@@ -1,0 +1,22 @@
+jiaoyi
+======
+
+This repository vendors third-party files. Each is listed with its source,
+licence and the exact copy taken.
+
+1. cTrader Open API protocol definitions (Spotware)
+   Files:   crates/jiaoyi-ctrader/proto/OpenApiCommonMessages.proto
+            crates/jiaoyi-ctrader/proto/OpenApiCommonModelMessages.proto
+            crates/jiaoyi-ctrader/proto/OpenApiMessages.proto
+            crates/jiaoyi-ctrader/proto/OpenApiModelMessages.proto
+   Source:  https://github.com/spotware/openapi-proto-messages
+            branch main, commit 3fd8bddfbe0cfc2ecfda079623dc4e498af11e66
+            (read with `git ls-remote` on 24-10-2026)
+   Licence: MIT License, Copyright (c) 2021 Spotware.
+            Full text: crates/jiaoyi-ctrader/proto/LICENSE-spotware-openapi-proto-messages
+   SHA-256 of the copies, unmodified:
+     9816cd24b340dcc4eb28548eb4dd16735995d2a61889337591e5c4d8021652a2  OpenApiCommonMessages.proto
+     b95d7df670a7e890a53ec08f676198ace7bb0a074a4b07ff0b493c4be00a0dea  OpenApiCommonModelMessages.proto
+     a84df9b528e69a494e197d48e21d6291b3d76db31396663a8188721eef9fcf35  OpenApiMessages.proto
+     56338dcac45a149227678b7c23637d64f4e2b607f6649af82394ce5c0957fedf  OpenApiModelMessages.proto
+     d3fc4cfe3604a0d96b55f7808c530e428aa74f349364eaee195339dfa95d5213  LICENSE-spotware-openapi-proto-messages

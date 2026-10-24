@@ -1,0 +1,33 @@
+[package]
+name = "jiaoyi-ctrader"
+description = "cTrader Open API client: framing, the payload allowlist, and the read requests phase 1 uses."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+jiaoyi-core.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+prost.workspace = true
+rust_decimal.workspace = true
+rustls.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tracing.workspace = true
+webpki-roots.workspace = true
+
+[features]
+# A scripted in-memory cTrader server for tests of this crate and its users.
+testkit = []
+
+[dev-dependencies]
+# Enables the in-memory fake broker for this crate's own integration tests.
+jiaoyi-ctrader = { path = ".", features = ["testkit"] }
+static_assertions.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+protox.workspace = true
