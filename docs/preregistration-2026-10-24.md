@@ -75,7 +75,7 @@ What these facts force:
   - short: the first bid at or below the lowest low of the previous 50 completed days;
   - one position per symbol.
   - Daily-bar fill: the level, or the day's open if the day opened beyond it, moved to the side of the quote the order fills on: buys at the ask, sells at the bid.
-    - The quote basis of the broker's daily bars (bid, ask or mid) is measured against stored ticks and recorded, never assumed.
+    - The quote basis of the broker's daily bars (bid, ask or mid) is measured against development-period broker ticks and recorded, never assumed. The held-out seal applies to this check too.
     - Costs are always adverse:
       - a buy fills at the bar price converted to the ask, plus slippage;
       - a sell fills at the bar price converted to the bid, minus slippage.
