@@ -17,6 +17,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::{Postgres, QueryBuilder, Row};
 
 pub mod history;
+pub mod research;
 pub mod settings;
 pub mod ticks;
 

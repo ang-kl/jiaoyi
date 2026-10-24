@@ -477,10 +477,18 @@ async fn run(
             enabled: s.enabled,
         })
         .collect();
+    // The broker's base and quote asset ids are kept too: with the trader
+    // record's deposit asset they establish the deposit currency (R1).
     summary.listed_symbols = Some(serde_json::Value::Array(
-        listed_symbols
+        listed
+            .symbol
             .iter()
-            .map(|s| json!({ "id": s.symbol_id, "name": s.name, "enabled": s.enabled }))
+            .map(|s| {
+                json!({
+                    "id": s.symbol_id, "name": s.symbol_name, "enabled": s.enabled,
+                    "base_asset_id": s.base_asset_id, "quote_asset_id": s.quote_asset_id,
+                })
+            })
             .collect(),
     ));
     let resolutions = resolve_universe(&universe, &listed_symbols);

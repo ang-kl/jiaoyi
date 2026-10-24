@@ -834,6 +834,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "thiserror",
  "tokio",
@@ -847,6 +848,7 @@ name = "jiaoyi-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "libm",
  "serde",
  "serde_json",
  "sha2",

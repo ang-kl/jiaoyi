@@ -51,13 +51,20 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.http_port)).await?;
     tracing::info!(
         port = cfg.http_port,
-        "serving /health, /phase1/report, /research/inventory and /research/bars"
+        "serving /health, /phase1/report, /research/inventory, /research/bars, /research/jobs and /research/trials"
     );
 
     let (trigger, stop) = shutdown::channel();
     let trigger = Arc::new(trigger);
     let mut tasks = service::start_recorders(&pool, &cfg, &recorders, &stop);
     tasks.extend(service::start_history(&pool, &cfg, &history, &stop));
+    // The research engine: the pre-registered jobs, one at a time.
+    tasks.push(tokio::spawn(jiaoyi::edge::runner::run(
+        pool.clone(),
+        cfg.broker.clone(),
+        cfg.plan.permitted.clone(),
+        stop.clone(),
+    )));
     tasks.push(tokio::spawn(service::run_loop(
         pool,
         cfg.clone(),

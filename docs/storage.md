@@ -107,6 +107,25 @@ Read-only against the broker. Migration 0004.
 - The depth downloaded is the setting `history.tick_days_back` (default 7 days). The probe (`history.probe_years`, default 15) finds the earliest week with ticks without downloading the years in between.
 - Size is the limit, not the broker. As an order of magnitude only (not measured), a busy FX pair can carry 100,000–200,000 quote changes a day per side; 20 symbols × 2 sides × a year would be on the order of 100 GB. The depth is raised once the first week's real volume is measured from `/research/inventory`.
 
+## Research engine: the pre-registered edge test (migration 0009)
+
+The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embedded in the binary and hashed at start. A job under any other hash is refused.
+
+| Table | Kind | Notes |
+|---|---|---|
+| `research_jobs` | job queue | The trial cap, inserted by the migration only: the 9 H1 development cells (breakout {20, 50, 100} × stop {2, 3, 4} × ATR, the default (50, 3) first) and 1 held-out job at the default. Status `pending` → `running` → `done` / `refused` / `failed`. A job's definition never changes, a finished job never runs again, and nothing is deleted (trigger). |
+| `research_job_attempts` | event, append-only | Every attempt: start time and deployed commit (`RAILWAY_GIT_COMMIT_SHA`, or `unknown`). An attempt interrupted by a stop wrote nothing, so the job is attempted again (owner, 24-10-2026). Its trial lists every attempt, and a changed commit is reported under the evidence against. |
+| `research_job_events` | event, append-only | Every status a job takes, with the reason. |
+| `research_trials` | research log, append-only | Now with `prereg_hash` and `job_id` (one trial per job). The trial and the job's `done` are one transaction. |
+| `research_spreads` | event, append-only | One June week (the second full week) per symbol and development year (2013–2025): the median ask − bid of the broker's ticks, which are streamed and never stored raw; the bar quote-basis observations; ticks and wall time. The schema refuses a week ending after the seal. |
+
+- **Seal.** One data-access layer per stage. A development job reads only bars that end (open + 24 h) by 2025-10-24 00:00 UTC, and ticks before then. A request past that is refused, never clamped. Held-out jobs read up to 2026-10-24 00:00 UTC.
+- **Gate.** The held-out job is refused, with the reason, unless the development default met PASS rules 1–3 and at least 6 of the 9 cells have a profit factor above 1.0, under the same hash. The verdict is then "no demonstrated edge".
+- **Inputs before an attempt.** A job waits, unattempted, until every universe symbol's June samples exist and the deposit currency is established. The deposit currency is the trader record's deposit asset, matched with the asset the broker lists as USD (loads now keep the base and quote asset ids). The cross-check is that closing deals on USD-quoted symbols convert at 1. Either failing fails the job.
+- **Commission** comes from the live deals (21-10-2025 → 16-01-2026, the source the pre-registration names). It reads only the class, commission, money digits and filled volume, never a price; a test pins the query.
+- **Readings** where the text leaves a choice are written into every trial's params, `readings`.
+- `GET /research/jobs` and `GET /research/trials` show counts and R only, plus the deflated Sharpe once all 9 development trials exist. Notional money and the trade list stay in the stored trial.
+
 ## Volume and retention
 
 - **Daily bars:** about 20 symbols × 20 years × 260 days ≈ 104,000 rows per account.
