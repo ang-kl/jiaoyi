@@ -94,12 +94,19 @@ pub struct Gap {
 
 #[derive(Debug, Serialize, Default)]
 pub struct ProbeResult {
+    /// When the latest COMPLETED search finished; its result is below.
     pub probed_at: Option<DateTime<Utc>>,
+    /// "complete" or "no_ticks", for the search the result comes from.
+    pub status: Option<String>,
     pub weeks_probed: i64,
     /// The earliest week whose bid history held ticks.
     pub earliest_week_with_ticks: Option<NaiveDate>,
     /// The latest probed week before that with none.
     pub latest_empty_week_before: Option<NaiveDate>,
+    /// The latest search of any outcome, when it did not complete: its time
+    /// and error. An incomplete search sets no result.
+    pub last_incomplete_at: Option<DateTime<Utc>>,
+    pub last_incomplete_error: Option<String>,
     pub method: &'static str,
 }
 
@@ -297,31 +304,41 @@ async fn symbol_inventory(
     inv.history_bid = side_coverage(pool, account_id, id, "bid", &weeks, from_ms).await?;
     inv.history_ask = side_coverage(pool, account_id, id, "ask", &weeks, from_ms).await?;
 
-    let p = sqlx::query(
-        "SELECT max(fetched_at) AS at, count(*) AS n,
-                min(window_from) FILTER (WHERE status = 'ok' AND ticks > 0) AS earliest
-         FROM history_fetches WHERE account_id = $1 AND broker_symbol_id = $2 AND kind = 'probe'",
+    // The result is the latest COMPLETED search's (history_probes); a failed
+    // step leaves its search incomplete, with no result.
+    let done = sqlx::query(
+        "SELECT finished_at, status, steps, earliest_week_with_ticks, latest_empty_week_before
+         FROM history_probes WHERE account_id = $1 AND broker_symbol_id = $2
+           AND status IN ('complete', 'no_ticks')
+         ORDER BY finished_at DESC, id DESC LIMIT 1",
     )
     .bind(account_id)
     .bind(id)
-    .fetch_one(pool)
+    .fetch_optional(pool)
     .await?;
-    inv.probe.probed_at = p.get("at");
-    inv.probe.weeks_probed = p.get("n");
-    let earliest: Option<DateTime<Utc>> = p.get("earliest");
-    inv.probe.earliest_week_with_ticks = earliest.map(|d| d.date_naive());
-    if let Some(e) = earliest {
-        let before: Option<DateTime<Utc>> = sqlx::query_scalar(
-            "SELECT max(window_from) FROM history_fetches
-             WHERE account_id = $1 AND broker_symbol_id = $2 AND kind = 'probe'
-               AND status = 'ok' AND ticks = 0 AND window_from < $3",
-        )
-        .bind(account_id)
-        .bind(id)
-        .bind(e)
-        .fetch_one(pool)
-        .await?;
-        inv.probe.latest_empty_week_before = before.map(|d| d.date_naive());
+    if let Some(p) = done {
+        inv.probe.probed_at = p.get("finished_at");
+        inv.probe.status = Some(p.get("status"));
+        inv.probe.weeks_probed = p.get::<i32, _>("steps") as i64;
+        inv.probe.earliest_week_with_ticks = p
+            .get::<Option<DateTime<Utc>>, _>("earliest_week_with_ticks")
+            .map(|d| d.date_naive());
+        inv.probe.latest_empty_week_before = p
+            .get::<Option<DateTime<Utc>>, _>("latest_empty_week_before")
+            .map(|d| d.date_naive());
+    }
+    let last = sqlx::query(
+        "SELECT finished_at, status, error FROM history_probes
+         WHERE account_id = $1 AND broker_symbol_id = $2
+         ORDER BY finished_at DESC, id DESC LIMIT 1",
+    )
+    .bind(account_id)
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(l) = last.filter(|l| l.get::<String, _>("status") == "incomplete") {
+        inv.probe.last_incomplete_at = Some(l.get("finished_at"));
+        inv.probe.last_incomplete_error = l.get("error");
     }
 
     // Overlap: up to 200 recorded live bids inside the history's span.
@@ -386,9 +403,14 @@ async fn symbol_inventory(
         }
     }
     if inv.probe.probed_at.is_none() {
-        m.push("tick-history depth not probed yet".into());
+        m.push(match &inv.probe.last_incomplete_error {
+            Some(e) => {
+                format!("tick-history depth not known: the last probe did not complete ({e})")
+            }
+            None => "tick-history depth not probed yet".into(),
+        });
     } else if inv.probe.earliest_week_with_ticks.is_none() {
-        m.push("probe found no bid ticks in any week".into());
+        m.push("probe found no bid ticks in the newest complete week".into());
     }
     if inv.live_ticks.count == 0 {
         m.push("no live ticks recorded".into());
@@ -457,10 +479,16 @@ async fn side_coverage(
         }
     }
     let agg = sqlx::query(
-        "SELECT coalesce(sum(stored), 0)::bigint AS stored, min(first_tick) AS f, max(last_tick) AS l,
-                array_remove(array_agg(DISTINCT s), NULL) AS signs
-         FROM history_fetches LEFT JOIN LATERAL unnest(delta_signs) AS s ON TRUE
-         WHERE account_id = $1 AND broker_symbol_id = $2 AND side = $3 AND kind = 'download' AND status = 'ok'",
+        // The sums come from the fetches themselves; the signs are expanded in
+        // a separate subquery, so a fetch read with two signs is not counted twice.
+        "WITH f AS (
+             SELECT stored, first_tick, last_tick, delta_signs FROM history_fetches
+             WHERE account_id = $1 AND broker_symbol_id = $2 AND side = $3
+               AND kind = 'download' AND status = 'ok')
+         SELECT (SELECT coalesce(sum(stored), 0)::bigint FROM f) AS stored,
+                (SELECT min(first_tick) FROM f) AS f,
+                (SELECT max(last_tick) FROM f) AS l,
+                (SELECT array_agg(DISTINCT s ORDER BY s) FROM f, unnest(f.delta_signs) AS s) AS signs",
     )
     .bind(account_id)
     .bind(id)

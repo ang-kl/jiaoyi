@@ -186,15 +186,56 @@ pub async fn complete_windows(
     Ok(covered(rows))
 }
 
-/// The latest probe of a symbol's bid history, if any.
+/// One probe search for how far back a symbol's tick history goes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProbeSearch {
+    pub account_id: i64,
+    pub broker_symbol_id: i64,
+    pub side: &'static str,
+    pub started_at: DateTime<Utc>,
+    /// "complete", "no_ticks" or "incomplete".
+    pub status: &'static str,
+    pub searched_from: DateTime<Utc>,
+    pub searched_to: DateTime<Utc>,
+    pub steps: i32,
+    pub earliest_week_with_ticks: Option<DateTime<Utc>>,
+    pub latest_empty_week_before: Option<DateTime<Utc>>,
+    pub error: Option<String>,
+}
+
+pub async fn record_probe_search(pool: &PgPool, p: &ProbeSearch) -> crate::Result<()> {
+    sqlx::query(
+        "INSERT INTO history_probes (account_id, broker_symbol_id, side, started_at, status,
+            searched_from, searched_to, steps, earliest_week_with_ticks, latest_empty_week_before, error)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+    )
+    .bind(p.account_id)
+    .bind(p.broker_symbol_id)
+    .bind(p.side)
+    .bind(p.started_at)
+    .bind(p.status)
+    .bind(p.searched_from)
+    .bind(p.searched_to)
+    .bind(p.steps)
+    .bind(p.earliest_week_with_ticks)
+    .bind(p.latest_empty_week_before)
+    .bind(&p.error)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// When a probe search of this symbol last COMPLETED (found the earliest week,
+/// or found no ticks at all). An incomplete search does not count, so a failed
+/// probe is tried again at the next sync.
 pub async fn last_probe_at(
     pool: &PgPool,
     account_id: i64,
     symbol_id: i64,
 ) -> crate::Result<Option<DateTime<Utc>>> {
     sqlx::query_scalar(
-        "SELECT max(fetched_at) FROM history_fetches
-         WHERE account_id = $1 AND broker_symbol_id = $2 AND kind = 'probe'",
+        "SELECT max(finished_at) FROM history_probes
+         WHERE account_id = $1 AND broker_symbol_id = $2 AND status IN ('complete', 'no_ticks')",
     )
     .bind(account_id)
     .bind(symbol_id)

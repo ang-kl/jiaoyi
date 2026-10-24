@@ -50,6 +50,9 @@ pub struct FakeBroker {
     pub tick_history: HashMap<(i64, i32), Vec<(i64, i64)>>,
     /// At most this many ticks per response (0 = unlimited); more sets hasMore.
     pub max_ticks_per_response: usize,
+    /// Refuse every tick request whose window starts before this time (ms)
+    /// with BLOCKED_PAYLOAD_TYPE and retryAfter 0, as a rate limit would.
+    pub block_ticks_before: Option<i64>,
     /// Deal history of the account.
     pub deals: Vec<pb::ProtoOaDeal>,
     /// At most this many deals per response (0 = unlimited); more sets hasMore.
@@ -260,6 +263,25 @@ impl FakeBroker {
                         .unwrap()
                         .tick_requests
                         .push((req.symbol_id, req.r#type, from, to));
+                    if self.block_ticks_before.is_some_and(|b| from < b) {
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaErrorRes as i32,
+                            pb::ProtoOaErrorRes {
+                                error_code: "BLOCKED_PAYLOAD_TYPE".into(),
+                                description: Some("fake broker: rate limit".into()),
+                                retry_after: Some(0),
+                                ..Default::default()
+                            }
+                            .encode_to_vec(),
+                        ));
+                        for m in out {
+                            if write_frame(&mut server, &m).await.is_err() {
+                                return;
+                            }
+                        }
+                        continue;
+                    }
                     let mut ticks: Vec<(i64, i64)> = self
                         .tick_history
                         .get(&(req.symbol_id, req.r#type))
