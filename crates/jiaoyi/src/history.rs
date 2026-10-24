@@ -13,6 +13,14 @@
 //! Windows sit on a fixed grid, so a sync resumes where the last one stopped
 //! and a window already fetched completely is not fetched again. Every window
 //! is recorded, whether it held ticks or not, and whether it failed.
+//!
+//! When the broker ends the account session (a refresh elsewhere invalidated
+//! the token, the account disconnected, the socket closed), the pass stops:
+//! the window cut short is recorded as `session_ended`, not as a broker
+//! failure of that week, and the sync re-authorises from the shared token
+//! store after `history.session_retry_secs` and resumes at the first
+//! unfinished window (PR #6; deploy 7765158a, where a demo refresh failed
+//! every later live window).
 //! Nothing here can trade: only read requests are on the payload allowlist.
 
 use std::collections::HashMap;
@@ -75,8 +83,16 @@ pub struct HistoryStatus {
     pub tick_windows_failed: u64,
     pub ticks_stored: u64,
     pub probes: u64,
+    /// Passes stopped because the broker ended the account session, the
+    /// latest reason, and the windows cut short by it (fetched again later).
+    pub session_ends: u64,
+    pub last_session_end: Option<String>,
+    pub windows_cut_by_session_end: u64,
     pub last_error: Option<String>,
     pub last_error_at: Option<DateTime<Utc>>,
+    /// The failure last logged; a repeat is not logged again.
+    #[serde(skip)]
+    pub logged_failure: Option<String>,
 }
 
 pub type HistoryStatusMap = Arc<Mutex<HashMap<i64, HistoryStatus>>>;
@@ -154,8 +170,46 @@ pub fn deal_row(d: &ProtoOaDeal) -> DealRow {
     }
 }
 
-/// Is this error the end of the session (stop the sync) rather than a
-/// problem with one window (record it and go on)?
+/// The broker ended the account session under the sync: stop the pass,
+/// re-authorise and resume. Not a failure of any week.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("account session ended: {0}")]
+pub struct SessionEnded(pub String);
+
+/// Has the session ended (recorded on the connection), before any request?
+fn check_session(session: &AccountSession<'_>) -> Result<(), SessionEnded> {
+    if let Some(end) = session.session_ended() {
+        return Err(SessionEnded(end.reason));
+    }
+    if let Some(r) = session.closed_reason() {
+        return Err(SessionEnded(format!("connection closed: {r}")));
+    }
+    Ok(())
+}
+
+/// Did this request fail because the session ended under it? The connection's
+/// own record of a session end is believed first; otherwise the error says so
+/// (the socket closed, the account is no longer authorised, the token was
+/// refused mid-sync).
+fn ended_by(session: &AccountSession<'_>, e: &ClientError) -> Option<SessionEnded> {
+    if let Err(end) = check_session(session) {
+        return Some(end);
+    }
+    let ended = match e {
+        ClientError::Disconnected(_) | ClientError::Frame(_) => true,
+        ClientError::Broker { code, .. } => {
+            code == "ACCOUNT_NOT_AUTHORIZED"
+                || code == "CH_CLIENT_NOT_AUTHENTICATED"
+                || e.is_token_rejected()
+        }
+        _ => false,
+    };
+    ended.then(|| SessionEnded(e.to_string()))
+}
+
+/// Is this error the end of the sync (stop, retry later) rather than a
+/// problem with one window (record it and go on)? A session end is handled
+/// before this; a timeout also stops the sync.
 fn session_fatal(e: &ClientError) -> bool {
     matches!(
         e,
@@ -180,7 +234,14 @@ pub async fn sync_account(
     });
 
     // 1. The trader record.
-    let trader = session.trader().await?;
+    check_session(session)?;
+    let trader = match session.trader().await {
+        Ok(t) => t,
+        Err(e) => match ended_by(session, &e) {
+            Some(end) => return Err(end.into()),
+            None => return Err(e.into()),
+        },
+    };
     let registration = trader.registration_timestamp.map(at);
     hist::record_account_snapshot(
         pool,
@@ -211,12 +272,21 @@ pub async fn sync_account(
         if done.covers(from, to) {
             continue;
         }
+        check_session(session)?;
         let to_req = to.min(ms(now));
         let complete = to < ms(now);
+        let mut ended = None;
         let (deals, error) = match session.deal_history(from, to_req).await {
             Ok(d) => (d, None),
-            Err(e) if session_fatal(&e) => return Err(e.into()),
-            Err(e) => (vec![], Some(e.to_string())),
+            Err(e) => match ended_by(session, &e) {
+                Some(end) => {
+                    let msg = e.to_string();
+                    ended = Some(end);
+                    (vec![], Some(msg))
+                }
+                None if session_fatal(&e) => return Err(e.into()),
+                None => (vec![], Some(e.to_string())),
+            },
         };
         let rows: Vec<DealRow> = deals.iter().map(deal_row).collect();
         let upsert = hist::upsert_deals(pool, id, &rows, Utc::now()).await?;
@@ -230,9 +300,14 @@ pub async fn sync_account(
                 deals: rows.len() as i32,
                 upsert,
                 error,
+                session_ended: ended.is_some(),
             },
         )
         .await?;
+        if let Some(end) = ended {
+            with_status(status, id, |s| s.windows_cut_by_session_end += 1);
+            return Err(end.into());
+        }
         with_status(status, id, |s| {
             s.deal_windows_fetched += 1;
             s.deals_inserted += upsert.inserted as u64;
@@ -253,6 +328,7 @@ pub async fn sync_account(
                 if done.covers(from, to) {
                     continue;
                 }
+                check_session(session)?;
                 download_window(
                     pool,
                     session,
@@ -279,6 +355,7 @@ pub async fn sync_account(
                 .await?
                 .is_some_and(|t| now - t < chrono::Duration::days(PROBE_EVERY_DAYS));
             if !recent {
+                check_session(session)?;
                 probe(pool, session, id, symbol, now, cfg.probe_years, status).await?;
             }
         }
@@ -314,7 +391,9 @@ async fn download_window(
         last_tick: None,
         delta_signs: vec![],
         error: None,
+        session_ended: false,
     };
+    let mut ended = None;
     let ticks: Vec<HistoryTick> = match session.tick_history(symbol, side, from, to).await {
         Ok(f) => {
             rec.ticks = f.ticks.len() as i32;
@@ -334,23 +413,36 @@ async fn download_window(
             rec.last_tick = rows.last().map(|t| t.ts);
             rows
         }
-        Err(e) if session_fatal(&e) => return Err(e.into()),
-        Err(e) => {
-            rec.error = Some(e.to_string());
-            vec![]
-        }
+        Err(e) => match ended_by(session, &e) {
+            Some(end) => {
+                rec.error = Some(e.to_string());
+                rec.session_ended = true;
+                ended = Some(end);
+                vec![]
+            }
+            None if session_fatal(&e) => return Err(e.into()),
+            None => {
+                rec.error = Some(e.to_string());
+                vec![]
+            }
+        },
     };
     let failed = rec.error.is_some();
     let (_, stored) = hist::record_window(pool, &rec, &ticks).await?;
     with_status(status, account_id, |s| {
-        if failed {
+        if ended.is_some() {
+            s.windows_cut_by_session_end += 1;
+        } else if failed {
             s.tick_windows_failed += 1;
         } else {
             s.tick_windows_fetched += 1;
         }
         s.ticks_stored += stored as u64;
     });
-    Ok(())
+    match ended {
+        Some(end) => Err(end.into()),
+        None => Ok(()),
+    }
 }
 
 /// What one probe request found. A failed request is its own outcome, never
@@ -359,7 +451,13 @@ async fn download_window(
 pub enum ProbeStep {
     Ticks,
     Empty,
-    Failed { error: String, fatal: bool },
+    Failed {
+        error: String,
+        fatal: bool,
+    },
+    /// The session ended under the step: the search stops and is made again
+    /// after the sync re-authorises.
+    SessionEnded(SessionEnded),
 }
 
 /// Find the earliest week with bid ticks by binary search over the grid, from
@@ -423,6 +521,18 @@ async fn probe(
                 search.latest_empty_week_before = Some(at(windows[idx].0));
                 lo = idx + 1;
             }
+            ProbeStep::SessionEnded(end) => {
+                search.status = "incomplete";
+                search.error = Some(format!(
+                    "step {} ({}): {end}; searched again after re-authorising",
+                    search.steps,
+                    at(windows[idx].0).date_naive()
+                ));
+                search.earliest_week_with_ticks = None;
+                search.latest_empty_week_before = None;
+                hist::record_probe_search(pool, &search).await?;
+                return Err(end.into());
+            }
             ProbeStep::Failed { error, fatal } => {
                 search.status = "incomplete";
                 search.error = Some(format!(
@@ -469,6 +579,7 @@ async fn probe_one(
         last_tick: None,
         delta_signs: vec![],
         error: None,
+        session_ended: false,
     };
     let step = match session.tick_page(symbol, QuoteSide::Bid, from, to).await {
         Ok((ticks, _)) => {
@@ -484,14 +595,26 @@ async fn probe_one(
         Err(e) => {
             // The failed request is recorded too, with its error.
             rec.error = Some(e.to_string());
-            ProbeStep::Failed {
-                error: e.to_string(),
-                fatal: session_fatal(&e),
+            match ended_by(session, &e) {
+                Some(end) => {
+                    rec.session_ended = true;
+                    ProbeStep::SessionEnded(end)
+                }
+                None => ProbeStep::Failed {
+                    error: e.to_string(),
+                    fatal: session_fatal(&e),
+                },
             }
         }
     };
     hist::record_window(pool, &rec, &[]).await?;
-    with_status(status, account_id, |s| s.probes += 1);
+    with_status(status, account_id, |s| {
+        if matches!(step, ProbeStep::SessionEnded(_)) {
+            s.windows_cut_by_session_end += 1;
+        } else {
+            s.probes += 1;
+        }
+    });
     Ok(step)
 }
 
@@ -530,6 +653,11 @@ pub async fn run_with<C, F>(
     C: Fn() -> F,
     F: std::future::Future<Output = anyhow::Result<Connection>>,
 {
+    // Was the previous pass cut short by a session end? A resumed pass whose
+    // session ends again before it stores one window waits RETRY_AFTER rather
+    // than `history.session_retry_secs`, so a session that keeps ending cannot
+    // spin.
+    let mut resumed = false;
     loop {
         if shutdown.is_set() {
             return;
@@ -537,6 +665,7 @@ pub async fn run_with<C, F>(
         // The sync stops between windows on shutdown; a window being written is
         // one transaction, so cutting the sync short loses nothing recorded.
         let watcher = shutdown.clone();
+        let done_before = progress(&status, account.id());
         let result = async {
             let conn = connect().await?;
             let session = loader::authorise(&pool, &conn, &broker, &account).await?;
@@ -546,22 +675,64 @@ pub async fn run_with<C, F>(
             r = result => r,
             _ = shutdown.wait() => return,
         };
+        let settings = jiaoyi_store::settings::snapshot(&pool, Some(account.id()))
+            .await
+            .ok();
+        let setting = |k: &str, default: i64| {
+            settings
+                .as_ref()
+                .and_then(|s| s.integer(k).ok())
+                .unwrap_or(default)
+        };
         let wait = match outcome {
             Ok(()) => {
-                let hours = jiaoyi_store::settings::snapshot(&pool, Some(account.id()))
-                    .await
-                    .ok()
-                    .and_then(|s| s.integer("history.interval_hours").ok())
-                    .unwrap_or(1);
-                Duration::from_secs(hours.max(1) as u64 * 3600)
+                resumed = false;
+                Duration::from_secs(setting("history.interval_hours", 1).max(1) as u64 * 3600)
+            }
+            Err(e) if e.downcast_ref::<SessionEnded>().is_some() => {
+                let made = progress(&status, account.id()) - done_before;
+                let quick = !resumed || made > 0;
+                resumed = true;
+                with_status(&status, account.id(), |s| {
+                    s.session_ends += 1;
+                    s.last_session_end = Some(format!("{e:#}"));
+                });
+                tracing::warn!(
+                    account = %account,
+                    reason = %format!("{e:#}"),
+                    windows_this_pass = made,
+                    "history sync: the account session ended; re-authorising and resuming"
+                );
+                if quick {
+                    Duration::from_secs(setting("history.session_retry_secs", 5).max(0) as u64)
+                } else {
+                    RETRY_AFTER
+                }
             }
             Err(e) => {
-                tracing::warn!(account = %account, error = %format!("{e:#}"), "history sync failed; retrying");
-                with_status(&status, account.id(), |s| {
-                    s.last_error = Some(format!("{e:#}"));
+                resumed = false;
+                let msg = format!("{e:#}");
+                let new_state = {
+                    let mut m = status.lock().unwrap();
+                    let s = m.entry(account.id()).or_default();
+                    s.last_error = Some(msg.clone());
                     s.last_error_at = Some(Utc::now());
-                });
-                RETRY_AFTER
+                    let new = s.logged_failure.as_deref() != Some(msg.as_str());
+                    s.logged_failure = Some(msg.clone());
+                    new
+                };
+                if new_state {
+                    tracing::warn!(account = %account, error = %msg, "history sync failed; retrying (repeats are not logged)");
+                } else {
+                    tracing::debug!(account = %account, error = %msg, "history sync still failing");
+                }
+                if loader::is_grant_refusal(&e) {
+                    // The token cannot authorise this account; a grant read
+                    // every load.retry_minutes is enough.
+                    Duration::from_secs(setting("load.retry_minutes", 5).max(1) as u64 * 60)
+                } else {
+                    RETRY_AFTER
+                }
             }
         };
         tokio::select! {
@@ -569,6 +740,14 @@ pub async fn run_with<C, F>(
             _ = shutdown.wait() => return,
         }
     }
+}
+
+/// Windows and probe steps stored so far for an account (any outcome but a
+/// session end).
+fn progress(status: &HistoryStatusMap, account: i64) -> u64 {
+    status.lock().unwrap().get(&account).map_or(0, |s| {
+        s.deal_windows_fetched + s.tick_windows_fetched + s.tick_windows_failed + s.probes
+    })
 }
 
 #[cfg(test)]

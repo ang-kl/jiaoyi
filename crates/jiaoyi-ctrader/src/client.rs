@@ -130,6 +130,30 @@ impl Drop for Connection {
     }
 }
 
+/// The accounts an access token's grant covers, as
+/// `ProtoOAGetAccountListByAccessTokenRes` gives them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenGrant {
+    /// `SCOPE_VIEW` or `SCOPE_TRADE`, as the broker names it; `None` when not sent.
+    pub permission_scope: Option<String>,
+    pub accounts: Vec<GrantedAccount>,
+}
+
+/// One account in a token's grant.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GrantedAccount {
+    pub ctid: i64,
+    /// `None` when the broker did not say.
+    pub is_live: Option<bool>,
+    pub trader_login: Option<i64>,
+}
+
+impl TokenGrant {
+    pub fn account(&self, ctid: i64) -> Option<&GrantedAccount> {
+        self.accounts.iter().find(|a| a.ctid == ctid)
+    }
+}
+
 /// A refreshed OAuth token, as `ProtoOARefreshTokenRes` gives it.
 #[derive(Debug, Clone)]
 pub struct RefreshedToken {
@@ -344,6 +368,35 @@ impl Connection {
         })
     }
 
+    /// Which accounts the access token's grant covers
+    /// (`ProtoOAGetAccountListByAccessTokenReq`). Read-only; needs only the
+    /// application to be authorised. A refresh renews a grant, it never adds
+    /// an account to it.
+    pub async fn account_list(&self, access_token: &Secret) -> Result<TokenGrant, ClientError> {
+        let res = self
+            .request(&pb::ProtoOaGetAccountListByAccessTokenReq {
+                payload_type: None,
+                access_token: access_token.expose().to_string(),
+            })
+            .await?;
+        Ok(TokenGrant {
+            permission_scope: res.permission_scope.map(|s| {
+                pb::ProtoOaClientPermissionScope::try_from(s)
+                    .map(|v| v.as_str_name().to_string())
+                    .unwrap_or_else(|_| format!("UNKNOWN({s})"))
+            }),
+            accounts: res
+                .ctid_trader_account
+                .iter()
+                .map(|a| GrantedAccount {
+                    ctid: a.ctid_trader_account_id as i64,
+                    is_live: a.is_live,
+                    trader_login: a.trader_login,
+                })
+                .collect(),
+        })
+    }
+
     /// Authorise one account. Only a [`PermittedAccount`] — an account that
     /// passed the allowlist — can be authorised.
     pub async fn account_auth(
@@ -529,6 +582,17 @@ impl SpreadSamples {
 impl AccountSession<'_> {
     pub fn account(&self) -> &PermittedAccount {
         &self.account
+    }
+
+    /// The broker ended this account's session on its connection (token
+    /// invalidated, account or client disconnected); it must re-authorise.
+    pub fn session_ended(&self) -> Option<SessionEnd> {
+        self.conn.session_ended(self.account.id())
+    }
+
+    /// Why the connection under this session closed, once it has.
+    pub fn closed_reason(&self) -> Option<String> {
+        self.conn.closed_reason()
     }
 
     fn check_account(&self, got: i64) -> Result<(), ClientError> {

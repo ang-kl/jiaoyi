@@ -44,7 +44,8 @@ The phase-1 migrations (`migrations/`) create the tables below. Types are final 
 | `symbol_costs` | event, append-only | Median spread from spot quotes, and commission and swap fields exactly as the broker gives them. `commission_per_lot_side` is NULL with a reason (not derived in phase 1). |
 | `daily_bars` | market data | Closed bars only. Prices exact (`NUMERIC`, relative ÷ 100000). Deletes are refused. A re-read that differs is applied, and the old and new values are written to `reconcile_events` first. |
 | `ticks` | market data, partitioned by UTC day | The live spot stream as received: bid and ask in cTrader's relative unit (1/100000), the broker's timestamp as sent, and the receive time. A side the event did not carry is NULL (the proxy sends only the side that changed). Whole days older than `ticks.retention_days` are dropped; that is the only deletion of recorded data. |
-| `oauth_tokens` | secret state | One row, replaced on refresh. The refresh token is single-use. Never logged. |
+| `oauth_tokens` | secret state | One row, replaced on refresh, or by a new env seed (below). The refresh token is single-use. Never logged. `seed_fingerprint`: the env seed it descends from. |
+| `token_grants` | event, append-only | Every read of the token's grant, made before authorising an account (migration 0007): the account, host, token fingerprint and source, the verdict, and the accounts listed. |
 | `reconcile_events` | event, append-only | Every disagreement with the broker: changed bars, cross-check mismatches, refused trendbars, bar-date collisions. |
 | `setting_definitions`, `settings`, `settings_version`, `settings_changes` | settings | See below. |
 
@@ -61,10 +62,23 @@ Owner, 24-10-2026: *"no hard code settings, the UI should have setting to tweak.
 
 ### Fixes from the first deploy (migration 0005, 24-10-2026)
 
-- **Partitions** (`ticks` daily, `ticks_history` monthly) are created under a transaction advisory lock keyed on the partition name, with `IF NOT EXISTS`; a concurrent creator's SQLSTATE 42P07 counts as success.
+- **Partitions** (`ticks` daily, `ticks_history` monthly) are created under a transaction advisory lock keyed on the partition name, with `IF NOT EXISTS`; a concurrent creator's SQLSTATE 42P07 counts as success. (Migration 0007 checks `to_regclass` first and drops `IF NOT EXISTS`: see below.)
 - **Loads**: a run that failed on authorisation after the token was refreshed is tried again at once (`load.auth_retry_attempts`, `load.auth_retry_secs`, doubling). A failed or partial run is retried after `load.retry_minutes` (default 5), not after `load.interval_hours`.
 - **Spreads**: a median from fewer than `spread.min_samples` quote updates (default 30) is not a measurement; the verdict is `undecided` ("spread not measured: N samples"). Each measurement records whether the market was open, from the symbol's own schedule (`symbol_costs.market_open`, with `market_state_reason`; only UTC schedules are evaluated).
-- **Universe** (owner, 24-10-2026: "use the broker's names for energy, like NatGas, etc."): one logged change by `owner` — NATGAS → NatGas, USOIL → SpotCrude, UKOIL removed until its broker name is known. Each load stores the broker's symbol list (`load_runs.listed_symbols`), and `/phase1/report` lists `energy_candidates` per account.
+- **Universe** (owner, 24-10-2026: "use the broker's names for energy, like NatGas, etc."): one logged change by `owner` — NATGAS → NatGas, USOIL → SpotCrude, UKOIL removed until its broker name is known. Each load stores the broker's symbol list (`load_runs.listed_symbols`), and `/phase1/report` lists `energy_candidates` per account. Migration 0008 adds SpotBrent to energy, one more logged change by `owner` (Brent is SpotBrent on the broker: `energy_candidates`, load run 6 on 43002148). No futures (-F) or perpetual (-PERP) names. The demo account's names are not known until it loads, and are not guessed.
+
+### Token grant check and seed replacement (migration 0007, 24-10-2026)
+
+Deploy 7765158a: demo 49236051 was refused (CH_ACCESS_TOKEN_INVALID) on every authorisation, even straight after a refresh, while live 43002148 authorised with the same token; and every refresh ended the live sessions. A refresh renews a grant; it never adds an account.
+
+- **Grant check.** After the application is authorised and before an account is, `ProtoOAGetAccountListByAccessTokenReq` (read-only) lists the accounts the token's grant covers. Each read goes to `token_grants`, the token by fingerprint only (first 16 hex characters of its SHA-256). An account the grant omits is refused: `token grant does not include account N (grant lists: [...])`. One listed with an `isLive` that disagrees with its declared environment is refused too. Neither refreshes the token; the load, the recorder and the history sync re-read the grant every `load.retry_minutes`. If the read itself is refused as an expired or invalid token, the token is refreshed once and the grant read again. A listed account that is still refused gets the single refresh, as before. `/health` shows each account's grant state (`listed`, `not_listed`, `environment_mismatch`, `unread`) with the reason and fingerprint; `/phase1/report` shows the last read.
+- **Seed replacement.** A seed in the environment whose fingerprint differs from `oauth_tokens.seed_fingerprint` replaces the stored token (source `env_seed`), and `reconcile_events` records it (`token_seed_replaced`, fingerprints only). The same seed keeps the stored, refreshed token. A row stored before 0007 has no fingerprint; it is judged once. It is replaced if it came from a different seed, or if it came from a refresh and the seed's grant is accepted and adds an account (or the stored token is refused). Otherwise it is kept, and the seed's fingerprint is adopted (`token_seed_baseline`).
+
+### History sync: session ends and partitions (migration 0007)
+
+- When the broker ends the account session mid-sync (token invalidated, account disconnected, socket closed), the pass stops. The window cut short is recorded with `failure_kind = 'session_ended'` (others `broker`). `/research/inventory` counts that week as missing, not failed. The sync re-authorises from the shared token store after `history.session_retry_secs` (default 5) and resumes at the first unfinished window. If a resumed pass ends before storing a window, it waits the normal 5 minutes.
+- `/research/inventory` lists each account's distinct fetch errors (tick windows, deal windows, probe steps) with count and last time.
+- Partitions: an existing partition is found with `to_regclass` before any CREATE, so the "already exists, skipping" notice cannot occur; the advisory lock and the 42P07 handling stay for racing creators.
 
 ### UI access (design; the UI is not built in phase 1)
 

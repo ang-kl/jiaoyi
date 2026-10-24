@@ -34,6 +34,19 @@ pub struct FetchRecord {
     pub last_tick: Option<DateTime<Utc>>,
     pub delta_signs: Vec<String>,
     pub error: Option<String>,
+    /// The request failed because the account session ended under it (token
+    /// invalidated, account disconnected, socket closed), not because the
+    /// broker refused this window. Stored as failure_kind 'session_ended'.
+    pub session_ended: bool,
+}
+
+/// `failure_kind` for a fetch record: NULL when it succeeded.
+fn failure_kind(error: &Option<String>, session_ended: bool) -> Option<&'static str> {
+    match (error, session_ended) {
+        (None, _) => None,
+        (Some(_), true) => Some("session_ended"),
+        (Some(_), false) => Some("broker"),
+    }
 }
 
 /// Create the monthly partitions spanning `from..=to`.
@@ -98,8 +111,8 @@ pub async fn record_window(
     }
     sqlx::query(
         "INSERT INTO history_fetches (id, account_id, broker_symbol_id, side, kind, window_from, window_to,
-            status, complete, ticks, stored, pages, first_tick, last_tick, delta_signs, error)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
+            status, complete, ticks, stored, pages, first_tick, last_tick, delta_signs, error, failure_kind)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
     )
     .bind(id)
     .bind(f.account_id)
@@ -117,6 +130,7 @@ pub async fn record_window(
     .bind(f.last_tick)
     .bind(&f.delta_signs)
     .bind(&f.error)
+    .bind(failure_kind(&f.error, f.session_ended))
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -403,12 +417,15 @@ pub struct DealFetchRecord {
     pub deals: i32,
     pub upsert: DealUpsert,
     pub error: Option<String>,
+    /// As [`FetchRecord::session_ended`].
+    pub session_ended: bool,
 }
 
 pub async fn record_deal_fetch(pool: &PgPool, f: &DealFetchRecord) -> crate::Result<()> {
     sqlx::query(
-        "INSERT INTO deal_fetches (account_id, window_from, window_to, status, complete, deals, inserted, changed, error)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        "INSERT INTO deal_fetches (account_id, window_from, window_to, status, complete, deals, inserted,
+                                   changed, error, failure_kind)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
     )
     .bind(f.account_id)
     .bind(f.window_from)
@@ -419,6 +436,7 @@ pub async fn record_deal_fetch(pool: &PgPool, f: &DealFetchRecord) -> crate::Res
     .bind(f.upsert.inserted)
     .bind(f.upsert.changed)
     .bind(&f.error)
+    .bind(failure_kind(&f.error, f.session_ended))
     .execute(pool)
     .await?;
     Ok(())

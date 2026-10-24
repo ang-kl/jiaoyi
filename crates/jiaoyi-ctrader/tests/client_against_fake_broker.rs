@@ -88,6 +88,50 @@ async fn broker_errors_come_back_as_errors_with_their_code() {
 }
 
 #[tokio::test]
+async fn the_account_list_reads_the_tokens_grant() {
+    use jiaoyi_ctrader::testkit::GrantEntry;
+    use jiaoyi_ctrader::GrantedAccount;
+    let mut f = fake();
+    f.grant = Some(vec![
+        GrantEntry {
+            ctid: 43002148,
+            is_live: Some(true),
+            login: Some(1251442),
+        },
+        GrantEntry {
+            ctid: ACCOUNT,
+            is_live: Some(false),
+            login: None,
+        },
+    ]);
+    f.expired_tokens = HashSet::from(["old".to_string()]);
+    let (conn, log) = f.spawn();
+    conn.application_auth("id", &Secret::new("s"))
+        .await
+        .unwrap();
+    let g = conn.account_list(&Secret::new("tok")).await.unwrap();
+    assert_eq!(g.permission_scope.as_deref(), Some("SCOPE_TRADE"));
+    assert_eq!(
+        g.account(43002148),
+        Some(&GrantedAccount {
+            ctid: 43002148,
+            is_live: Some(true),
+            trader_login: Some(1251442)
+        })
+    );
+    assert_eq!(g.account(ACCOUNT).and_then(|a| a.is_live), Some(false));
+    assert_eq!(g.account(11111111), None);
+    // An expired token is refused like any other request with it.
+    let err = conn.account_list(&Secret::new("old")).await.err().unwrap();
+    assert!(err.is_token_rejected(), "{err}");
+    assert!(log
+        .lock()
+        .unwrap()
+        .payload_types
+        .contains(&(ProtoOaPayloadType::ProtoOaGetAccountsByAccessTokenReq as u32)));
+}
+
+#[tokio::test]
 async fn refresh_returns_the_new_pair() {
     let mut f = fake();
     f.refresh_reply = Some(("new-access".into(), "new-refresh".into(), 2_628_000));

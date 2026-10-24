@@ -23,7 +23,7 @@ One binary, `jiaoyi`, deployed by `railway.toml` (Dockerfile build, healthcheck 
 | `JIAOYI_ACCOUNT_ENVIRONMENTS` | yes | Which server each account is on, e.g. `49236051:demo,43002148:live`. An allowlisted account without one is refused and recorded; the server is not guessed. |
 | `DATABASE_URL` | yes | PostgreSQL. Migrations run on start. |
 | `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET` | yes | The Open API application. |
-| `CTRADER_ACCESS_TOKEN`, `CTRADER_REFRESH_TOKEN` | first start | Seed the token store while `oauth_tokens` is empty. After the first refresh the database holds the current pair. |
+| `CTRADER_ACCESS_TOKEN`, `CTRADER_REFRESH_TOKEN` | first start, or a new grant | Seed the token store. After a refresh the database holds the current pair; the same seed is not stored over it again. A NEW seed (a different access token, e.g. after re-granting the app access to an added account) replaces the stored pair, and the replacement is recorded by fingerprint (docs/storage.md). |
 | `CTRADER_ACCESS_TOKEN_EXPIRES_AT` | no | RFC 3339 expiry of the seed token; without it the token is refreshed only when the broker rejects it. |
 | `CTRADER_DEMO_HOST`, `CTRADER_LIVE_HOST`, `CTRADER_PORT` | no | Default `demo.ctraderapi.com`, `live.ctraderapi.com`, `5035`. |
 | `PORT` | no | HTTP port, default 8080. |

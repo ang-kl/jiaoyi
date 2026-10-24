@@ -11,18 +11,21 @@
 //! Nothing here can send an order: the client has no trading request on its
 //! payload allowlist.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use jiaoyi_core::allowlist::PermittedAccount;
+use jiaoyi_core::allowlist::{Environment, PermittedAccount};
+use jiaoyi_core::secret::Secret;
 use jiaoyi_core::universe::{resolve_universe, AssetClass, ListedSymbol};
 use jiaoyi_ctrader::client::SpreadSamples;
 use jiaoyi_ctrader::messages::{
     ProtoOaCommissionType, ProtoOaDayOfWeek, ProtoOaMinCommissionType, ProtoOaSwapCalculationType,
     ProtoOaSymbol, ProtoOaTradingMode,
 };
-use jiaoyi_ctrader::{closed_daily_bars, decode_trendbar, AccountSession, ClientError, Connection};
+use jiaoyi_ctrader::{
+    closed_daily_bars, decode_trendbar, AccountSession, ClientError, Connection, TokenGrant,
+};
 use jiaoyi_store::sqlx::PgPool;
 use jiaoyi_store::{self as store, BarRow, CostRow, RunSummary, SymbolRow};
 use prost::Message;
@@ -39,20 +42,317 @@ pub struct LoadOutcome {
     pub auth_rejected: bool,
 }
 
-/// Get the token to use: the stored one, else the environment seed (stored
-/// on first use). `None` means there is no token anywhere.
+/// Get the token to use. `None` means there is no token anywhere.
+///
+/// The stored token, unless the environment holds a NEW seed (PR #6): a seed
+/// whose fingerprint differs from the one the stored token descends from
+/// replaces it, and the replacement is recorded (fingerprints only). The same
+/// seed keeps the stored, refreshed token. A token stored before seed
+/// fingerprints were kept is judged once: see [`judge_legacy_seed`].
+/// `conn` must have the application authorised (the legacy case reads grants).
 pub async fn current_token(
     pool: &PgPool,
+    conn: &Connection,
     broker: &BrokerConfig,
-) -> store::Result<Option<store::StoredToken>> {
-    if let Some(t) = store::load_token(pool).await? {
-        return Ok(Some(t));
-    }
+) -> anyhow::Result<Option<store::StoredToken>> {
+    let stored = store::load_token(pool).await?;
     let (Some(a), Some(r)) = (&broker.seed_access_token, &broker.seed_refresh_token) else {
-        return Ok(None);
+        return Ok(stored);
     };
-    store::save_token(pool, a, r, None, broker.seed_expires_at, "env_seed").await?;
-    store::load_token(pool).await
+    let seed = a.fingerprint();
+    let Some(t) = stored else {
+        store::store_seed(pool, a, r, broker.seed_expires_at).await?;
+        return Ok(store::load_token(pool).await?);
+    };
+    match t.seed_fingerprint.clone() {
+        Some(fp) if fp == seed => return Ok(Some(t)),
+        Some(old) => {
+            replace_with_seed(
+                pool,
+                broker,
+                &t,
+                Some(&old),
+                "the environment holds a new seed",
+            )
+            .await?
+        }
+        None => {
+            if let Some(why) = judge_legacy_seed(pool, conn, &t, a).await? {
+                replace_with_seed(pool, broker, &t, None, &why).await?;
+            }
+        }
+    }
+    Ok(store::load_token(pool).await?)
+}
+
+/// A token stored before migration 0007 has no seed fingerprint, and on the
+/// deploy it had been refreshed: storing the env seed over it blindly could
+/// put back a spent token. Returns why the seed should replace it, or `None`
+/// to keep it (the seed's fingerprint is then adopted as the baseline).
+///
+/// - stored from the env seed: replace when the seed differs from it;
+/// - stored from a refresh: read the seed's grant. Refused: the seed is
+///   spent, keep the stored token. Accepted: replace when the stored token is
+///   refused, or when the seed's grant lists an account the stored token's
+///   grant does not (a new grant); otherwise keep.
+async fn judge_legacy_seed(
+    pool: &PgPool,
+    conn: &Connection,
+    t: &store::StoredToken,
+    seed_access: &Secret,
+) -> anyhow::Result<Option<String>> {
+    let seed = seed_access.fingerprint();
+    let keep = |detail: Value| async move {
+        store::set_seed_fingerprint(pool, &seed_access.fingerprint()).await?;
+        store::record_reconcile(
+            pool,
+            None,
+            "token_seed_baseline",
+            "oauth_tokens",
+            detail,
+            "the stored token is kept; the env seed's fingerprint is adopted as its baseline",
+        )
+        .await?;
+        anyhow::Ok(None)
+    };
+    if t.source == "env_seed" {
+        if t.access_token.fingerprint() == seed {
+            return keep(
+                json!({ "seed_fingerprint": seed, "why": "the stored token is this seed" }),
+            )
+            .await;
+        }
+        return Ok(Some(
+            "stored before seed fingerprints were kept, and the env seed differs from it".into(),
+        ));
+    }
+    let ids = |g: &TokenGrant| g.accounts.iter().map(|a| a.ctid).collect::<Vec<_>>();
+    let seed_grant = match conn.account_list(seed_access).await {
+        Ok(g) => g,
+        Err(e) if e.is_token_rejected() => {
+            return keep(json!({
+                "seed_fingerprint": seed,
+                "stored_token_fingerprint": t.access_token.fingerprint(),
+                "why": format!("the env seed's token is refused ({e}): it is spent"),
+            }))
+            .await
+        }
+        Err(e) => return Err(e.into()),
+    };
+    match conn.account_list(&t.access_token).await {
+        Err(e) if e.is_token_rejected() => Ok(Some(format!(
+            "the stored token is refused ({e}) and the env seed is accepted"
+        ))),
+        Err(e) => Err(e.into()),
+        Ok(stored_grant) => {
+            let added: Vec<i64> = ids(&seed_grant)
+                .into_iter()
+                .filter(|id| stored_grant.account(*id).is_none())
+                .collect();
+            if added.is_empty() {
+                keep(json!({
+                    "seed_fingerprint": seed,
+                    "stored_token_fingerprint": t.access_token.fingerprint(),
+                    "seed_grant": ids(&seed_grant),
+                    "stored_grant": ids(&stored_grant),
+                    "why": "the env seed's grant adds no account",
+                }))
+                .await
+            } else {
+                Ok(Some(format!(
+                    "the env seed's grant adds accounts {added:?} to the stored token's {:?}",
+                    ids(&stored_grant)
+                )))
+            }
+        }
+    }
+}
+
+/// Store the env seed over the stored token and record the replacement, by
+/// fingerprints only.
+async fn replace_with_seed(
+    pool: &PgPool,
+    broker: &BrokerConfig,
+    t: &store::StoredToken,
+    old_seed: Option<&str>,
+    why: &str,
+) -> anyhow::Result<()> {
+    let (Some(a), Some(r)) = (&broker.seed_access_token, &broker.seed_refresh_token) else {
+        return Ok(());
+    };
+    store::store_seed(pool, a, r, broker.seed_expires_at).await?;
+    store::record_reconcile(
+        pool,
+        None,
+        "token_seed_replaced",
+        "oauth_tokens",
+        json!({
+            "replaced_token_fingerprint": t.access_token.fingerprint(),
+            "replaced_token_source": t.source,
+            "replaced_seed_fingerprint": old_seed,
+            "new_seed_fingerprint": a.fingerprint(),
+            "why": why,
+        }),
+        "the new env seed is stored and used; the replaced token is no longer used",
+    )
+    .await?;
+    tracing::warn!(
+        replaced = %t.access_token.fingerprint(),
+        new_seed = %a.fingerprint(),
+        why,
+        "a new env seed replaces the stored token"
+    );
+    Ok(())
+}
+
+/// Why an account is not authorised, read from the token's grant
+/// (`ProtoOAGetAccountListByAccessTokenReq`). Neither is a token rejection: a
+/// refresh renews a grant and never adds an account to it, so neither is
+/// refreshed for (PR #6; deploy 7765158a).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum GrantError {
+    #[error("token grant does not include account {account} (grant lists: [{}])", join_ids(.listed))]
+    NotListed { account: i64, listed: Vec<i64> },
+    #[error(
+        "token grant lists account {account} as {}, but it is declared {}; refused",
+        if *.is_live { "live" } else { "demo" },
+        .declared.as_str()
+    )]
+    EnvironmentMismatch {
+        account: i64,
+        declared: Environment,
+        is_live: bool,
+    },
+}
+
+impl GrantError {
+    pub fn verdict(&self) -> &'static str {
+        match self {
+            GrantError::NotListed { .. } => "not_listed",
+            GrantError::EnvironmentMismatch { .. } => "environment_mismatch",
+        }
+    }
+}
+
+fn join_ids(ids: &[i64]) -> String {
+    ids.iter()
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// True when an error chain holds a [`GrantError`]: the account cannot be
+/// authorised with this token, and retrying soon will not change that.
+pub fn is_grant_refusal(e: &anyhow::Error) -> bool {
+    e.chain().any(|c| c.downcast_ref::<GrantError>().is_some())
+}
+
+/// Is `account` in the grant, with an environment that agrees with the one
+/// it was declared with? An `isLive` the broker does not send is no
+/// disagreement.
+pub fn judge_grant(
+    account: i64,
+    declared: Option<Environment>,
+    grant: &TokenGrant,
+) -> Result<(), GrantError> {
+    let Some(a) = grant.account(account) else {
+        return Err(GrantError::NotListed {
+            account,
+            listed: grant.accounts.iter().map(|a| a.ctid).collect(),
+        });
+    };
+    match (declared, a.is_live) {
+        (Some(env), Some(live)) if (env == Environment::Live) != live => {
+            Err(GrantError::EnvironmentMismatch {
+                account,
+                declared: env,
+                is_live: live,
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The last grant state logged per account: a state is logged when it
+/// changes, not on every retry.
+static GRANT_STATES: std::sync::Mutex<BTreeMap<i64, String>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
+fn state_changed(account: i64, state: String) -> bool {
+    let mut m = GRANT_STATES.lock().unwrap_or_else(|e| e.into_inner());
+    if m.get(&account) == Some(&state) {
+        false
+    } else {
+        m.insert(account, state);
+        true
+    }
+}
+
+/// Read the token's grant for `account` and record the read. The broker's
+/// refusal of the read itself (an expired or invalid token) is recorded and
+/// returned as the client error.
+async fn read_grant(
+    pool: &PgPool,
+    conn: &Connection,
+    account: i64,
+    declared: Option<Environment>,
+    host: &str,
+    token: &store::StoredToken,
+) -> anyhow::Result<Result<Result<(), GrantError>, ClientError>> {
+    let mut read = store::GrantRead {
+        account_id: account,
+        host: host.to_string(),
+        token_fingerprint: token.access_token.fingerprint(),
+        token_source: token.source.clone(),
+        verdict: "listed",
+        reason: None,
+        permission_scope: None,
+        accounts: None,
+    };
+    let outcome = match conn.account_list(&token.access_token).await {
+        Ok(g) => {
+            read.permission_scope = g.permission_scope.clone();
+            read.accounts = Some(json!(g
+                .accounts
+                .iter()
+                .map(|a| json!({ "ctid": a.ctid, "is_live": a.is_live, "login": a.trader_login }))
+                .collect::<Vec<_>>()));
+            let judged = judge_grant(account, declared, &g);
+            if let Err(e) = &judged {
+                read.verdict = e.verdict();
+                read.reason = Some(e.to_string());
+            }
+            Ok(judged)
+        }
+        Err(e) if e.is_token_rejected() => {
+            read.verdict = "rejected";
+            read.reason = Some(format!("the account-list request was refused: {e}"));
+            Err(e)
+        }
+        Err(e) => return Err(e.into()),
+    };
+    store::record_grant(pool, &read).await?;
+    if state_changed(
+        account,
+        format!("{} {}", read.verdict, read.token_fingerprint),
+    ) {
+        match read.verdict {
+            "listed" => tracing::info!(
+                account,
+                token = %read.token_fingerprint,
+                accounts = %read.accounts.as_ref().map(|a| a.to_string()).unwrap_or_default(),
+                "token grant includes the account"
+            ),
+            v => tracing::warn!(
+                account,
+                token = %read.token_fingerprint,
+                state = v,
+                reason = %read.reason.clone().unwrap_or_default(),
+                "token grant state changed"
+            ),
+        }
+    }
+    Ok(outcome)
 }
 
 /// One refresh at a time in this process: the refresh token is single-use,
@@ -266,8 +566,16 @@ async fn run(
     Ok(())
 }
 
-/// Authorise the application and one permitted account on a connection,
-/// refreshing the token when it is near expiry or rejected (once).
+/// Authorise the application and one permitted account on a connection.
+///
+/// After the application is authorised and before the account is, the
+/// token's grant is read (PR #6). An account the grant omits, or lists under
+/// the other environment, is refused with a [`GrantError`] and the token is
+/// NOT refreshed: a refresh would not add it, and it would end every other
+/// session using the token. If the grant read itself is refused as an
+/// expired or invalid token, the token is refreshed once and the grant read
+/// again. A listed account is then authorised, refreshing the token when it is
+/// near expiry or rejected (once), as before.
 pub async fn authorise<'c>(
     pool: &PgPool,
     conn: &'c Connection,
@@ -284,18 +592,38 @@ pub async fn authorise<'c>(
         .ok_or_else(|| anyhow::anyhow!("CTRADER_CLIENT_SECRET is not set"))?;
     conn.application_auth(client_id, client_secret).await?;
 
-    let mut token = current_token(pool, broker).await?.ok_or_else(|| {
+    let mut token = current_token(pool, conn, broker).await?.ok_or_else(|| {
         anyhow::anyhow!("no token: oauth_tokens is empty and CTRADER_ACCESS_TOKEN / CTRADER_REFRESH_TOKEN are not set")
     })?;
-    if token
-        .expires_at
-        .is_some_and(|t| t - Utc::now() < REFRESH_WHEN_WITHIN)
+
+    // The grant, read before anything here can refresh.
+    let declared = store::account_environment(pool, account.id()).await?;
+    let host = declared.map_or("unknown", |e| broker.host(e)).to_string();
+    // At most one refresh per authorisation: each refresh ends every other
+    // session using the old token.
+    let mut refreshed = false;
+    let judged = match read_grant(pool, conn, account.id(), declared, &host, &token).await? {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!(account = %account, error = %e, "the token's grant read was refused; refreshing once");
+            token = refresh(pool, conn, &token).await?;
+            refreshed = true;
+            read_grant(pool, conn, account.id(), declared, &host, &token).await??
+        }
+    };
+    judged?;
+
+    if !refreshed
+        && token
+            .expires_at
+            .is_some_and(|t| t - Utc::now() < REFRESH_WHEN_WITHIN)
     {
         token = refresh(pool, conn, &token).await?;
+        refreshed = true;
     }
     let session = match conn.account_auth(account, &token.access_token).await {
         Ok(s) => s,
-        Err(e) if e.is_token_rejected() => {
+        Err(e) if e.is_token_rejected() && !refreshed => {
             tracing::warn!(account = %account, "access token rejected; refreshing once");
             token = refresh(pool, conn, &token).await?;
             conn.account_auth(account, &token.access_token).await?

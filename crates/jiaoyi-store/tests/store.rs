@@ -90,6 +90,7 @@ async fn migrations_create_every_phase1_table(pool: PgPool) {
         "deal_fetches",
         "account_snapshots",
         "research_trials",
+        "token_grants",
     ] {
         assert!(tables.iter().any(|x| x == t), "{t} missing from {tables:?}");
     }
@@ -252,8 +253,10 @@ async fn a_universe_miss_is_recorded_with_its_reason(pool: PgPool) {
 async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(pool: PgPool) {
     let s = settings::snapshot(&pool, None).await.unwrap();
     // 17 phase-1 seeds, 4 history seeds (0004), 4 load/spread seeds (0005),
-    // and the owner's universe change (0005).
-    assert_eq!(s.version, 26);
+    // the owner's universe change (0005), the session-retry seed (0007) and
+    // the owner's SpotBrent change (0008).
+    assert_eq!(s.version, 28);
+    assert_eq!(s.integer("history.session_retry_secs").unwrap(), 5);
     assert_eq!(s.integer("history.tick_days_back").unwrap(), 7);
     assert_eq!(s.integer("spread.min_samples").unwrap(), 30);
     assert_eq!(s.integer("load.retry_minutes").unwrap(), 5);
@@ -294,6 +297,7 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
             "XAGUSD",
             "SpotCrude",
             "NatGas",
+            "SpotBrent",
             "BTCUSD",
             "ETHUSD"
         ]
@@ -303,9 +307,10 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     }
     assert!(u
         .iter()
-        .filter(|(n, _)| *n == "SpotCrude" || *n == "NatGas")
+        .filter(|(n, _)| *n == "SpotCrude" || *n == "NatGas" || *n == "SpotBrent")
         .all(|(_, c)| *c == jiaoyi_core::universe::AssetClass::Energy));
-    let change = &h[0];
+    // h[0] is the SpotBrent change (its own test); h[1] the energy names.
+    let change = &h[1];
     assert_eq!(change.version, 26);
     assert_eq!(change.changed_by, "owner");
     assert_eq!(
@@ -321,10 +326,10 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     assert_eq!(s.integer("spread.sample_secs").unwrap(), 60);
     // Every seed and the owner's change are logged.
     let h = settings::history(&pool, None).await.unwrap();
-    assert_eq!(h.len(), 26);
+    assert_eq!(h.len(), 28);
     assert!(h
         .iter()
-        .filter(|c| c.version != 26)
+        .filter(|c| c.version != 26 && c.version != 28)
         .all(|c| c.changed_by == "migration" && c.old_value.is_none()));
 }
 
@@ -361,7 +366,7 @@ async fn an_out_of_bounds_value_is_refused_and_nothing_changes(pool: PgPool) {
         30,
         "not clamped, not changed"
     );
-    assert_eq!(s.version, 26, "a refused change does not bump the version");
+    assert_eq!(s.version, 28, "a refused change does not bump the version");
     assert!(matches!(
         settings::change(
             &pool,
@@ -392,11 +397,11 @@ async fn a_change_is_logged_with_old_and_new_values_and_bumps_the_version(pool: 
     )
     .await
     .unwrap();
-    assert_eq!(v, 27);
+    assert_eq!(v, 29);
     let h = settings::history(&pool, Some("ticks.retention_days"))
         .await
         .unwrap();
-    assert_eq!(h[0].version, 27);
+    assert_eq!(h[0].version, 29);
     assert_eq!(h[0].old_value, Some(json!(30)));
     assert_eq!(h[0].new_value, Some(json!(14)));
     assert_eq!(h[0].changed_by, "owner");
@@ -542,6 +547,66 @@ async fn token_round_trip_and_expiry_reason(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(rows, 1);
+    assert_eq!(t.seed_fingerprint, None, "saved without a seed");
+}
+
+/// PR #6: a stored seed remembers its fingerprint, and a refresh of it keeps
+/// that fingerprint; the grant reads are append-only and hold no token.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_seed_keeps_its_fingerprint_through_a_refresh_and_grant_reads_are_append_only(
+    pool: PgPool,
+) {
+    use jiaoyi_core::secret::Secret;
+    let seed = Secret::new("seed-access");
+    store::store_seed(&pool, &seed, &Secret::new("seed-refresh"), None)
+        .await
+        .unwrap();
+    let t = store::load_token(&pool).await.unwrap().unwrap();
+    assert_eq!(t.source, "env_seed");
+    assert_eq!(t.seed_fingerprint, Some(seed.fingerprint()));
+    store::save_token(
+        &pool,
+        &Secret::new("refreshed"),
+        &Secret::new("refreshed-r"),
+        Some("bearer"),
+        Some(Utc::now()),
+        "refresh",
+    )
+    .await
+    .unwrap();
+    let t = store::load_token(&pool).await.unwrap().unwrap();
+    assert_eq!(t.access_token.expose(), "refreshed");
+    assert_eq!(t.seed_fingerprint, Some(seed.fingerprint()), "kept");
+
+    let read = store::GrantRead {
+        account_id: A,
+        host: "demo.ctraderapi.com".into(),
+        token_fingerprint: t.access_token.fingerprint(),
+        token_source: t.source.clone(),
+        verdict: "not_listed",
+        reason: Some(
+            "token grant does not include account 49236051 (grant lists: [43002148])".into(),
+        ),
+        permission_scope: Some("SCOPE_TRADE".into()),
+        accounts: Some(json!([{ "ctid": 43002148, "is_live": true, "login": 1 }])),
+    };
+    store::record_grant(&pool, &read).await.unwrap();
+    let latest = store::latest_grants(&pool).await.unwrap();
+    assert_eq!(latest.len(), 1);
+    assert_eq!(latest[0].verdict, "not_listed");
+    for q in [
+        "UPDATE token_grants SET verdict = 'listed'",
+        "DELETE FROM token_grants",
+    ] {
+        let e = sqlx::query(q).execute(&pool).await.unwrap_err();
+        assert!(e.to_string().contains("append-only"), "{q}: {e}");
+    }
+    // A fingerprint is 16 hex characters; anything else is refused.
+    let bad = store::GrantRead {
+        token_fingerprint: "refreshed".into(),
+        ..read
+    };
+    assert!(store::record_grant(&pool, &bad).await.is_err());
 }
 
 /// Review finding on #3: a flush is all or nothing, and a retried flush
@@ -602,6 +667,7 @@ fn fetch(kind: &'static str, error: Option<&str>) -> jiaoyi_store::history::Fetc
         last_tick: None,
         delta_signs: vec!["add".into()],
         error: error.map(String::from),
+        session_ended: false,
     }
 }
 
@@ -806,4 +872,114 @@ async fn concurrent_partition_creators_all_succeed(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(monthly, 12);
+}
+
+/// The server notices sqlx reports (target `sqlx::postgres::notice`).
+#[derive(Clone, Default)]
+struct Notices(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+struct Message(String);
+
+impl tracing::field::Visit for Message {
+    fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
+        if f.name() == "message" {
+            self.0 = format!("{v:?}");
+        }
+    }
+    fn record_str(&mut self, f: &tracing::field::Field, v: &str) {
+        if f.name() == "message" {
+            self.0 = v.to_string();
+        }
+    }
+}
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Notices {
+    fn on_event(&self, e: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        if e.metadata().target() == "sqlx::postgres::notice" {
+            let mut m = Message(String::new());
+            e.record(&mut m);
+            self.0.lock().unwrap().push(m.0);
+        }
+    }
+}
+
+/// PR #6, item C: the deploy log carried `relation "ticks_p2026102x" already
+/// exists, skipping` from every partition check. An existing partition is now
+/// found with to_regclass before the CREATE, so the notice cannot occur; the
+/// advisory lock and the 42P07 handling stay for the race.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_existing_partition_raises_no_notice(pool: PgPool) {
+    use tracing_subscriber::layer::SubscriberExt;
+    let notices = Notices::default();
+    let _g = tracing::subscriber::set_default(tracing_subscriber::registry().with(notices.clone()));
+    // The counter sees a notice when one is raised (it is not blind).
+    sqlx::query("DO $$ BEGIN RAISE NOTICE 'counter check'; END $$")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        notices.0.lock().unwrap().clone(),
+        vec!["counter check".to_string()]
+    );
+    notices.0.lock().unwrap().clear();
+
+    let day = NaiveDate::from_ymd_opt(2027, 3, 1).unwrap();
+    let at = day.and_hms_opt(12, 0, 0).unwrap().and_utc();
+    for _ in 0..3 {
+        ticks::ensure_partitions(&pool, day, 2).await.unwrap();
+        jiaoyi_store::history::ensure_partitions(&pool, at, at)
+            .await
+            .unwrap();
+    }
+    let made: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_class WHERE relkind = 'r'
+           AND relname IN ('ticks_p20270301', 'ticks_p20270302', 'ticks_history_p202703')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(made, 3);
+    assert_eq!(notices.0.lock().unwrap().clone(), Vec::<String>::new());
+}
+
+/// PR #6, item D. Owner, 24-10-2026: "use the broker's names for energy";
+/// Brent is SpotBrent on the broker (energy_candidates, load run 6 on
+/// 43002148). One logged change of universe.symbols by the owner; no futures
+/// (-F) or perpetual (-PERP) names; the demo account's names are not guessed.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_owner_adds_spot_brent_to_the_energy_class(pool: PgPool) {
+    let s = settings::snapshot(&pool, None).await.unwrap();
+    let u = s.universe("universe.symbols").unwrap();
+    let energy: Vec<&str> = u
+        .iter()
+        .filter(|(_, c)| *c == AssetClass::Energy)
+        .map(|(n, _)| n.as_str())
+        .collect();
+    assert_eq!(energy, vec!["SpotCrude", "NatGas", "SpotBrent"]);
+    assert!(u
+        .iter()
+        .all(|(n, _)| !n.ends_with("-F") && !n.ends_with("-PERP")));
+    let h = settings::history(&pool, Some("universe.symbols"))
+        .await
+        .unwrap();
+    assert_eq!(h.len(), 3, "seed, energy names, SpotBrent");
+    let c = &h[0];
+    assert_eq!(c.version, s.version, "the latest change");
+    assert_eq!(
+        h[1].version,
+        c.version - 2,
+        "one settings seed between them (0007)"
+    );
+    assert_eq!(c.changed_by, "owner");
+    assert_eq!(
+        c.reason,
+        "owner 24-10: use the broker's names for energy; Brent is SpotBrent on the broker (energy_candidates, load run 6 on 43002148)"
+    );
+    assert_eq!(c.old_value, h[1].new_value);
+    // Only SpotBrent was added; nothing else moved.
+    let old = jiaoyi_core::universe::parse_universe(c.old_value.as_ref().unwrap()).unwrap();
+    let mut expected = old.clone();
+    let after_natgas = expected.iter().position(|(n, _)| n == "NatGas").unwrap() + 1;
+    expected.insert(after_natgas, ("SpotBrent".to_string(), AssetClass::Energy));
+    assert_eq!(u, expected);
 }

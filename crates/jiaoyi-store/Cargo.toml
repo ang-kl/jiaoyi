@@ -18,3 +18,6 @@ thiserror.workspace = true
 [dev-dependencies]
 tokio.workspace = true
 sqlx.workspace = true
+# Counts the server notices sqlx reports as tracing events (PR #6, item C).
+tracing.workspace = true
+tracing-subscriber.workspace = true

@@ -49,7 +49,7 @@ All 20 names below appear in the bot's own broker deal statements (bot-trade `ag
 | Equity indices (7) | US500, NAS100, US30, GER40, UK100, JPN225, AUS200 |
 | FX (6) | EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, NZDUSD |
 | Metals (2) | XAUUSD, XAGUSD |
-| Energy (3) | USOIL, UKOIL, NATGAS |
+| Energy (3) | NatGas (broker name, owner 24-10), SpotCrude (broker name, owner 24-10), SpotBrent (broker name, owner 24-10) |
 | Crypto (2) | BTCUSD, ETHUSD |
 
 Phase 1 drops a symbol that fails any of these checks, and records why:
