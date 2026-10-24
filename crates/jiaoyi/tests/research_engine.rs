@@ -1592,6 +1592,150 @@ async fn a_trail_hit_on_the_period_end_day_counts(pool: PgPool) {
     assert!((d.exit_fill - 155.3).abs() < 1e-9, "{d:?}");
 }
 
+/// A steady downtrend in the held-out period, the uptrend's mirror: close
+/// −0.5 a day from 200, range ±1 (ATR 2), entries from day 100. With
+/// breakout 50 the daily rules go short on day 100 at the level 149.5.
+fn downtrend(n: usize) -> jiaoyi_core::research::h1::Series {
+    let mut s = uptrend(n);
+    let close: Vec<f64> = (0..n).map(|i| 200.0 - 0.5 * i as f64).collect();
+    s.open = (0..n)
+        .map(|i| if i == 0 { 200.0 } else { close[i - 1] })
+        .collect();
+    s.high = close.iter().map(|c| c + 1.0).collect();
+    s.low = close.iter().map(|c| c - 1.0).collect();
+    s.close = close;
+    s
+}
+
+/// Set the bars' measured basis: bar → ask is `+to_ask`, bar → bid is
+/// `−to_bid`, the spread is their sum.
+fn basis(
+    mut s: jiaoyi_core::research::h1::Series,
+    to_ask: f64,
+    to_bid: f64,
+) -> jiaoyi_core::research::h1::Series {
+    let n = s.dates.len();
+    s.to_ask = vec![to_ask; n];
+    s.to_bid = vec![to_bid; n];
+    s.spread = vec![to_ask + to_bid; n];
+    s
+}
+
+/// (bid, ask) ticks at the given hours of a day, the same millisecond for
+/// both sides.
+fn quotes(day_open: i64, q: &[(i64, f64, f64)]) -> (Ticks, Ticks) {
+    (
+        q.iter()
+            .map(|(h, b, _)| (day_open + h * HOUR, e5(*b)))
+            .collect(),
+        q.iter()
+            .map(|(h, _, a)| (day_open + h * HOUR, e5(*a)))
+            .collect(),
+    )
+}
+
+/// Codex P2 on #9 (recheck.rs:185): a long's stop is a bid level, checked
+/// against the actual bid. Ask bars, spread 2 (slippage 1× = 2), d = 6.
+/// The fill is the ask 150.7 + 2 = 152.7, so the stop is the bid 146.7.
+/// Day 103's ask bar low of 148.0 puts the bid at 146.0: the day is
+/// streamed, and its bid 146.0 (ask 148.0) exits at 146.0 − 2 = 144.0. Put
+/// into the ask basis, that bid read 148.0 and the stop was never reached
+/// (Codex's example: stop 94, bid 93 / ask 95).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_long_stop_is_a_bid_level_on_ask_bars(pool: PgPool) {
+    use jiaoyi_core::research::h1::ExitReason;
+    let mut s = basis(uptrend(112), 0.0, 2.0);
+    s.low[103] = 148.0;
+    let x = prepared(s);
+    let (mut bids, mut asks) = quotes(
+        x.opens[100].timestamp_millis(),
+        &[(1, 148.0, 150.0), (2, 148.7, 150.7), (3, 148.9, 150.9)],
+    );
+    let (b103, a103) = quotes(
+        x.opens[103].timestamp_millis(),
+        &[(1, 149.0, 151.0), (2, 146.0, 148.0), (3, 149.5, 151.5)],
+    );
+    bids.extend(b103);
+    asks.extend(a103);
+    let (trades, _, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert!((t.entry_fill - 152.7).abs() < 1e-9, "{t:?}");
+    assert!((t.initial_stop - 146.7).abs() < 1e-9, "{t:?}");
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (103, ExitReason::Stop),
+        "{t:?}"
+    );
+    assert!((t.exit_ref - 146.0).abs() < 1e-9, "{t:?}");
+    assert!((t.exit_fill - 144.0).abs() < 1e-9, "{t:?}");
+}
+
+/// Codex P2 on #9 (recheck.rs:185): a short's stop is an ask level, checked
+/// against the actual ask. Mid bars, spread 2 (bar → ask +1). The fill is
+/// the bid 149.3 − 2 = 147.3, so the stop is the ask 153.3; the ask 154.0
+/// exits at 154.0 + 2 = 156.0. Put into the mid basis, that ask read 153.0
+/// and the stop was missed.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_short_stop_is_an_ask_level_on_mid_bars(pool: PgPool) {
+    use jiaoyi_core::research::h1::{ExitReason, Side};
+    let mut s = basis(downtrend(112), 1.0, 1.0);
+    s.high[100] = 153.5;
+    let x = prepared(s);
+    let (bids, asks) = quotes(
+        x.opens[100].timestamp_millis(),
+        &[(1, 150.0, 152.0), (2, 149.3, 151.3), (3, 152.0, 154.0)],
+    );
+    let (trades, _, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert_eq!(t.side, Side::Short);
+    assert!((t.entry_fill - 147.3).abs() < 1e-9, "{t:?}");
+    assert!((t.initial_stop - 153.3).abs() < 1e-9, "{t:?}");
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (100, ExitReason::Stop),
+        "{t:?}"
+    );
+    assert!((t.exit_fill - 156.0).abs() < 1e-9, "{t:?}");
+}
+
+/// Codex P2 on #9 (recheck.rs:185): a short's stop trails from the lowest
+/// actual ask and is never loosened. Bid bars, spread 2 (bar → ask +2). The
+/// stop starts at the ask 153.3; the ask falls to 148.0, whose trail
+/// 148.0 + 6 = 154.0 would loosen it, so 153.3 holds; the ask 153.6 then
+/// exits at 153.6 + 2 = 155.6. Trailed in the bid basis (146.0 + 6 = 152.0)
+/// and compared with the ask put into it (151.6), the stop was missed.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_short_stop_trails_on_the_ask_and_never_loosens(pool: PgPool) {
+    use jiaoyi_core::research::h1::{ExitReason, Side};
+    let mut s = basis(downtrend(112), 2.0, 0.0);
+    s.high[100] = 152.0;
+    s.low[100] = 146.0;
+    let x = prepared(s);
+    let (bids, asks) = quotes(
+        x.opens[100].timestamp_millis(),
+        &[
+            (1, 150.0, 152.0),
+            (2, 149.3, 151.3),
+            (3, 146.0, 148.0),
+            (4, 151.6, 153.6),
+        ],
+    );
+    let (trades, _, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert_eq!(t.side, Side::Short);
+    assert!((t.initial_stop - 153.3).abs() < 1e-9, "{t:?}");
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (100, ExitReason::Stop),
+        "{t:?}"
+    );
+    assert!((t.exit_ref - 153.6).abs() < 1e-9, "{t:?}");
+    assert!((t.exit_fill - 155.6).abs() < 1e-9, "{t:?}");
+}
+
 /// Codex P2 on #9 (h1job.rs:460): on held-out data, rule 2 holds only when
 /// both the daily-bar-executed mean and the tick-counted mean are above the
 /// 95th percentile of the daily-bar controls; each half fails it alone.

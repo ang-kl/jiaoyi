@@ -6,13 +6,17 @@
 //! - the fill is the first ask at or above the level for a long (the first
 //!   bid at or below it for a short), made worse by the slippage; a day whose
 //!   ticks never reach the level makes no trade;
-//! - from the fill on, the stop trails tick by tick, stop_atr × the last
-//!   completed day's ATR behind the best price since the fill, and a tick
-//!   beyond it exits (at that tick's bid for a long, ask for a short, minus or
-//!   plus the slippage). Prices are compared in the bars' measured basis.
+//! - the stop is on the exit side, in actual quotes: a long's is a bid level
+//!   (the fill − stop_atr × ATR, then trailed stop_atr × the last completed
+//!   day's ATR behind the best bid since the fill), checked against every
+//!   bid; a short's is an ask level, checked against every ask. A quote
+//!   beyond it exits at that quote, made worse by the slippage. No tick is
+//!   put into the bars' basis (Codex P2 on #9).
 //!
-//! Between those days the daily-bar rules run unchanged. A day on which the
-//! daily rules would exit is streamed the same way; if its ticks do not reach
+//! Between those days only the bar is known: it is put on the exit side by
+//! the measured basis (bar → bid for a long, bar → ask for a short) to trail
+//! the stop and to find the days to stream. A day whose bar reaches the stop
+//! is streamed the same way; if its ticks do not reach
 //! the stop, the trade goes on. The period's last day is streamed too: a
 //! trade still open after it closes at that day's last bid (long) or ask
 //! (short), made worse by the slippage. Both results are kept, with the
@@ -147,13 +151,26 @@ async fn tick_trade(
     // reached in the fill's millisecond counts (the worse order for the
     // trade; the true order of a bid and an ask update there is not known).
     let first = if long { QuoteSide::Ask } else { QuoteSide::Bid };
-    // The exit side's price (a long's bid, a short's ask), when known, and
-    // the same price in the bars' basis, compared with the stop.
-    let exit_side = |k: usize, b: &Option<i64>, a: &Option<i64>| -> Option<(f64, f64)> {
+    // Stops live on the exit side, in actual quotes (Codex P2 on #9): a
+    // long's stop is a bid level, checked against each actual bid and
+    // trailed from the best actual bid; a short's is an ask level, against
+    // each actual ask and the lowest actual ask. No tick is put into the
+    // bars' basis.
+    let side_px = |b: &Option<i64>, a: &Option<i64>| -> Option<f64> {
         if long {
-            b.map(|b| (px(b), px(b) + s.to_bid[k]))
+            b.map(px)
         } else {
-            a.map(|a| (px(a), px(a) - s.to_ask[k]))
+            a.map(px)
+        }
+    };
+    // A day without streamed ticks has only its bar: its prices are put on
+    // the exit side by the measured basis (bar → bid for a long, bar → ask
+    // for a short), to trail and to find the days to stream.
+    let bar_px = |k: usize, v: f64| {
+        if long {
+            v - s.to_bid[k]
+        } else {
+            v + s.to_ask[k]
         }
     };
     let exit_fill = |k: usize, price: f64| {
@@ -183,9 +200,8 @@ async fn tick_trade(
     };
     let initial_stop = if long { entry_fill - d } else { entry_fill + d };
     let mut stop = initial_stop;
-    let mut best: Option<f64> = None;
     let better = |a: f64, b: f64| if long { a.max(b) } else { a.min(b) };
-    let beyond = |r: f64, stop: f64| if long { r <= stop } else { r >= stop };
+    let beyond = |price: f64, stop: f64| if long { price <= stop } else { price >= stop };
     let trail = |stop: f64, best: f64, atr: f64| {
         if long {
             stop.max(best - p.stop_atr * atr)
@@ -194,38 +210,40 @@ async fn tick_trade(
         }
     };
     // Walk one day's updates from index `from`, trailing on `atr`. Every
-    // update of the exit side is checked; the first one checked on a day
-    // walked from its start is a gap when beyond the stop.
+    // exit-side update is checked against the stop before it counts as a
+    // new best; the first one checked on a day walked from its start is a
+    // gap when beyond the stop. Returns the exit quote and the reason.
     let walk = |q: &[Quote],
                 from: usize,
-                k: usize,
                 atr: f64,
                 stop: &mut f64,
                 best: &mut Option<f64>|
-     -> Option<(f64, f64, ExitReason)> {
+     -> Option<(f64, ExitReason)> {
         let mut opening = from == 0;
         for (_, b, a) in q.iter().skip(from) {
-            let Some((price, r)) = exit_side(k, b, a) else {
+            let Some(price) = side_px(b, a) else {
                 continue;
             };
-            if beyond(r, *stop) {
+            if beyond(price, *stop) {
                 let why = if opening {
                     ExitReason::GapThroughStop
                 } else {
                     ExitReason::Stop
                 };
-                return Some((r, exit_fill(k, price), why));
+                return Some((price, why));
             }
             opening = false;
-            let nb = best.map_or(r, |x| better(x, r));
+            let nb = best.map_or(price, |x| better(x, price));
             *best = Some(nb);
             *stop = trail(*stop, nb, atr);
         }
         None
     };
+    // The best exit-side quote since the fill: the one standing at the fill.
+    let mut best: Option<f64> = side_px(&b0, &a0);
     let mut exit: Option<(usize, f64, f64, ExitReason)> = None;
-    if let Some((r, f, why)) = walk(&q, i0 + 1, t_e, atr_e, &mut stop, &mut best) {
-        exit = Some((t_e, r, f, why));
+    if let Some((price, why)) = walk(&q, i0 + 1, atr_e, &mut stop, &mut best) {
+        exit = Some((t_e, price, exit_fill(t_e, price), why));
     }
     let mut note = None;
     // The last day's updates, when streamed: the period-end close takes its
@@ -238,13 +256,10 @@ async fn tick_trade(
         if let (Some(b), Some(a)) = (best, ind.atr[t_e]) {
             stop = trail(stop, b, a);
         }
-        let mut best_d = best.unwrap_or(if long { s.high[t_e] } else { s.low[t_e] });
         for u in (t_e + 1)..=s.last {
-            let daily_exit = if long {
-                s.open[u] <= stop || s.low[u] <= stop
-            } else {
-                s.open[u] >= stop || s.high[u] >= stop
-            };
+            let open_q = bar_px(u, s.open[u]);
+            let worst_q = bar_px(u, if long { s.low[u] } else { s.high[u] });
+            let daily_exit = beyond(open_q, stop) || beyond(worst_q, stop);
             // A day the daily rules exit on is streamed, and so is the
             // period's last day (Codex P2 on #9): a tick stop or trail hit
             // there counts.
@@ -258,26 +273,18 @@ async fn tick_trade(
                         ));
                         break;
                     }
-                    // No ticks that day: the daily-bar exit stands.
-                    let gap = if long {
-                        s.open[u] <= stop
-                    } else {
-                        s.open[u] >= stop
-                    };
-                    let r = if gap { s.open[u] } else { stop };
-                    let f = if long {
-                        r - s.to_bid[u] - slip(u)
-                    } else {
-                        r + s.to_ask[u] + slip(u)
-                    };
+                    // No ticks that day: the daily-bar exit stands, on the
+                    // exit side.
+                    let gap = beyond(open_q, stop);
+                    let price = if gap { open_q } else { stop };
                     note = Some(format!(
                         "no ticks on {}: the daily-bar exit is kept",
                         s.dates[u]
                     ));
                     exit = Some((
                         u,
-                        r,
-                        f,
+                        price,
+                        exit_fill(u, price),
                         if gap {
                             ExitReason::GapThroughStop
                         } else {
@@ -287,46 +294,36 @@ async fn tick_trade(
                     break;
                 }
                 let atr_prev = ind.atr[u - 1].unwrap_or(atr_e);
-                let mut b = Some(best_d);
-                if let Some((r, f, why)) = walk(&qu, 0, u, atr_prev, &mut stop, &mut b) {
-                    exit = Some((u, r, f, why));
+                if let Some((price, why)) = walk(&qu, 0, atr_prev, &mut stop, &mut best) {
+                    exit = Some((u, price, exit_fill(u, price), why));
                     break;
                 }
-                best_d = b.unwrap_or(best_d);
-                if let Some(a) = ind.atr[u] {
-                    stop = trail(stop, best_d, a);
+                if let (Some(b), Some(a)) = (best, ind.atr[u]) {
+                    stop = trail(stop, b, a);
                 }
                 if u == s.last {
                     last_day = Some(qu);
                 }
                 continue;
             }
-            best_d = better(best_d, if long { s.high[u] } else { s.low[u] });
+            let day_best = bar_px(u, if long { s.high[u] } else { s.low[u] });
+            let nb = best.map_or(day_best, |b| better(b, day_best));
+            best = Some(nb);
             if let Some(a) = ind.atr[u] {
-                stop = trail(stop, best_d, a);
+                stop = trail(stop, nb, a);
             }
         }
     }
     // Still open at the period's end: closed at the last day's last quote
     // on the exit side (the bid for a long, the ask for a short) and the
-    // slippage; without ticks that day, at the daily close as before.
+    // slippage; without ticks that day, at its close put on that side.
     let (t_x, exit_ref, exit_fill, exit_reason) = exit.unwrap_or_else(|| {
         let k = s.last;
-        let last_quote = last_day
+        let price = last_day
             .as_deref()
-            .and_then(|q| q.iter().rev().find_map(|(_, b, a)| exit_side(k, b, a)));
-        match last_quote {
-            Some((price, r)) => (k, r, exit_fill(k, price), ExitReason::PeriodEnd),
-            None => {
-                let c = s.close[k];
-                let f = if long {
-                    c - s.to_bid[k] - slip(k)
-                } else {
-                    c + s.to_ask[k] + slip(k)
-                };
-                (k, c, f, ExitReason::PeriodEnd)
-            }
-        }
+            .and_then(|q| q.iter().rev().find_map(|(_, b, a)| side_px(b, a)))
+            .unwrap_or_else(|| bar_px(k, s.close[k]));
+        (k, price, exit_fill(k, price), ExitReason::PeriodEnd)
     });
     let gross_r = if long {
         (exit_fill - entry_fill) / d
