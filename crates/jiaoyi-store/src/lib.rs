@@ -693,6 +693,56 @@ pub async fn bars(pool: &PgPool, account_id: i64, symbol_id: i64) -> Result<Vec<
         .collect())
 }
 
+/// The broker symbol ids an account's stored symbols carry under `name`.
+pub async fn symbol_ids_by_name(pool: &PgPool, account_id: i64, name: &str) -> Result<Vec<i64>> {
+    Ok(sqlx::query_scalar(
+        "SELECT broker_symbol_id FROM symbols WHERE account_id = $1 AND name = $2
+         ORDER BY broker_symbol_id",
+    )
+    .bind(account_id)
+    .bind(name)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Stored daily bars of one symbol dated `from..=to` (no lower bound when
+/// `from` is `None`), in date order, at most `limit` rows.
+pub async fn bars_between(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+    from: Option<NaiveDate>,
+    to: NaiveDate,
+    limit: i64,
+) -> Result<Vec<BarRow>> {
+    let rows = sqlx::query(
+        "SELECT bar_date, bar_open_utc, open, high, low, close, tick_volume
+         FROM daily_bars
+         WHERE account_id = $1 AND broker_symbol_id = $2
+           AND ($3::date IS NULL OR bar_date >= $3) AND bar_date <= $4
+         ORDER BY bar_date LIMIT $5",
+    )
+    .bind(account_id)
+    .bind(symbol_id)
+    .bind(from)
+    .bind(to)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| BarRow {
+            bar_date: r.get("bar_date"),
+            bar_open_utc: r.get("bar_open_utc"),
+            open: r.get("open"),
+            high: r.get("high"),
+            low: r.get("low"),
+            close: r.get("close"),
+            tick_volume: r.get("tick_volume"),
+        })
+        .collect())
+}
+
 // ---------------------------------------------------------------- reconcile
 
 pub async fn record_reconcile<'e, E>(

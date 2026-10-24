@@ -584,3 +584,119 @@ async fn side_coverage(
     }
     Ok(c)
 }
+
+// ------------------------------------------------------------- /research/bars
+
+/// At most this many bars per `/research/bars` reply; a longer range is
+/// marked `truncated` with the date to continue from.
+pub const BARS_PER_REPLY: usize = 5000;
+
+/// The query of `/research/bars`.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct BarsQuery {
+    pub account: Option<i64>,
+    pub symbol: Option<String>,
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+}
+
+/// Why `/research/bars` refused a request.
+#[derive(Debug, thiserror::Error)]
+pub enum BarsRefusal {
+    #[error("{0}")]
+    BadRequest(String),
+    /// Not on the account allowlist, or reaching into the sealed held-out period.
+    #[error("{0}")]
+    Forbidden(String),
+    #[error("{0}")]
+    NotFound(String),
+    #[error(transparent)]
+    Store(#[from] store::StoreError),
+}
+
+/// Development-period daily bars of one symbol, exactly as stored (R0 of the
+/// edge test). Only accounts on the allowlist; nothing dated on or after the
+/// held-out seal (2025-10-24): a request reaching into it is refused, never
+/// clamped. A bar dated by its UTC open that runs past the seal (an FX daily
+/// bar opening at 21:00 UTC on 23-10 ends at 21:00 on 24-10) is sealed too.
+pub async fn bars(
+    pool: &PgPool,
+    allowed: &std::collections::BTreeSet<i64>,
+    q: &BarsQuery,
+) -> Result<serde_json::Value, BarsRefusal> {
+    use jiaoyi_core::seal;
+    let bad = |m: &str| BarsRefusal::BadRequest(m.to_string());
+    let account = q.account.ok_or_else(|| bad("account is required"))?;
+    let symbol = q
+        .symbol
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| bad("symbol is required"))?;
+    let to = q.to.ok_or_else(|| {
+        bad("to is required (the last bar date, at most the day before the held-out seal 2025-10-24)")
+    })?;
+    if !allowed.contains(&account) {
+        return Err(BarsRefusal::Forbidden(format!(
+            "account {account} is not on {}",
+            jiaoyi_core::allowlist::ALLOWLIST_VAR
+        )));
+    }
+    if to >= seal::held_out_from() {
+        return Err(BarsRefusal::Forbidden(format!(
+            "sealed: to {to} is on or after {}, the start of the held-out period ({} → {}); development data ends before it. The request is refused, not clamped",
+            seal::held_out_from(),
+            seal::held_out_from(),
+            seal::held_out_to()
+        )));
+    }
+    if q.from.is_some_and(|f| f > to) {
+        return Err(bad("from is after to"));
+    }
+    let ids = store::symbol_ids_by_name(pool, account, symbol).await?;
+    let id = match ids.as_slice() {
+        [id] => *id,
+        [] => {
+            return Err(BarsRefusal::NotFound(format!(
+                "no stored symbol {symbol:?} on account {account}"
+            )))
+        }
+        many => {
+            return Err(BarsRefusal::BadRequest(format!(
+            "symbol {symbol:?} is stored under several broker ids on account {account}: {many:?}"
+        )))
+        }
+    };
+    let mut rows =
+        store::bars_between(pool, account, id, q.from, to, BARS_PER_REPLY as i64 + 1).await?;
+    let next_from = (rows.len() > BARS_PER_REPLY).then(|| rows[BARS_PER_REPLY].bar_date);
+    rows.truncate(BARS_PER_REPLY);
+    if let Some(b) = rows
+        .iter()
+        .find(|b| !seal::daily_bar_is_development(b.bar_open_utc))
+    {
+        return Err(BarsRefusal::Forbidden(format!(
+            "sealed: the bar dated {} opens {} and runs to {}, past the held-out seal {}; ask to {} or earlier. The request is refused, not clamped",
+            b.bar_date,
+            b.bar_open_utc.to_rfc3339(),
+            seal::daily_bar_end(b.bar_open_utc).to_rfc3339(),
+            seal::seal_instant().to_rfc3339(),
+            b.bar_date.pred_opt().unwrap_or(b.bar_date)
+        )));
+    }
+    Ok(serde_json::json!({
+        "account_id": account,
+        "symbol": symbol,
+        "broker_symbol_id": id,
+        "from": q.from,
+        "to": to,
+        "held_out_from": seal::held_out_from(),
+        "count": rows.len(),
+        "truncated": next_from.is_some(),
+        "next_from": next_from,
+        "notes": [
+            "Daily bars exactly as stored: prices are exact decimal strings in the broker's price units; tick_volume is the broker's.",
+            "bar_date is the UTC date of the bar's open; a bar ends 24 h after bar_open_utc.",
+        ],
+        "bars": rows,
+    }))
+}

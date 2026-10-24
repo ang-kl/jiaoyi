@@ -29,3 +29,6 @@ tracing-subscriber.workspace = true
 [dev-dependencies]
 jiaoyi-ctrader = { workspace = true, features = ["testkit"] }
 sqlx.workspace = true
+# Drive the HTTP router in tests without a socket.
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

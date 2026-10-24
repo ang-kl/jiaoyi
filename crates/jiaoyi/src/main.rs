@@ -46,11 +46,12 @@ async fn main() -> anyhow::Result<()> {
         loading: loading.clone(),
         recorders: recorders.clone(),
         history: history.clone(),
+        allowed_accounts: Arc::new(cfg.plan.permitted.iter().map(|(a, _)| a.id()).collect()),
     });
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.http_port)).await?;
     tracing::info!(
         port = cfg.http_port,
-        "serving /health, /phase1/report and /research/inventory"
+        "serving /health, /phase1/report, /research/inventory and /research/bars"
     );
 
     let (trigger, stop) = shutdown::channel();
