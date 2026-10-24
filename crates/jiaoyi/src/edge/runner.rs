@@ -26,7 +26,7 @@ use super::data::{Data, Stage};
 use super::h1job::{self, Deposit, Setting};
 use super::prereg;
 use super::recheck;
-use super::sampler::{self, FIRST_SAMPLE_YEAR, LAST_SAMPLE_YEAR};
+use super::sampler::{self, Sampled, FIRST_SAMPLE_YEAR, LAST_SAMPLE_YEAR};
 use crate::config::BrokerConfig;
 use crate::loader;
 use crate::shutdown::Shutdown;
@@ -204,29 +204,49 @@ where
         Stage::Development => {
             // Inputs first: the spread samples (broker), then the deposit currency.
             if let Some(missing) = missing_samples(pool, setting.account_id).await? {
-                let conn = connect(setting.account_id).await?;
-                let session = loader::authorise(pool, &conn, broker, account).await?;
-                let data = Data::new(pool, Stage::Development);
-                for (id, name, have) in missing {
-                    if shutdown.is_set() {
-                        return Ok(Step::Waiting("shutdown".into()));
+                // A sample waits for a load run that ended ok with the
+                // symbol's daily bars (its basis observations come from them).
+                let mut ready = Vec::new();
+                let mut no_bars = Vec::new();
+                for m in missing {
+                    match rs::complete_bar_load(pool, setting.account_id, m.0).await? {
+                        Some(_) => ready.push(m),
+                        None => no_bars.push(m.1),
                     }
-                    sampler::sample_symbol(
-                        &data,
-                        &session,
-                        setting.account_id,
-                        id,
-                        &name,
-                        &have,
-                        FIRST_SAMPLE_YEAR..=LAST_SAMPLE_YEAR,
-                    )
-                    .await?;
+                }
+                if !ready.is_empty() {
+                    let conn = connect(setting.account_id).await?;
+                    let session = loader::authorise(pool, &conn, broker, account).await?;
+                    let data = Data::new(pool, Stage::Development);
+                    for (id, name, have) in ready {
+                        if shutdown.is_set() {
+                            return Ok(Step::Waiting("shutdown".into()));
+                        }
+                        if sampler::sample_symbol(
+                            &data,
+                            &session,
+                            setting.account_id,
+                            id,
+                            &name,
+                            &have,
+                            FIRST_SAMPLE_YEAR..=LAST_SAMPLE_YEAR,
+                        )
+                        .await?
+                            == Sampled::WaitingForBars
+                        {
+                            no_bars.push(name);
+                        }
+                    }
                 }
                 if let Some(still) = missing_samples(pool, setting.account_id).await? {
-                    return Ok(Step::Waiting(format!(
-                        "{} symbols still miss June spread samples",
-                        still.len()
-                    )));
+                    let mut why = format!("{} symbols still miss June spread samples", still.len());
+                    if !no_bars.is_empty() {
+                        why.push_str(&format!(
+                            "; waiting for a load run with status ok to store the daily bars of {}",
+                            no_bars.join(", ")
+                        ));
+                    }
+                    return Ok(Step::Waiting(why));
                 }
             }
             let deposit = match h1job::deposit_currency(pool, setting.account_id).await? {

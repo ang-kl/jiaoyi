@@ -468,6 +468,9 @@ struct Statement {
     assets: Option<Value>,
     /// The quote → deposit rate of the XAUUSD closing deal.
     xau_close_rate: f64,
+    /// Whether the load stored the daily bars and ended `ok`; otherwise it
+    /// ended `partial` before the bars (the loader stores symbol rows first).
+    bars_loaded: bool,
 }
 
 impl Default for Statement {
@@ -484,6 +487,7 @@ impl Default for Statement {
                 {"asset_id": 20, "name": "XAU"},
             ])),
             xau_close_rate: 1.0,
+            bars_loaded: true,
         }
     }
 }
@@ -526,6 +530,36 @@ async fn store_deals(pool: &PgPool, deals: &[ProtoOaDeal]) {
         .unwrap();
 }
 
+/// The two symbols' daily bars, as a load stores them.
+async fn store_bars(pool: &PgPool) {
+    store::upsert_daily_bars(pool, LIVE, 1, None, &wave(1.3), Utc::now())
+        .await
+        .unwrap();
+    store::upsert_daily_bars(pool, LIVE, 41, None, &wave(1250.0), Utc::now())
+        .await
+        .unwrap();
+}
+
+/// A load run resolves both universe names, as the loader does first.
+async fn resolve_both(pool: &PgPool, run: i64) {
+    use jiaoyi_core::universe::Resolution;
+    for (id, name, class) in [
+        (1i64, "EURUSD", AssetClass::Fx),
+        (41, "XAUUSD", AssetClass::Metal),
+    ] {
+        store::record_resolution(
+            pool,
+            run,
+            LIVE,
+            name,
+            class,
+            &Resolution::Resolved { symbol_id: id },
+        )
+        .await
+        .unwrap();
+    }
+}
+
 async fn end_to_end_setup(pool: &PgPool) -> FakeBroker {
     end_to_end_setup_with(pool, Statement::default()).await
 }
@@ -548,14 +582,12 @@ async fn end_to_end_setup_with(pool: &PgPool, st: Statement) -> FakeBroker {
     symbol(pool, 41, "XAUUSD", AssetClass::Metal, 2, 1).await;
     let eur = wave(1.3);
     let xau = wave(1250.0);
-    store::upsert_daily_bars(pool, LIVE, 1, None, &eur, Utc::now())
-        .await
-        .unwrap();
-    store::upsert_daily_bars(pool, LIVE, 41, None, &xau, Utc::now())
-        .await
-        .unwrap();
+    if st.bars_loaded {
+        store_bars(pool).await;
+    }
     // A load run with the symbol list (asset ids: USD is 15) and the costs.
     let run = store::start_run(pool, LIVE).await.unwrap();
+    resolve_both(pool, run).await;
     for (id, sym) in [(1i64, "EURUSD"), (41, "XAUUSD")] {
         let s = ProtoOaSymbol {
             symbol_id: id,
@@ -586,10 +618,15 @@ async fn end_to_end_setup_with(pool: &PgPool, st: Statement) -> FakeBroker {
     store::finish_run(
         pool,
         run,
-        "ok",
+        if st.bars_loaded { "ok" } else { "partial" },
         &store::RunSummary {
             listed_symbols: Some(st.listed),
             assets: st.assets,
+            errors: if st.bars_loaded {
+                vec![]
+            } else {
+                vec!["EURUSD: daily bars: connection closed".into()]
+            },
             ..Default::default()
         },
     )
@@ -1139,6 +1176,113 @@ async fn a_development_job_reads_no_quote_rate_of_a_sealed_period_deal(pool: PgP
         t.params["deposit_currency"]["cross_check"],
         "2 closing deals on symbols the broker quotes in USD, all at quote→deposit rate 1"
     );
+}
+
+/// Codex P2 on #9 (sampler.rs:330): a spread sample is final (append-only)
+/// and carries the week's bar-basis observations, so it is taken only once a
+/// load run has ended `ok` with the symbol's daily bars stored. Here the load
+/// ended `partial` before the bars: the pass records nothing and waits. Once
+/// the bars land with an `ok` load, the next pass records June 2014 with its
+/// basis observations, and the job runs.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_spread_sample_waits_for_a_complete_bar_load(pool: PgPool) {
+    let f = end_to_end_setup_with(
+        &pool,
+        Statement {
+            bars_loaded: false,
+            ..Default::default()
+        },
+    )
+    .await;
+    // The runner waits without connecting to the broker or recording.
+    let connects = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (_t, stop) = shutdown::channel();
+    let (f2, n) = (f.clone(), connects.clone());
+    let connect = move |_account: i64| {
+        let f = f2.clone();
+        n.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        async move { Ok(f.spawn().0) }
+    };
+    let step = runner::step(
+        &pool,
+        &broker(),
+        &[(permitted(), Environment::Live)],
+        &connect,
+        &stop,
+    )
+    .await
+    .unwrap();
+    assert!(
+        matches!(&step, runner::Step::Waiting(w)
+            if w.contains("waiting for a load run with status ok to store the daily bars of EURUSD, XAUUSD")),
+        "{step:?}"
+    );
+    assert_eq!(connects.load(std::sync::atomic::Ordering::SeqCst), 0);
+    // The sampler itself records nothing and asks for no tick either.
+    let (conn, log) = f.clone().spawn();
+    conn.application_auth("client", &Secret::new("s"))
+        .await
+        .unwrap();
+    let session = conn
+        .account_auth(&permitted(), &Secret::new("tok"))
+        .await
+        .unwrap();
+    let sampled = jiaoyi::edge::sampler::sample_symbol(
+        &Data::new(&pool, Stage::Development),
+        &session,
+        LIVE,
+        1,
+        "EURUSD",
+        &[],
+        2014..=2014,
+    )
+    .await
+    .unwrap();
+    assert_eq!(sampled, jiaoyi::edge::sampler::Sampled::WaitingForBars);
+    assert!(log.lock().unwrap().tick_requests.is_empty());
+    let samples = rs::spread_samples(&pool, LIVE).await.unwrap();
+    assert!(
+        samples.iter().all(|s| s.year != 2014),
+        "nothing recorded for June 2014: {samples:?}"
+    );
+    assert_eq!(rs::jobs(&pool).await.unwrap()[0].status, "pending");
+
+    // The bars land with an ok load.
+    store_bars(&pool).await;
+    let run = store::start_run(&pool, LIVE).await.unwrap();
+    resolve_both(&pool, run).await;
+    let st = Statement::default();
+    store::finish_run(
+        &pool,
+        run,
+        "ok",
+        &store::RunSummary {
+            listed_symbols: Some(st.listed),
+            assets: st.assets,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let step = dev_step(&pool, &f).await;
+    assert!(
+        matches!(&step, runner::Step::Finished(s) if s.contains("done")),
+        "{step:?}"
+    );
+    let samples = rs::spread_samples(&pool, LIVE).await.unwrap();
+    for name in ["EURUSD", "XAUUSD"] {
+        let s = samples
+            .iter()
+            .find(|s| s.symbol == name && s.year == 2014)
+            .unwrap();
+        assert_eq!(s.status, "measured");
+        let basis = s.basis.as_ref().unwrap();
+        assert!(
+            basis["observations"].as_u64().unwrap() > 0,
+            "{name}: {basis}"
+        );
+        assert_eq!(basis["observations"], basis["bid"], "{name}: {basis}");
+    }
 }
 
 // ------------------------------------------------- the held-out re-check

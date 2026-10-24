@@ -499,6 +499,29 @@ pub async fn deposit_asset_id(pool: &PgPool, account_id: i64) -> crate::Result<O
     .await?)
 }
 
+/// The latest load run of the account that ended `ok` with the symbol
+/// resolved in it. Such a run read the symbol's whole daily history and
+/// stored it without an error (the loader stores a symbol's row before its
+/// bars, and any failed bar load makes the run partial), so every stored bar
+/// of a sampled week is there. `None`: no such run yet.
+pub async fn complete_bar_load(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+) -> crate::Result<Option<i64>> {
+    Ok(sqlx::query_scalar(
+        "SELECT r.id FROM load_runs r
+         JOIN universe_resolutions u ON u.load_run_id = r.id
+         WHERE r.account_id = $1 AND r.status = 'ok' AND r.finished_at IS NOT NULL
+           AND u.account_id = $1 AND u.broker_symbol_id = $2 AND u.status = 'resolved'
+         ORDER BY r.id DESC LIMIT 1",
+    )
+    .bind(account_id)
+    .bind(symbol_id)
+    .fetch_optional(pool)
+    .await?)
+}
+
 /// (broker symbol id, year) of the sample weeks that failed at least
 /// `times` times.
 pub async fn sample_weeks_failed(

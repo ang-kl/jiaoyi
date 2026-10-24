@@ -285,9 +285,25 @@ pub async fn sample_week(
     Ok(w)
 }
 
+/// What one pass over a symbol's missing samples did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sampled {
+    /// This many weeks were recorded.
+    Taken(u32),
+    /// Nothing was recorded: no load run has yet ended `ok` with the
+    /// symbol's daily bars stored, and a sample records the week's
+    /// bar-basis observations once and for ever (append-only).
+    WaitingForBars,
+}
+
 /// Take every missing sample of one symbol (years without a measured or
 /// no-ticks row). A failed week is recorded and the next year tried; a
 /// session end stops and is returned, so the caller re-authorises.
+///
+/// Codex P2 on #9: a sample is final, and its basis observations come from
+/// the stored daily bars of its week, so nothing is recorded until a load
+/// run has ended `ok` with the symbol resolved (that run read and stored the
+/// symbol's whole daily history). Until then the pass waits.
 #[allow(clippy::too_many_arguments)]
 pub async fn sample_symbol(
     data: &Data<'_>,
@@ -297,7 +313,13 @@ pub async fn sample_symbol(
     name: &str,
     have: &[i32],
     years: std::ops::RangeInclusive<i32>,
-) -> Result<u32, DataError> {
+) -> Result<Sampled, DataError> {
+    if rs::complete_bar_load(data.pool(), account_id, symbol_id)
+        .await?
+        .is_none()
+    {
+        return Ok(Sampled::WaitingForBars);
+    }
     let bars = data
         .daily_bars(account_id, symbol_id, data.stage().end())
         .await?;
@@ -347,7 +369,7 @@ pub async fn sample_symbol(
         rs::record_spread(data.pool(), &row).await?;
         taken += 1;
     }
-    Ok(taken)
+    Ok(Sampled::Taken(taken))
 }
 
 /// The session (or the connection under it) has ended: stop, re-authorise.
