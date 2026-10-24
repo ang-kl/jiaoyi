@@ -705,6 +705,42 @@ pub async fn symbol_ids_by_name(pool: &PgPool, account_id: i64, name: &str) -> R
     .await?)
 }
 
+/// The first stored daily bar of one symbol dated `from..=to` whose end
+/// (open + 1 day) is after `instant`, if any.
+pub async fn first_bar_ending_after(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+    from: Option<NaiveDate>,
+    to: NaiveDate,
+    instant: DateTime<Utc>,
+) -> Result<Option<BarRow>> {
+    let r = sqlx::query(
+        "SELECT bar_date, bar_open_utc, open, high, low, close, tick_volume
+         FROM daily_bars
+         WHERE account_id = $1 AND broker_symbol_id = $2
+           AND ($3::date IS NULL OR bar_date >= $3) AND bar_date <= $4
+           AND bar_open_utc + interval '1 day' > $5
+         ORDER BY bar_date LIMIT 1",
+    )
+    .bind(account_id)
+    .bind(symbol_id)
+    .bind(from)
+    .bind(to)
+    .bind(instant)
+    .fetch_optional(pool)
+    .await?;
+    Ok(r.map(|r| BarRow {
+        bar_date: r.get("bar_date"),
+        bar_open_utc: r.get("bar_open_utc"),
+        open: r.get("open"),
+        high: r.get("high"),
+        low: r.get("low"),
+        close: r.get("close"),
+        tick_volume: r.get("tick_volume"),
+    }))
+}
+
 /// Stored daily bars of one symbol dated `from..=to` (no lower bound when
 /// `from` is `None`), in date order, at most `limit` rows.
 pub async fn bars_between(

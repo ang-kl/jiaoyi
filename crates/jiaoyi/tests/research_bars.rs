@@ -304,3 +304,59 @@ async fn a_long_range_is_capped_and_says_where_to_continue(pool: PgPool) {
     assert_eq!(v["truncated"], false);
     let _: DateTime<Utc> = serde_json::from_value(v["bars"][0]["bar_open_utc"].clone()).unwrap();
 }
+
+/// Codex P2 on #8: the whole requested range is checked against the seal
+/// before it is paged. A long range whose first 5,000 bars are old must
+/// still be refused when it holds a bar running past the seal.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_long_range_holding_a_sealed_bar_is_refused_before_paging(pool: PgPool) {
+    setup(&pool).await;
+    symbol(&pool, LIVE, 5, "GBPUSD", AssetClass::Fx).await;
+    // 5,100 FX-style bars opening 21:00 UTC, the last dated 23-10-2025
+    // (it runs to 21:00 on 24-10, past the seal).
+    let last = day(2025, 10, 23);
+    let rows: Vec<BarRow> = (0..5100)
+        .map(|i| {
+            bar(
+                last - Duration::days(5099 - i),
+                21,
+                130_000,
+                130_500,
+                129_500,
+                130_200,
+            )
+        })
+        .collect();
+    store::upsert_daily_bars(&pool, LIVE, 5, None, &rows, Utc::now())
+        .await
+        .unwrap();
+    let from = last - Duration::days(5099);
+    let (st, v) = get(
+        &pool,
+        &format!("/research/bars?account=43002148&symbol=GBPUSD&from={from}&to=2025-10-23"),
+    )
+    .await;
+    assert_eq!(
+        st,
+        StatusCode::FORBIDDEN,
+        "{}",
+        &v.to_string()[..200.min(v.to_string().len())]
+    );
+    let why = v["reason"].as_str().unwrap();
+    assert!(
+        why.contains("2025-10-23T21:00:00") && why.contains("not clamped"),
+        "{why}"
+    );
+    assert!(v.get("bars").is_none());
+    // To the day before: the whole range is development data, served in pages.
+    let (st, v) = get(
+        &pool,
+        &format!("/research/bars?account=43002148&symbol=GBPUSD&from={from}&to=2025-10-22"),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(
+        (v["count"].clone(), v["truncated"].clone()),
+        (5000.into(), true.into())
+    );
+}

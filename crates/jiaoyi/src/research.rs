@@ -666,22 +666,33 @@ pub async fn bars(
         )))
         }
     };
-    let mut rows =
-        store::bars_between(pool, account, id, q.from, to, BARS_PER_REPLY as i64 + 1).await?;
-    let next_from = (rows.len() > BARS_PER_REPLY).then(|| rows[BARS_PER_REPLY].bar_date);
-    rows.truncate(BARS_PER_REPLY);
-    if let Some(b) = rows
-        .iter()
-        .find(|b| !seal::daily_bar_is_development(b.bar_open_utc))
-    {
-        return Err(BarsRefusal::Forbidden(format!(
+    let crossing = |b: &store::BarRow| {
+        BarsRefusal::Forbidden(format!(
             "sealed: the bar dated {} opens {} and runs to {}, past the held-out seal {}; ask to {} or earlier. The request is refused, not clamped",
             b.bar_date,
             b.bar_open_utc.to_rfc3339(),
             seal::daily_bar_end(b.bar_open_utc).to_rfc3339(),
             seal::seal_instant().to_rfc3339(),
             b.bar_date.pred_opt().unwrap_or(b.bar_date)
-        )));
+        ))
+    };
+    // The whole requested range, before any paging (Codex P2 on #8): a range
+    // holding a bar that runs past the seal is refused whatever page it is on.
+    if let Some(b) =
+        store::first_bar_ending_after(pool, account, id, q.from, to, seal::seal_instant()).await?
+    {
+        return Err(crossing(&b));
+    }
+    let mut rows =
+        store::bars_between(pool, account, id, q.from, to, BARS_PER_REPLY as i64 + 1).await?;
+    let next_from = (rows.len() > BARS_PER_REPLY).then(|| rows[BARS_PER_REPLY].bar_date);
+    rows.truncate(BARS_PER_REPLY);
+    // Second line: every row served is checked again.
+    if let Some(b) = rows
+        .iter()
+        .find(|b| !seal::daily_bar_is_development(b.bar_open_utc))
+    {
+        return Err(crossing(b));
     }
     Ok(serde_json::json!({
         "account_id": account,
