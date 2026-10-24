@@ -537,3 +537,141 @@ async fn one_authorisation_refreshes_the_token_at_most_once(pool: PgPool) {
         "the refused run, then the retry on the renewed token"
     );
 }
+
+/// Codex P1 on #6 (48890c03): on boot after a new env seed, the loader, the
+/// recorders and the history syncs all decide on the seed at once. A task
+/// that read the stored row before another stored the seed, authorised and
+/// refreshed it must not then write the seed back: the seed's refresh token
+/// is spent and its access token invalidated, and the service would be left
+/// with no valid token. Three tasks authorise together; the stored row is
+/// from before seed fingerprints (refreshed), the seed's grant adds the demo
+/// account, and the first account authorisation is refused, so one refresh
+/// happens.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn concurrent_authorisations_store_a_new_seed_once_and_keep_its_refresh(pool: PgPool) {
+    setup(&pool).await;
+    sqlx::query(
+        "INSERT INTO oauth_tokens (token_owner, access_token, refresh_token, expires_at,
+                                   expires_at_missing_reason, obtained_at, source)
+         VALUES ('ctrader', 'R-access', 'R-refresh', NULL, 'test', now(), 'refresh')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut f = fake(DEMO, vec![demo_listed(), live_listed()]);
+    f.grant_by_token = HashMap::from([("R-access".to_string(), vec![live_listed()])]);
+    f.auth_rejections = Arc::new(AtomicUsize::new(1));
+    f.pairs = vec![
+        ("S-access".into(), "S-refresh".into()),
+        ("R-access".into(), "R-refresh".into()),
+    ];
+    // Ordering, by the broker's reply times only. The first task reads the
+    // seed's grant in 100 ms, so the others read the stored row before it
+    // stores the seed. The others read the stored token's grant in 500 ms, so
+    // (without the lock) their legacy decision, "the seed's grant adds an
+    // account", lands after the first task has stored the seed, authorised,
+    // been refused once and refreshed.
+    let mut first = f.clone();
+    first.account_list_delays =
+        HashMap::from([("S-access".to_string(), Duration::from_millis(100))]);
+    let mut slow = f.clone();
+    slow.account_list_delays =
+        HashMap::from([("R-access".to_string(), Duration::from_millis(500))]);
+
+    let mut tasks = Vec::new();
+    for fk in [first, slow.clone(), slow] {
+        let pool = pool.clone();
+        tasks.push(tokio::spawn(async move {
+            let (conn, _) = fk.spawn();
+            loader::authorise(
+                &pool,
+                &conn,
+                &broker(Some(("S-access", "S-refresh"))),
+                &permitted(DEMO),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| format!("{e:#}"))
+        }));
+    }
+    let mut outcomes = Vec::new();
+    for t in tasks {
+        outcomes.push(t.await.unwrap());
+    }
+    assert!(
+        outcomes.iter().all(|o| o.is_ok()),
+        "every task ends authorised: {outcomes:?}"
+    );
+    let (access, refresh, source): (String, String, String) =
+        sqlx::query_as("SELECT access_token, refresh_token, source FROM oauth_tokens")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (access.as_str(), refresh.as_str(), source.as_str()),
+        ("fresh", "fresh-refresh", "refresh"),
+        "the refreshed pair is kept, not the spent seed"
+    );
+    let replaced: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM reconcile_events WHERE kind = 'token_seed_replaced'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(replaced, 1);
+    assert_eq!(f.refresh_count.load(Ordering::SeqCst), 1);
+}
+
+/// The same race on the plain path: the stored row descends from an older
+/// seed, and five tasks start together with a new one. The seed is stored
+/// once, and the one refresh it needs is kept.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn concurrent_authorisations_replace_an_old_seed_once(pool: PgPool) {
+    setup(&pool).await;
+    sqlx::query(
+        "INSERT INTO oauth_tokens (token_owner, access_token, refresh_token, expires_at,
+                                   expires_at_missing_reason, obtained_at, source, seed_fingerprint)
+         VALUES ('ctrader', 'O-access', 'O-refresh', NULL, 'test', now(), 'refresh', $1)",
+    )
+    .bind(Secret::new("OLD-seed").fingerprint())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut f = fake(DEMO, vec![demo_listed()]);
+    f.auth_rejections = Arc::new(AtomicUsize::new(1));
+    f.pairs = vec![("S-access".into(), "S-refresh".into())];
+    let mut tasks = Vec::new();
+    for _ in 0..5 {
+        let (pool, fk) = (pool.clone(), f.clone());
+        tasks.push(tokio::spawn(async move {
+            let (conn, _) = fk.spawn();
+            loader::authorise(
+                &pool,
+                &conn,
+                &broker(Some(("S-access", "S-refresh"))),
+                &permitted(DEMO),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| format!("{e:#}"))
+        }));
+    }
+    let mut outcomes = Vec::new();
+    for t in tasks {
+        outcomes.push(t.await.unwrap());
+    }
+    assert!(outcomes.iter().all(|o| o.is_ok()), "{outcomes:?}");
+    let access: String = sqlx::query_scalar("SELECT access_token FROM oauth_tokens")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(access, "fresh");
+    let replaced: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM reconcile_events WHERE kind = 'token_seed_replaced'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(replaced, 1);
+    assert_eq!(f.refresh_count.load(Ordering::SeqCst), 1);
+}

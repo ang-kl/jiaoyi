@@ -50,16 +50,26 @@ pub struct LoadOutcome {
 /// seed keeps the stored, refreshed token. A token stored before seed
 /// fingerprints were kept is judged once: see [`judge_legacy_seed`].
 /// `conn` must have the application authorised (the legacy case reads grants).
+///
+/// With a seed in the environment, the whole decision (read the stored row,
+/// compare fingerprints, judge a legacy row, store the seed) is one critical
+/// section under [`REFRESH_LOCK`], the lock [`refresh`] takes. On boot the
+/// loader, the recorders and the history syncs all get here at once; without
+/// it a task holding a stale read could write the seed back over the token
+/// another task had already refreshed from it, leaving a spent refresh token
+/// and an invalidated access token (Codex P1 on #6). A task that waited
+/// re-reads the row, finds the seed's fingerprint, and keeps what is stored.
 pub async fn current_token(
     pool: &PgPool,
     conn: &Connection,
     broker: &BrokerConfig,
 ) -> anyhow::Result<Option<store::StoredToken>> {
-    let stored = store::load_token(pool).await?;
     let (Some(a), Some(r)) = (&broker.seed_access_token, &broker.seed_refresh_token) else {
-        return Ok(stored);
+        return Ok(store::load_token(pool).await?);
     };
     let seed = a.fingerprint();
+    let _decision = REFRESH_LOCK.lock().await;
+    let stored = store::load_token(pool).await?;
     let Some(t) = stored else {
         store::store_seed(pool, a, r, broker.seed_expires_at).await?;
         return Ok(store::load_token(pool).await?);
@@ -356,7 +366,8 @@ async fn read_grant(
 }
 
 /// One refresh at a time in this process: the refresh token is single-use,
-/// and the loader and the tick recorder share it.
+/// and the loader, the tick recorders and the history syncs share it. The
+/// env-seed decision in [`current_token`] holds it too.
 static REFRESH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Refresh the token over this connection and store the new pair. If another

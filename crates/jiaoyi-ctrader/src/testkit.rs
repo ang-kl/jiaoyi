@@ -65,6 +65,14 @@ pub struct FakeBroker {
     pub grant: Option<Vec<GrantEntry>>,
     /// A grant for one access token, overriding `grant` for that token.
     pub grant_by_token: HashMap<String, Vec<GrantEntry>>,
+    /// Wait this long before answering an account-list request for this
+    /// access token (to order concurrent tasks in a test).
+    pub account_list_delays: HashMap<String, Duration>,
+    /// Token pairs (access, refresh). A refresh spends the refresh token it
+    /// used and, when listed here, its access token: both are refused from
+    /// then on, as the broker does. Spent tokens are shared by clones.
+    pub pairs: Vec<(String, String)>,
+    pub spent: Arc<Mutex<HashSet<String>>>,
     /// Refresh requests received, shared by clones (spans connections).
     pub refresh_count: Arc<std::sync::atomic::AtomicUsize>,
     /// A token event hub shared by fakes: every refresh on any of them sends
@@ -133,6 +141,11 @@ fn oa_error(id: Option<String>, code: &str) -> ProtoMessage {
 
 impl FakeBroker {
     /// Start the fake and return a client connection to it, plus its log.
+    /// Refused as expired: listed in `expired_tokens`, or spent by a refresh.
+    fn expired(&self, token: &str) -> bool {
+        self.expired_tokens.contains(token) || self.spent.lock().unwrap().contains(token)
+    }
+
     fn grant_entries(&self, token: &str) -> Vec<GrantEntry> {
         if let Some(g) = self.grant_by_token.get(token) {
             return g.clone();
@@ -197,7 +210,10 @@ impl FakeBroker {
                         let req =
                             pb::ProtoOaGetAccountListByAccessTokenReq::decode(body.as_slice())
                                 .unwrap();
-                        if self.expired_tokens.contains(&req.access_token) {
+                        if let Some(d) = self.account_list_delays.get(&req.access_token) {
+                            tokio::time::sleep(*d).await;
+                        }
+                        if self.expired(&req.access_token) {
                             out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID"));
                         } else {
                             let entries = self.grant_entries(&req.access_token);
@@ -241,7 +257,7 @@ impl FakeBroker {
                             out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID"));
                         } else if req.ctid_trader_account_id != self.account_id {
                             out.push(oa_error(id, "CH_CTID_TRADER_ACCOUNT_NOT_FOUND"));
-                        } else if self.expired_tokens.contains(&req.access_token) {
+                        } else if self.expired(&req.access_token) {
                             out.push(oa_error(id, "OA_AUTH_TOKEN_EXPIRED"));
                         } else if !self
                             .grant_entries(&req.access_token)
@@ -263,24 +279,39 @@ impl FakeBroker {
                             ));
                         }
                     } else if pt == Oa::ProtoOaRefreshTokenReq as i32 {
-                        self.refresh_count.fetch_add(1, SeqCst);
-                        if let Some(tx) = &self.token_events {
-                            let _ = tx.send(());
-                        }
-                        match &self.refresh_reply {
-                            Some((a, r, e)) => out.push(reply(
-                                id,
-                                Oa::ProtoOaRefreshTokenRes as i32,
-                                pb::ProtoOaRefreshTokenRes {
-                                    payload_type: None,
-                                    access_token: a.clone(),
-                                    token_type: "bearer".into(),
-                                    expires_in: *e,
-                                    refresh_token: r.clone(),
+                        let req = pb::ProtoOaRefreshTokenReq::decode(body.as_slice()).unwrap();
+                        if self.expired(&req.refresh_token) {
+                            // A refresh token is single-use.
+                            out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID"));
+                        } else {
+                            {
+                                let mut spent = self.spent.lock().unwrap();
+                                spent.insert(req.refresh_token.clone());
+                                for (a, r) in &self.pairs {
+                                    if *r == req.refresh_token {
+                                        spent.insert(a.clone());
+                                    }
                                 }
-                                .encode_to_vec(),
-                            )),
-                            None => out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID")),
+                            }
+                            self.refresh_count.fetch_add(1, SeqCst);
+                            if let Some(tx) = &self.token_events {
+                                let _ = tx.send(());
+                            }
+                            match &self.refresh_reply {
+                                Some((a, r, e)) => out.push(reply(
+                                    id,
+                                    Oa::ProtoOaRefreshTokenRes as i32,
+                                    pb::ProtoOaRefreshTokenRes {
+                                        payload_type: None,
+                                        access_token: a.clone(),
+                                        token_type: "bearer".into(),
+                                        expires_in: *e,
+                                        refresh_token: r.clone(),
+                                    }
+                                    .encode_to_vec(),
+                                )),
+                                None => out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID")),
+                            }
                         }
                     } else if pt == Oa::ProtoOaSymbolsListReq as i32 {
                         out.push(reply(
