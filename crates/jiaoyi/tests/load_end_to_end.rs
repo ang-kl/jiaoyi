@@ -129,6 +129,74 @@ async fn small_universe(pool: &PgPool) {
     .unwrap();
 }
 
+/// R1 (owner, 24-10-2026): quote currencies come from the broker. The load
+/// stores the account's asset list (ProtoOAAssetListRes) with each listed
+/// symbol's base and quote asset named from it; a broker refusing the list
+/// makes the load partial, with the reason, and stores no asset list.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_load_stores_the_brokers_asset_list_and_each_symbols_quote_asset(pool: PgPool) {
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    let mut f = fake();
+    f.light_symbols[0].base_asset_id = Some(3);
+    f.light_symbols[0].quote_asset_id = Some(15);
+    f.light_symbols[1].quote_asset_id = Some(77);
+    f.assets = vec![(15, "USD".into()), (3, "EUR".into())];
+    let (conn, log) = f.spawn();
+    let out = loader::load_account(&pool, &conn, &broker(Some(("tok", "ref"))), &permitted())
+        .await
+        .unwrap();
+    assert_eq!(out.status, "ok", "{:?}", out.summary.errors);
+    assert!(log
+        .lock()
+        .unwrap()
+        .payload_types
+        .contains(&(jiaoyi_ctrader::messages::ProtoOaPayloadType::ProtoOaAssetListReq as u32)));
+    let (run, assets, listed) = store::latest_assets(&pool, A).await.unwrap().unwrap();
+    assert_eq!(run, out.run_id);
+    let names: Vec<(i64, &str)> = assets
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["asset_id"].as_i64().unwrap(), a["name"].as_str().unwrap()))
+        .collect();
+    assert_eq!(names, vec![(15, "USD"), (3, "EUR")]);
+    let eur = &listed[0];
+    assert_eq!(eur["name"], "EURUSD");
+    assert_eq!(
+        (eur["base_asset"].as_str(), eur["quote_asset"].as_str()),
+        (Some("EUR"), Some("USD"))
+    );
+    assert_eq!(eur["quote_asset_id"], 15);
+    // An asset id the list does not name stays unnamed, never guessed.
+    assert_eq!(listed[1]["quote_asset_id"], 77);
+    assert!(listed[1]["quote_asset"].is_null());
+
+    let mut refusing = fake();
+    refusing.assets_refused = true;
+    let (conn, _) = refusing.spawn();
+    let out = loader::load_account(&pool, &conn, &broker(None), &permitted())
+        .await
+        .unwrap();
+    assert_eq!(out.status, "partial");
+    assert!(
+        out.summary
+            .errors
+            .iter()
+            .any(|e| e.starts_with("asset list:")),
+        "{:?}",
+        out.summary.errors
+    );
+    assert!(out.summary.assets.is_none());
+    // The latest stored asset list is still the earlier run's.
+    assert_eq!(
+        store::latest_assets(&pool, A).await.unwrap().unwrap().0,
+        run
+    );
+}
+
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgPool) {
     store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)

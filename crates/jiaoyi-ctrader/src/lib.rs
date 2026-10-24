@@ -1,8 +1,9 @@
 //! cTrader Open API client.
 //!
 //! Phase 1 uses it to read: application and account authorisation, the
-//! token's grant (the accounts it covers), the symbol list, symbol details,
-//! daily trendbars, spot quotes (for spread sampling) and token refresh.
+//! token's grant (the accounts it covers), the symbol list, the asset list,
+//! symbol details, daily trendbars, spot quotes (for spread sampling) and
+//! token refresh.
 //!
 //! Every frame this program writes passes [`payload::check_sendable`], the one
 //! place that names the request payload types the program may send. A request
@@ -84,7 +85,7 @@ pub mod messages {
 }
 
 pub use client::{
-    AccountSession, ClientError, Connection, GrantedAccount, ReceivedSpot, RefreshedToken,
+    AccountSession, Asset, ClientError, Connection, GrantedAccount, ReceivedSpot, RefreshedToken,
     SessionEnd, TokenGrant,
 };
 pub use payload::{check_sendable, NotSendable};

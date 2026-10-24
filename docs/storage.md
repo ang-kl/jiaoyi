@@ -38,7 +38,7 @@ The phase-1 migrations (`migrations/`) create the tables below. Types are final 
 |---|---|---|
 | `accounts` | config | Permitted accounts only. `login`, `currency` and `role` are NULL with a reason: phase 1 does not read them. |
 | `account_refusals` | event, append-only | Every account refused at start-up (not on `JIAOYI_ALLOWED_ACCOUNTS`, or no declared environment), with the reason. |
-| `load_runs` | one row per load | Account, start and finish, status (`ok` / `partial` / `failed`), counts, cross-check results, errors, and the settings version the load read. |
+| `load_runs` | one row per load | Account, start and finish, status (`ok` / `partial` / `failed`), counts, cross-check results, errors, and the settings version the load read. Also the broker's symbol list with each symbol's base and quote asset (ids and names), and the account's asset list (`ProtoOAAssetListRes`, `assets`, migration 0009); a load that cannot read the asset list is partial and stores none. |
 | `universe_resolutions` | event, append-only | How each universe name resolved on each load: `resolved`, `missing` or `ambiguous`, with the reason. A miss without a reason is refused by the database. |
 | `symbols` | current state | `ProtoOASymbol` fields as the broker gives them, plus the raw message bytes. `value_per_point` is NULL with a reason (the broker does not give it). Per-column reasons for NULLs are in `null_reasons`. |
 | `symbol_costs` | event, append-only | Median spread from spot quotes, and commission and swap fields exactly as the broker gives them. `commission_per_lot_side` is NULL with a reason (not derived in phase 1). |
@@ -106,6 +106,26 @@ Read-only against the broker. Migration 0004.
 - Tick requests span at most one week (Spotware). Windows are Monday-to-Monday UTC weeks on a fixed grid, so a sync resumes, and a week fetched completely is not fetched again.
 - The depth downloaded is the setting `history.tick_days_back` (default 7 days). The probe (`history.probe_years`, default 15) finds the earliest week with ticks without downloading the years in between.
 - Size is the limit, not the broker. As an order of magnitude only (not measured), a busy FX pair can carry 100,000–200,000 quote changes a day per side; 20 symbols × 2 sides × a year would be on the order of 100 GB. The depth is raised once the first week's real volume is measured from `/research/inventory`.
+
+## Research engine: the pre-registered edge test (migration 0009)
+
+The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embedded in the binary and hashed at start. A job under any other hash is refused.
+
+| Table | Kind | Notes |
+|---|---|---|
+| `research_jobs` | job queue | The trial cap, inserted by the migration only: the 9 H1 development cells (breakout {20, 50, 100} × stop {2, 3, 4} × ATR, the default (50, 3) first) and 1 held-out job at the default. Status `pending` → `running` → `done` / `refused` / `failed`. A job's definition never changes, a finished job never runs again, and nothing is deleted (trigger). |
+| `research_job_attempts` | event, append-only | Every attempt: start time and deployed commit (`RAILWAY_GIT_COMMIT_SHA`, or `unknown`). An attempt interrupted by a stop wrote nothing, so the job is attempted again (owner, 24-10-2026). Its trial lists every attempt, and a changed commit is reported under the evidence against. |
+| `research_job_events` | event, append-only | Every status a job takes, with the reason. |
+| `research_trials` | research log, append-only | Now with `prereg_hash` and `job_id` (one trial per job). The trial and the job's `done` are one transaction. |
+| `research_spreads` | event, append-only | One June week (the second full week) per symbol and development year (2013–2025): the median ask − bid of the broker's ticks, which are streamed and never stored raw; the bar quote-basis observations; ticks and wall time. The schema refuses a week ending after the seal. |
+
+- **Seal.** One data-access layer per stage. A development job reads only bars that end (open + 24 h) by 2025-10-24 00:00 UTC, and ticks before then. A request past that is refused, never clamped. Held-out jobs read up to 2026-10-24 00:00 UTC.
+- **Gate.** The held-out job is refused, with the reason, unless the development default met PASS rules 1–3 and at least 6 of the 9 cells have a profit factor above 1.0, under the same hash. The verdict is then "no demonstrated edge".
+- **Inputs before an attempt.** A job waits, unattempted, until every universe symbol's June samples exist and a load has stored the broker's asset list. A symbol's weeks are sampled only after a load run has ended `ok` with the symbol resolved: that run stored its whole daily history, and an append-only sample keeps the week's bar-basis observations for good. Until then the sampler records nothing and waits. The deposit currency is the name the asset list gives the trader record's deposit asset; anything but USD fails the job. The cross-check is that closing deals on symbols the broker quotes in USD convert at exactly 1; the query selects only those symbols' rates (any date), so no other rate is read. Either failing fails the job.
+- **Quote currencies** come only from the broker (owner, 24-10-2026): each symbol's quote asset in the symbol list, named by the asset list of the same load. A symbol whose quote asset cannot be read, or whose currency no FX pair of the universe converts, is refused with the reason. Each tested symbol's closing deals are cross-checked: the quote → deposit rate must agree within 1% with the FX close of the deal's day, or the job fails. The deal rates go through the stage's data layer: a development job reads only deals executed before the seal (a rate of a sealed-period deal is a price of that period), a held-out job those before its end. A symbol without such a deal is "not cross-checked".
+- **Commission** comes from the live deals (21-10-2025 → 16-01-2026, the source the pre-registration names). It reads only the class, commission, money digits and filled volume, never a price; a test pins the query.
+- **Readings** where the text leaves a choice are written into every trial's params, `readings`.
+- `GET /research/jobs` and `GET /research/trials` show counts and R only, plus the deflated Sharpe once all 9 development trials exist. Notional money and the trade list stay in the stored trial.
 
 ## Volume and retention
 

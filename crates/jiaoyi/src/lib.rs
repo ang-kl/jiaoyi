@@ -3,6 +3,7 @@
 //! and report on them.
 
 pub mod config;
+pub mod edge;
 pub mod history;
 pub mod http;
 pub mod loader;

@@ -1,5 +1,6 @@
-//! HTTP on $PORT: `/health`, `/phase1/report`, `/research/inventory` and
-//! `/research/bars`. Read-only: no route writes.
+//! HTTP on $PORT: `/health`, `/phase1/report`, `/research/inventory`,
+//! `/research/bars`, `/research/jobs` and `/research/trials`. Read-only: no
+//! route writes.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -28,6 +29,8 @@ pub fn router(state: AppState) -> Router {
         .route("/phase1/report", get(report))
         .route("/research/inventory", get(inventory))
         .route("/research/bars", get(bars))
+        .route("/research/jobs", get(jobs))
+        .route("/research/trials", get(trials))
         .with_state(state)
 }
 
@@ -82,5 +85,19 @@ async fn bars(State(s): State<AppState>, Query(q): Query<crate::research::BarsQu
             )
                 .into_response()
         }
+    }
+}
+
+async fn jobs(State(s): State<AppState>) -> Response {
+    match crate::edge::routes::jobs(&s.pool).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => unavailable(e),
+    }
+}
+
+async fn trials(State(s): State<AppState>) -> Response {
+    match crate::edge::routes::trials(&s.pool).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => unavailable(e),
     }
 }

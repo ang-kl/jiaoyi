@@ -477,10 +477,31 @@ async fn run(
             enabled: s.enabled,
         })
         .collect();
+    // The broker's asset list names each symbol's base and quote assets
+    // and the deposit asset: the research engine converts money with these
+    // names, never with assumed ones (R1). A failed read is a partial load.
+    let assets: HashMap<i64, String> = match session.asset_list().await {
+        Ok(list) => {
+            summary.assets = Some(json!(list));
+            list.into_iter().map(|a| (a.asset_id, a.name)).collect()
+        }
+        Err(e) => {
+            summary.errors.push(format!("asset list: {e}"));
+            HashMap::new()
+        }
+    };
+    let name_of = |id: Option<i64>| id.and_then(|i| assets.get(&i).cloned());
     summary.listed_symbols = Some(serde_json::Value::Array(
-        listed_symbols
+        listed
+            .symbol
             .iter()
-            .map(|s| json!({ "id": s.symbol_id, "name": s.name, "enabled": s.enabled }))
+            .map(|s| {
+                json!({
+                    "id": s.symbol_id, "name": s.symbol_name, "enabled": s.enabled,
+                    "base_asset_id": s.base_asset_id, "quote_asset_id": s.quote_asset_id,
+                    "base_asset": name_of(s.base_asset_id), "quote_asset": name_of(s.quote_asset_id),
+                })
+            })
             .collect(),
     ));
     let resolutions = resolve_universe(&universe, &listed_symbols);
