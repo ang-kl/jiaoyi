@@ -206,7 +206,9 @@ pub async fn sync_account(
         if shutdown.is_set() {
             return Ok(());
         }
-        if done.contains(&at(from)) {
+        // Skip only a window whose whole range earlier complete fetches cover:
+        // a narrower window that shares its start does not count.
+        if done.covers(from, to) {
             continue;
         }
         let to_req = to.min(ms(now));
@@ -248,7 +250,7 @@ pub async fn sync_account(
                 if shutdown.is_set() {
                     return Ok(());
                 }
-                if done.contains(&at(from)) {
+                if done.covers(from, to) {
                     continue;
                 }
                 download_window(

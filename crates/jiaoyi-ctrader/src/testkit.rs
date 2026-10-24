@@ -25,6 +25,9 @@ pub struct FakeBroker {
     pub account_id: i64,
     /// Access tokens the fake treats as expired (OA_AUTH_TOKEN_EXPIRED).
     pub expired_tokens: HashSet<String>,
+    /// Refuse this many account authorisations with CH_ACCESS_TOKEN_INVALID,
+    /// whatever the token. Shared by clones, so it spans connections.
+    pub auth_rejections: Arc<std::sync::atomic::AtomicUsize>,
     /// Reply to a refresh: (access, refresh, expires_in seconds).
     pub refresh_reply: Option<(String, String, i64)>,
     pub light_symbols: Vec<pb::ProtoOaLightSymbol>,
@@ -109,7 +112,17 @@ impl FakeBroker {
                         .unwrap()
                         .account_auths
                         .push(req.ctid_trader_account_id);
-                    if req.ctid_trader_account_id != self.account_id {
+                    let reject = self
+                        .auth_rejections
+                        .fetch_update(
+                            std::sync::atomic::Ordering::SeqCst,
+                            std::sync::atomic::Ordering::SeqCst,
+                            |n| n.checked_sub(1),
+                        )
+                        .is_ok();
+                    if reject {
+                        out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID"));
+                    } else if req.ctid_trader_account_id != self.account_id {
                         out.push(oa_error(id, "CH_CTID_TRADER_ACCOUNT_NOT_FOUND"));
                     } else if self.expired_tokens.contains(&req.access_token) {
                         out.push(oa_error(id, "OA_AUTH_TOKEN_EXPIRED"));

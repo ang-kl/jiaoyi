@@ -30,6 +30,6 @@ One binary, `jiaoyi`, deployed by `railway.toml` (Dockerfile build, healthcheck 
 
 Every tunable number is a setting in the database (`docs/storage.md`, "Settings").
 
-HTTP: `GET /health` (status, last load per account, tick recorders, history sync, settings version), `GET /research/inventory` (per account and symbol: what history exists — daily bars, live and historical ticks, deals — its coverage, gaps and what is missing; counts and dates only) and `GET /phase1/report` (per account and symbol: resolution, broker id, bars, first and last date, years of history, median spread, spread ÷ ATR, and the rulebook §3 verdict with its reasons).
+HTTP: `GET /health` (status, last load per account, tick recorders, history sync, settings version), `GET /research/inventory` (per account and symbol: what history exists — daily bars, live and historical ticks, deals — its coverage, gaps and what is missing; counts and dates only) and `GET /phase1/report` (per account and symbol: resolution, broker id, bars, first and last date, years of history, median spread, spread ÷ ATR, and the rulebook §3 verdict with its reasons; per account, `energy_candidates`: the broker's own names that may be energy instruments).
 
 Tests need a PostgreSQL: set `DATABASE_URL` and run `cargo test --workspace`. Each database test creates its own fresh database.

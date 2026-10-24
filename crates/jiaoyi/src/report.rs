@@ -41,6 +41,11 @@ pub struct AccountReport {
     pub account_id: i64,
     pub environment: String,
     pub last_load: Option<store::RunRow>,
+    /// Broker symbol names that may be energy instruments (crude, brent, oil,
+    /// wti, gas, xti, xbr; any case), from the latest load's symbol list.
+    /// `None` until a load has recorded the list.
+    pub energy_candidates: Option<Vec<serde_json::Value>>,
+    pub energy_candidates_from_run: Option<i64>,
     pub symbols: Vec<SymbolReport>,
 }
 
@@ -91,9 +96,26 @@ pub async fn build(pool: &PgPool) -> store::Result<Report> {
             let resolution = resolutions.iter().find(|r| &r.name == name).cloned();
             symbols.push(symbol_report(pool, account_id, name, *class, resolution, &params).await?);
         }
+        let listed = store::latest_listed_symbols(pool, account_id).await?;
+        let energy_candidates = listed.as_ref().map(|(_, _, list)| {
+            list.as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter(|s| {
+                            s.get("name")
+                                .and_then(|n| n.as_str())
+                                .is_some_and(jiaoyi_core::universe::is_energy_candidate)
+                        })
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default()
+        });
         out.push(AccountReport {
             account_id,
             environment,
+            energy_candidates,
+            energy_candidates_from_run: listed.map(|(id, _, _)| id),
             last_load: runs.iter().find(|r| r.account_id == account_id).cloned(),
             symbols,
         });
@@ -135,6 +157,7 @@ impl Params {
                 min_history_years: s.number("verdict.min_history_years")?,
                 min_history_years_crypto: s.number("verdict.min_history_years_crypto")?,
                 max_spread_to_atr: s.number("verdict.max_spread_to_atr")?,
+                min_spread_samples: s.integer("spread.min_samples")?,
             },
         })
     }
@@ -158,7 +181,10 @@ async fn symbol_report(
         _ => vec![],
     };
     let (measured, latest) = match (symbol_id, &info) {
-        (Some(id), Some(_)) => store::spread_readings(pool, account_id, id).await?,
+        (Some(id), Some(_)) => {
+            store::spread_readings(pool, account_id, id, params.thresholds.min_spread_samples)
+                .await?
+        }
         _ => (None, None),
     };
 
@@ -210,10 +236,28 @@ async fn symbol_report(
         Some(i) => tradability(i.listed_enabled, i.trading_mode.as_deref()),
         None => (None, None),
     };
-    let spread_missing_reason = latest
-        .as_ref()
-        .and_then(|l| l.null_reason.clone())
-        .or_else(|| Some("no spread measurement stored".into()));
+    // The verdict reads the latest measurement with enough samples; without
+    // one, the latest attempt, which the verdict then calls "not measured".
+    let judged = measured.as_ref().or(latest.as_ref());
+    let spread_samples = judged.map(|r| r.spread_samples as i64);
+    let judged_spread = judged
+        .and_then(|r| r.spread_median)
+        .and_then(|d| d.to_f64());
+    let spread_missing_reason = match judged {
+        None => Some("no spread measurement stored".to_string()),
+        Some(r) => {
+            let market = match (r.market_open, r.market_state_reason.as_deref()) {
+                (Some(false), Some(why)) => Some(format!("market closed at the sample: {why}")),
+                (Some(false), None) => Some("market closed at the sample".to_string()),
+                (None, Some(why)) => Some(format!("market state unknown: {why}")),
+                _ => None,
+            };
+            match (r.null_reason.clone(), market) {
+                (Some(a), Some(b)) => Some(format!("{a}; {b}")),
+                (a, b) => a.or(b),
+            }
+        }
+    };
     let verdict = judge(
         class,
         &Evidence {
@@ -222,7 +266,8 @@ async fn symbol_report(
             not_tradable_reason,
             history_years: years,
             atr20: atr,
-            spread_median: spread,
+            spread_median: judged_spread,
+            spread_samples,
             spread_missing_reason,
         },
         &params.thresholds,

@@ -59,6 +59,13 @@ Owner, 24-10-2026: *"no hard code settings, the UI should have setting to tweak.
 - The code reads the settings at each decision. Each load run stores the version it read.
 - The account allowlist is not a setting. It is an identity boundary and stays in the environment.
 
+### Fixes from the first deploy (migration 0005, 24-10-2026)
+
+- **Partitions** (`ticks` daily, `ticks_history` monthly) are created under a transaction advisory lock keyed on the partition name, with `IF NOT EXISTS`; a concurrent creator's SQLSTATE 42P07 counts as success.
+- **Loads**: a run that failed on authorisation after the token was refreshed is tried again at once (`load.auth_retry_attempts`, `load.auth_retry_secs`, doubling). A failed or partial run is retried after `load.retry_minutes` (default 5), not after `load.interval_hours`.
+- **Spreads**: a median from fewer than `spread.min_samples` quote updates (default 30) is not a measurement; the verdict is `undecided` ("spread not measured: N samples"). Each measurement records whether the market was open, from the symbol's own schedule (`symbol_costs.market_open`, with `market_state_reason`; only UTC schedules are evaluated).
+- **Universe** (owner, 24-10-2026: "use the broker's names for energy, like NatGas, etc."): one logged change by `owner` — NATGAS → NatGas, USOIL → SpotCrude, UKOIL removed until its broker name is known. Each load stores the broker's symbol list (`load_runs.listed_symbols`), and `/phase1/report` lists `energy_candidates` per account.
+
 ### UI access (design; the UI is not built in phase 1)
 
 - The UI is served by the same binary.

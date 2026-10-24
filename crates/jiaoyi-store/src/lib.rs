@@ -36,6 +36,14 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
+/// SQLSTATE 42P07: the relation already exists (here: a partition created by
+/// a concurrent caller).
+pub fn is_duplicate_table(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .is_some_and(|c| c == "42P07")
+}
+
 pub async fn connect(url: &str) -> Result<PgPool> {
     Ok(PgPoolOptions::new().max_connections(5).connect(url).await?)
 }
@@ -106,6 +114,8 @@ pub struct RunSummary {
     pub spreads_measured: i32,
     pub crosscheck: Vec<Value>,
     pub errors: Vec<String>,
+    /// The broker's symbol list as this load read it: [{id, name, enabled}].
+    pub listed_symbols: Option<Value>,
 }
 
 impl RunSummary {
@@ -123,7 +133,7 @@ pub async fn finish_run(pool: &PgPool, run_id: i64, status: &str, s: &RunSummary
             symbols_resolved = $3, symbols_unresolved = $4, bars_inserted = $5,
             bars_changed = $6, bars_unchanged = $7, bars_refused = $8,
             forming_bars_dropped = $9, spreads_measured = $10, crosscheck = $11, errors = $12,
-            settings_version = $13
+            settings_version = $13, listed_symbols = $14
          WHERE id = $1 AND status = 'running'",
     )
     .bind(run_id)
@@ -139,6 +149,7 @@ pub async fn finish_run(pool: &PgPool, run_id: i64, status: &str, s: &RunSummary
     .bind(json!(s.crosscheck))
     .bind(json!(s.errors))
     .bind(s.settings_version)
+    .bind(&s.listed_symbols)
     .execute(pool)
     .await?;
     Ok(())
@@ -196,6 +207,22 @@ pub async fn latest_runs(pool: &PgPool) -> Result<Vec<RunRow>> {
             settings_version: r.get("settings_version"),
         })
         .collect())
+}
+
+/// The broker's symbol list from the account's latest load that recorded one:
+/// (run id, when, [{id, name, enabled}]).
+pub async fn latest_listed_symbols(
+    pool: &PgPool,
+    account_id: i64,
+) -> Result<Option<(i64, DateTime<Utc>, Value)>> {
+    let r = sqlx::query(
+        "SELECT id, started_at, listed_symbols FROM load_runs
+         WHERE account_id = $1 AND listed_symbols IS NOT NULL ORDER BY started_at DESC, id DESC LIMIT 1",
+    )
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(r.map(|r| (r.get("id"), r.get("started_at"), r.get("listed_symbols"))))
 }
 
 // ---------------------------------------------------------------- universe
@@ -392,6 +419,10 @@ pub struct CostRow {
     pub swap_rollover_3days: Option<String>,
     pub swap_period_hours: Option<i32>,
     pub swap_time_minutes: Option<i32>,
+    /// Whether the market was open at `measured_at`, from the symbol's schedule;
+    /// `None` when that cannot be told, with the reason.
+    pub market_open: Option<bool>,
+    pub market_state_reason: Option<String>,
     pub source: String,
     pub null_reasons: Value,
 }
@@ -403,8 +434,8 @@ pub async fn insert_cost(pool: &PgPool, c: &CostRow) -> Result<i64> {
             commission_type, precise_trading_commission_rate, commission_deprecated,
             precise_min_commission, min_commission_type, min_commission_asset, swap_long,
             swap_short, swap_calculation_type, swap_rollover_3days, swap_period_hours,
-            swap_time_minutes, source, null_reasons)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+            swap_time_minutes, source, null_reasons, market_open, market_state_reason)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
          RETURNING id",
     )
     .bind(c.account_id)
@@ -428,6 +459,8 @@ pub async fn insert_cost(pool: &PgPool, c: &CostRow) -> Result<i64> {
     .bind(c.swap_time_minutes)
     .bind(&c.source)
     .bind(&c.null_reasons)
+    .bind(c.market_open)
+    .bind(&c.market_state_reason)
     .fetch_one(pool)
     .await?;
     Ok(id)
@@ -439,20 +472,30 @@ pub struct SpreadReading {
     pub spread_samples: i32,
     pub measured_at: DateTime<Utc>,
     pub null_reason: Option<String>,
+    pub market_open: Option<bool>,
+    pub market_state_reason: Option<String>,
 }
 
-/// The latest spread measurement with samples, and the latest one of any kind.
+/// The latest spread measurement from at least `min_samples` quote updates,
+/// and the latest attempt of any kind. A sample smaller than that (one stale
+/// weekend quote) is never taken as the measurement; the next load samples again.
 pub async fn spread_readings(
     pool: &PgPool,
     account_id: i64,
     symbol_id: i64,
+    min_samples: i64,
 ) -> Result<(Option<SpreadReading>, Option<SpreadReading>)> {
     let q = |only_measured: bool| {
         format!(
-            "SELECT spread_median, spread_samples, measured_at, null_reasons->>'spread_median' AS why
+            "SELECT spread_median, spread_samples, measured_at, null_reasons->>'spread_median' AS why,
+                    market_open, market_state_reason
              FROM symbol_costs WHERE account_id = $1 AND broker_symbol_id = $2 {}
              ORDER BY measured_at DESC, id DESC LIMIT 1",
-            if only_measured { "AND spread_median IS NOT NULL" } else { "" }
+            if only_measured {
+                "AND spread_median IS NOT NULL AND spread_samples >= $3"
+            } else {
+                "AND $3::bigint IS NOT NULL"
+            }
         )
     };
     let map = |r: sqlx::postgres::PgRow| SpreadReading {
@@ -460,16 +503,20 @@ pub async fn spread_readings(
         spread_samples: r.get("spread_samples"),
         measured_at: r.get("measured_at"),
         null_reason: r.get("why"),
+        market_open: r.get("market_open"),
+        market_state_reason: r.get("market_state_reason"),
     };
     let measured = sqlx::query(&q(true))
         .bind(account_id)
         .bind(symbol_id)
+        .bind(min_samples)
         .fetch_optional(pool)
         .await?
         .map(map);
     let latest = sqlx::query(&q(false))
         .bind(account_id)
         .bind(symbol_id)
+        .bind(min_samples)
         .fetch_optional(pool)
         .await?
         .map(map);

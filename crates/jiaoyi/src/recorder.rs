@@ -51,6 +51,15 @@ pub struct RecorderStatus {
     pub last_error: Option<String>,
     pub last_error_at: Option<DateTime<Utc>>,
     pub partitions_dropped: Vec<String>,
+    /// Warnings written for a new failure state. A failure repeated with the
+    /// same message is counted, not logged again (owner deploy review, 24-10-2026).
+    pub failures_logged: u64,
+    pub failures_repeated: u64,
+    /// Sessions that started after a logged failure (logged once each).
+    pub recoveries: u64,
+    /// The failure last logged; cleared when a session starts.
+    #[serde(skip)]
+    pub logged_failure: Option<String>,
 }
 
 pub type StatusMap = Arc<Mutex<HashMap<i64, RecorderStatus>>>;
@@ -195,11 +204,26 @@ pub async fn run_with<C, F>(
         };
         with_status(&status, account.id(), |s| s.subscribed_symbols.clear());
         if let Err(e) = result {
-            tracing::warn!(account = %account, error = %format!("{e:#}"), "tick recording stopped; retrying");
-            with_status(&status, account.id(), |s| {
-                s.last_error = Some(format!("{e:#}"));
+            let msg = format!("{e:#}");
+            let new_state = {
+                let mut m = status.lock().unwrap();
+                let s = m.entry(account.id()).or_default();
+                s.last_error = Some(msg.clone());
                 s.last_error_at = Some(Utc::now());
-            });
+                if s.logged_failure.as_deref() == Some(msg.as_str()) {
+                    s.failures_repeated += 1;
+                    false
+                } else {
+                    s.logged_failure = Some(msg.clone());
+                    s.failures_logged += 1;
+                    true
+                }
+            };
+            if new_state {
+                tracing::warn!(account = %account, error = %msg, "tick recording stopped; retrying (repeats are counted, not logged)");
+            } else {
+                tracing::debug!(account = %account, error = %msg, "tick recording still stopped");
+            }
         }
         if stop.as_ref().is_some_and(|s| s.is_set()) {
             tracing::info!(account = %account, "tick recorder stopped for shutdown");
@@ -246,13 +270,25 @@ pub async fn record(
     session.subscribe_spots(&ids).await?;
     // An end that arrives from here on is seen by `ends` (taken before the
     // authorisation). The quotes received before it are still recorded.
-    with_status(status, account.id(), |s| {
+    let recovered_from = {
+        let mut m = status.lock().unwrap();
+        let s = m.entry(account.id()).or_default();
         s.subscribed_symbols = ids.clone();
         s.sessions_started += 1;
         s.session_started_at = Some(Utc::now());
         s.flush_millis = Some(cfg.flush_every.as_millis() as u64);
-    });
-    tracing::info!(account = %account, symbols = ids.len(), "recording spot quotes");
+        let was = s.logged_failure.take();
+        if was.is_some() {
+            s.recoveries += 1;
+        }
+        was
+    };
+    match recovered_from {
+        Some(was) => {
+            tracing::info!(account = %account, symbols = ids.len(), previous_failure = %was, "tick recording recovered")
+        }
+        None => tracing::info!(account = %account, symbols = ids.len(), "recording spot quotes"),
+    }
 
     let mut buf: Vec<TickRow> = Vec::new();
     let mut written = 0u64;

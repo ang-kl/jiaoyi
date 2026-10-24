@@ -1,7 +1,7 @@
 //! Storage for the broker's history: historical ticks, deals, account
 //! snapshots and the research trial log (migration 0004).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::Serialize;
@@ -45,10 +45,16 @@ pub async fn ensure_partitions(
     let mut m = NaiveDate::from_ymd_opt(from.year(), from.month(), 1).unwrap();
     let end = NaiveDate::from_ymd_opt(to.year(), to.month(), 1).unwrap();
     while m <= end {
-        sqlx::query("SELECT jiaoyi_ensure_history_partition($1)")
+        match sqlx::query("SELECT jiaoyi_ensure_history_partition($1)")
             .bind(m)
             .execute(pool)
-            .await?;
+            .await
+        {
+            Ok(_) => {}
+            // Created by a concurrent caller: that is success.
+            Err(e) if crate::is_duplicate_table(&e) => {}
+            Err(e) => return Err(e.into()),
+        }
         m = if m.month() == 12 {
             NaiveDate::from_ymd_opt(m.year() + 1, 1, 1).unwrap()
         } else {
@@ -117,16 +123,57 @@ pub async fn record_window(
     Ok((id, stored as i32))
 }
 
-/// Window starts already fetched successfully and completely.
+/// The time ranges, inclusive, that successful fetches covered completely.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Covered {
+    /// (from, to) in milliseconds, sorted by `from`.
+    ranges: Vec<(i64, i64)>,
+}
+
+impl Covered {
+    pub fn new(mut ranges: Vec<(i64, i64)>) -> Covered {
+        ranges.sort_unstable();
+        Covered { ranges }
+    }
+
+    /// True only when the union of the ranges covers every millisecond of
+    /// `[from, to]`. A range that shares the start of a wider window but
+    /// ends early does not count for the rest of it.
+    pub fn covers(&self, from: i64, to: i64) -> bool {
+        let mut next = from;
+        for &(a, b) in &self.ranges {
+            if a > next {
+                break;
+            }
+            if b >= next {
+                next = b.saturating_add(1);
+                if next > to {
+                    return true;
+                }
+            }
+        }
+        next > to
+    }
+}
+
+fn covered(rows: Vec<(DateTime<Utc>, DateTime<Utc>)>) -> Covered {
+    Covered::new(
+        rows.into_iter()
+            .map(|(a, b)| (a.timestamp_millis(), b.timestamp_millis()))
+            .collect(),
+    )
+}
+
+/// The ranges successful, complete tick fetches of this kind covered.
 pub async fn complete_windows(
     pool: &PgPool,
     account_id: i64,
     symbol_id: i64,
     side: &str,
     kind: &str,
-) -> crate::Result<HashSet<DateTime<Utc>>> {
-    let rows: Vec<DateTime<Utc>> = sqlx::query_scalar(
-        "SELECT window_from FROM history_fetches
+) -> crate::Result<Covered> {
+    let rows: Vec<(DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT window_from, window_to FROM history_fetches
          WHERE account_id = $1 AND broker_symbol_id = $2 AND side = $3 AND kind = $4
            AND status = 'ok' AND complete",
     )
@@ -136,7 +183,7 @@ pub async fn complete_windows(
     .bind(kind)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().collect())
+    Ok(covered(rows))
 }
 
 /// The latest probe of a symbol's bid history, if any.
@@ -336,17 +383,16 @@ pub async fn record_deal_fetch(pool: &PgPool, f: &DealFetchRecord) -> crate::Res
     Ok(())
 }
 
-pub async fn complete_deal_windows(
-    pool: &PgPool,
-    account_id: i64,
-) -> crate::Result<HashSet<DateTime<Utc>>> {
-    let rows: Vec<DateTime<Utc>> = sqlx::query_scalar(
-        "SELECT window_from FROM deal_fetches WHERE account_id = $1 AND status = 'ok' AND complete",
+/// The ranges successful, complete deal-list fetches covered.
+pub async fn complete_deal_windows(pool: &PgPool, account_id: i64) -> crate::Result<Covered> {
+    let rows: Vec<(DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT window_from, window_to FROM deal_fetches
+         WHERE account_id = $1 AND status = 'ok' AND complete",
     )
     .bind(account_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().collect())
+    Ok(covered(rows))
 }
 
 // ------------------------------------------------------------------ accounts
@@ -412,4 +458,28 @@ pub async fn record_trial(pool: &PgPool, t: &Trial<'_>) -> crate::Result<i64> {
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Covered;
+
+    #[test]
+    fn coverage_needs_the_whole_range_not_just_its_start() {
+        // Day 1 of a week fetched; the 7-day window sharing its start is not covered.
+        let day = 86_400_000;
+        let c = Covered::new(vec![(0, day - 1)]);
+        assert!(c.covers(0, day - 1));
+        assert!(!c.covers(0, 7 * day - 1));
+        // Adjacent ranges join; a one-millisecond hole does not.
+        let c = Covered::new(vec![(day, 2 * day - 1), (0, day - 1)]);
+        assert!(c.covers(0, 2 * day - 1));
+        let holed = Covered::new(vec![(0, day - 2), (day, 2 * day - 1)]);
+        assert!(!holed.covers(0, 2 * day - 1));
+        // Overlapping and nested ranges.
+        let c = Covered::new(vec![(0, 10), (5, 8), (9, 20)]);
+        assert!(c.covers(3, 20));
+        assert!(!c.covers(3, 21));
+        assert!(!Covered::default().covers(0, 0));
+    }
 }

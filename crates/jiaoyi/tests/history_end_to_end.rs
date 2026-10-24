@@ -309,3 +309,97 @@ async fn only_read_requests_reach_the_broker_during_a_sync(pool: PgPool) {
         assert!(jiaoyi_ctrader::check_sendable(*t).is_ok(), "{t}");
     }
 }
+
+/// Review finding on #4: a complete 1-day deal window must not hide the rest
+/// of a later 7-day window that starts on the same day.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn widening_the_deal_window_fetches_the_days_not_yet_covered(pool: PgPool) {
+    use jiaoyi_store::history::{self as hist, DealFetchRecord, DealUpsert};
+    prepare(&pool).await;
+    let day = 86_400_000i64;
+    let now = Utc::now().timestamp_millis();
+    // A 7-day grid window that ended about two weeks ago.
+    let w0 = (now - 21 * day).div_euclid(7 * day) * 7 * day;
+    let at = |ms: i64| chrono::DateTime::<Utc>::from_timestamp_millis(ms).unwrap();
+    // An earlier sync with deals.window_days = 1 fetched day 1 only.
+    settings::change(
+        &pool,
+        "deals.window_days",
+        None,
+        Some(json!(1)),
+        "test",
+        "daily windows",
+    )
+    .await
+    .unwrap();
+    hist::record_deal_fetch(
+        &pool,
+        &DealFetchRecord {
+            account_id: A,
+            window_from: at(w0),
+            window_to: at(w0 + day - 1),
+            complete: true,
+            deals: 0,
+            upsert: DealUpsert::default(),
+            error: None,
+        },
+    )
+    .await
+    .unwrap();
+    settings::change(
+        &pool,
+        "deals.window_days",
+        None,
+        Some(json!(7)),
+        "test",
+        "weekly windows",
+    )
+    .await
+    .unwrap();
+    // A deal on day 3 of that week; the account registered on its first day.
+    let mut f = fake();
+    f.deals = vec![ProtoOaDeal {
+        deal_id: 42,
+        order_id: 43,
+        position_id: 44,
+        volume: 100_000,
+        filled_volume: 100_000,
+        symbol_id: 1,
+        create_timestamp: w0 + 2 * day + 3_600_000,
+        execution_timestamp: w0 + 2 * day + 3_600_000,
+        trade_side: 1,
+        deal_status: 2,
+        ..Default::default()
+    }];
+    f.trader.as_mut().unwrap().registration_timestamp = Some(w0);
+    let log = sync(&pool, f).await;
+    let found: Option<i64> = sqlx::query_scalar("SELECT deal_id FROM deals WHERE deal_id = 42")
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+    assert_eq!(found, Some(42), "days 2-7 were fetched");
+    assert!(log
+        .lock()
+        .unwrap()
+        .deal_requests
+        .iter()
+        .any(|(from, to)| *from == w0 && *to == w0 + 7 * day - 1));
+}
+
+/// Review finding on #4: (t, 100), (t, 101), (t, 100) at one millisecond are
+/// three ticks, and all three are stored.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn alternating_ticks_in_one_millisecond_are_all_stored(pool: PgPool) {
+    prepare(&pool).await;
+    let t = Utc::now().timestamp_millis() - 3_600_000;
+    let mut f = fake();
+    f.tick_history = HashMap::from([((1, 1), vec![(t, 108_500), (t, 108_501), (t, 108_500)])]);
+    sync(&pool, f).await;
+    let rows: Vec<(i64, i32)> = sqlx::query_as(
+        "SELECT price_e5, dup FROM ticks_history WHERE side = 'bid' ORDER BY price_e5, dup",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows, vec![(108_500, 0), (108_500, 1), (108_501, 0)]);
+}

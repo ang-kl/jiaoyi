@@ -59,7 +59,7 @@ pub struct TickFetch {
     pub signs: Vec<DeltaSign>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct HistTick {
     pub ts_ms: i64,
     /// Price in 1/100000.
@@ -208,15 +208,19 @@ impl Pages {
     /// recognised as the same rows.
     pub fn finish(mut self) -> Vec<(HistTick, i32)> {
         self.ticks.reverse();
-        let mut out: Vec<(HistTick, i32)> = Vec::with_capacity(self.ticks.len());
-        for t in self.ticks {
-            let dup = match out.last() {
-                Some((p, d)) if *p == t => d + 1,
-                _ => 0,
-            };
-            out.push((t, dup));
-        }
-        out
+        // Count every (timestamp, price) across the whole window, not only the
+        // tick just before: (t, 100), (t, 101), (t, 100) numbers the two
+        // (t, 100) ticks 0 and 1, so the stored key keeps all three.
+        let mut seen: std::collections::HashMap<HistTick, i32> = std::collections::HashMap::new();
+        self.ticks
+            .into_iter()
+            .map(|t| {
+                let n = seen.entry(t).or_insert(0);
+                let dup = *n;
+                *n += 1;
+                (t, dup)
+            })
+            .collect()
     }
 }
 
@@ -322,6 +326,33 @@ mod tests {
                 (t(9_000, 5), 0),
             ]
         );
+    }
+
+    #[test]
+    fn repeats_are_numbered_across_the_window_not_just_neighbours() {
+        let t = |ts, p| HistTick {
+            ts_ms: ts,
+            price_e5: p,
+        };
+        let mut pages = Pages::default();
+        // Newest first: (t,100), (t,101), (t,100) all at the same millisecond.
+        pages
+            .push(
+                vec![t(7_000, 100), t(7_000, 101), t(7_000, 100)],
+                DeltaSign::Add,
+            )
+            .unwrap();
+        let out = pages.finish();
+        let keys: std::collections::HashSet<(i64, i64, i32)> =
+            out.iter().map(|(t, d)| (t.ts_ms, t.price_e5, *d)).collect();
+        assert_eq!(keys.len(), 3, "three distinct stored keys: {out:?}");
+        let mut dups: Vec<i32> = out
+            .iter()
+            .filter(|(t, _)| t.price_e5 == 100)
+            .map(|(_, d)| *d)
+            .collect();
+        dups.sort();
+        assert_eq!(dups, vec![0, 1]);
     }
 
     #[test]

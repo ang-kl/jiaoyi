@@ -249,33 +249,82 @@ async fn a_universe_miss_is_recorded_with_its_reason(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn seeded_settings_are_the_rulebook_values_at_version_21(pool: PgPool) {
+async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(pool: PgPool) {
     let s = settings::snapshot(&pool, None).await.unwrap();
-    // 17 phase-1 seeds plus 4 history seeds (migration 0004).
-    assert_eq!(s.version, 21);
+    // 17 phase-1 seeds, 4 history seeds (0004), 4 load/spread seeds (0005),
+    // and the owner's universe change (0005).
+    assert_eq!(s.version, 26);
     assert_eq!(s.integer("history.tick_days_back").unwrap(), 7);
-    let u = s.universe("universe.symbols").unwrap();
-    let names: Vec<&str> = u.iter().map(|(n, _)| n.as_str()).collect();
-    // Rulebook §3, in its order.
+    assert_eq!(s.integer("spread.min_samples").unwrap(), 30);
+    assert_eq!(s.integer("load.retry_minutes").unwrap(), 5);
+    // The seed (version 1) is rulebook §3, in its order.
+    let h = settings::history(&pool, Some("universe.symbols"))
+        .await
+        .unwrap();
+    let seed = h.iter().find(|c| c.version == 1).unwrap();
+    let seeded = jiaoyi_core::universe::parse_universe(seed.new_value.as_ref().unwrap()).unwrap();
     assert_eq!(
-        names,
+        seeded.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(),
         vec![
             "US500", "NAS100", "US30", "GER40", "UK100", "JPN225", "AUS200", "EURUSD", "GBPUSD",
             "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
             "BTCUSD", "ETHUSD"
         ]
     );
+    // Now the owner's ruling (24-10): the broker's energy names, UKOIL out.
+    let u = s.universe("universe.symbols").unwrap();
+    let names: Vec<&str> = u.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        vec![
+            "US500",
+            "NAS100",
+            "US30",
+            "GER40",
+            "UK100",
+            "JPN225",
+            "AUS200",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY",
+            "AUDUSD",
+            "USDCAD",
+            "NZDUSD",
+            "XAUUSD",
+            "XAGUSD",
+            "SpotCrude",
+            "NatGas",
+            "BTCUSD",
+            "ETHUSD"
+        ]
+    );
+    for gone in ["USOIL", "UKOIL", "NATGAS"] {
+        assert!(!names.contains(&gone), "{gone}");
+    }
+    assert!(u
+        .iter()
+        .filter(|(n, _)| *n == "SpotCrude" || *n == "NatGas")
+        .all(|(_, c)| *c == jiaoyi_core::universe::AssetClass::Energy));
+    let change = &h[0];
+    assert_eq!(change.version, 26);
+    assert_eq!(change.changed_by, "owner");
+    assert_eq!(
+        change.reason,
+        "owner 24-10: use the broker's names for energy"
+    );
+    assert_eq!(change.old_value, seed.new_value);
     assert_eq!(s.integer("indicators.atr_length").unwrap(), 20);
     assert_eq!(s.number("verdict.min_history_years").unwrap(), 10.0);
     assert_eq!(s.number("verdict.min_history_years_crypto").unwrap(), 6.0);
     assert_eq!(s.number("verdict.max_spread_to_atr").unwrap(), 0.10);
     assert_eq!(s.integer("ticks.retention_days").unwrap(), 30);
     assert_eq!(s.integer("spread.sample_secs").unwrap(), 60);
-    // Every seed is a logged change.
+    // Every seed and the owner's change are logged.
     let h = settings::history(&pool, None).await.unwrap();
-    assert_eq!(h.len(), 21);
+    assert_eq!(h.len(), 26);
     assert!(h
         .iter()
+        .filter(|c| c.version != 26)
         .all(|c| c.changed_by == "migration" && c.old_value.is_none()));
 }
 
@@ -312,7 +361,7 @@ async fn an_out_of_bounds_value_is_refused_and_nothing_changes(pool: PgPool) {
         30,
         "not clamped, not changed"
     );
-    assert_eq!(s.version, 21, "a refused change does not bump the version");
+    assert_eq!(s.version, 26, "a refused change does not bump the version");
     assert!(matches!(
         settings::change(
             &pool,
@@ -343,11 +392,11 @@ async fn a_change_is_logged_with_old_and_new_values_and_bumps_the_version(pool: 
     )
     .await
     .unwrap();
-    assert_eq!(v, 22);
+    assert_eq!(v, 27);
     let h = settings::history(&pool, Some("ticks.retention_days"))
         .await
         .unwrap();
-    assert_eq!(h[0].version, 22);
+    assert_eq!(h[0].version, 27);
     assert_eq!(h[0].old_value, Some(json!(30)));
     assert_eq!(h[0].new_value, Some(json!(14)));
     assert_eq!(h[0].changed_by, "owner");
@@ -603,7 +652,11 @@ async fn a_tick_window_is_stored_once_with_its_fetch_record(pool: PgPool) {
     let done = hist::complete_windows(&pool, A, 1, "bid", "download")
         .await
         .unwrap();
-    assert_eq!(done.len(), 1);
+    let f = fetch("download", None);
+    assert!(done.covers(
+        f.window_from.timestamp_millis(),
+        f.window_to.timestamp_millis()
+    ));
     // Append-only.
     assert!(sqlx::query("UPDATE history_fetches SET ticks = 0")
         .execute(&pool)
@@ -710,4 +763,47 @@ async fn research_trials_are_kept_whatever_their_result(pool: PgPool) {
     .execute(&pool)
     .await;
     assert!(bad.is_err(), "sample is development or held_out");
+}
+
+/// Deploy fix (452da09a): two recorders creating the same day's partition at
+/// once must both succeed, for the daily ticks and the monthly history.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn concurrent_partition_creators_all_succeed(pool: PgPool) {
+    for d in 0..12 {
+        let day = NaiveDate::from_ymd_opt(2027, 1, 1).unwrap() + chrono::Duration::days(d * 31);
+        let at = day.and_hms_opt(12, 0, 0).unwrap().and_utc();
+        let mut tasks: Vec<tokio::task::JoinHandle<Result<(), String>>> = Vec::new();
+        for _ in 0..8 {
+            let p = pool.clone();
+            tasks.push(tokio::spawn(async move {
+                ticks::ensure_partitions(&p, day, 1)
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            }));
+            let p = pool.clone();
+            tasks.push(tokio::spawn(async move {
+                jiaoyi_store::history::ensure_partitions(&p, at, at)
+                    .await
+                    .map_err(|e| e.to_string())
+            }));
+        }
+        for t in tasks {
+            t.await.unwrap().unwrap();
+        }
+    }
+    let daily: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_class WHERE relkind = 'r' AND relname LIKE 'ticks\\_p2027%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(daily, 12);
+    let monthly: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_class WHERE relkind = 'r' AND relname LIKE 'ticks\\_history\\_p2027%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(monthly, 12);
 }
