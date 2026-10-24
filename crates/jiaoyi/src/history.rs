@@ -353,10 +353,21 @@ async fn download_window(
     Ok(())
 }
 
+/// What one probe request found. A failed request is its own outcome, never
+/// an empty week (review of #4, round 2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbeStep {
+    Ticks,
+    Empty,
+    Failed { error: String, fatal: bool },
+}
+
 /// Find the earliest week with bid ticks by binary search over the grid, from
 /// `probe_years` ago to the last complete week. Assumes the broker's history is
 /// continuous from its start (recorded as such in the inventory). Every week
-/// asked is recorded as a probe, with how many ticks its first page held.
+/// asked is recorded in `history_fetches`; the search as a whole is recorded
+/// in `history_probes`. If any step fails the search ends as `incomplete`,
+/// with the error and no result, and the next sync probes again.
 async fn probe(
     pool: &PgPool,
     session: &AccountSession<'_>,
@@ -374,22 +385,65 @@ async fn probe(
     );
     // Oldest first.
     let windows: Vec<(i64, i64)> = windows.into_iter().rev().collect();
-    if windows.is_empty() {
+    let (Some(first), Some(last)) = (windows.first(), windows.last()) else {
         return Ok(());
-    }
+    };
+    let mut search = hist::ProbeSearch {
+        account_id,
+        broker_symbol_id: symbol,
+        side: "bid",
+        started_at: Utc::now(),
+        status: "incomplete",
+        searched_from: at(first.0),
+        searched_to: at(last.1),
+        steps: 0,
+        earliest_week_with_ticks: None,
+        latest_empty_week_before: None,
+        error: None,
+    };
     let (mut lo, mut hi) = (0usize, windows.len() - 1);
-    // Does the newest complete week have data at all?
-    if !probe_one(pool, session, account_id, symbol, windows[hi], status).await? {
-        return Ok(());
-    }
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        if probe_one(pool, session, account_id, symbol, windows[mid], status).await? {
-            hi = mid;
-        } else {
-            lo = mid + 1;
+    let mut first_step = true;
+    loop {
+        let idx = if first_step { hi } else { (lo + hi) / 2 };
+        if !first_step && lo >= hi {
+            break;
         }
+        search.steps += 1;
+        match probe_one(pool, session, account_id, symbol, windows[idx], status).await? {
+            ProbeStep::Ticks => {
+                hi = idx;
+            }
+            ProbeStep::Empty if first_step => {
+                // The newest complete week has no ticks at all.
+                search.status = "no_ticks";
+                hist::record_probe_search(pool, &search).await?;
+                return Ok(());
+            }
+            ProbeStep::Empty => {
+                search.latest_empty_week_before = Some(at(windows[idx].0));
+                lo = idx + 1;
+            }
+            ProbeStep::Failed { error, fatal } => {
+                search.status = "incomplete";
+                search.error = Some(format!(
+                    "step {} ({}): {error}",
+                    search.steps,
+                    at(windows[idx].0).date_naive()
+                ));
+                search.earliest_week_with_ticks = None;
+                search.latest_empty_week_before = None;
+                hist::record_probe_search(pool, &search).await?;
+                if fatal {
+                    anyhow::bail!("probe ended: {error}");
+                }
+                return Ok(());
+            }
+        }
+        first_step = false;
     }
+    search.status = "complete";
+    search.earliest_week_with_ticks = Some(at(windows[hi].0));
+    hist::record_probe_search(pool, &search).await?;
     Ok(())
 }
 
@@ -400,7 +454,7 @@ async fn probe_one(
     symbol: i64,
     (from, to): (i64, i64),
     status: &HistoryStatusMap,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<ProbeStep> {
     let mut rec = FetchRecord {
         account_id,
         broker_symbol_id: symbol,
@@ -416,22 +470,29 @@ async fn probe_one(
         delta_signs: vec![],
         error: None,
     };
-    let has = match session.tick_page(symbol, QuoteSide::Bid, from, to).await {
+    let step = match session.tick_page(symbol, QuoteSide::Bid, from, to).await {
         Ok((ticks, _)) => {
             rec.ticks = ticks.len() as i32;
             rec.first_tick = ticks.last().map(|t| at(t.ts_ms));
             rec.last_tick = ticks.first().map(|t| at(t.ts_ms));
-            !ticks.is_empty()
+            if ticks.is_empty() {
+                ProbeStep::Empty
+            } else {
+                ProbeStep::Ticks
+            }
         }
-        Err(e) if session_fatal(&e) => return Err(e.into()),
         Err(e) => {
+            // The failed request is recorded too, with its error.
             rec.error = Some(e.to_string());
-            false
+            ProbeStep::Failed {
+                error: e.to_string(),
+                fatal: session_fatal(&e),
+            }
         }
     };
     hist::record_window(pool, &rec, &[]).await?;
     with_status(status, account_id, |s| s.probes += 1);
-    Ok(has)
+    Ok(step)
 }
 
 /// Run until shutdown: connect, authorise, sync, wait `history.interval_hours`.

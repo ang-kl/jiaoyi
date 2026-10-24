@@ -403,3 +403,106 @@ async fn alternating_ticks_in_one_millisecond_are_all_stored(pool: PgPool) {
     .unwrap();
     assert_eq!(rows, vec![(108_500, 0), (108_500, 1), (108_501, 0)]);
 }
+
+/// Review of #4, round 2: a rate-limited probe step is a failure, not an
+/// empty week. The search ends incomplete with no boundary, and the next
+/// sync probes again (no cooldown after an incomplete search).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_rate_limited_probe_step_leaves_the_boundary_unset_and_is_probed_again(pool: PgPool) {
+    prepare(&pool).await;
+    let broker_data = fake();
+    let mut limited = broker_data.clone();
+    // Weeks older than 10 weeks are refused: the binary search's second step
+    // (about a year back) hits the limit.
+    limited.block_ticks_before = Some(Utc::now().timestamp_millis() - 10 * WEEK_MS);
+    sync(&pool, limited).await;
+
+    let inv = research::build(&pool).await.unwrap();
+    let probe = &inv.accounts[0].symbols[0].probe;
+    assert_eq!(probe.earliest_week_with_ticks, None, "{probe:?}");
+    assert_eq!(probe.probed_at, None, "{probe:?}");
+    assert!(
+        probe
+            .last_incomplete_error
+            .as_deref()
+            .unwrap_or("")
+            .contains("BLOCKED_PAYLOAD_TYPE"),
+        "{probe:?}"
+    );
+    let failed_steps: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM history_fetches WHERE kind = 'probe' AND status = 'failed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(failed_steps, 1, "the failed request is recorded");
+    assert!(inv.accounts[0].symbols[0]
+        .missing
+        .iter()
+        .any(|m| m.contains("did not complete")));
+
+    // The next sync probes again and finds the true boundary, 40 weeks back.
+    let log = sync(&pool, broker_data).await;
+    assert!(
+        log.lock()
+            .unwrap()
+            .tick_requests
+            .iter()
+            .any(|(_, _, from, _)| *from < Utc::now().timestamp_millis() - 10 * WEEK_MS),
+        "probed again"
+    );
+    let inv = research::build(&pool).await.unwrap();
+    let want = chrono::DateTime::<Utc>::from_timestamp_millis(week_start(
+        Utc::now().timestamp_millis() - 40 * WEEK_MS,
+    ))
+    .unwrap()
+    .date_naive();
+    let probe = &inv.accounts[0].symbols[0].probe;
+    assert_eq!(probe.earliest_week_with_ticks, Some(want), "{probe:?}");
+    assert_eq!(probe.status.as_deref(), Some("complete"));
+}
+
+/// Review of #4, round 2: a fetch read with two difference signs is counted
+/// once in the inventory's stored ticks.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_fetch_with_two_signs_is_counted_once(pool: PgPool) {
+    use jiaoyi_store::history::{self as hist, FetchRecord, HistoryTick};
+    prepare(&pool).await;
+    let now = Utc::now();
+    let ticks: Vec<HistoryTick> = (0..10)
+        .map(|i| HistoryTick {
+            ts: now - Duration::hours(1) + Duration::seconds(i),
+            price_e5: 108_500 + i,
+            dup: 0,
+        })
+        .collect();
+    let (_, stored) = hist::record_window(
+        &pool,
+        &FetchRecord {
+            account_id: A,
+            broker_symbol_id: 1,
+            side: "bid",
+            kind: "download",
+            window_from: now - Duration::days(1),
+            window_to: now,
+            complete: false,
+            ticks: 10,
+            pages: 2,
+            first_tick: Some(ticks[0].ts),
+            last_tick: Some(ticks[9].ts),
+            delta_signs: vec!["subtract".into(), "add".into()],
+            error: None,
+        },
+        &ticks,
+    )
+    .await
+    .unwrap();
+    assert_eq!(stored, 10);
+    let inv = research::build(&pool).await.unwrap();
+    let bid = &inv.accounts[0].symbols[0].history_bid;
+    assert_eq!(bid.ticks_stored, 10);
+    assert_eq!(
+        bid.delta_signs_seen,
+        vec!["add".to_string(), "subtract".to_string()]
+    );
+}

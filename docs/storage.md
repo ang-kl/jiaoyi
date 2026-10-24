@@ -81,6 +81,7 @@ Read-only against the broker. Migration 0004.
 |---|---|---|
 | `ticks_history` | market data, partitioned by UTC month | The broker's historical bid and ask ticks (`ProtoOAGetTickDataReq`), `source = broker_history`, price in 1/100000 as sent. `dup` numbers identical ticks at one instant, so repeats are kept and a re-download stores nothing twice. |
 | `history_fetches` | event, append-only | Every tick request window: what was asked, how many ticks came back, how many were new, which difference sign decoded them, and any error. `kind = probe` rows only count ticks, to find how far back the history goes. |
+| `history_probes` | event, append-only | Every probe search as a whole (migration 0006): `complete` with the earliest week found, `no_ticks`, or `incomplete` with the failing step's error and no result. Only a completed search starts the re-probe cooldown; a failed request is never read as an empty week. |
 | `deals` | broker record | Every deal exactly as `ProtoOADeal` gives it, money as the broker's integers with `money_digits`, plus the raw message. Deletes are refused; a deal the broker later reports differently is written to `reconcile_events` first. |
 | `deal_fetches` | event, append-only | Every deal-list window and its outcome. |
 | `account_snapshots` | event, append-only | `ProtoOATraderRes` each time it is read: login, deposit asset, balance, registration date. |
