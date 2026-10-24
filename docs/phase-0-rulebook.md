@@ -95,6 +95,10 @@ Source: Clenow, *Following the Trend*, and the Turtle rules (breakout with a tre
 | Drawdown brake | Equity 25% below its peak → no new entries. Open positions keep their stops. The owner decides what happens next. |
 | Manual trading | None on the system's accounts. A position the system did not open is reported, never managed ([R]: human and adopted trades cost 24% of the loss). |
 
+## 6a. No trading switch
+
+There is no on/off trading switch. Owner, 24-10-2026: *"you don't need to be bothered about a trading or not-trading switch. It should always want to trade."* Once its phase gates are passed, the system trades whenever its rules say so. The only things that stop an entry are the rules themselves: the signal (§4), the cost guard and the hard size cap (§5), the portfolio limits and the drawdown brake (§6), and the account allowlist (§2). Each refusal is recorded with its reason.
+
 ## 7. What the system never does
 
 - Intraday or tick entries.
