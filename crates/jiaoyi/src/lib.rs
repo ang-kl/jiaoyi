@@ -8,3 +8,4 @@ pub mod loader;
 pub mod recorder;
 pub mod report;
 pub mod service;
+pub mod shutdown;

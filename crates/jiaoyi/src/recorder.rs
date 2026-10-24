@@ -22,6 +22,7 @@ use tokio::time::Instant;
 
 use crate::config::BrokerConfig;
 use crate::loader;
+use crate::shutdown::Shutdown;
 
 /// Pause before a new session after a failure or a disconnect.
 pub const RETRY_AFTER: Duration = Duration::from_secs(30);
@@ -100,13 +101,17 @@ async fn session_settings(pool: &PgPool, account_id: i64) -> anyhow::Result<Sess
     })
 }
 
-/// How a recording session runs. Production uses [`RecordOptions::default`].
-#[derive(Debug, Clone, Copy)]
+/// How a recording session runs. Production uses the defaults plus the
+/// service's shutdown receiver.
+#[derive(Debug, Clone)]
 pub struct RecordOptions {
     /// End the session at this instant (tests); `None` runs until an error
     /// or a change of the resolved symbol set.
     pub until: Option<Instant>,
     pub maintain_every: Duration,
+    /// On shutdown the session writes its buffered ticks and ends, and the
+    /// recorder does not start another.
+    pub shutdown: Option<Shutdown>,
 }
 
 impl Default for RecordOptions {
@@ -114,7 +119,16 @@ impl Default for RecordOptions {
         RecordOptions {
             until: None,
             maintain_every: MAINTAIN_EVERY,
+            shutdown: None,
         }
+    }
+}
+
+/// Resolves when shutdown fires; never, without a receiver.
+async fn shutdown_fired(s: &mut Option<Shutdown>) {
+    match s.as_mut() {
+        Some(s) => s.wait().await,
+        None => std::future::pending().await,
     }
 }
 
@@ -125,6 +139,7 @@ pub async fn run(
     account: PermittedAccount,
     env: Environment,
     status: StatusMap,
+    shutdown: Shutdown,
 ) {
     let b = broker.clone();
     run_with(
@@ -137,13 +152,16 @@ pub async fn run(
             async move { loader::connect(&b, env).await.map_err(anyhow::Error::from) }
         },
         RETRY_AFTER,
-        RecordOptions::default(),
+        RecordOptions {
+            shutdown: Some(shutdown),
+            ..Default::default()
+        },
     )
     .await
 }
 
-/// Run forever: open a connection with `connect`, record until the session
-/// ends, record why it ended, wait `retry_after`, and start again.
+/// Run until shutdown: open a connection with `connect`, record until the
+/// session ends, record why it ended, wait `retry_after`, and start again.
 pub async fn run_with<C, F>(
     pool: PgPool,
     broker: BrokerConfig,
@@ -156,10 +174,18 @@ pub async fn run_with<C, F>(
     C: Fn() -> F,
     F: std::future::Future<Output = anyhow::Result<Connection>>,
 {
+    let mut stop = opts.shutdown.clone();
     loop {
-        let result = match connect().await {
+        if stop.as_ref().is_some_and(|s| s.is_set()) {
+            return;
+        }
+        let conn = tokio::select! {
+            c = connect() => c,
+            _ = shutdown_fired(&mut stop) => return,
+        };
+        let result = match conn {
             Ok(conn) => {
-                let r = record(&pool, &conn, &broker, &account, &status, opts).await;
+                let r = record(&pool, &conn, &broker, &account, &status, opts.clone()).await;
                 if r.is_err() && conn.closed_reason().is_some() {
                     with_status(&status, account.id(), |s| s.disconnects += 1);
                 }
@@ -175,13 +201,21 @@ pub async fn run_with<C, F>(
                 s.last_error_at = Some(Utc::now());
             });
         }
-        tokio::time::sleep(retry_after).await;
+        if stop.as_ref().is_some_and(|s| s.is_set()) {
+            tracing::info!(account = %account, "tick recorder stopped for shutdown");
+            return;
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(retry_after) => {}
+            _ = shutdown_fired(&mut stop) => return,
+        }
     }
 }
 
 /// One recording session on an open connection. Returns `Ok` when the
-/// resolved symbol set changed (the caller reconnects) or `opts.until`
-/// passed; returns `Err` when the connection or the database fails.
+/// resolved symbol set changed (the caller reconnects), `opts.until` passed,
+/// or shutdown fired — in every case after writing the buffered ticks.
+/// Returns `Err` when the connection or the database fails.
 pub async fn record(
     pool: &PgPool,
     conn: &Connection,
@@ -190,6 +224,10 @@ pub async fn record(
     status: &StatusMap,
     opts: RecordOptions,
 ) -> anyhow::Result<u64> {
+    let mut stop = opts.shutdown.clone();
+    if stop.as_ref().is_some_and(|s| s.is_set()) {
+        return Ok(0);
+    }
     let dropped = maintain_partitions(pool).await?;
     with_status(status, account.id(), |s| {
         s.partitions_dropped.extend(dropped)
@@ -294,6 +332,10 @@ pub async fn record(
                     Ok(_) => {}
                     Err(e) => break Err(e.into()),
                 }
+            }
+            _ = shutdown_fired(&mut stop) => {
+                tracing::info!(account = %account, buffered = buf.len(), "shutdown: writing buffered ticks");
+                break Ok(());
             }
             _ = async { deadline.as_mut().as_pin_mut().unwrap().await }, if deadline.is_some() => break Ok(()),
         }

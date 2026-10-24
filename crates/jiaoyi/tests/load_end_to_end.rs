@@ -537,6 +537,7 @@ async fn a_flush_interval_change_takes_effect_without_a_restart(pool: PgPool) {
             recorder::RecordOptions {
                 until: Some(tokio::time::Instant::now() + Duration::from_secs(6)),
                 maintain_every: Duration::from_millis(200),
+                ..Default::default()
             },
         )
         .await
@@ -639,4 +640,75 @@ async fn the_recorder_reauthorises_when_the_broker_invalidates_the_token(pool: P
     let logs = auths.lock().unwrap();
     assert!(logs.len() >= 2);
     assert_eq!(logs[1].lock().unwrap().account_auths, vec![A]);
+}
+
+/// Review finding 3 on #3: on shutdown the recorder writes the ticks it has
+/// buffered before it stops, and the service's wait sees it finish.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn shutdown_writes_the_buffered_ticks_before_the_recorder_stops(pool: PgPool) {
+    use jiaoyi::shutdown;
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    // A 60 s flush: the quotes stay in the buffer unless shutdown writes them.
+    settings::change(
+        &pool,
+        "ticks.flush_millis",
+        None,
+        Some(json!(60000)),
+        "test",
+        "slow flush",
+    )
+    .await
+    .unwrap();
+    load_once(&pool, fake()).await;
+
+    let (trigger, stop) = shutdown::channel();
+    let status = recorder::StatusMap::default();
+    let handle = tokio::spawn(recorder::run_with(
+        pool.clone(),
+        broker(None),
+        permitted(),
+        status.clone(),
+        || async { Ok(fake().spawn().0) },
+        Duration::from_millis(100),
+        recorder::RecordOptions {
+            shutdown: Some(stop),
+            ..Default::default()
+        },
+    ));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while status
+        .lock()
+        .unwrap()
+        .get(&A)
+        .map_or(0, |s| s.sessions_started)
+        == 0
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        tick_count(&pool).await,
+        0,
+        "the quotes are buffered, not yet written"
+    );
+
+    trigger.fire();
+    let report = shutdown::wait_for_tasks(vec![handle], Duration::from_secs(5)).await;
+    assert_eq!(
+        report,
+        shutdown::StopReport {
+            finished: 1,
+            aborted: 0
+        },
+        "the recorder stopped on its own"
+    );
+    assert_eq!(
+        tick_count(&pool).await,
+        3,
+        "the buffered ticks were written"
+    );
 }
