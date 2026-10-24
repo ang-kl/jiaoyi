@@ -55,6 +55,10 @@ pub const SENDABLE: &[(i32, &str)] = &[
         Oa::ProtoOaTraderReq as i32,
         "read the account's registration date and deposit asset",
     ),
+    (
+        Oa::ProtoOaGetAccountsByAccessTokenReq as i32,
+        "read which accounts the access token's grant covers",
+    ),
 ];
 
 /// A payload type that is not on [`SENDABLE`].
@@ -142,6 +146,8 @@ request!(pb::ProtoOaDealListReq => Oa::ProtoOaDealListReq,
          pb::ProtoOaDealListRes => Oa::ProtoOaDealListRes);
 request!(pb::ProtoOaTraderReq => Oa::ProtoOaTraderReq,
          pb::ProtoOaTraderRes => Oa::ProtoOaTraderRes);
+request!(pb::ProtoOaGetAccountListByAccessTokenReq => Oa::ProtoOaGetAccountsByAccessTokenReq,
+         pb::ProtoOaGetAccountListByAccessTokenRes => Oa::ProtoOaGetAccountsByAccessTokenRes);
 
 #[cfg(test)]
 mod tests {
@@ -158,7 +164,7 @@ mod tests {
     assert_not_impl_any!(pb::ProtoOaMarginCallUpdateReq: Request);
 
     /// The read requests phase 1 needs, and nothing else.
-    const EXPECTED_SENDABLE: [i32; 12] = [
+    const EXPECTED_SENDABLE: [i32; 13] = [
         Common::HeartbeatEvent as i32,
         Oa::ProtoOaApplicationAuthReq as i32,
         Oa::ProtoOaAccountAuthReq as i32,
@@ -171,6 +177,7 @@ mod tests {
         Oa::ProtoOaGetTickdataReq as i32,
         Oa::ProtoOaDealListReq as i32,
         Oa::ProtoOaTraderReq as i32,
+        Oa::ProtoOaGetAccountsByAccessTokenReq as i32,
     ];
 
     #[test]
@@ -227,6 +234,7 @@ mod tests {
             pt::<pb::ProtoOaGetTickDataReq>(),
             pt::<pb::ProtoOaDealListReq>(),
             pt::<pb::ProtoOaTraderReq>(),
+            pt::<pb::ProtoOaGetAccountListByAccessTokenReq>(),
         ] {
             assert!(check_sendable(t).is_ok(), "{t}");
         }

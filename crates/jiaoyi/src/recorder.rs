@@ -203,7 +203,18 @@ pub async fn run_with<C, F>(
             Err(e) => Err(e),
         };
         with_status(&status, account.id(), |s| s.subscribed_symbols.clear());
+        let mut wait = retry_after;
         if let Err(e) = result {
+            if loader::is_grant_refusal(&e) {
+                // The token's grant cannot authorise this account: read the
+                // grant again every load.retry_minutes, not every retry_after.
+                let minutes = jiaoyi_store::settings::snapshot(&pool, None)
+                    .await
+                    .ok()
+                    .and_then(|s| s.integer("load.retry_minutes").ok())
+                    .unwrap_or(5);
+                wait = wait.max(Duration::from_secs(minutes.max(1) as u64 * 60));
+            }
             let msg = format!("{e:#}");
             let new_state = {
                 let mut m = status.lock().unwrap();
@@ -230,7 +241,7 @@ pub async fn run_with<C, F>(
             return;
         }
         tokio::select! {
-            _ = tokio::time::sleep(retry_after) => {}
+            _ = tokio::time::sleep(wait) => {}
             _ = shutdown_fired(&mut stop) => return,
         }
     }

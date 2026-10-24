@@ -2,6 +2,8 @@
 //! the in-memory fake broker and a real PostgreSQL.
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use jiaoyi::config::BrokerConfig;
@@ -10,7 +12,8 @@ use jiaoyi::{loader, research, shutdown};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::secret::Secret;
 use jiaoyi_ctrader::messages::{
-    ProtoOaClosePositionDetail, ProtoOaDeal, ProtoOaLightSymbol, ProtoOaSymbol, ProtoOaTrader,
+    ProtoOaClosePositionDetail, ProtoOaDeal, ProtoOaLightSymbol, ProtoOaPayloadType, ProtoOaSymbol,
+    ProtoOaTrader,
 };
 use jiaoyi_ctrader::testkit::{d1_bar, FakeBroker};
 use jiaoyi_store::{self as store, settings};
@@ -342,6 +345,7 @@ async fn widening_the_deal_window_fetches_the_days_not_yet_covered(pool: PgPool)
             deals: 0,
             upsert: DealUpsert::default(),
             error: None,
+            session_ended: false,
         },
     )
     .await
@@ -492,6 +496,7 @@ async fn a_fetch_with_two_signs_is_counted_once(pool: PgPool) {
             last_tick: Some(ticks[9].ts),
             delta_signs: vec!["subtract".into(), "add".into()],
             error: None,
+            session_ended: false,
         },
         &ticks,
     )
@@ -505,4 +510,185 @@ async fn a_fetch_with_two_signs_is_counted_once(pool: PgPool) {
         bid.delta_signs_seen,
         vec!["add".to_string(), "subtract".to_string()]
     );
+}
+
+/// PR #6, item A (deploy 7765158a, 24-10-2026): a token refresh for the demo
+/// account invalidated the live session in the middle of its history sync,
+/// and every later window failed (all 76 tick windows, 63 of 83 deal
+/// windows). The sync now stops on the session end, re-authorises from the
+/// shared token store and resumes at the first unfinished window; the window
+/// cut short is recorded as `session_ended`, not as a broker failure.
+async fn a_session_end_mid_sync(pool: &PgPool, payload_type: i32, nth: usize) {
+    prepare(pool).await;
+    // A clean broker: no impossible ask, so every window can complete.
+    let mut f = fake();
+    f.tick_history
+        .get_mut(&(1, 2))
+        .unwrap()
+        .retain(|(_, price)| *price > 0);
+    f.invalidate_on = Some((payload_type, Arc::new(AtomicUsize::new(nth))));
+    // No pause before re-authorising. The setting is new in PR #6; before it
+    // the change is refused and the sync is retried after 300 s.
+    let _ = settings::change(
+        pool,
+        "history.session_retry_secs",
+        None,
+        Some(json!(0)),
+        "test",
+        "no wait",
+    )
+    .await;
+    let status = history::HistoryStatusMap::default();
+    let (trigger, stop) = shutdown::channel();
+    let f2 = f.clone();
+    let connects = Arc::new(AtomicUsize::new(0));
+    let c2 = connects.clone();
+    let task = tokio::spawn(history::run_with(
+        pool.clone(),
+        broker(),
+        permitted(),
+        status.clone(),
+        move || {
+            let f = f2.clone();
+            c2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async move { Ok(f.spawn().0) }
+        },
+        stop,
+    ));
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    while status
+        .lock()
+        .unwrap()
+        .get(&A)
+        .and_then(|s| s.last_sync_finished_at)
+        .is_none()
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    trigger.fire();
+    let _ = task.await;
+    let st = status.lock().unwrap().get(&A).cloned().unwrap_or_default();
+    assert!(
+        st.last_sync_finished_at.is_some(),
+        "the sync finished: {st:?}"
+    );
+    // One session end, one window cut short, one re-authorised connection.
+    // (Read through the JSON /health shows, so the test builds against the
+    // status shape from before the fix too.)
+    let sv = serde_json::to_value(&st).unwrap();
+    assert_eq!(sv["session_ends"], 1, "{sv}");
+    assert_eq!(sv["windows_cut_by_session_end"], 1, "{sv}");
+    assert_eq!(sv["tick_windows_failed"], 0, "{sv}");
+    assert_eq!(connects.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // Every window completed: no failed tick week, no failed deal window.
+    let inv = research::build(pool).await.unwrap();
+    let eur = &inv.accounts[0].symbols[0];
+    for side in [&eur.history_bid, &eur.history_ask] {
+        assert!(side.weeks_failed.is_empty(), "{:?}", side.weeks_failed);
+        assert!(
+            side.weeks_missing.len() <= 1,
+            "only the current week: {:?}",
+            side.weeks_missing
+        );
+    }
+    assert_eq!(
+        inv.accounts[0].deals.windows_failed, 0,
+        "{:?}",
+        inv.accounts[0].deals
+    );
+    assert!(inv.accounts[0].deals.windows_ok > 0);
+    let broker_failures: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM history_fetches WHERE status = 'failed' AND failure_kind = 'broker')
+              + (SELECT count(*) FROM deal_fetches WHERE status = 'failed' AND failure_kind = 'broker')",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(broker_failures, 0);
+    // The window cut short is on record, with its reason.
+    let ended: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM history_fetches WHERE failure_kind = 'session_ended')
+              + (SELECT count(*) FROM deal_fetches WHERE failure_kind = 'session_ended')",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(ended, 1);
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_session_ended_during_the_tick_download_is_reauthorised_and_resumed(pool: PgPool) {
+    a_session_end_mid_sync(&pool, ProtoOaPayloadType::ProtoOaGetTickdataReq as i32, 2).await;
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_session_ended_during_the_deal_download_is_reauthorised_and_resumed(pool: PgPool) {
+    a_session_end_mid_sync(&pool, ProtoOaPayloadType::ProtoOaDealListReq as i32, 2).await;
+}
+
+/// PR #6, item B: `/research/inventory` names, per account, each distinct
+/// error of the failed tick windows, deal windows and probe steps, with its
+/// count and the last time it happened.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_inventory_names_each_distinct_fetch_error_with_count_and_last_time(pool: PgPool) {
+    prepare(&pool).await;
+    let tick = |from: &str, kind: &str, error: Option<&str>, at: &str| {
+        format!(
+            "INSERT INTO history_fetches (account_id, broker_symbol_id, side, kind, window_from, window_to,
+                                          fetched_at, status, complete, error)
+             VALUES ({A}, 1, 'bid', '{kind}', '{from}', '{from}'::timestamptz + interval '6 days',
+                     '{at}', '{}', true, {})",
+            if error.is_some() { "failed" } else { "ok" },
+            error.map_or("NULL".to_string(), |e| format!("'{e}'"))
+        )
+    };
+    for q in [
+        tick("2026-09-07", "download", Some("broker error ACCOUNT_NOT_AUTHORIZED"), "2026-10-24 01:00Z"),
+        tick("2026-09-14", "download", Some("broker error ACCOUNT_NOT_AUTHORIZED"), "2026-10-24 02:00Z"),
+        tick("2026-09-21", "download", Some("tick data: does not decode"), "2026-10-24 03:00Z"),
+        tick("2026-09-28", "download", None, "2026-10-24 04:00Z"),
+        tick("2015-01-05", "probe", Some("broker error REQUEST_FREQUENCY_EXCEEDED"), "2026-10-24 05:00Z"),
+        format!(
+            "INSERT INTO deal_fetches (account_id, window_from, window_to, fetched_at, status, complete, error)
+             VALUES ({A}, '2026-08-01', '2026-08-07', '2026-10-24 06:00Z', 'failed', true,
+                     'broker error ACCOUNT_NOT_AUTHORIZED')"
+        ),
+    ] {
+        sqlx::query(&q).execute(&pool).await.unwrap();
+    }
+    let inv = research::build(&pool).await.unwrap();
+    let v = serde_json::to_value(&inv).unwrap();
+    let errors = v["accounts"][0]["fetch_errors"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let find = |kind: &str, text: &str| {
+        errors
+            .iter()
+            .find(|e| e["kind"] == kind && e["error"] == text)
+            .cloned()
+            .unwrap_or_else(|| panic!("{kind} {text} not in {errors:?}"))
+    };
+    let e = find("tick_window", "broker error ACCOUNT_NOT_AUTHORIZED");
+    assert_eq!(e["count"], 2);
+    assert!(
+        e["last_at"]
+            .as_str()
+            .unwrap()
+            .starts_with("2026-10-24T02:00:00"),
+        "{e}"
+    );
+    assert_eq!(
+        find("tick_window", "tick data: does not decode")["count"],
+        1
+    );
+    assert_eq!(
+        find("deal_window", "broker error ACCOUNT_NOT_AUTHORIZED")["count"],
+        1
+    );
+    let p = find("probe_step", "broker error REQUEST_FREQUENCY_EXCEEDED");
+    assert_eq!(p["count"], 1);
+    assert_eq!(errors.len(), 4, "{errors:?}");
 }

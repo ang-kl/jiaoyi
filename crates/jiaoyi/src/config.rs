@@ -33,7 +33,8 @@ pub struct BrokerConfig {
     /// `None` when unset: every load then fails and records why.
     pub client_id: Option<String>,
     pub client_secret: Option<Secret>,
-    /// Seed tokens, used only while `oauth_tokens` is empty.
+    /// Seed tokens: stored when `oauth_tokens` is empty, or when they are a
+    /// new seed (a fingerprint the stored token does not descend from).
     pub seed_access_token: Option<Secret>,
     pub seed_refresh_token: Option<Secret>,
     pub seed_expires_at: Option<DateTime<Utc>>,

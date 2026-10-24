@@ -731,11 +731,14 @@ pub struct StoredToken {
     pub expires_at: Option<DateTime<Utc>>,
     pub obtained_at: DateTime<Utc>,
     pub source: String,
+    /// The fingerprint of the env seed this token descends from; `None` for a
+    /// token stored before migration 0007.
+    pub seed_fingerprint: Option<String>,
 }
 
 pub async fn load_token(pool: &PgPool) -> Result<Option<StoredToken>> {
     let r = sqlx::query(
-        "SELECT access_token, refresh_token, expires_at, obtained_at, source
+        "SELECT access_token, refresh_token, expires_at, obtained_at, source, seed_fingerprint
          FROM oauth_tokens WHERE token_owner = $1",
     )
     .bind(TOKEN_OWNER)
@@ -747,11 +750,13 @@ pub async fn load_token(pool: &PgPool) -> Result<Option<StoredToken>> {
         expires_at: r.get("expires_at"),
         obtained_at: r.get("obtained_at"),
         source: r.get("source"),
+        seed_fingerprint: r.get("seed_fingerprint"),
     }))
 }
 
 /// Store a token. `expires_at` is NULL when unknown (an env seed without an
-/// expiry), with that reason.
+/// expiry), with that reason. The seed fingerprint of the stored row is kept:
+/// a refreshed token descends from the same seed.
 pub async fn save_token(
     pool: &PgPool,
     access: &Secret,
@@ -783,4 +788,117 @@ pub async fn save_token(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Store an env seed as the token (source `env_seed`), remembering its
+/// fingerprint, so that the same seed is not stored over its own refreshed
+/// token again, and a different seed is.
+pub async fn store_seed(
+    pool: &PgPool,
+    access: &Secret,
+    refresh: &Secret,
+    expires_at: Option<DateTime<Utc>>,
+) -> Result<()> {
+    save_token(pool, access, refresh, None, expires_at, "env_seed").await?;
+    set_seed_fingerprint(pool, &access.fingerprint()).await
+}
+
+/// Remember which env seed the stored token descends from.
+pub async fn set_seed_fingerprint(pool: &PgPool, fingerprint: &str) -> Result<()> {
+    sqlx::query("UPDATE oauth_tokens SET seed_fingerprint = $2 WHERE token_owner = $1")
+        .bind(TOKEN_OWNER)
+        .bind(fingerprint)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------- token grants
+
+/// One read of a token's grant, made before authorising `account_id`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct GrantRead {
+    pub account_id: i64,
+    pub host: String,
+    pub token_fingerprint: String,
+    pub token_source: String,
+    /// `listed`, `not_listed`, `environment_mismatch` or `rejected`.
+    pub verdict: &'static str,
+    pub reason: Option<String>,
+    pub permission_scope: Option<String>,
+    /// `[{ctid, is_live, login}]`; `None` when the read was rejected.
+    pub accounts: Option<Value>,
+}
+
+pub async fn record_grant(pool: &PgPool, g: &GrantRead) -> Result<i64> {
+    Ok(sqlx::query_scalar(
+        "INSERT INTO token_grants (account_id, host, token_fingerprint, token_source, verdict,
+                                   reason, permission_scope, accounts)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+    )
+    .bind(g.account_id)
+    .bind(&g.host)
+    .bind(&g.token_fingerprint)
+    .bind(&g.token_source)
+    .bind(g.verdict)
+    .bind(&g.reason)
+    .bind(&g.permission_scope)
+    .bind(&g.accounts)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// The latest grant read made for an account, as stored.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct GrantRow {
+    pub id: i64,
+    pub read_at: DateTime<Utc>,
+    pub account_id: i64,
+    pub host: String,
+    pub token_fingerprint: String,
+    pub token_source: String,
+    pub verdict: String,
+    pub reason: Option<String>,
+    pub permission_scope: Option<String>,
+    pub accounts: Option<Value>,
+}
+
+/// The latest grant read per account.
+pub async fn latest_grants(pool: &PgPool) -> Result<Vec<GrantRow>> {
+    let rows = sqlx::query(
+        "SELECT DISTINCT ON (account_id) id, read_at, account_id, host, token_fingerprint,
+                token_source, verdict, reason, permission_scope, accounts
+         FROM token_grants ORDER BY account_id, id DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| GrantRow {
+            id: r.get("id"),
+            read_at: r.get("read_at"),
+            account_id: r.get("account_id"),
+            host: r.get("host"),
+            token_fingerprint: r.get("token_fingerprint"),
+            token_source: r.get("token_source"),
+            verdict: r.get("verdict"),
+            reason: r.get("reason"),
+            permission_scope: r.get("permission_scope"),
+            accounts: r.get("accounts"),
+        })
+        .collect())
+}
+
+/// The environment an account was declared with (`accounts.environment`).
+pub async fn account_environment(pool: &PgPool, account_id: i64) -> Result<Option<Environment>> {
+    let env: Option<String> =
+        sqlx::query_scalar("SELECT environment FROM accounts WHERE account_id = $1")
+            .bind(account_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(env.and_then(|e| match e.as_str() {
+        "demo" => Some(Environment::Demo),
+        "live" => Some(Environment::Live),
+        _ => None,
+    }))
 }

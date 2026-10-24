@@ -46,6 +46,9 @@ pub struct AccountReport {
     /// `None` until a load has recorded the list.
     pub energy_candidates: Option<Vec<serde_json::Value>>,
     pub energy_candidates_from_run: Option<i64>,
+    /// The last read of the token's grant made for this account (PR #6):
+    /// the accounts it listed, by fingerprint of the token, never the token.
+    pub token_grant: Option<store::GrantRow>,
     pub symbols: Vec<SymbolReport>,
 }
 
@@ -83,6 +86,7 @@ pub async fn build(pool: &PgPool) -> store::Result<Report> {
     .fetch_all(pool)
     .await?;
     let runs = store::latest_runs(pool).await?;
+    let grants = store::latest_grants(pool).await?;
     let global = store::settings::snapshot(pool, None).await?;
     let mut out = Vec::new();
     for a in accounts {
@@ -116,6 +120,7 @@ pub async fn build(pool: &PgPool) -> store::Result<Report> {
             environment,
             energy_candidates,
             energy_candidates_from_run: listed.map(|(id, _, _)| id),
+            token_grant: grants.iter().find(|g| g.account_id == account_id).cloned(),
             last_load: runs.iter().find(|r| r.account_id == account_id).cloned(),
             symbols,
         });
@@ -311,6 +316,20 @@ pub async fn health(
     let refusals: i64 = jiaoyi_store::sqlx::query_scalar("SELECT count(*) FROM account_refusals")
         .fetch_one(pool)
         .await?;
+    let accounts = jiaoyi_store::sqlx::query(
+        "SELECT account_id, environment FROM accounts WHERE enabled ORDER BY account_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    let grants = store::latest_grants(pool).await?;
+    let token_grants: Vec<Value> = accounts
+        .iter()
+        .map(|a| {
+            let id: i64 = a.get("account_id");
+            let env: String = a.get("environment");
+            grant_state(id, &env, grants.iter().find(|g| g.account_id == id))
+        })
+        .collect();
     Ok(serde_json::json!({
         "status": "ok",
         "service": "jiaoyi",
@@ -320,6 +339,7 @@ pub async fn health(
         "tick_recorders": recorders,
         "ticks": ticks,
         "account_refusals_recorded": refusals,
+        "token_grants": token_grants,
         "last_loads": runs.iter().map(|r| serde_json::json!({
             "account_id": r.account_id,
             "run_id": r.id,
@@ -335,4 +355,25 @@ pub async fn health(
             "errors": r.errors,
         })).collect::<Vec<_>>(),
     }))
+}
+
+/// One account's grant state for `/health`: `listed`, `not_listed`,
+/// `environment_mismatch`, or `unread` (no read yet, or the last read was
+/// refused), with the reason and the fingerprint of the token last read.
+pub fn grant_state(account_id: i64, environment: &str, g: Option<&store::GrantRow>) -> Value {
+    let (state, reason) = match g {
+        None => ("unread", Some("no grant read recorded yet".to_string())),
+        Some(g) if g.verdict == "rejected" => ("unread", g.reason.clone()),
+        Some(g) => (g.verdict.as_str(), g.reason.clone()),
+    };
+    serde_json::json!({
+        "account_id": account_id,
+        "environment": environment,
+        "state": state,
+        "reason": reason,
+        "token_fingerprint": g.map(|g| g.token_fingerprint.clone()),
+        "token_source": g.map(|g| g.token_source.clone()),
+        "host": g.map(|g| g.host.clone()),
+        "read_at": g.map(|g| g.read_at),
+    })
 }

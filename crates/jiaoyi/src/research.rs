@@ -27,7 +27,23 @@ pub struct AccountInventory {
     pub trader_read_at: Option<DateTime<Utc>>,
     pub deals: DealCoverage,
     pub symbols: Vec<SymbolInventory>,
+    /// Each distinct error of this account's failed tick windows, deal
+    /// windows and probe steps, with how often and when it last happened.
+    pub fetch_errors: Vec<FetchError>,
     pub missing: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct FetchError {
+    /// `tick_window`, `deal_window` or `probe_step`.
+    pub kind: String,
+    pub error: String,
+    /// `broker`, `session_ended` (the window is fetched again after
+    /// re-authorising), or `None` for a failure recorded before the two were
+    /// told apart (migration 0007).
+    pub failure_kind: Option<String>,
+    pub count: i64,
+    pub last_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -37,7 +53,11 @@ pub struct DealCoverage {
     pub first_executed_at: Option<DateTime<Utc>>,
     pub last_executed_at: Option<DateTime<Utc>>,
     pub windows_ok: i64,
+    /// Windows whose latest fetch failed at the broker. A window cut short
+    /// because the account session ended is not a failure: it is missing,
+    /// and counted in `windows_session_ended`.
     pub windows_failed: i64,
+    pub windows_session_ended: i64,
     pub last_fetched_at: Option<DateTime<Utc>>,
 }
 
@@ -169,9 +189,12 @@ async fn account_inventory(
     .fetch_one(pool)
     .await?;
     let w = sqlx::query(
-        "SELECT count(*) FILTER (WHERE status = 'ok') AS ok, count(*) FILTER (WHERE status = 'failed') AS failed,
+        "SELECT count(*) FILTER (WHERE status = 'ok') AS ok,
+                count(*) FILTER (WHERE status = 'failed'
+                                   AND failure_kind IS DISTINCT FROM 'session_ended') AS failed,
+                count(*) FILTER (WHERE failure_kind = 'session_ended') AS ended,
                 max(fetched_at) AS last
-         FROM (SELECT DISTINCT ON (window_from) status, fetched_at FROM deal_fetches
+         FROM (SELECT DISTINCT ON (window_from) status, failure_kind, fetched_at FROM deal_fetches
                WHERE account_id = $1 ORDER BY window_from, fetched_at DESC) x",
     )
     .bind(account_id)
@@ -184,6 +207,7 @@ async fn account_inventory(
         last_executed_at: d.get("l"),
         windows_ok: w.get("ok"),
         windows_failed: w.get("failed"),
+        windows_session_ended: w.get("ended"),
         last_fetched_at: w.get("last"),
     };
     let resolutions = store::latest_resolutions(pool, account_id).await?;
@@ -206,6 +230,30 @@ async fn account_inventory(
             .await?,
         );
     }
+    let fetch_errors = sqlx::query(
+        "SELECT kind, error, failure_kind, count(*) AS n, max(fetched_at) AS last_at FROM (
+             SELECT CASE kind WHEN 'download' THEN 'tick_window' ELSE 'probe_step' END AS kind,
+                    error, failure_kind, fetched_at
+             FROM history_fetches WHERE account_id = $1 AND status = 'failed'
+             UNION ALL
+             SELECT 'deal_window', error, failure_kind, fetched_at
+             FROM deal_fetches WHERE account_id = $1 AND status = 'failed'
+         ) e
+         GROUP BY kind, error, failure_kind
+         ORDER BY kind, max(fetched_at) DESC, error",
+    )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|r| FetchError {
+        kind: r.get("kind"),
+        error: r.get("error"),
+        failure_kind: r.get("failure_kind"),
+        count: r.get("n"),
+        last_at: r.get("last_at"),
+    })
+    .collect();
     let mut missing = Vec::new();
     if snap.is_none() {
         missing.push("trader record not read yet: no history sync has run".to_string());
@@ -226,6 +274,7 @@ async fn account_inventory(
         trader_read_at: snap.as_ref().map(|r| r.get("read_at")),
         deals,
         symbols,
+        fetch_errors,
         missing,
     })
 }
@@ -439,7 +488,7 @@ async fn side_coverage(
     from_ms: i64,
 ) -> store::Result<SideCoverage> {
     let rows = sqlx::query(
-        "SELECT DISTINCT ON (window_from) window_from, status, complete, ticks
+        "SELECT DISTINCT ON (window_from) window_from, status, failure_kind, complete, ticks
          FROM history_fetches
          WHERE account_id = $1 AND broker_symbol_id = $2 AND side = $3 AND kind = 'download'
          ORDER BY window_from, (status = 'ok' AND complete) DESC, fetched_at DESC",
@@ -471,7 +520,13 @@ async fn side_coverage(
                     c.weeks_empty.push(date(*start));
                 }
             }
-            Some(r) if r.get::<String, _>("status") == "failed" => {
+            // A window cut short by a session end is fetched again: missing,
+            // not a failure of that week.
+            Some(r)
+                if r.get::<String, _>("status") == "failed"
+                    && r.get::<Option<String>, _>("failure_kind").as_deref()
+                        != Some("session_ended") =>
+            {
                 c.weeks_failed.push(date(*start));
                 c.weeks_missing.push(date(*start));
             }
