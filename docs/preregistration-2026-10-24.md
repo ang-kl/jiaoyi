@@ -32,6 +32,11 @@ What these facts force:
 - **H2 runs on sampled weeks of ticks:**
   - development: 52 random weeks, 2019-01 → 2025-10, seed 20261024;
   - held-out: every second week of the last 12 months (26 weeks).
+- **Sampling policy for H2.** A sampled week is a **scored week**: only entries made inside it count as trades. Two kinds of supporting data are read around it, and neither is ever scored:
+  - **Warm-up:** the 5 trading days before each scored week. They fit the first day's hedge ratios, unit-root test and spread statistics, and warm up the imbalance-bar estimates.
+  - **Exit coverage:** after a scored week, ticks are read for as long as a position opened in it stays open, at most the 5-day time limit. Every exit follows the rules below; nothing is closed at the week's end.
+  - **Development:** a development scored week is drawn only if its warm-up and its longest possible exit coverage both end before 2025-10-24, so no development read reaches the sealed period.
+  - **Held-out:** warm-up and exit coverage may use the unscored weeks in between. They are read only in the held-out stage.
 
 ## Shared by H1 and H2
 
