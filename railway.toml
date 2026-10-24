@@ -1,0 +1,14 @@
+# Railway service `jiaoyi` in project `jiaoyi_prj`.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "/usr/local/bin/jiaoyi"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+# Seconds between SIGTERM and SIGKILL (Railway's default is 0). Longer than
+# the service's 10 s shutdown grace, so the recorders' final flush completes.
+drainingSeconds = 15
