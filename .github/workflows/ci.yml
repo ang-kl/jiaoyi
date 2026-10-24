@@ -38,3 +38,13 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: test
         run: cargo test --workspace --locked
+
+  # The image Railway deploys. `cargo test` builds from the full checkout, so
+  # it cannot see files the Docker context leaves out (.dockerignore); this job
+  # builds the real image so such a gap fails here instead of at deploy.
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the deploy image
+        run: docker build --tag jiaoyi:ci .
