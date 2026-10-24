@@ -74,7 +74,12 @@ What these facts force:
   - long: the first ask at or above the highest high of the previous 50 completed days;
   - short: the first bid at or below the lowest low of the previous 50 completed days;
   - one position per symbol.
-  - Daily-bar fill: the level, or the day's open if the day opened beyond it, plus half the spread and the slippage.
+  - Daily-bar fill: the level, or the day's open if the day opened beyond it, moved to the side of the quote the order fills on: buys at the ask, sells at the bid.
+    - The quote basis of the broker's daily bars (bid, ask or mid) is measured against stored ticks and recorded, never assumed.
+    - Costs are always adverse:
+      - a buy fills at the bar price converted to the ask, plus slippage;
+      - a sell fills at the bar price converted to the bid, minus slippage.
+    - The same rule applies to exits.
 - **Exit:**
   - the stop starts 3 × ATR(20) from the fill (Wilder, completed days);
   - it trails 3 × ATR behind the best price since entry, and only ever moves in the trade's favour;
