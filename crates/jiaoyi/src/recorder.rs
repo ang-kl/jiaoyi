@@ -23,9 +23,10 @@ use tokio::time::Instant;
 use crate::config::BrokerConfig;
 use crate::loader;
 
-/// Pause before a new session after a failure.
+/// Pause before a new session after a failure or a disconnect.
 pub const RETRY_AFTER: Duration = Duration::from_secs(30);
-/// Partition maintenance and the resolved-symbol check run this often.
+/// Partition maintenance, the settings re-read and the resolved-symbol check
+/// run this often.
 pub const MAINTAIN_EVERY: Duration = Duration::from_secs(3600);
 /// Partitions created ahead of today.
 pub const PARTITIONS_AHEAD: u32 = 3;
@@ -33,10 +34,15 @@ pub const PARTITIONS_AHEAD: u32 = 3;
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct RecorderStatus {
     pub subscribed_symbols: Vec<i64>,
+    pub sessions_started: u64,
     pub session_started_at: Option<DateTime<Utc>>,
+    /// The `ticks.flush_millis` in force for the current session.
+    pub flush_millis: Option<u64>,
     pub last_flush_at: Option<DateTime<Utc>>,
     pub ticks_written: u64,
     pub ticks_missed_lagging: u64,
+    /// Sessions that ended because the broker connection closed.
+    pub disconnects: u64,
     pub last_error: Option<String>,
     pub last_error_at: Option<DateTime<Utc>>,
     pub partitions_dropped: Vec<String>,
@@ -67,7 +73,48 @@ pub async fn maintain_partitions(pool: &PgPool) -> anyhow::Result<Vec<String>> {
     Ok(dropped)
 }
 
-/// Run forever for one account.
+/// The settings a recording session reads, at its start and at each maintenance.
+struct SessionSettings {
+    names: Vec<String>,
+    flush_every: Duration,
+}
+
+async fn session_settings(pool: &PgPool, account_id: i64) -> anyhow::Result<SessionSettings> {
+    let s = jiaoyi_store::settings::snapshot(pool, Some(account_id)).await?;
+    let names = s
+        .universe("universe.symbols")
+        .map_err(anyhow::Error::msg)?
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    let flush = s
+        .integer("ticks.flush_millis")
+        .map_err(anyhow::Error::msg)?;
+    Ok(SessionSettings {
+        names,
+        flush_every: Duration::from_millis(flush.max(1) as u64),
+    })
+}
+
+/// How a recording session runs. Production uses [`RecordOptions::default`].
+#[derive(Debug, Clone, Copy)]
+pub struct RecordOptions {
+    /// End the session at this instant (tests); `None` runs until an error
+    /// or a change of the resolved symbol set.
+    pub until: Option<Instant>,
+    pub maintain_every: Duration,
+}
+
+impl Default for RecordOptions {
+    fn default() -> Self {
+        RecordOptions {
+            until: None,
+            maintain_every: MAINTAIN_EVERY,
+        }
+    }
+}
+
+/// Run forever for one account over TLS.
 pub async fn run(
     pool: PgPool,
     broker: BrokerConfig,
@@ -75,63 +122,99 @@ pub async fn run(
     env: Environment,
     status: StatusMap,
 ) {
+    let b = broker.clone();
+    run_with(
+        pool,
+        broker,
+        account,
+        status,
+        move || {
+            let b = b.clone();
+            async move { loader::connect(&b, env).await.map_err(anyhow::Error::from) }
+        },
+        RETRY_AFTER,
+        RecordOptions::default(),
+    )
+    .await
+}
+
+/// Run forever: open a connection with `connect`, record until the session
+/// ends, record why it ended, wait `retry_after`, and start again.
+pub async fn run_with<C, F>(
+    pool: PgPool,
+    broker: BrokerConfig,
+    account: PermittedAccount,
+    status: StatusMap,
+    connect: C,
+    retry_after: Duration,
+    opts: RecordOptions,
+) where
+    C: Fn() -> F,
+    F: std::future::Future<Output = anyhow::Result<Connection>>,
+{
     loop {
-        let result = match loader::connect(&broker, env).await {
-            Ok(conn) => record(&pool, &conn, &broker, &account, &status, None).await,
-            Err(e) => Err(e.into()),
+        let result = match connect().await {
+            Ok(conn) => {
+                let r = record(&pool, &conn, &broker, &account, &status, opts).await;
+                if r.is_err() && conn.closed_reason().is_some() {
+                    with_status(&status, account.id(), |s| s.disconnects += 1);
+                }
+                r
+            }
+            Err(e) => Err(e),
         };
+        with_status(&status, account.id(), |s| s.subscribed_symbols.clear());
         if let Err(e) = result {
-            tracing::warn!(account = %account, error = %format!("{e:#}"), "tick recording stopped");
+            tracing::warn!(account = %account, error = %format!("{e:#}"), "tick recording stopped; retrying");
             with_status(&status, account.id(), |s| {
                 s.last_error = Some(format!("{e:#}"));
                 s.last_error_at = Some(Utc::now());
-                s.subscribed_symbols.clear();
             });
         }
-        tokio::time::sleep(RETRY_AFTER).await;
+        tokio::time::sleep(retry_after).await;
     }
 }
 
 /// One recording session on an open connection. Returns `Ok` when the
-/// resolved symbol set changed (the caller reconnects) or `until` passed.
+/// resolved symbol set changed (the caller reconnects) or `opts.until`
+/// passed; returns `Err` when the connection or the database fails.
 pub async fn record(
     pool: &PgPool,
     conn: &Connection,
     broker: &BrokerConfig,
     account: &PermittedAccount,
     status: &StatusMap,
-    until: Option<Instant>,
+    opts: RecordOptions,
 ) -> anyhow::Result<u64> {
     let dropped = maintain_partitions(pool).await?;
     with_status(status, account.id(), |s| {
         s.partitions_dropped.extend(dropped)
     });
-    let ids = ticks::resolved_symbol_ids(pool, account.id()).await?;
+    let mut cfg = session_settings(pool, account.id()).await?;
+    let ids = ticks::resolved_symbol_ids(pool, account.id(), &cfg.names).await?;
     if ids.is_empty() {
         anyhow::bail!("no resolved symbols stored yet for this account; waiting for a data load");
     }
-    let settings = jiaoyi_store::settings::snapshot(pool, Some(account.id())).await?;
-    let flush_every = Duration::from_millis(
-        settings
-            .integer("ticks.flush_millis")
-            .map_err(anyhow::Error::msg)?
-            .max(1) as u64,
-    );
 
     let session = loader::authorise(pool, conn, broker, account).await?;
     let mut rx = conn.spot_events();
     session.subscribe_spots(&ids).await?;
     with_status(status, account.id(), |s| {
         s.subscribed_symbols = ids.clone();
+        s.sessions_started += 1;
         s.session_started_at = Some(Utc::now());
+        s.flush_millis = Some(cfg.flush_every.as_millis() as u64);
     });
     tracing::info!(account = %account, symbols = ids.len(), "recording spot quotes");
 
     let mut buf: Vec<TickRow> = Vec::new();
     let mut written = 0u64;
-    let mut flush = tokio::time::interval(flush_every);
-    let mut maintain = tokio::time::interval_at(Instant::now() + MAINTAIN_EVERY, MAINTAIN_EVERY);
-    let deadline = until.map(tokio::time::sleep_until);
+    // The first flush comes one interval after the start (a plain `interval`
+    // would fire at once).
+    let mut flush = tokio::time::interval_at(Instant::now() + cfg.flush_every, cfg.flush_every);
+    let mut maintain =
+        tokio::time::interval_at(Instant::now() + opts.maintain_every, opts.maintain_every);
+    let deadline = opts.until.map(tokio::time::sleep_until);
     tokio::pin!(deadline);
 
     let outcome: anyhow::Result<()> = loop {
@@ -159,7 +242,10 @@ pub async fn record(
                     tracing::warn!(account = %account, missed = n, "tick recorder lagged; quotes missed");
                     with_status(status, account.id(), |s| s.ticks_missed_lagging += n);
                 }
-                Err(RecvError::Closed) => break Err(anyhow::anyhow!("spot stream closed")),
+                Err(RecvError::Closed) => {
+                    let why = conn.closed_reason().unwrap_or_else(|| "no reason given".into());
+                    break Err(anyhow::anyhow!("broker connection closed: {why}"));
+                }
             },
             _ = flush.tick() => {
                 if let Err(e) = write(pool, &mut buf, &mut written, status, account.id()).await {
@@ -171,7 +257,18 @@ pub async fn record(
                     Ok(d) => with_status(status, account.id(), |s| s.partitions_dropped.extend(d)),
                     Err(e) => break Err(e),
                 }
-                match ticks::resolved_symbol_ids(pool, account.id()).await {
+                match session_settings(pool, account.id()).await {
+                    Ok(new) => {
+                        if new.flush_every != cfg.flush_every {
+                            tracing::info!(account = %account, flush_millis = new.flush_every.as_millis() as u64, "ticks.flush_millis changed");
+                            flush = tokio::time::interval_at(Instant::now() + new.flush_every, new.flush_every);
+                            with_status(status, account.id(), |s| s.flush_millis = Some(new.flush_every.as_millis() as u64));
+                        }
+                        cfg = new;
+                    }
+                    Err(e) => break Err(e),
+                }
+                match ticks::resolved_symbol_ids(pool, account.id(), &cfg.names).await {
                     Ok(now_ids) if now_ids != ids => break Ok(()),
                     Ok(_) => {}
                     Err(e) => break Err(e.into()),

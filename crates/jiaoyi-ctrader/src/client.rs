@@ -89,7 +89,10 @@ pub struct Connection {
     writer: Arc<Mutex<Writer>>,
     pending: Pending,
     next_id: AtomicU64,
-    spots: broadcast::Sender<ReceivedSpot>,
+    /// The spot broadcast. Taken (set to `None`) when the connection closes, so
+    /// that every spot consumer's `recv` returns `Closed` instead of waiting
+    /// for events that can no longer arrive.
+    spots: Arc<StdMutex<Option<broadcast::Sender<ReceivedSpot>>>>,
     notices: Arc<StdMutex<Vec<String>>>,
     closed: Arc<StdMutex<Option<String>>>,
     historical_gate: Mutex<Option<Instant>>,
@@ -147,19 +150,20 @@ impl Connection {
         let (mut reader, writer) = tokio::io::split(stream);
         let writer: Arc<Mutex<Writer>> = Arc::new(Mutex::new(Box::new(writer) as Writer));
         let pending: Pending = Arc::default();
-        let (spots, _) = broadcast::channel(4096);
+        let (spots_tx, _) = broadcast::channel(4096);
+        let spots = Arc::new(StdMutex::new(Some(spots_tx.clone())));
         let notices: Arc<StdMutex<Vec<String>>> = Arc::default();
         let closed: Arc<StdMutex<Option<String>>> = Arc::default();
 
         let read_task = {
             let pending = pending.clone();
-            let spots = spots.clone();
+            let spots_slot = spots.clone();
             let notices = notices.clone();
             let closed = closed.clone();
             tokio::spawn(async move {
                 let reason = loop {
                     match read_frame(&mut reader).await {
-                        Ok(msg) => route(msg, &pending, &spots, &notices),
+                        Ok(msg) => route(msg, &pending, &spots_tx, &notices),
                         Err(e) => break e.to_string(),
                     }
                 };
@@ -167,6 +171,9 @@ impl Connection {
                 *closed.lock().unwrap() = Some(reason);
                 // Dropping the senders wakes every waiting request with an error.
                 pending.lock().unwrap().clear();
+                // Drop every spot sender: consumers see `Closed` once drained.
+                spots_slot.lock().unwrap().take();
+                drop(spots_tx);
             })
         };
 
@@ -244,9 +251,18 @@ impl Connection {
         decode_response::<R::Response>(msg)
     }
 
-    /// A receiver of spot events. Subscribe before asking for spots.
+    /// A receiver of spot events. Subscribe before asking for spots. On a
+    /// closed connection the receiver is already closed.
     pub fn spot_events(&self) -> broadcast::Receiver<ReceivedSpot> {
-        self.spots.subscribe()
+        match self.spots.lock().unwrap().as_ref() {
+            Some(tx) => tx.subscribe(),
+            None => broadcast::channel(1).1,
+        }
+    }
+
+    /// Why the connection closed, once it has.
+    pub fn closed_reason(&self) -> Option<String> {
+        self.closed.lock().unwrap().clone()
     }
 
     /// Disconnect and token-invalidated notices received so far.

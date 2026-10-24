@@ -35,6 +35,9 @@ pub struct FakeBroker {
     pub quotes: HashMap<i64, Vec<SidedQuote>>,
     /// At most this many bars per trendbar response (0 = unlimited); more sets hasMore.
     pub max_bars_per_response: usize,
+    /// Close the socket right after sending the quotes that follow a spot
+    /// subscription, as a broker disconnect would.
+    pub close_after_spots: bool,
 }
 
 /// What the fake saw.
@@ -234,6 +237,10 @@ impl FakeBroker {
                     if write_frame(&mut server, &m).await.is_err() {
                         return;
                     }
+                }
+                if self.close_after_spots && pt == Oa::ProtoOaSubscribeSpotsReq as i32 {
+                    // Dropping the server half closes the client's read side.
+                    return;
                 }
             }
         });

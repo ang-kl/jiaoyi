@@ -302,7 +302,10 @@ async fn the_recorder_writes_each_quote_update_to_ticks(pool: PgPool) {
         &broker(None),
         &permitted(),
         &status,
-        Some(until),
+        recorder::RecordOptions {
+            until: Some(until),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -352,4 +355,223 @@ async fn accounts_not_on_the_allowlist_are_refused_and_recorded(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(accounts, vec![A]);
+}
+
+async fn tick_count(pool: &PgPool) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM ticks")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn load_once(pool: &PgPool, f: FakeBroker) {
+    let (conn, _) = f.spawn();
+    let out = loader::load_account(pool, &conn, &broker(Some(("tok", "ref"))), &permitted())
+        .await
+        .unwrap();
+    assert_eq!(out.status, "ok", "{:?}", out.summary.errors);
+}
+
+/// Codex P1 on #3: a broker disconnect after the spot subscription must end
+/// the session; the recorder records the disconnect and reconnects.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_recorder_reconnects_after_the_broker_closes_the_socket(pool: PgPool) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    load_once(&pool, fake()).await;
+
+    let status = recorder::StatusMap::default();
+    let connects = Arc::new(AtomicUsize::new(0));
+    let c = connects.clone();
+    let task = tokio::spawn(recorder::run_with(
+        pool.clone(),
+        broker(None),
+        permitted(),
+        status.clone(),
+        move || {
+            let n = c.fetch_add(1, Ordering::SeqCst);
+            async move {
+                let mut f = fake();
+                // The first broker session closes the socket after the quotes.
+                f.close_after_spots = n == 0;
+                Ok(f.spawn().0)
+            }
+        },
+        Duration::from_millis(100),
+        recorder::RecordOptions::default(),
+    ));
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while tick_count(&pool).await < 6 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    task.abort();
+    assert_eq!(
+        tick_count(&pool).await,
+        6,
+        "3 quotes from each of two sessions"
+    );
+    let st = status.lock().unwrap()[&A].clone();
+    assert!(st.sessions_started >= 2, "{st:?}");
+    assert!(st.disconnects >= 1, "{st:?}");
+    assert!(
+        st.last_error
+            .as_deref()
+            .unwrap_or("")
+            .contains("broker connection closed"),
+        "{st:?}"
+    );
+    assert!(connects.load(Ordering::SeqCst) >= 2);
+}
+
+/// Codex P2 on #3: a symbol removed from `universe.symbols` is no longer
+/// recorded, at once and after the next load.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_symbol_removed_from_the_universe_is_no_longer_recorded(pool: PgPool) {
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    settings::change(
+        &pool,
+        "universe.symbols",
+        None,
+        Some(json!([{"name": "EURUSD", "class": "fx"}, {"name": "GBPUSD", "class": "fx"}])),
+        "test",
+        "two resolvable symbols",
+    )
+    .await
+    .unwrap();
+    let mut f = fake();
+    f.light_symbols.push(light(2, "GBPUSD"));
+    f.symbols.push(detail(2));
+    load_once(&pool, f.clone()).await;
+    let names = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        store::ticks::resolved_symbol_ids(&pool, A, &names(&["EURUSD", "GBPUSD"]))
+            .await
+            .unwrap(),
+        vec![1, 2]
+    );
+
+    settings::change(
+        &pool,
+        "universe.symbols",
+        None,
+        Some(json!([{"name": "EURUSD", "class": "fx"}])),
+        "test",
+        "GBPUSD removed",
+    )
+    .await
+    .unwrap();
+    // Before any reload the current setting already excludes it...
+    assert_eq!(
+        store::ticks::resolved_symbol_ids(&pool, A, &names(&["EURUSD"]))
+            .await
+            .unwrap(),
+        vec![1]
+    );
+    // ...and after a reload the latest run no longer holds it, even if a
+    // caller still passed the old name list.
+    load_once(&pool, f).await;
+    assert_eq!(
+        store::ticks::resolved_symbol_ids(&pool, A, &names(&["EURUSD", "GBPUSD"]))
+            .await
+            .unwrap(),
+        vec![1]
+    );
+    // The recorder subscribes to the current set only.
+    let (conn, _) = fake().spawn();
+    let status = recorder::StatusMap::default();
+    recorder::record(
+        &pool,
+        &conn,
+        &broker(None),
+        &permitted(),
+        &status,
+        recorder::RecordOptions {
+            until: Some(tokio::time::Instant::now() + Duration::from_millis(300)),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(status.lock().unwrap()[&A].subscribed_symbols, vec![1]);
+}
+
+/// Codex P2 on #3: a change of `ticks.flush_millis` takes effect at the next
+/// maintenance, without a restart.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_flush_interval_change_takes_effect_without_a_restart(pool: PgPool) {
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    settings::change(
+        &pool,
+        "ticks.flush_millis",
+        None,
+        Some(json!(60000)),
+        "test",
+        "slow flush",
+    )
+    .await
+    .unwrap();
+    load_once(&pool, fake()).await;
+
+    let status = recorder::StatusMap::default();
+    let (conn, _) = fake().spawn();
+    let st2 = status.clone();
+    let p2 = pool.clone();
+    let session = tokio::spawn(async move {
+        recorder::record(
+            &p2,
+            &conn,
+            &broker(None),
+            &permitted(),
+            &st2,
+            recorder::RecordOptions {
+                until: Some(tokio::time::Instant::now() + Duration::from_secs(6)),
+                maintain_every: Duration::from_millis(200),
+            },
+        )
+        .await
+    });
+    // Wait until the session has read its settings and subscribed.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while status
+        .lock()
+        .unwrap()
+        .get(&A)
+        .map_or(0, |s| s.sessions_started)
+        == 0
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(status.lock().unwrap()[&A].flush_millis, Some(60000));
+    settings::change(
+        &pool,
+        "ticks.flush_millis",
+        None,
+        Some(json!(100)),
+        "test",
+        "faster",
+    )
+    .await
+    .unwrap();
+    // With the 60 s interval the quotes would sit in the buffer until the end
+    // of the session (6 s); with the new one they arrive within a second.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while tick_count(&pool).await < 3 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(tick_count(&pool).await, 3, "flushed under the new interval");
+    assert!(!session.is_finished(), "the session was not restarted");
+    assert_eq!(status.lock().unwrap()[&A].flush_millis, Some(100));
+    session.abort();
 }

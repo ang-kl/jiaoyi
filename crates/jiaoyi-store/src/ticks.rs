@@ -94,18 +94,26 @@ pub async fn stats(pool: &PgPool) -> Result<Vec<TickStats>, sqlx::Error> {
         .collect())
 }
 
-/// Resolved, stored symbols of an account's latest resolution (ids).
-pub async fn resolved_symbol_ids(pool: &PgPool, account_id: i64) -> Result<Vec<i64>, sqlx::Error> {
+/// The symbols to record for an account: those resolved in the account's
+/// latest load run, whose details are stored, and whose name is still in
+/// `names` (the current `universe.symbols` setting). Earlier runs do not count,
+/// so a name removed from the universe is no longer recorded.
+pub async fn resolved_symbol_ids(
+    pool: &PgPool,
+    account_id: i64,
+    names: &[String],
+) -> Result<Vec<i64>, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT l.broker_symbol_id FROM (
-             SELECT DISTINCT ON (name) name, status, broker_symbol_id
-             FROM universe_resolutions WHERE account_id = $1 ORDER BY name, id DESC
-         ) l
-         JOIN symbols s ON s.account_id = $1 AND s.broker_symbol_id = l.broker_symbol_id
-         WHERE l.status = 'resolved'
-         ORDER BY l.broker_symbol_id",
+        "SELECT r.broker_symbol_id FROM universe_resolutions r
+         JOIN symbols s ON s.account_id = r.account_id AND s.broker_symbol_id = r.broker_symbol_id
+         WHERE r.account_id = $1
+           AND r.status = 'resolved'
+           AND r.name = ANY($2)
+           AND r.load_run_id = (SELECT max(load_run_id) FROM universe_resolutions WHERE account_id = $1)
+         ORDER BY r.broker_symbol_id",
     )
     .bind(account_id)
+    .bind(names)
     .fetch_all(pool)
     .await
 }
