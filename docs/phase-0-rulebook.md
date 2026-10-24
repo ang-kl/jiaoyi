@@ -30,7 +30,13 @@ The research behind this design is in the bot-trade conversation's report *Why t
 |---|---|---|
 | Demo 49236051 (login 5361573) | First and only account trading the new system | Phase 5, after phase 4 gates |
 | Live 43002148 (login 1251442) | Real money, small risk | Phase 6, owner's word only |
-| All other accounts | Not used | — |
+| All other accounts | **Refused** | Never |
+
+**Only these two accounts are permitted** (owner, 24-10-2026: "only two account (live and demo) permitted"):
+- The list is the variable `JIAOYI_ALLOWED_ACCOUNTS=49236051,43002148`.
+- The program checks it at start-up and again in the order sender, before every order.
+- An order for any other account is refused and recorded, never sent.
+- A missing or empty list means no account is permitted and nothing trades.
 
 The old bot-trade program and the new system never trade the same account at the same time.
 
