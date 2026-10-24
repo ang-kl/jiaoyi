@@ -4,7 +4,7 @@ Status: **DRAFT, part of phase 0.** Owner, 24-10-2026: "yes, start phase 0 with 
 
 ## Principles
 
-1. **One managed PostgreSQL database** in the Railway project `jiaoyi` (created by the owner, 24-10-2026), separate from bot-trade's project. Demo and live share it, and every row carries `account_id`.
+1. **One managed PostgreSQL database** in the Railway project `jiaoyi_prj` (created by the owner, 24-10-2026; region asia-southeast1), separate from bot-trade's project. Demo and live share it, and every row carries `account_id`.
 2. **The event log is the source of truth.** Rows are written once and never updated or deleted. Current state is derived from them.
 3. **Intent before send.** An order intent row with its own `client_order_id` is committed before the order goes to the broker. After a restart, the intent is matched against the broker by that id, so an order is never sent twice.
 4. **The broker is the authority on positions.** At every start, and every hour, the database is reconciled against the broker. When they disagree, the broker wins and the disagreement is stored as an event.
