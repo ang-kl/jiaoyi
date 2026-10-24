@@ -1,4 +1,5 @@
 target
 .git
 .github
-docs
+docs/*
+!docs/preregistration-2026-10-24.md
