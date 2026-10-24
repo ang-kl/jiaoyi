@@ -16,6 +16,21 @@
 //! - [`runner`]: the background runner; the held-out gate.
 //! - [`routes`]: `/research/jobs` and `/research/trials` (counts and R only).
 
+/// The version of the engine whose results a trial counts, compiled in and
+/// recorded with every attempt and trial. It goes up whenever a change
+/// alters what a trial would count.
+/// - 1: the engine merged in #9 (9207eac1); attempts before this field
+///   record none.
+/// - 2: R1b, the held-out tick re-check checks the exit-side quote standing
+///   at the fill before any later update (Codex P2 on #9, round 4).
+pub const ENGINE_VERSION: i32 = 2;
+
+/// The held-out job runs only on this engine or a later one (owner,
+/// "Merge now, fix in next PR": the held-out stage never runs on an engine
+/// without the round-4 fix). An older engine leaves it pending, not
+/// attempted.
+pub const HELD_OUT_MIN_ENGINE: i32 = 2;
+
 pub mod costs;
 pub mod data;
 pub mod h1job;

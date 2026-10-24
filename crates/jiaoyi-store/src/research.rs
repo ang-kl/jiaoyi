@@ -63,8 +63,14 @@ pub async fn next_pending_job(pool: &PgPool) -> crate::Result<Option<JobRow>> {
 }
 
 /// Take a pending job (pending → running) and record the attempt with the
-/// deployed commit. `None` when it is no longer pending.
-pub async fn claim_job(pool: &PgPool, id: i64, commit: &str) -> crate::Result<Option<i32>> {
+/// deployed commit and the engine version. `None` when it is no longer
+/// pending.
+pub async fn claim_job(
+    pool: &PgPool,
+    id: i64,
+    commit: &str,
+    engine_version: i32,
+) -> crate::Result<Option<i32>> {
     let mut tx = pool.begin().await?;
     let taken = sqlx::query(
         "UPDATE research_jobs SET status = 'running', started_at = now(), reason = NULL
@@ -78,12 +84,13 @@ pub async fn claim_job(pool: &PgPool, id: i64, commit: &str) -> crate::Result<Op
         return Ok(None);
     }
     let attempt: i32 = sqlx::query_scalar(
-        "INSERT INTO research_job_attempts (job_id, attempt, commit)
-         SELECT $1, coalesce(max(attempt), 0) + 1, $2 FROM research_job_attempts WHERE job_id = $1
+        "INSERT INTO research_job_attempts (job_id, attempt, commit, engine_version)
+         SELECT $1, coalesce(max(attempt), 0) + 1, $2, $3 FROM research_job_attempts WHERE job_id = $1
          RETURNING attempt",
     )
     .bind(id)
     .bind(commit)
+    .bind(engine_version)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -96,11 +103,14 @@ pub struct Attempt {
     pub attempt: i32,
     pub started_at: DateTime<Utc>,
     pub commit: String,
+    /// `None`: an attempt made before engine versions were recorded (engine 1).
+    pub engine_version: Option<i32>,
 }
 
 pub async fn job_attempts(pool: &PgPool, job_id: i64) -> crate::Result<Vec<Attempt>> {
     let rows = sqlx::query(
-        "SELECT attempt, started_at, commit FROM research_job_attempts WHERE job_id = $1 ORDER BY attempt",
+        "SELECT attempt, started_at, commit, engine_version FROM research_job_attempts
+         WHERE job_id = $1 ORDER BY attempt",
     )
     .bind(job_id)
     .fetch_all(pool)
@@ -111,6 +121,7 @@ pub async fn job_attempts(pool: &PgPool, job_id: i64) -> crate::Result<Vec<Attem
             attempt: r.get("attempt"),
             started_at: r.get("started_at"),
             commit: r.get("commit"),
+            engine_version: r.get("engine_version"),
         })
         .collect())
 }
