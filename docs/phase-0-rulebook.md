@@ -9,7 +9,7 @@ Ordered by the owner, 24-10-2026 (bot-trade conversation, № 16,790–16,795):
 - new repository `ang-kl/jiaoyi`;
 - Rust;
 - PostgreSQL;
-- services in the existing Railway project;
+- services in the Railway project `jiaoyi`, which the owner created on 24-10-2026 (it replaces the earlier plan to use the existing project);
 - start phase 0.
 
 The research behind this design is in the bot-trade conversation's report *Why the trading bot loses*, 24-10-2026. It is cited below as **[R]**.

@@ -1,6 +1,6 @@
 # jiaoyi
 
-A daily trend-following trading system for cTrader accounts, written in Rust, with PostgreSQL storage, deployed on Railway.
+A daily trend-following trading system for cTrader accounts, written in Rust, with PostgreSQL storage, deployed in its own Railway project, `jiaoyi`.
 
 It is the ground-up rebuild ordered by the owner on 24-10-2026, replacing the bot-trade program.
 
