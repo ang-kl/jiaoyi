@@ -25,6 +25,9 @@ pub struct FakeBroker {
     pub account_id: i64,
     /// Access tokens the fake treats as expired (OA_AUTH_TOKEN_EXPIRED).
     pub expired_tokens: HashSet<String>,
+    /// Refuse this many account authorisations with CH_ACCESS_TOKEN_INVALID,
+    /// whatever the token. Shared by clones, so it spans connections.
+    pub auth_rejections: Arc<std::sync::atomic::AtomicUsize>,
     /// Reply to a refresh: (access, refresh, expires_in seconds).
     pub refresh_reply: Option<(String, String, i64)>,
     pub light_symbols: Vec<pb::ProtoOaLightSymbol>,
@@ -42,6 +45,17 @@ pub struct FakeBroker {
     /// the quotes that follow a spot subscription, keeping the socket open (as
     /// a token refresh elsewhere does).
     pub invalidate_after_spots: bool,
+    /// Historical ticks per (symbol id, `ProtoOAQuoteType` 1 bid / 2 ask):
+    /// (timestamp ms, price e5), in any order.
+    pub tick_history: HashMap<(i64, i32), Vec<(i64, i64)>>,
+    /// At most this many ticks per response (0 = unlimited); more sets hasMore.
+    pub max_ticks_per_response: usize,
+    /// Deal history of the account.
+    pub deals: Vec<pb::ProtoOaDeal>,
+    /// At most this many deals per response (0 = unlimited); more sets hasMore.
+    pub max_deals_per_response: usize,
+    /// The trader record; a default one when `None`.
+    pub trader: Option<pb::ProtoOaTrader>,
 }
 
 /// What the fake saw.
@@ -49,6 +63,8 @@ pub struct FakeBroker {
 pub struct FakeLog {
     pub payload_types: Vec<u32>,
     pub trendbar_requests: Vec<(i64, i64, i64)>,
+    pub tick_requests: Vec<(i64, i32, i64, i64)>,
+    pub deal_requests: Vec<(i64, i64)>,
     pub account_auths: Vec<i64>,
 }
 
@@ -96,7 +112,17 @@ impl FakeBroker {
                         .unwrap()
                         .account_auths
                         .push(req.ctid_trader_account_id);
-                    if req.ctid_trader_account_id != self.account_id {
+                    let reject = self
+                        .auth_rejections
+                        .fetch_update(
+                            std::sync::atomic::Ordering::SeqCst,
+                            std::sync::atomic::Ordering::SeqCst,
+                            |n| n.checked_sub(1),
+                        )
+                        .is_ok();
+                    if reject {
+                        out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID"));
+                    } else if req.ctid_trader_account_id != self.account_id {
                         out.push(oa_error(id, "CH_CTID_TRADER_ACCOUNT_NOT_FOUND"));
                     } else if self.expired_tokens.contains(&req.access_token) {
                         out.push(oa_error(id, "OA_AUTH_TOKEN_EXPIRED"));
@@ -224,6 +250,108 @@ impl FakeBroker {
                             ));
                         }
                     }
+                } else if pt == Oa::ProtoOaGetTickdataReq as i32 {
+                    let req = pb::ProtoOaGetTickDataReq::decode(body.as_slice()).unwrap();
+                    let (from, to) = (
+                        req.from_timestamp.unwrap_or(0),
+                        req.to_timestamp.unwrap_or(i64::MAX),
+                    );
+                    log2.lock()
+                        .unwrap()
+                        .tick_requests
+                        .push((req.symbol_id, req.r#type, from, to));
+                    let mut ticks: Vec<(i64, i64)> = self
+                        .tick_history
+                        .get(&(req.symbol_id, req.r#type))
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|(ts, _)| *ts >= from && *ts <= to)
+                        .collect();
+                    // Newest first; a stable sort keeps the scripted order of
+                    // ticks that share a millisecond.
+                    ticks.sort_by(|a, b| b.0.cmp(&a.0));
+                    let mut has_more = false;
+                    if self.max_ticks_per_response > 0 && ticks.len() > self.max_ticks_per_response
+                    {
+                        ticks.truncate(self.max_ticks_per_response);
+                        has_more = true;
+                    }
+                    // First absolute, then differences from the previous tick.
+                    let mut data = Vec::with_capacity(ticks.len());
+                    let mut prev: Option<(i64, i64)> = None;
+                    for (ts, p) in ticks {
+                        data.push(match prev {
+                            None => pb::ProtoOaTickData {
+                                timestamp: ts,
+                                tick: p,
+                            },
+                            Some((pts, pp)) => pb::ProtoOaTickData {
+                                timestamp: ts - pts,
+                                tick: p - pp,
+                            },
+                        });
+                        prev = Some((ts, p));
+                    }
+                    out.push(reply(
+                        id,
+                        Oa::ProtoOaGetTickdataRes as i32,
+                        pb::ProtoOaGetTickDataRes {
+                            payload_type: None,
+                            ctid_trader_account_id: self.account_id,
+                            tick_data: data,
+                            has_more,
+                        }
+                        .encode_to_vec(),
+                    ));
+                } else if pt == Oa::ProtoOaDealListReq as i32 {
+                    let req = pb::ProtoOaDealListReq::decode(body.as_slice()).unwrap();
+                    let (from, to) = (
+                        req.from_timestamp.unwrap_or(0),
+                        req.to_timestamp.unwrap_or(i64::MAX),
+                    );
+                    log2.lock().unwrap().deal_requests.push((from, to));
+                    let mut deals: Vec<pb::ProtoOaDeal> = self
+                        .deals
+                        .iter()
+                        .filter(|d| d.execution_timestamp >= from && d.execution_timestamp <= to)
+                        .cloned()
+                        .collect();
+                    let mut has_more = false;
+                    if self.max_deals_per_response > 0 && deals.len() > self.max_deals_per_response
+                    {
+                        deals.truncate(self.max_deals_per_response);
+                        has_more = true;
+                    }
+                    out.push(reply(
+                        id,
+                        Oa::ProtoOaDealListRes as i32,
+                        pb::ProtoOaDealListRes {
+                            payload_type: None,
+                            ctid_trader_account_id: self.account_id,
+                            deal: deals,
+                            has_more,
+                        }
+                        .encode_to_vec(),
+                    ));
+                } else if pt == Oa::ProtoOaTraderReq as i32 {
+                    let trader = self.trader.clone().unwrap_or(pb::ProtoOaTrader {
+                        ctid_trader_account_id: self.account_id,
+                        balance: 1_000_000,
+                        deposit_asset_id: 1,
+                        money_digits: Some(2),
+                        ..Default::default()
+                    });
+                    out.push(reply(
+                        id,
+                        Oa::ProtoOaTraderRes as i32,
+                        pb::ProtoOaTraderRes {
+                            payload_type: None,
+                            ctid_trader_account_id: self.account_id,
+                            trader,
+                        }
+                        .encode_to_vec(),
+                    ));
                 } else if pt == Oa::ProtoOaUnsubscribeSpotsReq as i32 {
                     out.push(reply(
                         id,

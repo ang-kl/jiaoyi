@@ -6,6 +6,9 @@
 //!   crypto: 6 years);
 //! - median spread greater than a fraction of one daily ATR (rulebook: 10% of ATR(20)).
 //!
+//! A spread is only "measured" with at least `spread.min_samples` quote
+//! updates: one stale weekend quote is not a median (owner review, 24-10-2026).
+//!
 //! The thresholds are settings ([`Thresholds`]), read at each report.
 //!
 //! A check whose input is unknown is neither passed nor failed. If nothing
@@ -23,6 +26,8 @@ pub struct Thresholds {
     pub min_history_years: f64,
     pub min_history_years_crypto: f64,
     pub max_spread_to_atr: f64,
+    /// `spread.min_samples`: fewer quote updates than this is no measurement.
+    pub min_spread_samples: i64,
 }
 
 impl Thresholds {
@@ -63,6 +68,8 @@ pub struct Evidence {
     pub atr20: Option<f64>,
     /// Median spread in price units. `None` if never measured.
     pub spread_median: Option<f64>,
+    /// How many quote updates that median came from.
+    pub spread_samples: Option<i64>,
     pub spread_missing_reason: Option<String>,
 }
 
@@ -94,7 +101,17 @@ pub fn judge(class: AssetClass, e: &Evidence, t: &Thresholds) -> Verdict {
         None => failed.push(format!("no daily history, needs {need:.0} years")),
     }
 
+    let enough = e.spread_samples.unwrap_or(0) >= t.min_spread_samples;
     match (e.spread_median, e.atr20) {
+        (Some(_), _) if !enough => unknown.push(format!(
+            "spread not measured: {} samples (minimum {}){}",
+            e.spread_samples.unwrap_or(0),
+            t.min_spread_samples,
+            e.spread_missing_reason
+                .as_deref()
+                .map(|r| format!("; {r}"))
+                .unwrap_or_default()
+        )),
         (Some(s), Some(a)) if a > 0.0 => {
             let ratio = s / a;
             if ratio > t.max_spread_to_atr {
@@ -141,6 +158,7 @@ mod tests {
         min_history_years: 10.0,
         min_history_years_crypto: 6.0,
         max_spread_to_atr: 0.10,
+        min_spread_samples: 30,
     };
 
     fn good() -> Evidence {
@@ -149,6 +167,7 @@ mod tests {
             history_years: Some(15.0),
             atr20: Some(0.0100),
             spread_median: Some(0.0001),
+            spread_samples: Some(120),
             ..Default::default()
         }
     }
@@ -207,6 +226,28 @@ mod tests {
         let v = judge(AssetClass::Fx, &e, &T);
         assert_eq!(v.decision, Decision::Undecided);
         assert!(v.reasons[0].contains("no quotes"));
+    }
+
+    #[test]
+    fn one_sample_is_undecided_and_enough_samples_decide() {
+        // One stale weekend quote: not a measurement, whatever its value.
+        let mut e = good();
+        e.spread_samples = Some(1);
+        e.spread_missing_reason = Some("market closed: outside the trading schedule".into());
+        let v = judge(AssetClass::Fx, &e, &T);
+        assert_eq!(v.decision, Decision::Undecided);
+        assert_eq!(
+            v.reasons,
+            vec!["spread not measured: 1 samples (minimum 30); market closed: outside the trading schedule"]
+        );
+        // 29 is still too few; 30 decides.
+        e.spread_samples = Some(29);
+        assert_eq!(judge(AssetClass::Fx, &e, &T).decision, Decision::Undecided);
+        e.spread_samples = Some(30);
+        assert_eq!(judge(AssetClass::Fx, &e, &T).decision, Decision::Keep);
+        // Enough samples of a wide spread drop it.
+        e.spread_median = Some(0.002);
+        assert_eq!(judge(AssetClass::Fx, &e, &T).decision, Decision::Drop);
     }
 
     #[test]

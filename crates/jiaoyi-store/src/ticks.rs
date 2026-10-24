@@ -27,10 +27,17 @@ pub async fn ensure_partitions(
     let mut out = Vec::new();
     for i in 0..days {
         let day = from + chrono::Duration::days(i as i64);
-        let name: String = sqlx::query_scalar("SELECT jiaoyi_ensure_tick_partition($1)")
+        let name = format!("ticks_p{}", day.format("%Y%m%d"));
+        match sqlx::query("SELECT jiaoyi_ensure_tick_partition($1)")
             .bind(day)
-            .fetch_one(pool)
-            .await?;
+            .execute(pool)
+            .await
+        {
+            Ok(_) => {}
+            // Created by a concurrent caller: that is success.
+            Err(e) if crate::is_duplicate_table(&e) => {}
+            Err(e) => return Err(e),
+        }
         out.push(name);
     }
     Ok(out)

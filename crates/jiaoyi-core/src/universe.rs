@@ -128,6 +128,16 @@ impl Resolution {
     }
 }
 
+/// Words that mark a broker symbol name as a possible energy instrument
+/// (owner ruling, 24-10-2026: report the broker's own names). Matched case
+/// insensitively anywhere in the name; read-only, nothing is resolved by it.
+pub const ENERGY_NAME_PARTS: [&str; 7] = ["crude", "brent", "oil", "wti", "gas", "xti", "xbr"];
+
+pub fn is_energy_candidate(name: &str) -> bool {
+    let n = name.to_lowercase();
+    ENERGY_NAME_PARTS.iter().any(|p| n.contains(p))
+}
+
 /// Resolve one universe name against an account's symbol list.
 pub fn resolve(name: &str, listed: &[ListedSymbol]) -> Resolution {
     let mut ids: Vec<i64> = listed
@@ -216,6 +226,25 @@ mod tests {
         ]))
         .unwrap_err()
         .contains("twice"));
+    }
+
+    #[test]
+    fn energy_candidates_match_case_insensitively() {
+        for n in [
+            "SpotCrude",
+            "NatGas",
+            "UKOIL",
+            "Brent",
+            "XTIUSD",
+            "XBRUSD",
+            "WTI.c",
+            "gasoline",
+        ] {
+            assert!(is_energy_candidate(n), "{n}");
+        }
+        for n in ["EURUSD", "US500", "XAUUSD", "GER40"] {
+            assert!(!is_energy_candidate(n), "{n}");
+        }
     }
 
     #[test]

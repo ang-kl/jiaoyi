@@ -141,7 +141,7 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         .unwrap();
     assert_eq!(out.status, "ok", "{:?}", out.summary.errors);
     let s = &out.summary;
-    assert_eq!(s.settings_version, Some(19));
+    assert_eq!(s.settings_version, Some(28));
     assert_eq!((s.symbols_resolved, s.symbols_unresolved), (1, 2));
     assert_eq!(s.bars_inserted, 4018, "every closed bar");
     assert_eq!(s.forming_bars_dropped, 1, "today's bar is not stored");
@@ -197,6 +197,45 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         .unwrap()
         .contains("not derived"));
 
+    // Three quote updates are below spread.min_samples (30): not a measurement.
+    let r = report::build(&pool).await.unwrap();
+    let a = &r.accounts[0];
+    let sym: HashMap<_, _> = a.symbols.iter().map(|s| (s.name.as_str(), s)).collect();
+    let eur = sym["EURUSD"];
+    assert_eq!(
+        eur.verdict.decision,
+        jiaoyi_core::verdict::Decision::Undecided,
+        "{:?}",
+        eur.verdict
+    );
+    assert!(
+        eur.verdict.reasons[0].starts_with("spread not measured: 3 samples (minimum 30)"),
+        "{:?}",
+        eur.verdict
+    );
+    assert_eq!(eur.spread_to_atr, None);
+    assert!(eur.median_spread.is_none());
+    // The broker's names that may be energy instruments are listed.
+    let candidates: Vec<&str> = a
+        .energy_candidates
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c["name"].as_str())
+        .collect();
+    assert_eq!(candidates, vec!["ukoil"]);
+
+    // With spread.min_samples at 3 the same measurement decides.
+    settings::change(
+        &pool,
+        "spread.min_samples",
+        None,
+        Some(json!(3)),
+        "test",
+        "three samples suffice here",
+    )
+    .await
+    .unwrap();
     let r = report::build(&pool).await.unwrap();
     let a = &r.accounts[0];
     let sym: HashMap<_, _> = a.symbols.iter().map(|s| (s.name.as_str(), s)).collect();
@@ -220,7 +259,7 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         sym["UKOIL"].verdict.decision,
         jiaoyi_core::verdict::Decision::Drop
     );
-    assert_eq!(r.settings_version, 19);
+    assert_eq!(r.settings_version, 29);
 
     // A second load stores nothing new and changes nothing.
     let (conn, _) = fake().spawn();
@@ -711,4 +750,106 @@ async fn shutdown_writes_the_buffered_ticks_before_the_recorder_stops(pool: PgPo
         3,
         "the buffered ticks were written"
     );
+}
+
+/// Deploy fix (452da09a): the first authorisation is rejected, the refresh
+/// succeeds, and the same cycle loads the account on a new connection.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_load_that_failed_on_auth_after_a_refresh_is_retried_at_once(pool: PgPool) {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    settings::change(
+        &pool,
+        "load.auth_retry_secs",
+        None,
+        Some(json!(0)),
+        "test",
+        "no wait in a test",
+    )
+    .await
+    .unwrap();
+    let mut f = fake();
+    // The account is refused twice: before and after the loader's own refresh.
+    f.auth_rejections = Arc::new(AtomicUsize::new(2));
+    f.refresh_reply = Some(("fresh".into(), "fresh-refresh".into(), 2_628_000));
+    let policy = service::RetryPolicy::read(&pool).await.unwrap();
+    let (_t, stop) = jiaoyi::shutdown::channel();
+    let f2 = f.clone();
+    let out = service::load_with_retries(
+        &pool,
+        move || {
+            let f = f2.clone();
+            async move { Ok(f.spawn().0) }
+        },
+        &broker(Some(("stale", "old-refresh"))),
+        &permitted(),
+        &policy,
+        &stop,
+    )
+    .await
+    .unwrap();
+    assert_eq!(out.status, "ok", "{:?}", out.summary.errors);
+    let runs: Vec<(String, serde_json::Value)> =
+        sqlx::query_as("SELECT status, errors FROM load_runs ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(runs.len(), 2, "{runs:?}");
+    assert_eq!(runs[0].0, "failed");
+    assert!(
+        runs[0].1.to_string().contains("CH_ACCESS_TOKEN_INVALID"),
+        "{runs:?}"
+    );
+    assert_eq!(runs[1].0, "ok");
+    let t = store::load_token(&pool).await.unwrap().unwrap();
+    assert_eq!(t.access_token.expose(), "fresh");
+    // A failed or partial run waits load.retry_minutes, not the daily interval.
+    assert_eq!(policy.next_wait("failed"), Duration::from_secs(300));
+    assert_eq!(policy.next_wait("partial"), Duration::from_secs(300));
+    assert_eq!(policy.next_wait("ok"), Duration::from_secs(86_400));
+}
+
+/// Deploy fix (452da09a): "waiting for a data load" is logged once per state
+/// change, not every retry; the recovery is logged once.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_repeated_recorder_failure_is_logged_once_and_its_recovery_once(pool: PgPool) {
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    let status = recorder::StatusMap::default();
+    let task = tokio::spawn(recorder::run_with(
+        pool.clone(),
+        broker(Some(("tok", "ref"))),
+        permitted(),
+        status.clone(),
+        || async { Ok(fake().spawn().0) },
+        Duration::from_millis(20),
+        recorder::RecordOptions::default(),
+    ));
+    // No data load yet: the recorder fails the same way again and again.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let st = status.lock().unwrap()[&A].clone();
+    assert_eq!(st.failures_logged, 1, "{st:?}");
+    assert!(st.failures_repeated >= 3, "{st:?}");
+    assert!(st
+        .last_error
+        .as_deref()
+        .unwrap()
+        .contains("waiting for a data load"));
+    // After a load it records, and the recovery is counted once.
+    load_once(&pool, fake()).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while status.lock().unwrap()[&A].sessions_started == 0 && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    task.abort();
+    let st = status.lock().unwrap()[&A].clone();
+    assert_eq!(st.recoveries, 1, "{st:?}");
+    assert_eq!(st.failures_logged, 1, "{st:?}");
 }

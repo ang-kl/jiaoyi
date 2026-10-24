@@ -6,7 +6,7 @@ It is the ground-up rebuild ordered by the owner on 24-10-2026, replacing the bo
 
 ## Status
 
-Phase 1, data: the service reads each permitted account's own daily bars, symbol details, costs and live quote stream from cTrader into PostgreSQL, and reports on them. It contains no code that places, amends, closes or cancels an order: the client's payload allowlist names only read requests.
+Data and edge verification: the service reads each permitted account's own daily bars, symbol details, costs, live quote stream, historical ticks and deal history from cTrader into PostgreSQL, and reports what exists. It contains no code that places, amends, closes or cancels an order: the client's payload allowlist names only read requests. Live trading waits until the edge verification shows an edge (owner-approved plan, 24-10-2026).
 
 - [`docs/phase-0-rulebook.md`](docs/phase-0-rulebook.md) — the trading rules, with every number fixed in advance, and the gates each phase must pass.
 - [`docs/storage.md`](docs/storage.md) — the PostgreSQL design: event log, intent before send, broker as the authority.
@@ -30,6 +30,6 @@ One binary, `jiaoyi`, deployed by `railway.toml` (Dockerfile build, healthcheck 
 
 Every tunable number is a setting in the database (`docs/storage.md`, "Settings").
 
-HTTP: `GET /health` (status, last load per account, tick recorders, settings version) and `GET /phase1/report` (per account and symbol: resolution, broker id, bars, first and last date, years of history, median spread, spread ÷ ATR, and the rulebook §3 verdict with its reasons).
+HTTP: `GET /health` (status, last load per account, tick recorders, history sync, settings version), `GET /research/inventory` (per account and symbol: what history exists — daily bars, live and historical ticks, deals — its coverage, gaps and what is missing; counts and dates only) and `GET /phase1/report` (per account and symbol: resolution, broker id, bars, first and last date, years of history, median spread, spread ÷ ATR, and the rulebook §3 verdict with its reasons; per account, `energy_candidates`: the broker's own names that may be energy instruments).
 
 Tests need a PostgreSQL: set `DATABASE_URL` and run `cargo test --workspace`. Each database test creates its own fresh database.

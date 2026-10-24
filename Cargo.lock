@@ -842,6 +842,7 @@ dependencies = [
 name = "jiaoyi-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_json",
  "thiserror",
@@ -860,6 +861,7 @@ dependencies = [
  "protox",
  "rust_decimal",
  "rustls",
+ "serde",
  "static_assertions",
  "thiserror",
  "tokio",

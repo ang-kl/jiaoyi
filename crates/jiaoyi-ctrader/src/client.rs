@@ -64,6 +64,8 @@ pub enum ClientError {
     Disconnected(String),
     #[error("response is for account {got}, asked for {asked}")]
     WrongAccount { asked: i64, got: i64 },
+    #[error("tick data: {0}")]
+    TickData(#[from] crate::tickdata::TickDataError),
 }
 
 impl ClientError {
@@ -686,6 +688,147 @@ impl AccountSession<'_> {
             a.extend(b);
             Ok(a)
         })
+    }
+
+    /// A historical-data request: spaced by [`HISTORICAL_MIN_GAP`], and a
+    /// rate-limit refusal (`BLOCKED_PAYLOAD_TYPE` with `retryAfter`) is waited
+    /// out up to three times.
+    async fn historical<R: Request>(&self, req: &R) -> Result<R::Response, ClientError> {
+        let mut attempt = 0;
+        loop {
+            self.conn.historical_pause().await;
+            match self.conn.request(req).await {
+                Err(ClientError::Broker {
+                    code,
+                    retry_after_secs: Some(secs),
+                    ..
+                }) if code == "BLOCKED_PAYLOAD_TYPE" && attempt < 3 => {
+                    attempt += 1;
+                    tokio::time::sleep(Duration::from_secs(secs.min(60))).await;
+                }
+                other => return other,
+            }
+        }
+    }
+
+    /// The account's trader record (balance, deposit asset, registration time).
+    pub async fn trader(&self) -> Result<pb::ProtoOaTrader, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaTraderReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res.trader)
+    }
+
+    /// Every bid or ask tick of `[from_ms, to_ms]` (at most one week), oldest
+    /// first. Follows `hasMore` page by page (see [`crate::tickdata::Pages`]).
+    pub async fn tick_history(
+        &self,
+        symbol_id: i64,
+        side: crate::tickdata::QuoteSide,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<crate::tickdata::TickFetch, ClientError> {
+        use crate::tickdata::{decode_ticks, Pages, TickDataError, MAX_WINDOW_MS};
+        if to_ms - from_ms > MAX_WINDOW_MS || to_ms < from_ms {
+            return Err(TickDataError::WindowTooLong { from_ms, to_ms }.into());
+        }
+        let mut pages = Pages::default();
+        loop {
+            let to = pages.next_to().unwrap_or(to_ms);
+            let res = self
+                .historical(&pb::ProtoOaGetTickDataReq {
+                    payload_type: None,
+                    ctid_trader_account_id: self.account.id(),
+                    symbol_id,
+                    r#type: side.proto(),
+                    from_timestamp: Some(from_ms),
+                    to_timestamp: Some(to),
+                })
+                .await?;
+            self.check_account(res.ctid_trader_account_id)?;
+            let (ticks, sign) = decode_ticks(&res.tick_data, from_ms, to)?;
+            let empty = ticks.is_empty();
+            pages.push(ticks, sign)?;
+            if !res.has_more || empty {
+                break;
+            }
+        }
+        Ok(pages.into_fetch())
+    }
+
+    /// One page of ticks only (for probing whether a window has any): the
+    /// decoded ticks of the first response and its `hasMore`.
+    pub async fn tick_page(
+        &self,
+        symbol_id: i64,
+        side: crate::tickdata::QuoteSide,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<(Vec<crate::tickdata::HistTick>, bool), ClientError> {
+        use crate::tickdata::{decode_ticks, TickDataError, MAX_WINDOW_MS};
+        if to_ms - from_ms > MAX_WINDOW_MS || to_ms < from_ms {
+            return Err(TickDataError::WindowTooLong { from_ms, to_ms }.into());
+        }
+        let res = self
+            .historical(&pb::ProtoOaGetTickDataReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                symbol_id,
+                r#type: side.proto(),
+                from_timestamp: Some(from_ms),
+                to_timestamp: Some(to_ms),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        let (ticks, _) = decode_ticks(&res.tick_data, from_ms, to_ms)?;
+        Ok((ticks, res.has_more))
+    }
+
+    /// Every deal of `[from_ms, to_ms]`. A window that reports `hasMore` is
+    /// split in half until it does not.
+    pub async fn deal_history(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<pb::ProtoOaDeal>, ClientError> {
+        let mut out = Vec::new();
+        let mut stack = vec![(from_ms, to_ms, 0u32)];
+        while let Some((from, to, depth)) = stack.pop() {
+            let res = self
+                .historical(&pb::ProtoOaDealListReq {
+                    payload_type: None,
+                    ctid_trader_account_id: self.account.id(),
+                    from_timestamp: Some(from),
+                    to_timestamp: Some(to),
+                    max_rows: None,
+                })
+                .await?;
+            self.check_account(res.ctid_trader_account_id)?;
+            if res.has_more && to - from > 1 && depth < 30 {
+                let mid = from + (to - from) / 2;
+                stack.push((mid + 1, to, depth + 1));
+                stack.push((from, mid, depth + 1));
+                continue;
+            }
+            if res.has_more {
+                return Err(ClientError::Broker {
+                    code: "DEALS_TRUNCATED".into(),
+                    description: Some(format!(
+                        "more deals in {from}..{to} than one response holds"
+                    )),
+                    retry_after_secs: None,
+                });
+            }
+            out.extend(res.deal);
+        }
+        out.sort_by_key(|d| (d.execution_timestamp, d.deal_id));
+        out.dedup_by_key(|d| d.deal_id);
+        Ok(out)
     }
 
     pub async fn subscribe_spots(&self, symbol_ids: &[i64]) -> Result<(), ClientError> {

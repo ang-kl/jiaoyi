@@ -35,6 +35,8 @@ pub struct LoadOutcome {
     pub run_id: i64,
     pub status: &'static str,
     pub summary: RunSummary,
+    /// The run failed because the broker rejected the access token.
+    pub auth_rejected: bool,
 }
 
 /// Get the token to use: the stored one, else the environment seed (stored
@@ -99,10 +101,15 @@ pub async fn load_account(
 ) -> store::Result<LoadOutcome> {
     let run_id = store::start_run(pool, account.id()).await?;
     let mut summary = RunSummary::default();
+    let mut auth_rejected = false;
     let status = match run(pool, conn, broker, account, run_id, &mut summary).await {
         Ok(()) if summary.errors.is_empty() => "ok",
         Ok(()) => "partial",
         Err(e) => {
+            auth_rejected = e.chain().any(|c| {
+                c.downcast_ref::<ClientError>()
+                    .is_some_and(ClientError::is_token_rejected)
+            });
             summary.errors.push(format!("{e:#}"));
             "failed"
         }
@@ -116,6 +123,7 @@ pub async fn load_account(
         run_id,
         status,
         summary,
+        auth_rejected,
     })
 }
 
@@ -158,6 +166,12 @@ async fn run(
             enabled: s.enabled,
         })
         .collect();
+    summary.listed_symbols = Some(serde_json::Value::Array(
+        listed_symbols
+            .iter()
+            .map(|s| json!({ "id": s.symbol_id, "name": s.name, "enabled": s.enabled }))
+            .collect(),
+    ));
     let resolutions = resolve_universe(&universe, &listed_symbols);
     let mut resolved: Vec<(&str, AssetClass, i64)> = Vec::new();
     for (name, class, r) in &resolutions {
@@ -506,11 +520,17 @@ pub fn cost_row(
         "commission_per_lot_side".into(),
         json!("not derived in phase 1: the broker gives preciseTradingCommissionRate in units of commissionType; money per lot needs prices and conversion rates"),
     );
+    let market = match sym {
+        Some(s) => market_state_of(s, measured_at),
+        None => jiaoyi_core::schedule::MarketState::Unknown("symbol details not read".into()),
+    };
     let mut row = CostRow {
         account_id,
         broker_symbol_id: symbol_id,
         load_run_id: Some(run_id),
         measured_at,
+        market_open: market.is_open(),
+        market_state_reason: market.reason().map(String::from),
         spread_median,
         spread_samples,
         spread_window_secs: window.as_secs() as i32,
@@ -627,6 +647,32 @@ pub fn cost_row(
     }
     row.null_reasons = Value::Object(r);
     row
+}
+
+/// Whether the market was open at `at`, from the symbol's own schedule.
+pub fn market_state_of(s: &ProtoOaSymbol, at: DateTime<Utc>) -> jiaoyi_core::schedule::MarketState {
+    use jiaoyi_core::schedule::{market_state, Holiday, Interval};
+    let intervals: Vec<Interval> = s
+        .schedule
+        .iter()
+        .map(|i| Interval {
+            start_second: i.start_second,
+            end_second: i.end_second,
+        })
+        .collect();
+    let holidays: Vec<Holiday> = s
+        .holiday
+        .iter()
+        .map(|h| Holiday {
+            name: h.name.clone(),
+            schedule_time_zone: h.schedule_time_zone.clone(),
+            date_days: h.holiday_date,
+            recurring: h.is_recurring,
+            start_second: h.start_second,
+            end_second: h.end_second,
+        })
+        .collect();
+    market_state(&intervals, &holidays, s.schedule_time_zone.as_deref(), at)
 }
 
 /// The tradability of a stored symbol, for the verdict: listed as enabled and

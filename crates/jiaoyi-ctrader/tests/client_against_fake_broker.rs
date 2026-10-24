@@ -213,3 +213,141 @@ async fn spread_sampling_carries_sides_forward_and_takes_the_median() {
         Some(rust_decimal::Decimal::new(20, 5))
     );
 }
+
+#[tokio::test]
+async fn tick_history_pages_through_has_more_and_keeps_same_millisecond_ticks() {
+    use jiaoyi_ctrader::tickdata::{HistTick, QuoteSide};
+    // 25 bid ticks; four share 1_005_000 ms. The fake answers at most 5 per
+    // response, so the client pages 6+ times and must lose and repeat none.
+    let mut ticks: Vec<(i64, i64)> = (0..22)
+        .map(|i| (1_000_000 + i * 1000, 108_500 + i))
+        .collect();
+    ticks.push((1_005_000, 108_777));
+    ticks.push((1_005_000, 108_777));
+    ticks.push((1_005_000, 108_778));
+    let mut f = fake();
+    f.tick_history = HashMap::from([
+        ((1, 1), ticks.clone()),
+        ((1, 2), vec![(1_000_500, 108_520)]),
+    ]);
+    f.max_ticks_per_response = 5;
+    let (conn, log) = f.clone().spawn();
+    conn.application_auth("id", &Secret::new("s"))
+        .await
+        .unwrap();
+    let account = Allowlist::parse(Some("49236051"))
+        .unwrap()
+        .permit(ACCOUNT)
+        .unwrap();
+    let session = conn
+        .account_auth(&account, &Secret::new("t"))
+        .await
+        .unwrap();
+
+    let got = session
+        .tick_history(1, QuoteSide::Bid, 1_000_000, 1_100_000)
+        .await
+        .unwrap();
+    assert_eq!(got.ticks.len(), 25);
+    assert!(got.pages >= 6, "{} pages", got.pages);
+    // Oldest first, every scripted tick once, with repeat ordinals.
+    let mut want: Vec<(i64, i64)> = ticks.clone();
+    want.sort();
+    let have: Vec<(i64, i64)> = got
+        .ticks
+        .iter()
+        .map(|(t, _)| (t.ts_ms, t.price_e5))
+        .collect();
+    let mut have_sorted = have.clone();
+    have_sorted.sort();
+    assert_eq!(have_sorted, want);
+    assert!(have.windows(2).all(|w| w[0].0 <= w[1].0), "oldest first");
+    let dups: Vec<i32> = got
+        .ticks
+        .iter()
+        .filter(|(t, _)| {
+            *t == HistTick {
+                ts_ms: 1_005_000,
+                price_e5: 108_777,
+            }
+        })
+        .map(|(_, d)| *d)
+        .collect();
+    assert_eq!(dups, vec![0, 1]);
+    // The ask series is its own request.
+    let ask = session
+        .tick_history(1, QuoteSide::Ask, 1_000_000, 1_100_000)
+        .await
+        .unwrap();
+    assert_eq!(ask.ticks.len(), 1);
+    let reqs = log.lock().unwrap().tick_requests.clone();
+    assert!(reqs.iter().any(|r| r.1 == 2));
+    // More than one week is refused before any request.
+    let n = reqs.len();
+    assert!(session
+        .tick_history(1, QuoteSide::Bid, 0, 604_800_001)
+        .await
+        .is_err());
+    assert_eq!(log.lock().unwrap().tick_requests.len(), n);
+
+    // With 4 per response, the 4 ticks of one millisecond fill a whole page:
+    // paging cannot progress past them, and that is an error, not a loop.
+    f.max_ticks_per_response = 4;
+    let (conn, _) = f.spawn();
+    conn.application_auth("id", &Secret::new("s"))
+        .await
+        .unwrap();
+    let session = conn
+        .account_auth(&account, &Secret::new("t"))
+        .await
+        .unwrap();
+    let e = session
+        .tick_history(1, QuoteSide::Bid, 1_000_000, 1_100_000)
+        .await
+        .unwrap_err();
+    assert!(e.to_string().contains("no progress"), "{e}");
+}
+
+#[tokio::test]
+async fn deal_history_splits_windows_until_complete() {
+    use jiaoyi_ctrader::messages::ProtoOaDeal;
+    let deals: Vec<ProtoOaDeal> = (0..10)
+        .map(|i| ProtoOaDeal {
+            deal_id: 100 + i,
+            order_id: 200 + i,
+            position_id: 300 + i,
+            volume: 100_000,
+            filled_volume: 100_000,
+            symbol_id: 1,
+            create_timestamp: 1_000 + i * 100,
+            execution_timestamp: 1_000 + i * 100,
+            trade_side: 1,
+            deal_status: 2,
+            commission: Some(-336),
+            money_digits: Some(2),
+            ..Default::default()
+        })
+        .collect();
+    let mut f = fake();
+    f.deals = deals;
+    f.max_deals_per_response = 3;
+    let (conn, log) = f.spawn();
+    conn.application_auth("id", &Secret::new("s"))
+        .await
+        .unwrap();
+    let account = Allowlist::parse(Some("49236051"))
+        .unwrap()
+        .permit(ACCOUNT)
+        .unwrap();
+    let session = conn
+        .account_auth(&account, &Secret::new("t"))
+        .await
+        .unwrap();
+    let got = session.deal_history(0, 10_000).await.unwrap();
+    assert_eq!(
+        got.iter().map(|d| d.deal_id).collect::<Vec<_>>(),
+        (100..110).collect::<Vec<_>>()
+    );
+    assert!(log.lock().unwrap().deal_requests.len() > 1);
+    assert_eq!(got[0].commission, Some(-336), "as the broker reports it");
+}
