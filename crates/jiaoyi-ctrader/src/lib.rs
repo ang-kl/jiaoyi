@@ -42,6 +42,8 @@ pub mod messages {
     };
 }
 
-pub use client::{AccountSession, ClientError, Connection, ReceivedSpot, RefreshedToken};
+pub use client::{
+    AccountSession, ClientError, Connection, ReceivedSpot, RefreshedToken, SessionEnd,
+};
 pub use payload::{check_sendable, NotSendable};
 pub use trendbar::{closed_daily_bars, decode_trendbar, DailyBar, TrendbarError};

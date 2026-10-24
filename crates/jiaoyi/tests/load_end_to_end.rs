@@ -575,3 +575,68 @@ async fn a_flush_interval_change_takes_effect_without_a_restart(pool: PgPool) {
     assert_eq!(status.lock().unwrap()[&A].flush_millis, Some(100));
     session.abort();
 }
+
+/// Review finding 2 on #3: the broker ends the account session on an open
+/// socket (token invalidated, e.g. by a refresh elsewhere). The recorder
+/// re-authorises with the token in `oauth_tokens` and records again.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_recorder_reauthorises_when_the_broker_invalidates_the_token(pool: PgPool) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    store::upsert_account(&pool, A, jiaoyi_core::allowlist::Environment::Demo)
+        .await
+        .unwrap();
+    small_universe(&pool).await;
+    load_once(&pool, fake()).await;
+
+    let status = recorder::StatusMap::default();
+    let auths = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let connects = Arc::new(AtomicUsize::new(0));
+    let (c, a2) = (connects.clone(), auths.clone());
+    let task = tokio::spawn(recorder::run_with(
+        pool.clone(),
+        broker(None),
+        permitted(),
+        status.clone(),
+        move || {
+            let n = c.fetch_add(1, Ordering::SeqCst);
+            let a2 = a2.clone();
+            async move {
+                let mut f = fake();
+                // The first session's token is invalidated after the quotes;
+                // the socket stays open.
+                f.invalidate_after_spots = n == 0;
+                let (conn, log) = f.spawn();
+                a2.lock().unwrap().push(log);
+                Ok(conn)
+            }
+        },
+        Duration::from_millis(100),
+        recorder::RecordOptions::default(),
+    ));
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while tick_count(&pool).await < 6 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    task.abort();
+    let st = status.lock().unwrap()[&A].clone();
+    assert_eq!(
+        tick_count(&pool).await,
+        6,
+        "3 quotes from each of two sessions: {st:?}"
+    );
+    assert!(st.account_session_ends >= 1, "{st:?}");
+    assert_eq!(st.disconnects, 0, "the socket never closed: {st:?}");
+    assert!(
+        st.last_session_end
+            .as_deref()
+            .unwrap_or("")
+            .contains("token invalidated"),
+        "{st:?}"
+    );
+    // Each session authorised the account again, with the stored token.
+    let logs = auths.lock().unwrap();
+    assert!(logs.len() >= 2);
+    assert_eq!(logs[1].lock().unwrap().account_auths, vec![A]);
+}

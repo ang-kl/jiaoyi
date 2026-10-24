@@ -407,6 +407,8 @@ async fn ticks_go_to_daily_partitions_and_retention_drops_whole_old_days(pool: P
     ticks::ensure_partitions(&pool, d(3, 1), 3).await.unwrap();
     let t = |h: u32, dd: u32| TickRow {
         account_id: A,
+        session_id: "s1".into(),
+        seq: (dd * 100 + h) as i64,
         broker_symbol_id: 1,
         received_at: Utc.with_ymd_and_hms(2024, 3, dd, h, 0, 0).unwrap(),
         broker_timestamp: Some(1),
@@ -483,4 +485,47 @@ async fn token_round_trip_and_expiry_reason(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(rows, 1);
+}
+
+/// Review finding on #3: a flush is all or nothing, and a retried flush
+/// cannot insert a quote twice.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_failed_flush_stores_nothing_and_a_retry_stores_each_tick_once(pool: PgPool) {
+    let day = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
+    ticks::ensure_partitions(&pool, day, 1).await.unwrap();
+    let rows: Vec<TickRow> = (0..10)
+        .map(|i| TickRow {
+            account_id: A,
+            session_id: "s1".into(),
+            seq: i,
+            broker_symbol_id: 1,
+            received_at: Utc.with_ymd_and_hms(2024, 3, 1, 9, 0, i as u32).unwrap(),
+            broker_timestamp: Some(i),
+            bid_e5: Some(108_500 + i),
+            ask_e5: Some(108_510 + i),
+        })
+        .collect();
+    let count = || async {
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ticks")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+
+    // Chunks of 4: rows 0-3, 4-7, 8-9. Row 6 breaks the second chunk (a tick
+    // with neither side violates the table's CHECK).
+    let mut bad = rows.clone();
+    bad[6].bid_e5 = None;
+    bad[6].ask_e5 = None;
+    assert!(ticks::insert_chunked(&pool, &bad, 4).await.is_err());
+    assert_eq!(
+        count().await,
+        0,
+        "the first chunk must not survive the failed flush"
+    );
+
+    assert_eq!(ticks::insert_chunked(&pool, &rows, 4).await.unwrap(), 10);
+    // The same flush again (a retry after an unknown outcome) adds nothing.
+    assert_eq!(ticks::insert_chunked(&pool, &rows, 4).await.unwrap(), 0);
+    assert_eq!(count().await, 10);
 }

@@ -38,6 +38,10 @@ pub struct FakeBroker {
     /// Close the socket right after sending the quotes that follow a spot
     /// subscription, as a broker disconnect would.
     pub close_after_spots: bool,
+    /// Send `ProtoOAAccountsTokenInvalidatedEvent` for the account right after
+    /// the quotes that follow a spot subscription, keeping the socket open (as
+    /// a token refresh elsewhere does).
+    pub invalidate_after_spots: bool,
 }
 
 /// What the fake saw.
@@ -235,6 +239,21 @@ impl FakeBroker {
                 }
                 for m in out {
                     if write_frame(&mut server, &m).await.is_err() {
+                        return;
+                    }
+                }
+                if self.invalidate_after_spots && pt == Oa::ProtoOaSubscribeSpotsReq as i32 {
+                    let ev = reply(
+                        None,
+                        Oa::ProtoOaAccountsTokenInvalidatedEvent as i32,
+                        pb::ProtoOaAccountsTokenInvalidatedEvent {
+                            payload_type: None,
+                            ctid_trader_account_ids: vec![self.account_id],
+                            reason: Some("Access Token is expired or recalled".into()),
+                        }
+                        .encode_to_vec(),
+                    );
+                    if write_frame(&mut server, &ev).await.is_err() {
                         return;
                     }
                 }

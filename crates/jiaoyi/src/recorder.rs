@@ -43,6 +43,10 @@ pub struct RecorderStatus {
     pub ticks_missed_lagging: u64,
     /// Sessions that ended because the broker connection closed.
     pub disconnects: u64,
+    /// Sessions the broker ended on an open socket (token invalidated,
+    /// account disconnected), and the latest reason.
+    pub account_session_ends: u64,
+    pub last_session_end: Option<String>,
     pub last_error: Option<String>,
     pub last_error_at: Option<DateTime<Utc>>,
     pub partitions_dropped: Vec<String>,
@@ -196,9 +200,14 @@ pub async fn record(
         anyhow::bail!("no resolved symbols stored yet for this account; waiting for a data load");
     }
 
+    let mut ends = conn.session_ends();
+    // The token comes from `oauth_tokens`, the one store the loader also uses,
+    // so a refresh by either is seen by both.
     let session = loader::authorise(pool, conn, broker, account).await?;
     let mut rx = conn.spot_events();
     session.subscribe_spots(&ids).await?;
+    // An end that arrives from here on is seen by `ends` (taken before the
+    // authorisation). The quotes received before it are still recorded.
     with_status(status, account.id(), |s| {
         s.subscribed_symbols = ids.clone();
         s.sessions_started += 1;
@@ -209,6 +218,13 @@ pub async fn record(
 
     let mut buf: Vec<TickRow> = Vec::new();
     let mut written = 0u64;
+    let session_id = format!(
+        "{}-{}-{}",
+        account.id(),
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let mut seq: i64 = 0;
     // The first flush comes one interval after the start (a plain `interval`
     // would fire at once).
     let mut flush = tokio::time::interval_at(Instant::now() + cfg.flush_every, cfg.flush_every);
@@ -221,22 +237,9 @@ pub async fn record(
         tokio::select! {
             r = rx.recv() => match r {
                 Ok(spot) => {
-                    let ev = spot.event;
-                    if ev.ctid_trader_account_id != account.id() || !ids.contains(&ev.symbol_id) {
-                        continue;
+                    if let Some(row) = tick_row(spot, account.id(), &ids, &session_id, &mut seq) {
+                        buf.push(row);
                     }
-                    let (bid, ask) = (ev.bid.and_then(|v| i64::try_from(v).ok()), ev.ask.and_then(|v| i64::try_from(v).ok()));
-                    if bid.is_none() && ask.is_none() {
-                        continue;
-                    }
-                    buf.push(TickRow {
-                        account_id: account.id(),
-                        broker_symbol_id: ev.symbol_id,
-                        received_at: spot.received_at,
-                        broker_timestamp: ev.timestamp,
-                        bid_e5: bid,
-                        ask_e5: ask,
-                    });
                 }
                 Err(RecvError::Lagged(n)) => {
                     tracing::warn!(account = %account, missed = n, "tick recorder lagged; quotes missed");
@@ -247,6 +250,24 @@ pub async fn record(
                     break Err(anyhow::anyhow!("broker connection closed: {why}"));
                 }
             },
+            e = ends.recv() => {
+                if let Ok(e) = e {
+                    if e.affects(account.id()) {
+                        // Keep the quotes that arrived before the end.
+                        while let Ok(spot) = rx.try_recv() {
+                            if let Some(row) = tick_row(spot, account.id(), &ids, &session_id, &mut seq) {
+                                buf.push(row);
+                            }
+                        }
+                        tracing::warn!(account = %account, reason = %e.reason, "account session ended by the broker; re-authorising");
+                        with_status(status, account.id(), |s| {
+                            s.account_session_ends += 1;
+                            s.last_session_end = Some(e.reason.clone());
+                        });
+                        break Err(anyhow::anyhow!("account session ended by the broker: {}", e.reason));
+                    }
+                }
+            }
             _ = flush.tick() => {
                 if let Err(e) = write(pool, &mut buf, &mut written, status, account.id()).await {
                     break Err(e);
@@ -280,6 +301,38 @@ pub async fn record(
     let last = write(pool, &mut buf, &mut written, status, account.id()).await;
     outcome.and(last)?;
     Ok(written)
+}
+
+/// A spot event as a tick row, numbered in its session. `None` for another
+/// account's or symbol's event, or one with neither side.
+fn tick_row(
+    spot: jiaoyi_ctrader::ReceivedSpot,
+    account_id: i64,
+    ids: &[i64],
+    session_id: &str,
+    seq: &mut i64,
+) -> Option<TickRow> {
+    let ev = spot.event;
+    if ev.ctid_trader_account_id != account_id || !ids.contains(&ev.symbol_id) {
+        return None;
+    }
+    let bid = ev.bid.and_then(|v| i64::try_from(v).ok());
+    let ask = ev.ask.and_then(|v| i64::try_from(v).ok());
+    if bid.is_none() && ask.is_none() {
+        return None;
+    }
+    let row = TickRow {
+        account_id,
+        session_id: session_id.to_string(),
+        seq: *seq,
+        broker_symbol_id: ev.symbol_id,
+        received_at: spot.received_at,
+        broker_timestamp: ev.timestamp,
+        bid_e5: bid,
+        ask_e5: ask,
+    };
+    *seq += 1;
+    Some(row)
 }
 
 async fn write(

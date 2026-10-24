@@ -76,6 +76,23 @@ impl ClientError {
 
 type Pending = Arc<StdMutex<HashMap<String, oneshot::Sender<ProtoMessage>>>>;
 
+/// The broker ended one or more account sessions on a socket that stays open
+/// (`ProtoOAAccountsTokenInvalidatedEvent`, `ProtoOAAccountDisconnectEvent`,
+/// or `ProtoOAClientDisconnectEvent` for every account). A session for an
+/// affected account must re-authorise before it can be used again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionEnd {
+    /// Empty: every account on this connection.
+    pub account_ids: Vec<i64>,
+    pub reason: String,
+}
+
+impl SessionEnd {
+    pub fn affects(&self, account_id: i64) -> bool {
+        self.account_ids.is_empty() || self.account_ids.contains(&account_id)
+    }
+}
+
 /// A spot event and the moment the reader task decoded it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReceivedSpot {
@@ -94,6 +111,9 @@ pub struct Connection {
     /// for events that can no longer arrive.
     spots: Arc<StdMutex<Option<broadcast::Sender<ReceivedSpot>>>>,
     notices: Arc<StdMutex<Vec<String>>>,
+    /// Account sessions the broker ended, in order, and their broadcast.
+    session_ends: Arc<StdMutex<Vec<SessionEnd>>>,
+    session_end_tx: broadcast::Sender<SessionEnd>,
     closed: Arc<StdMutex<Option<String>>>,
     historical_gate: Mutex<Option<Instant>>,
     request_timeout: Duration,
@@ -153,17 +173,20 @@ impl Connection {
         let (spots_tx, _) = broadcast::channel(4096);
         let spots = Arc::new(StdMutex::new(Some(spots_tx.clone())));
         let notices: Arc<StdMutex<Vec<String>>> = Arc::default();
+        let session_ends: Arc<StdMutex<Vec<SessionEnd>>> = Arc::default();
+        let (session_end_tx, _) = broadcast::channel(64);
         let closed: Arc<StdMutex<Option<String>>> = Arc::default();
 
         let read_task = {
             let pending = pending.clone();
             let spots_slot = spots.clone();
             let notices = notices.clone();
+            let ends = (session_ends.clone(), session_end_tx.clone());
             let closed = closed.clone();
             tokio::spawn(async move {
                 let reason = loop {
                     match read_frame(&mut reader).await {
-                        Ok(msg) => route(msg, &pending, &spots_tx, &notices),
+                        Ok(msg) => route(msg, &pending, &spots_tx, &notices, &ends),
                         Err(e) => break e.to_string(),
                     }
                 };
@@ -183,6 +206,8 @@ impl Connection {
             next_id: AtomicU64::new(1),
             spots,
             notices,
+            session_ends,
+            session_end_tx,
             closed,
             historical_gate: Mutex::new(None),
             request_timeout,
@@ -258,6 +283,22 @@ impl Connection {
             Some(tx) => tx.subscribe(),
             None => broadcast::channel(1).1,
         }
+    }
+
+    /// A receiver of account-session ends. Take it before authorising, then
+    /// also check [`Connection::session_ended`] for an end that came earlier.
+    pub fn session_ends(&self) -> broadcast::Receiver<SessionEnd> {
+        self.session_end_tx.subscribe()
+    }
+
+    /// The first recorded end affecting `account_id` on this connection, if any.
+    pub fn session_ended(&self, account_id: i64) -> Option<SessionEnd> {
+        self.session_ends
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|e| e.affects(account_id))
+            .cloned()
     }
 
     /// Why the connection closed, once it has.
@@ -362,7 +403,19 @@ fn route(
     pending: &Pending,
     spots: &broadcast::Sender<ReceivedSpot>,
     notices: &StdMutex<Vec<String>>,
+    ends: &(
+        Arc<StdMutex<Vec<SessionEnd>>>,
+        broadcast::Sender<SessionEnd>,
+    ),
 ) {
+    let end = |account_ids: Vec<i64>, reason: String| {
+        let e = SessionEnd {
+            account_ids,
+            reason,
+        };
+        ends.0.lock().unwrap().push(e.clone());
+        let _ = ends.1.send(e);
+    };
     if let Some(id) = &msg.client_msg_id {
         if let Some(tx) = pending.lock().unwrap().remove(id) {
             let _ = tx.send(msg);
@@ -388,17 +441,22 @@ fn route(
             ev.reason.unwrap_or_default()
         );
         tracing::warn!("{note}");
-        notices.lock().unwrap().push(note);
+        notices.lock().unwrap().push(note.clone());
+        // An event that names no account is taken to end every session on
+        // this connection (`SessionEnd` with an empty list).
+        end(ev.ctid_trader_account_ids, note);
     } else if pt == Oa::ProtoOaClientDisconnectEvent as i32 {
         let ev = pb::ProtoOaClientDisconnectEvent::decode(payload).unwrap_or_default();
         let note = format!("client disconnected: {}", ev.reason.unwrap_or_default());
         tracing::warn!("{note}");
-        notices.lock().unwrap().push(note);
+        notices.lock().unwrap().push(note.clone());
+        end(vec![], note);
     } else if pt == Oa::ProtoOaAccountDisconnectEvent as i32 {
         let ev = pb::ProtoOaAccountDisconnectEvent::decode(payload).unwrap_or_default();
         let note = format!("account {} disconnected", ev.ctid_trader_account_id);
         tracing::warn!("{note}");
-        notices.lock().unwrap().push(note);
+        notices.lock().unwrap().push(note.clone());
+        end(vec![ev.ctid_trader_account_id], note);
     } else {
         tracing::debug!(
             payload_type = msg.payload_type,
@@ -665,7 +723,11 @@ impl AccountSession<'_> {
         window: Duration,
     ) -> Result<HashMap<i64, SpreadSamples>, ClientError> {
         let mut rx = self.conn.spot_events();
+        let mut ends = self.conn.session_ends();
         self.subscribe_spots(symbol_ids).await?;
+        if let Some(e) = self.conn.session_ended(self.account.id()) {
+            return Err(ClientError::Disconnected(e.reason));
+        }
         let mut last: HashMap<i64, (Option<u64>, Option<u64>)> = HashMap::new();
         let mut out: HashMap<i64, SpreadSamples> = symbol_ids
             .iter()
@@ -673,14 +735,23 @@ impl AccountSession<'_> {
             .collect();
         let deadline = Instant::now() + window;
         loop {
-            let ev = match tokio::time::timeout_at(deadline, rx.recv()).await {
-                Err(_) => break,
-                Ok(Ok(r)) => r.event,
-                Ok(Err(broadcast::error::RecvError::Lagged(n))) => {
+            let next = tokio::select! {
+                r = rx.recv() => r,
+                e = ends.recv() => match e {
+                    Ok(e) if e.affects(self.account.id()) => {
+                        return Err(ClientError::Disconnected(e.reason));
+                    }
+                    _ => continue,
+                },
+                _ = tokio::time::sleep_until(deadline) => break,
+            };
+            let ev = match next {
+                Ok(r) => r.event,
+                Err(broadcast::error::RecvError::Lagged(n)) => {
                     tracing::warn!(missed = n, "spot sampling lagged");
                     continue;
                 }
-                Ok(Err(broadcast::error::RecvError::Closed)) => break,
+                Err(broadcast::error::RecvError::Closed) => break,
             };
             if ev.ctid_trader_account_id != self.account.id() {
                 continue;

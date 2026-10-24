@@ -7,6 +7,10 @@ use sqlx::{PgPool, Postgres, QueryBuilder, Row};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TickRow {
     pub account_id: i64,
+    /// The recording session that received the quote.
+    pub session_id: String,
+    /// The quote's place in its session, from 0.
+    pub seq: i64,
     pub broker_symbol_id: i64,
     pub received_at: DateTime<Utc>,
     pub broker_timestamp: Option<i64>,
@@ -45,23 +49,43 @@ pub async fn drop_expired(
         .await
 }
 
-/// Insert a batch of ticks.
+/// Rows per INSERT statement (8 binds each, well under Postgres's limit).
+pub const INSERT_CHUNK: usize = 5000;
+
+/// Insert one flush of ticks. Returns the rows newly inserted.
 pub async fn insert(pool: &PgPool, rows: &[TickRow]) -> Result<u64, sqlx::Error> {
+    insert_chunked(pool, rows, INSERT_CHUNK).await
+}
+
+/// Insert in chunks of `chunk` rows, all in ONE transaction: a failure in any
+/// chunk stores none of the flush, so a retry of the whole flush is safe. As
+/// a second guard, a row whose (account, session, seq, received_at) is
+/// already stored is skipped (`ON CONFLICT DO NOTHING`).
+pub async fn insert_chunked(
+    pool: &PgPool,
+    rows: &[TickRow],
+    chunk: usize,
+) -> Result<u64, sqlx::Error> {
+    let mut tx = pool.begin().await?;
     let mut n = 0;
-    for chunk in rows.chunks(5000) {
+    for part in rows.chunks(chunk.max(1)) {
         let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
-            "INSERT INTO ticks (account_id, broker_symbol_id, received_at, broker_timestamp, bid_e5, ask_e5) ",
+            "INSERT INTO ticks (account_id, session_id, seq, broker_symbol_id, received_at, broker_timestamp, bid_e5, ask_e5) ",
         );
-        qb.push_values(chunk, |mut b, t| {
+        qb.push_values(part, |mut b, t| {
             b.push_bind(t.account_id)
+                .push_bind(&t.session_id)
+                .push_bind(t.seq)
                 .push_bind(t.broker_symbol_id)
                 .push_bind(t.received_at)
                 .push_bind(t.broker_timestamp)
                 .push_bind(t.bid_e5)
                 .push_bind(t.ask_e5);
         });
-        n += qb.build().execute(pool).await?.rows_affected();
+        qb.push(" ON CONFLICT (account_id, session_id, seq, received_at) DO NOTHING");
+        n += qb.build().execute(&mut *tx).await?.rows_affected();
     }
+    tx.commit().await?;
     Ok(n)
 }
 
