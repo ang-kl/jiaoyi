@@ -477,8 +477,20 @@ async fn run(
             enabled: s.enabled,
         })
         .collect();
-    // The broker's base and quote asset ids are kept too: with the trader
-    // record's deposit asset they establish the deposit currency (R1).
+    // The broker's asset list names each symbol's base and quote assets
+    // and the deposit asset: the research engine converts money with these
+    // names, never with assumed ones (R1). A failed read is a partial load.
+    let assets: HashMap<i64, String> = match session.asset_list().await {
+        Ok(list) => {
+            summary.assets = Some(json!(list));
+            list.into_iter().map(|a| (a.asset_id, a.name)).collect()
+        }
+        Err(e) => {
+            summary.errors.push(format!("asset list: {e}"));
+            HashMap::new()
+        }
+    };
+    let name_of = |id: Option<i64>| id.and_then(|i| assets.get(&i).cloned());
     summary.listed_symbols = Some(serde_json::Value::Array(
         listed
             .symbol
@@ -487,6 +499,7 @@ async fn run(
                 json!({
                     "id": s.symbol_id, "name": s.symbol_name, "enabled": s.enabled,
                     "base_asset_id": s.base_asset_id, "quote_asset_id": s.quote_asset_id,
+                    "base_asset": name_of(s.base_asset_id), "quote_asset": name_of(s.quote_asset_id),
                 })
             })
             .collect(),

@@ -461,7 +461,76 @@ fn ticks_for(bars: &[BarRow], spread: i64) -> (Ticks, Ticks) {
     (bids, asks)
 }
 
+/// The broker's statement of quote assets in a load run: its symbol list
+/// (quote asset ids) and its asset list (names).
+struct Statement {
+    listed: Value,
+    assets: Option<Value>,
+    /// The quote → deposit rate of the XAUUSD closing deal.
+    xau_close_rate: f64,
+}
+
+impl Default for Statement {
+    /// Both symbols quoted in USD (asset 15), as the broker states them.
+    fn default() -> Self {
+        Statement {
+            listed: json!([
+                {"id": 1, "name": "EURUSD", "enabled": true, "base_asset_id": 3, "quote_asset_id": 15},
+                {"id": 41, "name": "XAUUSD", "enabled": true, "base_asset_id": 20, "quote_asset_id": 15},
+            ]),
+            assets: Some(json!([
+                {"asset_id": 15, "name": "USD"},
+                {"asset_id": 3, "name": "EUR"},
+                {"asset_id": 20, "name": "XAU"},
+            ])),
+            xau_close_rate: 1.0,
+        }
+    }
+}
+
+/// When the setup's deals execute: 2013-06-04 12:00 UTC, inside the
+/// stored FX bars, so the quote cross-check has the day's close.
+const DEAL_MS: i64 = 1_370_347_200_000;
+
+/// A deal on `sym` executed at `at_ms`: 10,000 units, commission 2.42 USD;
+/// a closing one converts quote → deposit at `rate`.
+fn deal(id: i64, sym: i64, closing: bool, at_ms: i64, rate: f64) -> ProtoOaDeal {
+    ProtoOaDeal {
+        deal_id: id,
+        order_id: id,
+        position_id: id,
+        volume: 1_000_000,
+        filled_volume: 1_000_000,
+        symbol_id: sym,
+        create_timestamp: at_ms,
+        execution_timestamp: at_ms,
+        execution_price: Some(1.17),
+        trade_side: 1,
+        deal_status: 2,
+        commission: Some(-242),
+        money_digits: Some(2),
+        close_position_detail: closing.then(|| ProtoOaClosePositionDetail {
+            entry_price: 1.16,
+            quote_to_deposit_conversion_rate: Some(rate),
+            money_digits: Some(2),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+async fn store_deals(pool: &PgPool, deals: &[ProtoOaDeal]) {
+    let rows: Vec<_> = deals.iter().map(history::deal_row).collect();
+    store::history::upsert_deals(pool, LIVE, &rows, Utc::now())
+        .await
+        .unwrap();
+}
+
 async fn end_to_end_setup(pool: &PgPool) -> FakeBroker {
+    end_to_end_setup_with(pool, Statement::default()).await
+}
+
+async fn end_to_end_setup_with(pool: &PgPool, st: Statement) -> FakeBroker {
     store::upsert_account(pool, LIVE, Environment::Live)
         .await
         .unwrap();
@@ -519,10 +588,8 @@ async fn end_to_end_setup(pool: &PgPool) -> FakeBroker {
         run,
         "ok",
         &store::RunSummary {
-            listed_symbols: Some(json!([
-                {"id": 1, "name": "EURUSD", "enabled": true, "base_asset_id": 3, "quote_asset_id": 15},
-                {"id": 41, "name": "XAUUSD", "enabled": true, "base_asset_id": 20, "quote_asset_id": 15},
-            ])),
+            listed_symbols: Some(st.listed),
+            assets: st.assets,
             ..Default::default()
         },
     )
@@ -543,41 +610,18 @@ async fn end_to_end_setup(pool: &PgPool) -> FakeBroker {
     )
     .await
     .unwrap();
-    // Deals: commission 2.42 USD on 10,000 units; closes at quote→deposit 1.
-    let deal = |id: i64, sym: i64, closing: bool| ProtoOaDeal {
-        deal_id: id,
-        order_id: id,
-        position_id: id,
-        volume: 1_000_000,
-        filled_volume: 1_000_000,
-        symbol_id: sym,
-        create_timestamp: 1_760_000_000_000,
-        execution_timestamp: 1_760_000_000_000,
-        execution_price: Some(1.17),
-        trade_side: 1,
-        deal_status: 2,
-        commission: Some(-242),
-        money_digits: Some(2),
-        close_position_detail: closing.then(|| ProtoOaClosePositionDetail {
-            entry_price: 1.16,
-            quote_to_deposit_conversion_rate: Some(1.0),
-            money_digits: Some(2),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
-    let rows: Vec<_> = [
-        deal(1, 1, false),
-        deal(2, 1, true),
-        deal(3, 41, false),
-        deal(4, 41, true),
-    ]
-    .iter()
-    .map(history::deal_row)
-    .collect();
-    store::history::upsert_deals(pool, LIVE, &rows, Utc::now())
-        .await
-        .unwrap();
+    // Deals: commission 2.42 USD on 10,000 units; EURUSD closes at
+    // quote→deposit 1, XAUUSD at the statement's rate.
+    store_deals(
+        pool,
+        &[
+            deal(1, 1, false, DEAL_MS, 0.0),
+            deal(2, 1, true, DEAL_MS, 1.0),
+            deal(3, 41, false, DEAL_MS, 0.0),
+            deal(4, 41, true, DEAL_MS, st.xau_close_rate),
+        ],
+    )
+    .await;
     // Earlier runs already sampled every June but 2014 (no ticks then):
     // the sampler resumes with the one missing year.
     for (id, name) in [(1i64, "EURUSD"), (41, "XAUUSD")] {
@@ -688,8 +732,22 @@ async fn the_default_development_job_runs_to_a_trial(pool: PgPool) {
         .unwrap()
         .contains("101st"));
     assert_eq!(t.params["deposit_currency"]["currency"], "USD");
+    assert!(t.params["deposit_currency"]["cross_check"]
+        .as_str()
+        .unwrap()
+        .starts_with("2 closing deals on symbols the broker quotes in USD"));
     let sym = &t.params["symbols"][0];
     assert_eq!(sym["basis"], "bid");
+    // The quote currency is the broker's, cross-checked with the deal.
+    assert_eq!(sym["quote"], "USD");
+    assert!(sym["quote_label"]
+        .as_str()
+        .unwrap()
+        .starts_with("the broker's asset list (load run"));
+    assert_eq!(
+        sym["quote_cross_check"],
+        "1 closing deals executed before 2025-10-24 00:00:00 UTC agree within 1% (largest difference 0.000%)"
+    );
     assert_eq!(sym["spreads_measured"]["2014"], 0.00002);
     assert!(sym["commission_label"]
         .as_str()
@@ -735,31 +793,367 @@ async fn the_default_development_job_runs_to_a_trial(pool: PgPool) {
     assert_eq!(jv["jobs"][0]["attempts"].as_array().unwrap().len(), 1);
 }
 
-/// Held-out trades are re-checked tick by tick on their entry and exit days.
-/// A steady uptrend (close +0.5 a day, range ±1, ATR 2, bid bars, spread
-/// 0.2, slippage 1×) in the held-out period; the daily rules enter on day
-/// 100 at 150.5 + 0.2 + 0.2 = 150.9 (stop 3 × 2 = 6 below) and exit on day
-/// 111 at the stop 150 − 0.2 = 149.8.
-///
-/// The broker's ticks: on day 100 the ask first reaches the level at 150.7
-/// (fill 150.7 + 0.2 = 150.9); on day 111 the bid rises to 156.5 (a new best:
-/// the stop trails to 156.5 − 6 = 150.5 tick by tick) and then falls to
-/// 150.4, exiting at 150.4 − 0.2 = 150.2. Tick R = (150.2 − 150.9) ÷ 6;
-/// daily R = (149.8 − 150.9) ÷ 6; the difference is 0.4 ÷ 6. The tick
-/// result is the one counted.
+// ------------------------------------------------- quote currencies (R1)
+
+/// The June 2014 spread samples of both symbols, as measured (bid bars), so
+/// a job needs no broker for its inputs.
+async fn measured_2014(pool: &PgPool) {
+    let (from, to) = jiaoyi::edge::sampler::june_week(2014);
+    for (id, name, spread) in [
+        (1i64, "EURUSD", Decimal::new(2, 5)),
+        (41, "XAUUSD", Decimal::new(30, 2)),
+    ] {
+        rs::record_spread(
+            pool,
+            &rs::SpreadSample {
+                account_id: LIVE,
+                broker_symbol_id: id,
+                symbol: name.into(),
+                year: 2014,
+                week_from: from,
+                week_to: to,
+                status: "measured".into(),
+                median_spread: Some(spread),
+                samples: 10,
+                bid_ticks: 10,
+                ask_ticks: 10,
+                download_ms: 1,
+                basis: Some(
+                    json!({"bid": 10, "ask": 0, "mid": 0, "observations": 10, "uninformative": 0}),
+                ),
+                error: None,
+                prereg_hash: HASH.into(),
+            },
+        )
+        .await
+        .unwrap();
+    }
+}
+
+/// A later load run stating the symbols' quote assets and the asset list.
+async fn load_run(pool: &PgPool, listed: Value, assets: Value) -> i64 {
+    let run = store::start_run(pool, LIVE).await.unwrap();
+    store::finish_run(
+        pool,
+        run,
+        "ok",
+        &store::RunSummary {
+            listed_symbols: Some(listed),
+            assets: Some(assets),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    run
+}
+
+async fn dev_step(pool: &PgPool, f: &FakeBroker) -> runner::Step {
+    let (_t, stop) = shutdown::channel();
+    let f2 = f.clone();
+    let connect = move |_account: i64| {
+        let f = f2.clone();
+        async move { Ok(f.spawn().0) }
+    };
+    runner::step(
+        pool,
+        &broker(),
+        &[(permitted(), Environment::Live)],
+        &connect,
+        &stop,
+    )
+    .await
+    .unwrap()
+}
+
+/// USD per euro at the close of the stored EURUSD bar containing `at_ms`.
+fn eur_close_at(at_ms: i64) -> f64 {
+    let t = DateTime::<Utc>::from_timestamp_millis(at_ms).unwrap();
+    let b = wave(1.3)
+        .into_iter()
+        .find(|b| b.bar_open_utc <= t && t < b.bar_open_utc + Duration::days(1))
+        .unwrap();
+    rust_decimal::prelude::ToPrimitive::to_f64(&b.close).unwrap()
+}
+
+/// The broker states XAUUSD's quote asset as EUR (asset 3): the engine
+/// takes the statement, not the name, and converts with EURUSD.
+fn xau_in_eur(xau_close_rate: f64) -> Statement {
+    Statement {
+        listed: json!([
+            {"id": 1, "name": "EURUSD", "enabled": true, "base_asset_id": 3, "quote_asset_id": 15},
+            {"id": 41, "name": "XAUUSD", "enabled": true, "base_asset_id": 20, "quote_asset_id": 3},
+        ]),
+        xau_close_rate,
+        ..Default::default()
+    }
+}
+
+fn refusals(u: &jiaoyi::edge::h1job::Universe) -> HashMap<&str, &str> {
+    u.refused
+        .iter()
+        .map(|(n, r)| (n.as_str(), r.as_str()))
+        .collect()
+}
+
+/// Owner, 24-10-2026: the broker's asset list is the sole source of a
+/// symbol's quote currency. A symbol whose quote asset cannot be read from
+/// it is refused with the reason, as is one quoted in a currency no FX pair
+/// of the universe converts; the other symbols are still tested.
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn held_out_trades_are_rechecked_on_ticks(pool: PgPool) {
-    use jiaoyi::edge::costs::{Basis, BasisCounts, SpreadBook, SwapTerms, SymbolCosts};
-    use jiaoyi::edge::h1job::Prepared;
-    use jiaoyi::edge::recheck::simulate_with_ticks;
-    use jiaoyi_core::research::h1::{ExitReason, H1Params, Indicators, Series};
-    let n = 112;
+async fn a_symbol_whose_quote_asset_is_not_read_from_the_broker_is_refused(pool: PgPool) {
+    use jiaoyi::edge::h1job::{self, Deposit};
+    let eur = json!({"id": 1, "name": "EURUSD", "enabled": true, "base_asset_id": 3, "quote_asset_id": 15});
+    let assets = Statement::default().assets.unwrap();
+    end_to_end_setup_with(
+        &pool,
+        Statement {
+            listed: json!([eur, {"id": 41, "name": "XAUUSD", "enabled": true, "base_asset_id": 20, "quote_asset_id": 77}]),
+            ..Default::default()
+        },
+    )
+    .await;
+    measured_2014(&pool).await;
+    let prepare = || async {
+        let deposit = match h1job::deposit_currency(&pool, LIVE).await.unwrap() {
+            Deposit::Usd(v) => v,
+            other => panic!("{other:?}"),
+        };
+        h1job::prepare(&Data::new(&pool, Stage::Development), LIVE, deposit)
+            .await
+            .unwrap()
+    };
+    let (run1, _, _) = store::latest_assets(&pool, LIVE).await.unwrap().unwrap();
+    let u = prepare().await;
+    let tested: Vec<&str> = u.symbols.iter().map(|x| x.costs.name.as_str()).collect();
+    assert_eq!(tested, vec!["EURUSD"]);
+    assert_eq!(
+        refusals(&u)["XAUUSD"],
+        format!(
+            "quote asset not read from the broker: asset 77 is not in load run {run1}'s asset list"
+        )
+    );
+
+    // A later load whose symbol list gives XAUUSD no quote asset id.
+    let run2 = load_run(
+        &pool,
+        json!([eur, {"id": 41, "name": "XAUUSD", "enabled": true, "base_asset_id": 20}]),
+        assets.clone(),
+    )
+    .await;
+    assert_eq!(
+        refusals(&prepare().await)["XAUUSD"],
+        format!("quote asset not read from the broker: load run {run2}'s symbol list gives symbol 41 no quote asset id")
+    );
+
+    // Quoted in CHF: no FX pair of the universe converts it.
+    let mut with_chf = assets.as_array().unwrap().clone();
+    with_chf.push(json!({"asset_id": 9, "name": "CHF"}));
+    load_run(
+        &pool,
+        json!([eur, {"id": 41, "name": "XAUUSD", "enabled": true, "base_asset_id": 20, "quote_asset_id": 9}]),
+        Value::Array(with_chf),
+    )
+    .await;
+    assert_eq!(
+        refusals(&prepare().await)["XAUUSD"],
+        "quoted in CHF: no FX pair in the universe converts it to USD"
+    );
+}
+
+/// Owner, 24-10-2026: the deposit currency is the name the broker's asset
+/// list gives the trader record's deposit asset. Without a stored asset
+/// list the job waits; a deposit in another currency, or one the list does
+/// not name, fails the job.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_deposit_currency_other_than_usd_fails_the_job(pool: PgPool) {
+    use jiaoyi::edge::h1job::{self, Deposit};
+    let f = end_to_end_setup_with(
+        &pool,
+        Statement {
+            assets: None,
+            ..Default::default()
+        },
+    )
+    .await;
+    measured_2014(&pool).await;
+    assert_eq!(
+        h1job::deposit_currency(&pool, LIVE).await.unwrap(),
+        Deposit::NotReady(
+            "no load has stored the broker's asset list (ProtoOAAssetListRes) yet".into()
+        )
+    );
+    let step = dev_step(&pool, &f).await;
+    assert!(
+        matches!(&step, runner::Step::Waiting(w) if w.contains("asset list")),
+        "{step:?}"
+    );
+    assert_eq!(rs::jobs(&pool).await.unwrap()[0].status, "pending");
+
+    // The broker names the deposit asset 15 SGD.
+    let run = load_run(
+        &pool,
+        Statement::default().listed,
+        json!([{"asset_id": 15, "name": "SGD"}, {"asset_id": 3, "name": "EUR"}]),
+    )
+    .await;
+    let why = "the deposit currency is SGD (asset 15), not USD: money cannot be converted";
+    assert_eq!(
+        h1job::deposit_currency(&pool, LIVE).await.unwrap(),
+        Deposit::Failed(why.into())
+    );
+    let step = dev_step(&pool, &f).await;
+    assert!(
+        matches!(&step, runner::Step::Finished(s) if s.contains("failed")),
+        "{step:?}"
+    );
+    let job = &rs::jobs(&pool).await.unwrap()[0];
+    assert_eq!(job.status, "failed");
+    assert_eq!(job.reason.as_deref(), Some(why));
+    assert!(rs::job_trials(&pool).await.unwrap().is_empty());
+
+    // A deposit asset the list does not name is not guessed either.
+    let run2 = load_run(
+        &pool,
+        Statement::default().listed,
+        json!([{"asset_id": 3, "name": "EUR"}]),
+    )
+    .await;
+    assert!(run2 > run);
+    assert_eq!(
+        h1job::deposit_currency(&pool, LIVE).await.unwrap(),
+        Deposit::Failed(format!(
+            "the deposit asset 15 is not in load run {run2}'s asset list: the deposit currency cannot be read"
+        ))
+    );
+}
+
+/// Owner, 24-10-2026: a closing deal's quote → deposit rate must agree
+/// with the FX close of its day within 1%; a disagreement fails the job.
+/// XAUUSD is stated as quoted in EUR: its deal on 4 June 2013 converts at
+/// the EURUSD close × 1.005 (agrees), its deal on 5 June at × 1.02 (2%).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_quote_rate_disagreeing_with_the_fx_close_fails_the_job(pool: PgPool) {
+    let f = end_to_end_setup_with(&pool, xau_in_eur(eur_close_at(DEAL_MS) * 1.005)).await;
+    measured_2014(&pool).await;
+    let next_day = DEAL_MS + 86_400_000;
+    store_deals(
+        &pool,
+        &[deal(5, 41, true, next_day, eur_close_at(next_day) * 1.02)],
+    )
+    .await;
+    let step = dev_step(&pool, &f).await;
+    assert!(
+        matches!(&step, runner::Step::Finished(s) if s.contains("failed")),
+        "{step:?}"
+    );
+    let job = &rs::jobs(&pool).await.unwrap()[0];
+    assert_eq!(job.status, "failed");
+    let why = job.reason.as_deref().unwrap();
+    assert!(
+        why.starts_with("XAUUSD: the broker-stated quote currency EUR disagrees with a deal: the closing deal at 2013-06-05 12:00:00 UTC"),
+        "{why}"
+    );
+    assert!(why.contains("(2.00% apart, more than 1%)"), "{why}");
+    assert!(rs::job_trials(&pool).await.unwrap().is_empty());
+}
+
+/// Owner, 24-10-2026: a development job must not read the quote → deposit
+/// rate of any deal executed on or after 2025-10-24: that rate is a price of
+/// the sealed period. The deposit check reads rates of any date, but only of
+/// symbols the broker quotes in USD, selected in SQL. Deals after the seal:
+/// XAUUSD (stated in EUR) at a rate no EURUSD close gives, and EURUSD at 1.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_development_job_reads_no_quote_rate_of_a_sealed_period_deal(pool: PgPool) {
+    let agreed = eur_close_at(DEAL_MS) * 1.005;
+    let f = end_to_end_setup_with(&pool, xau_in_eur(agreed)).await;
+    measured_2014(&pool).await;
+    let sealed_ms = at("2025-11-03T12:00:00Z").timestamp_millis();
+    store_deals(
+        &pool,
+        &[
+            deal(6, 41, true, sealed_ms, 5.0),
+            deal(7, 1, true, sealed_ms, 1.0),
+        ],
+    )
+    .await;
+
+    // The development data layer: deals before the seal only, filtered in
+    // the query; a read reaching past the seal is refused, not clamped.
+    let dev = Data::new(&pool, Stage::Development);
+    let rates = dev
+        .closing_rates(LIVE, 41, Stage::Development.end())
+        .await
+        .unwrap();
+    assert_eq!(
+        rates,
+        vec![(
+            DateTime::<Utc>::from_timestamp_millis(DEAL_MS).unwrap(),
+            agreed
+        )]
+    );
+    assert!(matches!(
+        dev.closing_rates(LIVE, 41, Stage::HeldOut.end()).await,
+        Err(DataError::Sealed(_))
+    ));
+    // A held-out job reads every deal up to its end.
+    let held = Data::new(&pool, Stage::HeldOut)
+        .closing_rates(LIVE, 41, Stage::HeldOut.end())
+        .await
+        .unwrap();
+    assert_eq!(
+        held.iter().map(|r| r.1).collect::<Vec<_>>(),
+        vec![agreed, 5.0]
+    );
+    // The deposit check selects only the USD-quoted EURUSD rates.
+    let (run, _, _) = store::latest_assets(&pool, LIVE).await.unwrap().unwrap();
+    let mut usd = rs::closing_rates_quoted_in(&pool, LIVE, run, 15)
+        .await
+        .unwrap();
+    usd.sort_by(f64::total_cmp);
+    assert_eq!(usd, vec![1.0, 1.0], "deals 2 and 7, never XAUUSD's");
+
+    // The job runs; each symbol's cross-check counts the pre-seal deal only.
+    let step = dev_step(&pool, &f).await;
+    assert!(
+        matches!(&step, runner::Step::Finished(s) if s.contains("done")),
+        "{step:?}"
+    );
+    let t = &rs::job_trials(&pool).await.unwrap()[0];
+    let by: HashMap<&str, &Value> = t.params["symbols"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| (x["name"].as_str().unwrap(), x))
+        .collect();
+    assert_eq!(by["XAUUSD"]["quote"], "EUR");
+    assert_eq!(
+        by["XAUUSD"]["quote_cross_check"],
+        "1 closing deals executed before 2025-10-24 00:00:00 UTC agree within 1% (largest difference 0.500%)"
+    );
+    assert_eq!(
+        by["EURUSD"]["quote_cross_check"],
+        "1 closing deals executed before 2025-10-24 00:00:00 UTC agree within 1% (largest difference 0.000%)"
+    );
+    assert_eq!(
+        t.params["deposit_currency"]["cross_check"],
+        "2 closing deals on symbols the broker quotes in USD, all at quote→deposit rate 1"
+    );
+}
+
+// ------------------------------------------------- the held-out re-check
+
+/// A steady uptrend in the held-out period: close +0.5 a day from 100, range
+/// ±1 (ATR 2), bid bars, spread 0.2, entries from day 100. With breakout 50
+/// and stop 3 × ATR the daily rules enter on day 100 at the level 150.5.
+fn uptrend(n: usize) -> jiaoyi_core::research::h1::Series {
     let first = at("2026-04-01T00:00:00Z");
-    let opens: Vec<DateTime<Utc>> = (0..n).map(|i| first + Duration::days(i as i64)).collect();
     let close: Vec<f64> = (0..n).map(|i| 100.0 + 0.5 * i as f64).collect();
-    let mut s = Series {
+    jiaoyi_core::research::h1::Series {
         symbol: "TEST".into(),
-        dates: opens.iter().map(|o| o.date_naive()).collect(),
+        dates: (0..n)
+            .map(|i| (first + Duration::days(i as i64)).date_naive())
+            .collect(),
         open: (0..n)
             .map(|i| if i == 0 { 100.0 } else { close[i - 1] })
             .collect(),
@@ -775,14 +1169,15 @@ async fn held_out_trades_are_rechecked_on_ticks(pool: PgPool) {
         swap_short: vec![0.0; n],
         first_entry: 100,
         last: n - 1,
-    };
-    // Day 111 falls through the stop.
-    s.open[111] = 155.0;
-    s.high[111] = 155.5;
-    s.low[111] = 149.0;
-    s.close[111] = 149.5;
-    let ind = Indicators::of(&s);
-    let x = Prepared {
+    }
+}
+
+fn prepared(s: jiaoyi_core::research::h1::Series) -> jiaoyi::edge::h1job::Prepared {
+    use jiaoyi::edge::costs::{Basis, BasisCounts, SpreadBook, SwapTerms, SymbolCosts};
+    use jiaoyi_core::research::h1::Indicators;
+    let n = s.dates.len();
+    let first = at("2026-04-01T00:00:00Z");
+    jiaoyi::edge::h1job::Prepared {
         costs: SymbolCosts {
             name: "TEST".into(),
             symbol_id: 7,
@@ -803,28 +1198,54 @@ async fn held_out_trades_are_rechecked_on_ticks(pool: PgPool) {
                 read_at: None,
             },
             quote: "USD".into(),
-            quote_label: "test",
+            quote_label: "test".into(),
+            quote_cross_check: "test".into(),
             min_units: None,
             step_units: None,
         },
+        indicators: Indicators::of(&s),
         series: s,
-        indicators: ind,
         usd_per_price: vec![1.0; n],
-        opens: opens.clone(),
-    };
-    let e5 = |p: f64| (p * 100_000.0).round() as i64;
-    let t100 = opens[100].timestamp_millis();
-    let t111 = opens[111].timestamp_millis();
-    let h = 3_600_000;
-    let bids = vec![
-        (t100 + h, e5(150.0)),
-        (t100 + 2 * h, e5(150.5)),
-        (t100 + 3 * h, e5(151.5)),
-        (t111 + h, e5(154.0)),
-        (t111 + 2 * h, e5(156.5)),
-        (t111 + 3 * h, e5(150.4)),
-    ];
-    let asks: Vec<(i64, i64)> = bids.iter().map(|(t, p)| (*t, p + e5(0.2))).collect();
+        opens: (0..n).map(|i| first + Duration::days(i as i64)).collect(),
+    }
+}
+
+fn e5(p: f64) -> i64 {
+    (p * 100_000.0).round() as i64
+}
+
+const HOUR: i64 = 3_600_000;
+
+/// The day-100 entry ticks: bid 150.0, 150.5, 151.5 an hour apart, the ask
+/// 0.2 above: the ask first reaches 150.5 at 150.7 (fill 150.7 + 0.2).
+fn entry_day(x: &jiaoyi::edge::h1job::Prepared) -> Vec<(i64, i64)> {
+    let t = x.opens[100].timestamp_millis();
+    vec![
+        (t + HOUR, e5(150.0)),
+        (t + 2 * HOUR, e5(150.5)),
+        (t + 3 * HOUR, e5(151.5)),
+    ]
+}
+
+fn asks_of(bids: &[(i64, i64)]) -> Vec<(i64, i64)> {
+    bids.iter().map(|(t, p)| (*t, p + e5(0.2))).collect()
+}
+
+/// Re-check `x` (breakout 50, stop 3 × ATR, 1× slippage) against a fake
+/// broker serving these ticks. The fake sends ticks newest first and keeps
+/// the scripted order of ticks sharing a millisecond, so a burst within one
+/// millisecond is scripted newest first. Returns the trades, the notes and
+/// the bar opens (ms) of the days streamed.
+async fn recheck_on(
+    pool: &PgPool,
+    x: &jiaoyi::edge::h1job::Prepared,
+    bids: Vec<(i64, i64)>,
+    asks: Vec<(i64, i64)>,
+) -> (
+    Vec<jiaoyi_core::research::h1::Trade>,
+    Vec<jiaoyi::edge::recheck::Recheck>,
+    std::collections::BTreeSet<i64>,
+) {
     let f = FakeBroker {
         account_id: LIVE,
         tick_history: HashMap::from([((7, 1), bids), ((7, 2), asks)]),
@@ -838,13 +1259,57 @@ async fn held_out_trades_are_rechecked_on_ticks(pool: PgPool) {
         .account_auth(&permitted(), &Secret::new("tok"))
         .await
         .unwrap();
-    let data = Data::new(&pool, Stage::HeldOut);
-    let p = H1Params {
+    let data = Data::new(pool, Stage::HeldOut);
+    let p = jiaoyi_core::research::h1::H1Params {
         breakout: 50,
         stop_atr: 3.0,
         slip_mult: 1.0,
     };
-    let (trades, notes) = simulate_with_ticks(&data, &session, &x, &p).await.unwrap();
+    let (trades, notes) = jiaoyi::edge::recheck::simulate_with_ticks(&data, &session, x, &p)
+        .await
+        .unwrap();
+    let days = log
+        .lock()
+        .unwrap()
+        .tick_requests
+        .iter()
+        .map(|(_, _, from, _)| *from)
+        .collect();
+    (trades, notes, days)
+}
+
+/// Held-out trades are re-checked tick by tick on their entry and exit days.
+/// A steady uptrend (close +0.5 a day, range ±1, ATR 2, bid bars, spread
+/// 0.2, slippage 1×) in the held-out period; the daily rules enter on day
+/// 100 at 150.5 + 0.2 + 0.2 = 150.9 (stop 3 × 2 = 6 below) and exit on day
+/// 111 at the stop 150 − 0.2 = 149.8.
+///
+/// The broker's ticks: on day 100 the ask first reaches the level at 150.7
+/// (fill 150.7 + 0.2 = 150.9); on day 111 the bid rises to 156.5 (a new best:
+/// the stop trails to 156.5 − 6 = 150.5 tick by tick) and then falls to
+/// 150.4, exiting at 150.4 − 0.2 = 150.2. Tick R = (150.2 − 150.9) ÷ 6;
+/// daily R = (149.8 − 150.9) ÷ 6; the difference is 0.4 ÷ 6. The tick
+/// result is the one counted.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn held_out_trades_are_rechecked_on_ticks(pool: PgPool) {
+    use jiaoyi_core::research::h1::ExitReason;
+    let mut s = uptrend(112);
+    // Day 111 falls through the stop.
+    s.open[111] = 155.0;
+    s.high[111] = 155.5;
+    s.low[111] = 149.0;
+    s.close[111] = 149.5;
+    let x = prepared(s);
+    let t100 = x.opens[100].timestamp_millis();
+    let t111 = x.opens[111].timestamp_millis();
+    let mut bids = entry_day(&x);
+    bids.extend([
+        (t111 + HOUR, e5(154.0)),
+        (t111 + 2 * HOUR, e5(156.5)),
+        (t111 + 3 * HOUR, e5(150.4)),
+    ]);
+    let asks = asks_of(&bids);
+    let (trades, notes, days) = recheck_on(&pool, &x, bids, asks).await;
     assert_eq!(trades.len(), 1);
     let t = &trades[0];
     assert!((t.entry_fill - 150.9).abs() < 1e-9, "{t:?}");
@@ -856,7 +1321,217 @@ async fn held_out_trades_are_rechecked_on_ticks(pool: PgPool) {
     assert!((d.exit_fill - 149.8).abs() < 1e-9, "{d:?}");
     assert!((notes[0].diff_r.unwrap() - 0.4 / 6.0).abs() < 1e-9);
     // Only the entry and exit days were streamed (one window per side each).
-    let asked = log.lock().unwrap().tick_requests.clone();
-    let days: std::collections::BTreeSet<i64> = asked.iter().map(|(_, _, from, _)| *from).collect();
     assert_eq!(days, std::collections::BTreeSet::from([t100, t111]));
+}
+
+/// Codex P2 on #9 (sampler.rs:79): an ask that reaches the level only
+/// inside a burst of updates sharing one millisecond is a fill. The ask
+/// bursts 150.3 → 150.6 → 150.3 at the same millisecond and otherwise
+/// stays below the level 150.5: the fill is 150.6 + 0.2 = 150.8.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_entry_crossing_inside_one_millisecond_fills(pool: PgPool) {
+    let x = prepared(uptrend(112));
+    let t = x.opens[100].timestamp_millis();
+    let bids = vec![(t + HOUR, e5(150.0)), (t + 3 * HOUR, e5(150.2))];
+    let asks = vec![
+        (t + HOUR, e5(150.2)),
+        // Newest first: oldest-first 150.3, 150.6, 150.3.
+        (t + 2 * HOUR, e5(150.3)),
+        (t + 2 * HOUR, e5(150.6)),
+        (t + 2 * HOUR, e5(150.3)),
+        (t + 3 * HOUR, e5(150.4)),
+    ];
+    let (trades, notes, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1, "{notes:?}");
+    assert_eq!(trades[0].entry_index, 100);
+    assert!(
+        (trades[0].entry_fill - 150.8).abs() < 1e-9,
+        "{:?}",
+        trades[0]
+    );
+}
+
+/// Codex P2 on #9 (sampler.rs:79): a bid that crosses the trailed stop only
+/// inside a burst sharing one millisecond exits. On day 111 (a daily exit
+/// day) the bid bursts 156.5 → 150.4 → 155.0 at one millisecond: the new
+/// best 156.5 trails the stop to 150.5 and 150.4 is beyond it, so the trade
+/// exits at 150.4 − 0.2 = 150.2. Collapsed to its last price (155.0), the
+/// burst is never checked.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_stop_crossing_inside_one_millisecond_exits(pool: PgPool) {
+    use jiaoyi_core::research::h1::ExitReason;
+    let mut s = uptrend(112);
+    s.open[111] = 155.0;
+    s.high[111] = 156.6;
+    s.low[111] = 149.0;
+    s.close[111] = 155.2;
+    let x = prepared(s);
+    let t111 = x.opens[111].timestamp_millis();
+    let mut bids = entry_day(&x);
+    bids.extend([
+        (t111 + HOUR, e5(154.0)),
+        // Newest first: oldest-first 156.5, 150.4, 155.0.
+        (t111 + 2 * HOUR, e5(155.0)),
+        (t111 + 2 * HOUR, e5(150.4)),
+        (t111 + 2 * HOUR, e5(156.5)),
+        (t111 + 3 * HOUR, e5(155.2)),
+    ]);
+    let asks = asks_of(&bids);
+    let (trades, _, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (111, ExitReason::Stop),
+        "{t:?}"
+    );
+    assert!((t.exit_fill - 150.2).abs() < 1e-9, "{t:?}");
+}
+
+/// Codex P2 on #9 (recheck.rs:271): a trade open on the period's last day
+/// is re-checked on that day's ticks. With no stop reached it closes at the
+/// day's last bid, 154.3, less the slippage: 154.1 (the daily close would
+/// give 155.5 − 0.2 = 155.3).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_period_end_exit_closes_at_the_last_days_last_quote(pool: PgPool) {
+    use jiaoyi_core::research::h1::ExitReason;
+    let x = prepared(uptrend(112));
+    let t100 = x.opens[100].timestamp_millis();
+    let t111 = x.opens[111].timestamp_millis();
+    let mut bids = entry_day(&x);
+    bids.extend([
+        (t111 + HOUR, e5(155.0)),
+        (t111 + 2 * HOUR, e5(155.4)),
+        (t111 + 3 * HOUR, e5(154.3)),
+    ]);
+    let asks = asks_of(&bids);
+    let (trades, _, days) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (111, ExitReason::PeriodEnd),
+        "{t:?}"
+    );
+    assert!((t.exit_ref - 154.3).abs() < 1e-9, "{t:?}");
+    assert!((t.exit_fill - 154.1).abs() < 1e-9, "{t:?}");
+    assert_eq!(days, std::collections::BTreeSet::from([t100, t111]));
+}
+
+/// Codex P2 on #9 (recheck.rs:271): the last day is streamed like an exit
+/// day, so a tick trail hit on it counts. The bid makes a new best at 157.5
+/// (stop trailed to 151.5), then falls to 151.4: a stop exit at 151.2,
+/// where the daily rules found no exit (low 154.5) and closed at 155.3.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_trail_hit_on_the_period_end_day_counts(pool: PgPool) {
+    use jiaoyi_core::research::h1::ExitReason;
+    let x = prepared(uptrend(112));
+    let t111 = x.opens[111].timestamp_millis();
+    let mut bids = entry_day(&x);
+    bids.extend([
+        (t111 + HOUR, e5(157.5)),
+        (t111 + 2 * HOUR, e5(151.4)),
+        (t111 + 3 * HOUR, e5(155.0)),
+    ]);
+    let asks = asks_of(&bids);
+    let (trades, notes, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (111, ExitReason::Stop),
+        "{t:?}"
+    );
+    assert!((t.exit_fill - 151.2).abs() < 1e-9, "{t:?}");
+    let d = notes[0].daily.as_ref().unwrap();
+    assert_eq!(d.exit_reason, ExitReason::PeriodEnd);
+    assert!((d.exit_fill - 155.3).abs() < 1e-9, "{d:?}");
+}
+
+/// Codex P2 on #9 (h1job.rs:460): on held-out data, rule 2 holds only when
+/// both the daily-bar-executed mean and the tick-counted mean are above the
+/// 95th percentile of the daily-bar controls; each half fails it alone.
+#[test]
+fn held_out_rule_2_needs_the_daily_bar_and_the_tick_mean_above_the_control() {
+    use jiaoyi::edge::costs::CommissionBook;
+    use jiaoyi::edge::h1job::{evaluate, Setting, Universe};
+    use jiaoyi_core::research::h1::{ExitReason, Side, Trade};
+    let x = prepared(uptrend(400));
+    let trades = |net_r: f64| -> Vec<Trade> {
+        (0..100)
+            .map(|k| {
+                let t = 110 + 2 * k;
+                Trade {
+                    symbol: "TEST".into(),
+                    side: Side::Long,
+                    entry_index: t,
+                    entry_date: x.series.dates[t],
+                    level: Some(x.series.close[t]),
+                    entry_ref: x.series.close[t],
+                    entry_fill: x.series.close[t],
+                    atr: 2.0,
+                    stop_distance: 6.0,
+                    initial_stop: x.series.close[t] - 6.0,
+                    exit_index: t + 1,
+                    exit_date: x.series.dates[t + 1],
+                    exit_ref: 0.0,
+                    exit_fill: 0.0,
+                    exit_reason: ExitReason::Stop,
+                    nights: 1,
+                    gross_r: net_r,
+                    commission_r: 0.0,
+                    swap_r: 0.0,
+                    // Alternate around the mean so the bootstrap and PF hold.
+                    net_r: net_r + if k % 2 == 0 { 0.5 } else { -0.5 },
+                    spread_estimated: false,
+                }
+            })
+            .collect()
+    };
+    let u = Universe {
+        symbols: vec![x.clone()],
+        refused: vec![],
+        settings_version: 1,
+        commission: CommissionBook {
+            per_class: Default::default(),
+            overall_median: 0.0,
+            deals: 0,
+        },
+        deposit: json!({}),
+    };
+    let setting = Setting {
+        breakout: 50,
+        stop_atr: 3.0,
+        account_id: LIVE,
+    };
+    let rule2 = |tick: f64, daily: f64| {
+        let (results, eval) = evaluate(
+            &u,
+            &setting,
+            &[trades(tick)],
+            Stage::HeldOut,
+            Some(&[trades(daily)]),
+        );
+        (eval.rules.rule2_above_control_p95, results)
+    };
+    // Both far above any control run mean: rule 2 holds.
+    let (both, results) = rule2(50.0, 40.0);
+    assert!(both, "{}", results["control"]);
+    // The tick mean above, the daily-bar mean below: rule 2 fails.
+    let (tick_only, results) = rule2(50.0, -50.0);
+    assert!(!tick_only, "{}", results["control"]);
+    assert_eq!(results["control"]["daily_bar_percentile"], 0.0);
+    assert_eq!(results["control"]["strategy_percentile"], 100.0);
+    assert!(
+        (results["evidence_against"]["tick_vs_daily_bar"]["mean_r_difference"]
+            .as_f64()
+            .unwrap()
+            - 100.0)
+            .abs()
+            < 1e-9
+    );
+    // The daily-bar mean above, the tick mean below: rule 2 fails.
+    let (daily_only, results) = rule2(-50.0, 50.0);
+    assert!(!daily_only, "{}", results["control"]);
+    assert_eq!(results["control"]["daily_bar_percentile"], 100.0);
 }

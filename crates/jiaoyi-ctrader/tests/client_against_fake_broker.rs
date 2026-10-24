@@ -395,3 +395,43 @@ async fn deal_history_splits_windows_until_complete() {
     assert!(log.lock().unwrap().deal_requests.len() > 1);
     assert_eq!(got[0].commission, Some(-336), "as the broker reports it");
 }
+
+#[tokio::test]
+async fn the_asset_list_names_the_accounts_assets() {
+    let mut f = fake();
+    f.assets = vec![(15, "USD".into()), (3, "EUR".into()), (9, "JPY".into())];
+    let (conn, log) = f.spawn();
+    conn.application_auth("id", &Secret::new("s"))
+        .await
+        .unwrap();
+    let list = Allowlist::parse(Some("49236051")).unwrap();
+    let session = conn
+        .account_auth(&list.permit(ACCOUNT).unwrap(), &Secret::new("tok"))
+        .await
+        .unwrap();
+    let assets = session.asset_list().await.unwrap();
+    assert_eq!(
+        assets
+            .iter()
+            .map(|a| (a.asset_id, a.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(15, "USD"), (3, "EUR"), (9, "JPY")]
+    );
+    assert!(log
+        .lock()
+        .unwrap()
+        .payload_types
+        .contains(&(ProtoOaPayloadType::ProtoOaAssetListReq as u32)));
+    // A broker refusing it: the refusal comes back as an error.
+    let mut refusing = fake();
+    refusing.assets_refused = true;
+    let (conn, _) = refusing.spawn();
+    conn.application_auth("id", &Secret::new("s"))
+        .await
+        .unwrap();
+    let session = conn
+        .account_auth(&list.permit(ACCOUNT).unwrap(), &Secret::new("tok"))
+        .await
+        .unwrap();
+    assert!(session.asset_list().await.is_err());
+}

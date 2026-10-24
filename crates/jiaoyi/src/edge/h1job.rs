@@ -3,7 +3,7 @@
 //! (the one PASS is judged on): the bootstrap, the control, buy-and-hold,
 //! per-year results, the evidence against, notional money and the rules.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use chrono::{Datelike, NaiveDate};
 use jiaoyi_core::research::bootstrap::{week_block, Bootstrap};
@@ -53,12 +53,17 @@ pub fn readings() -> Value {
         "held_out_entries": "on bars opening on or after 2025-10-24T00:00Z; earlier bars are warm-up only",
         "slippage": "per fill, in multiples of the year's median spread; PASS is judged at 1×",
         "commission": "per unit of volume per fill, the median over the class's deals of |commission| ÷ filled units, in USD, converted to the quote currency at that day's FX close",
+        "quote_currency": "the name, in the broker's asset list (ProtoOAAssetListRes), of the symbol's quote asset in the broker's symbol list, both from one load run; a symbol whose quote asset cannot be read, or whose quote currency no FX pair in the universe converts, is refused",
+        "deposit_currency": "the trader record's deposit asset must be named USD in the broker's asset list (otherwise the job fails); every closing deal on a symbol the broker quotes in it must convert at exactly 1, its rate selected in SQL only for those symbols, of any date",
+        "quote_cross_check": "each tested symbol's closing deals executed before the stage's end (the seal for a development job, so no rate of a sealed-period deal is read; the held-out end for a held-out job) must convert quote → deposit within 1% of the FX close of the deal's day: the close of the latest FX daily bar opened at or before the execution, when it opened within the 4 days before it (a weekend and a holiday); a deal without one is not checked, never compared with an older close; a disagreement fails the job; a symbol without a checked deal is not cross-checked",
         "swap": "the broker's current swap terms on every night held (each bar end), 3 nights on the triple day, sign as the broker gives it (credits counted)",
         "money": "notional: $10,000 start, compounding, 0.6% risk; a trade below the minimum volume is skipped (money only)",
         "seeds": {"control": SEED, "bootstrap": SEED},
         "spread_samples": "the second full week of June of each year 2013-2025, streamed day by day; a week that failed 3 times is not asked again and its year takes an estimated spread",
         "bar_basis": "a symbol's basis is the one explaining at least 90% of its informative open/close comparisons with no other above 50%; otherwise the symbol is refused",
-        "tick_recheck": "held-out only: entry days and the days the daily rules exit on are streamed; the fill is the first ask at or above the level (bid at or below for shorts) plus slippage; from the fill the stop trails tick by tick on the last completed day's ATR; a day whose ticks never reach the level makes no trade",
+        "tick_recheck": "held-out only: entry days, the days the daily rules exit on and the period's last day are streamed; every individual quote update is checked, those sharing a millisecond included, the entry side's updates first within a millisecond (the true order of a bid and an ask update there is not known; this order lets a stop reached in the fill's millisecond count); the fill is the first ask at or above the level (bid at or below for shorts) plus slippage; from the fill the stop trails on every bid (ask for shorts) on the last completed day's ATR; a day whose ticks never reach the level makes no trade",
+        "tick_period_end": "held-out only: a trade still open after the period's last day is streamed closes at that day's last bid (long) or ask (short), made worse by the slippage; when that day has no ticks, at its daily close as on daily bars",
+        "held_out_rule_2": "rule 2 on held-out data holds only when both the daily-bar-executed mean (the same rules on daily bars, as the controls are executed) and the tick-counted mean are strictly above the 95th percentile of the daily-bar controls; the controls take the daily-bar execution's entries per symbol per year; both percentiles are reported, and the tick-minus-daily difference is evidence against; rules 1, 3 and 4 and the bootstrap are on the tick-counted trades",
     })
 }
 
@@ -122,11 +127,83 @@ pub enum Deposit {
     Failed(String),
 }
 
-/// The deposit currency (owner, 24-10-2026): the broker-stated deposit asset
-/// of the trader record must be the asset the broker lists as USD (the quote
-/// asset of the XXXUSD symbols, the base asset of USDJPY and USDCAD), and,
-/// as a cross-check, every closing deal on a USD-quoted symbol must convert
-/// quote → deposit at exactly 1.
+/// The broker-stated quote currency of each listed symbol (owner,
+/// 24-10-2026): the name, in the broker's asset list (ProtoOAAssetListRes),
+/// of the symbol's quote asset, both read by one load run. Never inferred
+/// from a symbol's name; a symbol whose quote asset cannot be read is
+/// refused with the reason.
+#[derive(Debug, Clone, Default)]
+pub struct QuoteAssets {
+    pub run: i64,
+    names: HashMap<i64, String>,
+    /// Broker symbol id → its quote asset id, when the list gave one.
+    quote_ids: HashMap<i64, Option<i64>>,
+}
+
+impl QuoteAssets {
+    pub fn from_run(run: i64, assets: &Value, listed: &Value) -> QuoteAssets {
+        let names = assets
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| {
+                Some((
+                    a.get("asset_id")?.as_i64()?,
+                    a.get("name")?.as_str()?.to_string(),
+                ))
+            })
+            .collect();
+        let quote_ids = listed
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| {
+                Some((
+                    s.get("id")?.as_i64()?,
+                    s.get("quote_asset_id").and_then(|q| q.as_i64()),
+                ))
+            })
+            .collect();
+        QuoteAssets {
+            run,
+            names,
+            quote_ids,
+        }
+    }
+
+    pub fn asset_name(&self, asset_id: i64) -> Option<&str> {
+        self.names.get(&asset_id).map(String::as_str)
+    }
+
+    /// The quote currency of a broker symbol, or why it cannot be read.
+    pub fn quote_of(&self, symbol_id: i64) -> Result<(String, i64), String> {
+        let run = self.run;
+        let Some(quote_id) = self.quote_ids.get(&symbol_id) else {
+            return Err(format!(
+                "quote asset not read from the broker: symbol {symbol_id} is not in load run {run}'s symbol list"
+            ));
+        };
+        let Some(quote_id) = *quote_id else {
+            return Err(format!(
+                "quote asset not read from the broker: load run {run}'s symbol list gives symbol {symbol_id} no quote asset id"
+            ));
+        };
+        match self.asset_name(quote_id) {
+            Some(n) => Ok((n.to_string(), quote_id)),
+            None => Err(format!(
+                "quote asset not read from the broker: asset {quote_id} is not in load run {run}'s asset list"
+            )),
+        }
+    }
+}
+
+/// The deposit currency (owner, 24-10-2026): the deposit asset of the
+/// broker's trader record must be named USD in the broker's asset list;
+/// any other deposit fails the job. As a cross-check, every closing deal on
+/// a symbol whose broker-stated quote asset is that deposit asset must
+/// convert quote → deposit at exactly 1. The query selects only those deals'
+/// rates (the filter is in SQL), so no rate of a symbol quoted in another
+/// currency is read here, of any date.
 pub async fn deposit_currency(
     pool: &jiaoyi_store::sqlx::PgPool,
     account_id: i64,
@@ -136,65 +213,29 @@ pub async fn deposit_currency(
             "no trader record (ProtoOATraderRes) stored yet".into(),
         ));
     };
-    let Some((run, _, listed)) = jiaoyi_store::latest_listed_symbols(pool, account_id).await?
-    else {
+    let Some((run, assets, listed)) = jiaoyi_store::latest_assets(pool, account_id).await? else {
         return Ok(Deposit::NotReady(
-            "no load has stored the broker's symbol list yet".into(),
+            "no load has stored the broker's asset list (ProtoOAAssetListRes) yet".into(),
         ));
     };
-    let mut usd_ids = std::collections::BTreeSet::new();
-    for s in listed.as_array().into_iter().flatten() {
-        let name = s.get("name").and_then(|n| n.as_str()).unwrap_or("");
-        let id = match name {
-            "EURUSD" | "GBPUSD" | "AUDUSD" | "NZDUSD" | "XAUUSD" | "XAGUSD" => {
-                s.get("quote_asset_id")
-            }
-            "USDJPY" | "USDCAD" => s.get("base_asset_id"),
-            _ => None,
-        };
-        if let Some(id) = id.and_then(|v| v.as_i64()) {
-            usd_ids.insert(id);
-        }
-    }
-    let usd_id = match usd_ids.iter().collect::<Vec<_>>().as_slice() {
-        [] => {
-            return Ok(Deposit::NotReady(format!(
-                "load run {run}'s symbol list has no asset ids yet (kept from this release on)"
-            )))
-        }
-        [one] => **one,
-        many => {
+    let quotes = QuoteAssets::from_run(run, &assets, &listed);
+    let name = match quotes.asset_name(deposit) {
+        Some(n) => n.to_string(),
+        None => {
             return Ok(Deposit::Failed(format!(
-                "the broker lists USD under several asset ids: {many:?}"
+                "the deposit asset {deposit} is not in load run {run}'s asset list: the deposit currency cannot be read"
             )))
         }
     };
-    if deposit != usd_id {
+    if name != "USD" {
         return Ok(Deposit::Failed(format!(
-            "the deposit asset {deposit} is not USD (asset {usd_id}); money cannot be converted"
+            "the deposit currency is {name} (asset {deposit}), not USD: money cannot be converted"
         )));
     }
-    let usd_quoted = [
-        "EURUSD",
-        "GBPUSD",
-        "AUDUSD",
-        "NZDUSD",
-        "XAUUSD",
-        "XAGUSD",
-        "BTCUSD",
-        "ETHUSD",
-        "US500",
-        "NAS100",
-        "US30",
-        "SpotCrude",
-        "SpotBrent",
-        "NatGas",
-    ]
-    .map(String::from);
-    let rates = rs::closing_quote_to_deposit_rates(pool, account_id, &usd_quoted).await?;
+    let rates = rs::closing_rates_quoted_in(pool, account_id, run, deposit).await?;
     if rates.is_empty() || rates.iter().any(|r| (r - 1.0).abs() > 1e-9) {
         return Ok(Deposit::Failed(format!(
-            "the deal cross-check fails: {} closing deals on USD-quoted symbols, quote→deposit rates other than 1: {:?}",
+            "the deal cross-check fails: {} closing deals on symbols quoted in the deposit asset, quote→deposit rates other than 1: {:?}",
             rates.len(),
             rates.iter().filter(|r| (*r - 1.0).abs() > 1e-9).take(5).collect::<Vec<_>>()
         )));
@@ -202,9 +243,8 @@ pub async fn deposit_currency(
     Ok(Deposit::Usd(json!({
         "currency": "USD",
         "deposit_asset_id": deposit,
-        "usd_asset_id": usd_id,
-        "symbol_list_from_load_run": run,
-        "cross_check": format!("{} closing deals on USD-quoted symbols, all at quote→deposit rate 1", rates.len()),
+        "asset_list_from_load_run": run,
+        "cross_check": format!("{} closing deals on symbols the broker quotes in USD, all at quote→deposit rate 1", rates.len()),
     })))
 }
 
@@ -221,6 +261,15 @@ pub async fn prepare(data: &Data<'_>, account_id: i64, deposit: Value) -> anyhow
         .map_err(anyhow::Error::msg)?;
     let samples = rs::spread_samples(pool, account_id).await?;
     let end = data.stage().end();
+    // The quote currencies, from the load run that established the deposit.
+    let run = deposit
+        .get("asset_list_from_load_run")
+        .and_then(|r| r.as_i64())
+        .ok_or_else(|| anyhow::anyhow!("the deposit evidence names no asset list"))?;
+    let (assets, listed) = jiaoyi_store::assets_of_run(pool, account_id, run)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("load run {run}'s asset list is not stored"))?;
+    let quotes = QuoteAssets::from_run(run, &assets, &listed);
     // FX closes for converting money.
     let mut fx = Fx::default();
     for pair in ["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD", "USDJPY", "USDCAD"] {
@@ -228,18 +277,7 @@ pub async fn prepare(data: &Data<'_>, account_id: i64, deposit: Value) -> anyhow
             .await?
             .as_slice()
         {
-            let bars = data.daily_bars(account_id, *id, end).await?;
-            fx.closes.insert(
-                pair.to_string(),
-                bars.iter()
-                    .filter_map(|b| {
-                        Some((
-                            b.bar_date,
-                            rust_decimal::prelude::ToPrimitive::to_f64(&b.close)?,
-                        ))
-                    })
-                    .collect(),
-            );
+            fx.add_bars(pair, &data.daily_bars(account_id, *id, end).await?);
         }
     }
     let mut symbols = Vec::new();
@@ -253,6 +291,7 @@ pub async fn prepare(data: &Data<'_>, account_id: i64, deposit: Value) -> anyhow
             &samples,
             &commission,
             &fx,
+            &quotes,
             end,
         )
         .await
@@ -260,6 +299,15 @@ pub async fn prepare(data: &Data<'_>, account_id: i64, deposit: Value) -> anyhow
             Ok(p) => symbols.push(p),
             Err(why) => refused.push((name.clone(), why)),
         }
+    }
+    // The deal cross-check of each tested symbol's quote currency, over the
+    // deals the stage may read; a disagreement fails the job.
+    for p in &mut symbols {
+        let deals = data
+            .closing_rates(account_id, p.costs.symbol_id, end)
+            .await?;
+        p.costs.quote_cross_check = costs::cross_check_quote(&p.costs.quote, &fx, &deals, end)
+            .map_err(|why| anyhow::anyhow!("{}: {why}", p.costs.name))?;
     }
     Ok(Universe {
         symbols,
@@ -279,6 +327,7 @@ async fn prepare_symbol(
     samples: &[rs::SpreadSample],
     commission: &CommissionBook,
     fx: &Fx,
+    quotes: &QuoteAssets,
     end: chrono::DateTime<chrono::Utc>,
 ) -> Result<Prepared, String> {
     let pool = data.pool();
@@ -291,6 +340,23 @@ async fn prepare_symbol(
         [] => return Err("not stored on the account".into()),
         many => return Err(format!("stored under several broker ids: {many:?}")),
     };
+    let (quote, quote_asset) = quotes.quote_of(id)?;
+    if quote != "USD" {
+        let Some((pair, _)) = costs::fx_pair(&quote) else {
+            return Err(format!(
+                "quoted in {quote}: no FX pair in the universe converts it to USD"
+            ));
+        };
+        if !fx.closes.contains_key(pair) {
+            return Err(format!(
+                "quoted in {quote}: its FX pair {pair} has no stored daily bars on the account"
+            ));
+        }
+    }
+    let quote_label = format!(
+        "the broker's asset list (load run {}): quote asset {quote_asset}",
+        quotes.run
+    );
     let mine: Vec<&rs::SpreadSample> = samples
         .iter()
         .filter(|s| s.broker_symbol_id == id)
@@ -315,8 +381,6 @@ async fn prepare_symbol(
         .map_err(|e| e.to_string())?
         .ok_or("no symbol details stored")?;
     let swap = SwapTerms::from_terms(&terms)?;
-    let (quote, quote_label) =
-        costs::quote_currency(name, class).ok_or("quote currency not known")?;
     let (c, label) = commission.per_class[class.as_str()].clone();
     let costs = SymbolCosts {
         name: name.to_string(),
@@ -330,6 +394,7 @@ async fn prepare_symbol(
         swap,
         quote,
         quote_label,
+        quote_cross_check: String::new(),
         min_units: terms.min_volume.map(|v| v as f64 / 100.0),
         step_units: terms.volume_step.map(|v| v as f64 / 100.0),
     };
@@ -392,6 +457,7 @@ pub fn evaluate(
     s: &Setting,
     per_symbol: &[Vec<Trade>],
     stage: Stage,
+    daily: Option<&[Vec<Trade>]>,
 ) -> (Value, Evaluation) {
     let all: Vec<&Trade> = per_symbol.iter().flatten().collect();
     let rs: Vec<f64> = all.iter().map(|t| t.net_r).collect();
@@ -440,8 +506,12 @@ pub fn evaluate(
         })
         .collect();
     let bootstrap = week_block(&boot_in, BOOTSTRAP_RESAMPLES, SEED);
-    // Control: same symbols, same entries per symbol per year.
-    let counts: Vec<BTreeMap<i32, usize>> = per_symbol
+    // Control: same symbols, same entries per symbol per year, executed on
+    // daily bars; on held-out data the counts are the daily-bar execution's
+    // (Codex P2 on #9: the control is compared with the strategy executed
+    // the same way).
+    let counts: Vec<BTreeMap<i32, usize>> = daily
+        .unwrap_or(per_symbol)
         .iter()
         .map(|trades| {
             let mut c = BTreeMap::new();
@@ -458,7 +528,9 @@ pub fn evaluate(
         .map(|(x, c)| (&x.series, &x.indicators, c))
         .collect();
     let control: Control = random_entries(&syms, &s.params(1.0), CONTROL_RUNS, SEED);
-    let rules = Rules::evaluate(
+    let daily_stats =
+        daily.map(|d| r_stats(&d.iter().flatten().map(|t| t.net_r).collect::<Vec<_>>()));
+    let mut rules = Rules::evaluate(
         stats.n,
         stats.mean_r,
         bootstrap.as_ref().map(|b| b.mean_r_lower_2_5),
@@ -466,6 +538,10 @@ pub fn evaluate(
         stats.pf(),
         H1_MIN_TRADES,
     );
+    // Held-out: rule 2 needs the daily-bar mean above the same p95 too.
+    if let Some(ds) = &daily_stats {
+        rules = rules.also_above_control_p95(ds.mean_r, control.p95);
+    }
     let verdict = match stage {
         Stage::HeldOut => held_out_verdict(&rules).to_string(),
         Stage::Development if rules.rules_1_to_3() => "development: PASS rules 1-3 met".into(),
@@ -539,7 +615,10 @@ pub fn evaluate(
         "control": {
             "runs": control.runs, "seed": control.seed, "entries_per_run": control.entries_per_run,
             "shortfall": control.shortfall, "p95": control.p95,
+            "executed_on": "daily bars",
             "strategy_percentile": eval.control_percentile,
+            "daily_bar_mean_r": daily_stats.as_ref().and_then(|d| d.mean_r),
+            "daily_bar_percentile": daily_stats.as_ref().and_then(|d| d.mean_r).and_then(|m| control.percentile_of(m)),
         },
         "buy_and_hold": {"definition": "long from each trade's entry-day open to its exit-day close, same costs, in the trade's R", "r": r_stats(&bh)},
         "per_year": per_year,
@@ -547,6 +626,12 @@ pub fn evaluate(
         "evidence_against": {
             "without_top_5_trades": without_top5,
             "worst_year": worst_year,
+            "tick_vs_daily_bar": daily_stats.as_ref().map(|d| json!({
+                "tick": stats,
+                "daily_bar": d,
+                "mean_r_difference": stats.mean_r.zip(d.mean_r).map(|(t, d)| t - d),
+                "note": "tick-counted minus daily-bar-executed mean net R; the controls are executed on daily bars",
+            })),
         },
         "spread_estimated_trades": all.iter().filter(|t| t.spread_estimated).count(),
         "long_trades": all.iter().filter(|t| t.side == Side::Long).count(),
@@ -585,6 +670,7 @@ pub fn inputs(u: &Universe, s: &Setting, stage: Stage, prereg_hash: &str) -> (Va
             "commission_usd_per_unit": x.costs.commission_usd_per_unit, "commission_label": x.costs.commission_label,
             "swap": x.costs.swap, "swap_label": "estimated: the broker's current terms applied to every year",
             "quote": x.costs.quote, "quote_label": x.costs.quote_label,
+            "quote_cross_check": x.costs.quote_cross_check,
             "min_units": x.costs.min_units, "step_units": x.costs.step_units,
         })).collect::<Vec<_>>(),
         "refused_symbols": u.refused.iter().map(|(n, r)| json!({"name": n, "reason": r})).collect::<Vec<_>>(),

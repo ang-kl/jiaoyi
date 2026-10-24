@@ -131,7 +131,13 @@ CREATE TRIGGER research_spreads_append_only BEFORE UPDATE OR DELETE ON research_
 CREATE UNIQUE INDEX research_spreads_once ON research_spreads (account_id, broker_symbol_id, year)
     WHERE status <> 'failed';
 
--- 4. The H1 jobs: the 9 development cells, breakout {20, 50, 100} × stop
+-- 4. The broker's asset list (ProtoOAAssetListReq), as each load reads it,
+--    so that quote and deposit currencies are the broker's own names, never
+--    assumed. Each symbol in `listed_symbols` also carries its base and quote
+--    asset ids and names. NULL for loads made before this migration.
+ALTER TABLE load_runs ADD COLUMN assets JSONB;
+
+-- 5. The H1 jobs: the 9 development cells, breakout {20, 50, 100} × stop
 --    {2, 3, 4} × ATR, the default (50, 3) first; then the one held-out job at
 --    the default, refused unless the development gate is met under the same
 --    hash. Prices: live 43002148.

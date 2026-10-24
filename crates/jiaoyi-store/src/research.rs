@@ -352,22 +352,55 @@ pub async fn commission_per_unit(
         .collect())
 }
 
-/// The quote → deposit rates of an account's closing deals on the named
-/// symbols: only that column, to establish the deposit currency.
-pub async fn closing_quote_to_deposit_rates(
+/// The quote → deposit rates of the closing deals on the symbols whose
+/// quote asset, in the given load run's broker symbol list, is `asset_id`.
+/// The filter is in the query, so no other symbol's rate is read: a deal on
+/// a symbol quoted in another currency carries a price of that currency,
+/// and a development job must not read one dated in the sealed period
+/// (owner, 24-10-2026). Any date is read here, because a rate of a symbol
+/// quoted in the deposit currency itself is 1 by definition, not a price.
+pub const QUOTED_IN_SQL: &str = "SELECT d.close_quote_to_deposit_rate
+     FROM deals d
+     WHERE d.account_id = $1 AND d.is_closing AND d.close_quote_to_deposit_rate IS NOT NULL
+       AND d.broker_symbol_id IN (
+         SELECT (e->>'id')::bigint
+         FROM load_runs r, jsonb_array_elements(r.listed_symbols) e
+         WHERE r.id = $2 AND r.account_id = $1
+           AND jsonb_typeof(e->'quote_asset_id') = 'number'
+           AND (e->>'quote_asset_id')::bigint = $3)";
+
+pub async fn closing_rates_quoted_in(
     pool: &PgPool,
     account_id: i64,
-    symbols: &[String],
+    load_run_id: i64,
+    asset_id: i64,
 ) -> crate::Result<Vec<f64>> {
-    Ok(sqlx::query_scalar(
-        "SELECT d.close_quote_to_deposit_rate
-         FROM deals d JOIN symbols s
-           ON s.account_id = d.account_id AND s.broker_symbol_id = d.broker_symbol_id
-         WHERE d.account_id = $1 AND d.is_closing AND d.close_quote_to_deposit_rate IS NOT NULL
-           AND s.name = ANY($2)",
+    Ok(sqlx::query_scalar(QUOTED_IN_SQL)
+        .bind(account_id)
+        .bind(load_run_id)
+        .bind(asset_id)
+        .fetch_all(pool)
+        .await?)
+}
+
+/// (executed at, quote → deposit rate) of one symbol's closing deals
+/// executed before `before`: the filter is in the query, so a deal at or
+/// after it is not read (a development job passes the seal).
+pub async fn closing_rates_of(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+    before: DateTime<Utc>,
+) -> crate::Result<Vec<(DateTime<Utc>, f64)>> {
+    Ok(sqlx::query_as(
+        "SELECT executed_at, close_quote_to_deposit_rate FROM deals
+         WHERE account_id = $1 AND broker_symbol_id = $2 AND is_closing
+           AND close_quote_to_deposit_rate IS NOT NULL AND executed_at < $3
+         ORDER BY executed_at, deal_id",
     )
     .bind(account_id)
-    .bind(symbols)
+    .bind(symbol_id)
+    .bind(before)
     .fetch_all(pool)
     .await?)
 }

@@ -111,6 +111,29 @@ impl<'a> Data<'a> {
         Ok(rows)
     }
 
+    /// (executed at, quote → deposit rate) of a symbol's closing deals
+    /// executed before `before`. The rate of a deal on a symbol quoted in
+    /// another currency is a price of that day, so the seal holds for it as
+    /// for bars (owner, 24-10-2026): refused when `before` is past this
+    /// stage's limit, and the filter is in the query, so a later deal is
+    /// never read.
+    pub async fn closing_rates(
+        &self,
+        account_id: i64,
+        symbol_id: i64,
+        before: DateTime<Utc>,
+    ) -> Result<Vec<(DateTime<Utc>, f64)>, DataError> {
+        if before > self.stage.end() {
+            return Err(DataError::Sealed(format!(
+                "a {} job reads deals executed before {}, not {}; refused, not clamped",
+                self.stage.as_str(),
+                self.stage.end().to_rfc3339(),
+                before.to_rfc3339()
+            )));
+        }
+        Ok(store::research::closing_rates_of(self.pool, account_id, symbol_id, before).await?)
+    }
+
     /// Broker ticks of one side over `[from_ms, to_ms]` (at most a week),
     /// streamed from the broker and never stored. Refused when the window
     /// reaches this stage's limit.

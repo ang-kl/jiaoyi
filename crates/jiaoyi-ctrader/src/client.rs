@@ -130,6 +130,15 @@ impl Drop for Connection {
     }
 }
 
+/// One asset of an account, as `ProtoOAAsset` gives it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Asset {
+    pub asset_id: i64,
+    pub name: String,
+    pub display_name: Option<String>,
+    pub digits: Option<i32>,
+}
+
 /// The accounts an access token's grant covers, as
 /// `ProtoOAGetAccountListByAccessTokenRes` gives them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -604,6 +613,29 @@ impl AccountSession<'_> {
                 got,
             })
         }
+    }
+
+    /// The account's assets (currencies and the like): id → name, as the
+    /// broker states them (`ProtoOAAssetListReq`, read-only).
+    pub async fn asset_list(&self) -> Result<Vec<Asset>, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaAssetListReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res
+            .asset
+            .into_iter()
+            .map(|a| Asset {
+                asset_id: a.asset_id,
+                name: a.name,
+                display_name: a.display_name,
+                digits: a.digits,
+            })
+            .collect())
     }
 
     pub async fn symbols_list(&self) -> Result<pb::ProtoOaSymbolsListRes, ClientError> {

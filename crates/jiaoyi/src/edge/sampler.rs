@@ -81,6 +81,54 @@ pub fn merge(
     out
 }
 
+/// Every individual quote update of one day, both sides, each with the other
+/// side carried forward: `(ts_ms, bid, ask)`, one per tick. Nothing is
+/// collapsed, so a price reached and left within one millisecond is seen
+/// (Codex P2 on #9: the held-out triggers and stops are checked on these;
+/// the spread samples keep [`merge`]). Within one millisecond the order of
+/// a bid update relative to an ask update is not known: `first`'s updates
+/// of that millisecond come first, each side in the order received.
+pub fn updates(
+    bids: &[HistTick],
+    asks: &[HistTick],
+    first: QuoteSide,
+) -> Vec<(i64, Option<i64>, Option<i64>)> {
+    let mut out = Vec::with_capacity(bids.len() + asks.len());
+    let (mut bid, mut ask) = (None, None);
+    let (mut i, mut j) = (0, 0);
+    while i < bids.len() || j < asks.len() {
+        let ts = match (bids.get(i), asks.get(j)) {
+            (Some(b), Some(a)) => b.ts_ms.min(a.ts_ms),
+            (Some(b), None) => b.ts_ms,
+            (None, Some(a)) => a.ts_ms,
+            (None, None) => break,
+        };
+        let order = match first {
+            QuoteSide::Bid => [QuoteSide::Bid, QuoteSide::Ask],
+            QuoteSide::Ask => [QuoteSide::Ask, QuoteSide::Bid],
+        };
+        for side in order {
+            match side {
+                QuoteSide::Bid => {
+                    while bids.get(i).is_some_and(|b| b.ts_ms == ts) {
+                        bid = Some(bids[i].price_e5);
+                        i += 1;
+                        out.push((ts, bid, ask));
+                    }
+                }
+                QuoteSide::Ask => {
+                    while asks.get(j).is_some_and(|a| a.ts_ms == ts) {
+                        ask = Some(asks[j].price_e5);
+                        j += 1;
+                        out.push((ts, bid, ask));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 fn e5(d: Decimal) -> Option<i64> {
     (d * Decimal::from(100_000)).to_i64()
 }
@@ -356,5 +404,42 @@ mod tests {
             (c.bid, c.ask, c.mid, c.observations, c.uninformative),
             (1, 0, 1, 2, 1)
         );
+    }
+
+    /// Codex P2 on #9: every update is kept, those sharing a millisecond
+    /// included; `first`'s side leads within a millisecond.
+    #[test]
+    fn updates_keep_every_tick_of_a_millisecond() {
+        let t = |ts, p| HistTick {
+            ts_ms: ts,
+            price_e5: p,
+        };
+        let bids = [t(1, 100), t(3, 101), t(3, 95), t(3, 100)];
+        let asks = [t(2, 103), t(3, 110), t(3, 104)];
+        assert_eq!(
+            updates(&bids, &asks, QuoteSide::Ask),
+            vec![
+                (1, Some(100), None),
+                (2, Some(100), Some(103)),
+                (3, Some(100), Some(110)),
+                (3, Some(100), Some(104)),
+                (3, Some(101), Some(104)),
+                (3, Some(95), Some(104)),
+                (3, Some(100), Some(104)),
+            ]
+        );
+        let by_bid = updates(&bids, &asks, QuoteSide::Bid);
+        assert_eq!(
+            by_bid[2..],
+            [
+                (3, Some(101), Some(103)),
+                (3, Some(95), Some(103)),
+                (3, Some(100), Some(103)),
+                (3, Some(100), Some(110)),
+                (3, Some(100), Some(104)),
+            ]
+        );
+        // The spread samples' merge still gives one row per millisecond.
+        assert_eq!(merge(&bids, &asks, None, None).len(), 3);
     }
 }

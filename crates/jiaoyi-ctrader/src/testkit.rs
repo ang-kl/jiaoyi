@@ -73,6 +73,10 @@ pub struct FakeBroker {
     /// then on, as the broker does. Spent tokens are shared by clones.
     pub pairs: Vec<(String, String)>,
     pub spent: Arc<Mutex<HashSet<String>>>,
+    /// The account's assets (id, name), answered to ProtoOAAssetListReq.
+    pub assets: Vec<(i64, String)>,
+    /// Refuse the asset-list request (UNSUPPORTED_MESSAGE) instead.
+    pub assets_refused: bool,
     /// Refresh requests received, shared by clones (spans connections).
     pub refresh_count: Arc<std::sync::atomic::AtomicUsize>,
     /// A token event hub shared by fakes: every refresh on any of them sends
@@ -312,6 +316,28 @@ impl FakeBroker {
                                 )),
                                 None => out.push(oa_error(id, "CH_ACCESS_TOKEN_INVALID")),
                             }
+                        }
+                    } else if pt == Oa::ProtoOaAssetListReq as i32 {
+                        match (!self.assets_refused).then_some(&self.assets) {
+                            Some(list) => out.push(reply(
+                                id,
+                                Oa::ProtoOaAssetListRes as i32,
+                                pb::ProtoOaAssetListRes {
+                                    payload_type: None,
+                                    ctid_trader_account_id: self.account_id,
+                                    asset: list
+                                        .iter()
+                                        .map(|(a, n)| pb::ProtoOaAsset {
+                                            asset_id: *a,
+                                            name: n.clone(),
+                                            display_name: None,
+                                            digits: Some(2),
+                                        })
+                                        .collect(),
+                                }
+                                .encode_to_vec(),
+                            )),
+                            None => out.push(oa_error(id, "UNSUPPORTED_MESSAGE")),
                         }
                     } else if pt == Oa::ProtoOaSymbolsListReq as i32 {
                         out.push(reply(

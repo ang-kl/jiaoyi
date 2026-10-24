@@ -413,6 +413,9 @@ async fn run_trial(
     if u.symbols.is_empty() {
         anyhow::bail!("no symbol could be tested: {:?}", u.refused);
     }
+    // Held-out: the same rules executed on daily bars, which the controls
+    // are compared with (rule 2 needs both means above their p95).
+    let daily = (stage == Stage::HeldOut).then(|| h1job::simulate_all(&u, &setting, 1.0));
     let (per_symbol, notes) = match stage {
         Stage::Development => (h1job::simulate_all(&u, &setting, 1.0), Vec::new()),
         Stage::HeldOut => {
@@ -429,7 +432,7 @@ async fn run_trial(
             (all, notes)
         }
     };
-    let (mut results, eval) = h1job::evaluate(&u, &setting, &per_symbol, stage);
+    let (mut results, eval) = h1job::evaluate(&u, &setting, &per_symbol, stage, daily.as_deref());
     let slippage = h1job::slippage_table(&u, &setting);
     results["slippage_daily_bars"] = slippage.clone();
     results["evidence_against"]["slippage_2x"] = slippage["2x"].clone();

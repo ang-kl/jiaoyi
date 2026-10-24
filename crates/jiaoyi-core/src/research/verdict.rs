@@ -46,6 +46,20 @@ impl Rules {
         }
     }
 
+    /// Rule 2 also requires `other_mean` strictly above the same control
+    /// p95. Held-out (Codex P2 on #9): the controls are executed on daily
+    /// bars, so the daily-bar-executed mean and the tick-counted mean must
+    /// both be above it; either one alone fails rule 2.
+    pub fn also_above_control_p95(
+        mut self,
+        other_mean: Option<f64>,
+        control_p95: Option<f64>,
+    ) -> Rules {
+        self.rule2_above_control_p95 &=
+            matches!((other_mean, control_p95), (Some(m), Some(p)) if m > p);
+        self
+    }
+
     pub fn rules_1_to_3(&self) -> bool {
         self.rule1_mean_positive
             && self.rule1_bootstrap_lower_positive
@@ -119,6 +133,24 @@ mod tests {
         let at_p95 = Rules::evaluate(120, Some(0.1), Some(0.01), Some(0.1), Some(2.0), 80);
         assert!(!at_p95.rule2_above_control_p95);
         assert_eq!(held_out_verdict(&at_p95), "FAIL");
+        // Held-out rule 2: both means above the p95, each alone fails it.
+        let both = pass.also_above_control_p95(Some(0.15), Some(0.1));
+        assert!(both.rule2_above_control_p95);
+        assert!(
+            !pass
+                .also_above_control_p95(Some(0.1), Some(0.1))
+                .rule2_above_control_p95
+        );
+        assert!(
+            !pass
+                .also_above_control_p95(None, Some(0.1))
+                .rule2_above_control_p95
+        );
+        assert!(
+            !at_p95
+                .also_above_control_p95(Some(0.5), Some(0.1))
+                .rule2_above_control_p95
+        );
         let few = Rules::evaluate(79, Some(0.2), Some(0.01), Some(0.1), Some(2.0), 80);
         assert_eq!(held_out_verdict(&few), "insufficient evidence");
         let zero_lb = Rules::evaluate(200, Some(0.2), Some(0.0), Some(0.1), Some(2.0), 80);

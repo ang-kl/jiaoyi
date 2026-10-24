@@ -13,7 +13,14 @@
 //!
 //! Between those days the daily-bar rules run unchanged. A day on which the
 //! daily rules would exit is streamed the same way; if its ticks do not reach
-//! the stop, the trade goes on. Both results are kept, with the difference.
+//! the stop, the trade goes on. The period's last day is streamed too: a
+//! trade still open after it closes at that day's last bid (long) or ask
+//! (short), made worse by the slippage. Both results are kept, with the
+//! difference.
+//!
+//! Every individual quote update is checked, those sharing a millisecond
+//! included (Codex P2 on #9); within a millisecond the entry side's updates
+//! come first.
 
 use chrono::{DateTime, Duration, Utc};
 use jiaoyi_core::research::h1::{
@@ -25,7 +32,10 @@ use serde::Serialize;
 
 use super::data::{Data, DataError};
 use super::h1job::Prepared;
-use super::sampler::merge;
+use super::sampler::updates;
+
+/// `(ts_ms, bid, ask)`: one quote update, the other side carried forward.
+type Quote = (i64, Option<i64>, Option<i64>);
 
 /// One trade's daily-bar and tick results.
 #[derive(Debug, Clone, Serialize)]
@@ -39,13 +49,16 @@ pub struct Recheck {
     pub note: Option<String>,
 }
 
-/// `(ts_ms, bid, ask)` quote updates of the bar opening at `open`.
+/// `(ts_ms, bid, ask)`: every individual quote update of the bar opening at
+/// `open`, none collapsed (a price reached within one millisecond counts);
+/// within a millisecond `first`'s side leads.
 async fn day_quotes(
     data: &Data<'_>,
     session: &AccountSession<'_>,
     symbol_id: i64,
     open: DateTime<Utc>,
-) -> Result<Vec<(i64, Option<i64>, Option<i64>)>, DataError> {
+    first: QuoteSide,
+) -> Result<Vec<Quote>, DataError> {
     let from = open.timestamp_millis();
     let to = (open + Duration::days(1)).timestamp_millis() - 1;
     let b = data
@@ -56,7 +69,7 @@ async fn day_quotes(
         .await?;
     let bids: Vec<HistTick> = b.ticks.iter().map(|(t, _)| *t).collect();
     let asks: Vec<HistTick> = a.ticks.iter().map(|(t, _)| *t).collect();
-    Ok(merge(&bids, &asks, None, None))
+    Ok(updates(&bids, &asks, first))
 }
 
 fn px(e5: i64) -> f64 {
@@ -130,16 +143,27 @@ async fn tick_trade(
     };
     let d = p.stop_atr * atr_e;
     let slip = |k: usize| p.slip_mult * s.spread[k];
-    // The side compared with the stop, in the bars' basis: a long's bid
-    // plus the bar→bid step; a short's ask less the bar→ask step.
-    let reference = |k: usize, bid: i64, ask: i64| {
+    // Within a millisecond the entry side's updates come first, so a stop
+    // reached in the fill's millisecond counts (the worse order for the
+    // trade; the true order of a bid and an ask update there is not known).
+    let first = if long { QuoteSide::Ask } else { QuoteSide::Bid };
+    // The exit side's price (a long's bid, a short's ask), when known, and
+    // the same price in the bars' basis, compared with the stop.
+    let exit_side = |k: usize, b: &Option<i64>, a: &Option<i64>| -> Option<(f64, f64)> {
         if long {
-            px(bid) + s.to_bid[k]
+            b.map(|b| (px(b), px(b) + s.to_bid[k]))
         } else {
-            px(ask) - s.to_ask[k]
+            a.map(|a| (px(a), px(a) - s.to_ask[k]))
         }
     };
-    let q = day_quotes(data, session, id, x.opens[t_e]).await?;
+    let exit_fill = |k: usize, price: f64| {
+        if long {
+            price - slip(k)
+        } else {
+            price + slip(k)
+        }
+    };
+    let q = day_quotes(data, session, id, x.opens[t_e], first).await?;
     let fill_at = q.iter().position(|(_, b, a)| match (long, b, a) {
         (true, _, Some(a)) => px(*a) >= level,
         (false, Some(b), _) => px(*b) <= level,
@@ -169,30 +193,30 @@ async fn tick_trade(
             stop.min(best + p.stop_atr * atr)
         }
     };
-    // Walk one day's quotes from index `from`, trailing on `atr`.
-    let walk = |q: &[(i64, Option<i64>, Option<i64>)],
+    // Walk one day's updates from index `from`, trailing on `atr`. Every
+    // update of the exit side is checked; the first one checked on a day
+    // walked from its start is a gap when beyond the stop.
+    let walk = |q: &[Quote],
                 from: usize,
                 k: usize,
                 atr: f64,
                 stop: &mut f64,
                 best: &mut Option<f64>|
      -> Option<(f64, f64, ExitReason)> {
-        for (n, (_, b, a)) in q.iter().enumerate().skip(from) {
-            let (Some(b), Some(a)) = (b, a) else { continue };
-            let r = reference(k, *b, *a);
+        let mut opening = from == 0;
+        for (_, b, a) in q.iter().skip(from) {
+            let Some((price, r)) = exit_side(k, b, a) else {
+                continue;
+            };
             if beyond(r, *stop) {
-                let fill = if long {
-                    px(*b) - slip(k)
-                } else {
-                    px(*a) + slip(k)
-                };
-                let why = if n == from && from == 0 {
+                let why = if opening {
                     ExitReason::GapThroughStop
                 } else {
                     ExitReason::Stop
                 };
-                return Some((r, fill, why));
+                return Some((r, exit_fill(k, price), why));
             }
+            opening = false;
             let nb = best.map_or(r, |x| better(x, r));
             *best = Some(nb);
             *stop = trail(*stop, nb, atr);
@@ -204,6 +228,12 @@ async fn tick_trade(
         exit = Some((t_e, r, f, why));
     }
     let mut note = None;
+    // The last day's updates, when streamed: the period-end close takes its
+    // last exit-side quote.
+    let mut last_day: Option<Vec<Quote>> = None;
+    if exit.is_none() && t_e == s.last {
+        last_day = Some(q[i0..].to_vec());
+    }
     if exit.is_none() {
         if let (Some(b), Some(a)) = (best, ind.atr[t_e]) {
             stop = trail(stop, b, a);
@@ -215,9 +245,19 @@ async fn tick_trade(
             } else {
                 s.open[u] >= stop || s.high[u] >= stop
             };
-            if daily_exit {
-                let qu = day_quotes(data, session, id, x.opens[u]).await?;
+            // A day the daily rules exit on is streamed, and so is the
+            // period's last day (Codex P2 on #9): a tick stop or trail hit
+            // there counts.
+            if daily_exit || u == s.last {
+                let qu = day_quotes(data, session, id, x.opens[u], first).await?;
                 if qu.is_empty() {
+                    if !daily_exit {
+                        note = Some(format!(
+                            "no ticks on {}: the daily-bar period-end close is kept",
+                            s.dates[u]
+                        ));
+                        break;
+                    }
                     // No ticks that day: the daily-bar exit stands.
                     let gap = if long {
                         s.open[u] <= stop
@@ -256,6 +296,9 @@ async fn tick_trade(
                 if let Some(a) = ind.atr[u] {
                     stop = trail(stop, best_d, a);
                 }
+                if u == s.last {
+                    last_day = Some(qu);
+                }
                 continue;
             }
             best_d = better(best_d, if long { s.high[u] } else { s.low[u] });
@@ -264,14 +307,26 @@ async fn tick_trade(
             }
         }
     }
+    // Still open at the period's end: closed at the last day's last quote
+    // on the exit side (the bid for a long, the ask for a short) and the
+    // slippage; without ticks that day, at the daily close as before.
     let (t_x, exit_ref, exit_fill, exit_reason) = exit.unwrap_or_else(|| {
-        let c = s.close[s.last];
-        let f = if long {
-            c - s.to_bid[s.last] - slip(s.last)
-        } else {
-            c + s.to_ask[s.last] + slip(s.last)
-        };
-        (s.last, c, f, ExitReason::PeriodEnd)
+        let k = s.last;
+        let last_quote = last_day
+            .as_deref()
+            .and_then(|q| q.iter().rev().find_map(|(_, b, a)| exit_side(k, b, a)));
+        match last_quote {
+            Some((price, r)) => (k, r, exit_fill(k, price), ExitReason::PeriodEnd),
+            None => {
+                let c = s.close[k];
+                let f = if long {
+                    c - s.to_bid[k] - slip(k)
+                } else {
+                    c + s.to_ask[k] + slip(k)
+                };
+                (k, c, f, ExitReason::PeriodEnd)
+            }
+        }
     });
     let gross_r = if long {
         (exit_fill - entry_fill) / d

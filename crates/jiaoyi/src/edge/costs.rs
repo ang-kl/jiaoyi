@@ -11,7 +11,9 @@
 //!   overall median (estimated).
 //! - **Swap:** the broker's current swap terms applied to every night held,
 //!   the triple day included (estimated for past years).
-//! - **Money → price units:** with the matching FX daily close on that date.
+//! - **Money → price units:** with the matching FX daily close on that date,
+//!   in the quote currency the broker's asset list names (never inferred),
+//!   cross-checked against the account's closing deals.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -159,36 +161,6 @@ impl SpreadBook {
     }
 }
 
-/// The currency a symbol's prices are quoted in. FX, metals and crypto: the
-/// last three letters of the six-letter name. Indices and energy: the
-/// exchange currency, a stated assumption (the broker's asset list request
-/// is not on the read allowlist), labelled so.
-pub fn quote_currency(name: &str, class: AssetClass) -> Option<(String, &'static str)> {
-    match class {
-        AssetClass::Fx | AssetClass::Metal | AssetClass::Crypto
-            if name.len() == 6 && name.is_ascii() =>
-        {
-            Some((name[3..].to_string(), "from the symbol name"))
-        }
-        AssetClass::EquityIndex | AssetClass::Energy => {
-            let c = match name {
-                "US500" | "NAS100" | "US30" => "USD",
-                "GER40" => "EUR",
-                "UK100" => "GBP",
-                "JPN225" => "JPY",
-                "AUS200" => "AUD",
-                "SpotCrude" | "SpotBrent" | "NatGas" => "USD",
-                _ => return None,
-            };
-            Some((
-                c.to_string(),
-                "assumed: the exchange currency (not read from the broker)",
-            ))
-        }
-        _ => None,
-    }
-}
-
 /// The FX pairs that convert USD to another quote currency, and whether USD
 /// is their base.
 pub fn fx_pair(ccy: &str) -> Option<(&'static str, bool)> {
@@ -207,9 +179,43 @@ pub fn fx_pair(ccy: &str) -> Option<(&'static str, bool)> {
 #[derive(Debug, Clone, Default)]
 pub struct Fx {
     pub closes: HashMap<String, BTreeMap<NaiveDate, f64>>,
+    /// The same closes keyed by their bar's open, for the deal cross-check.
+    pub closes_by_open: HashMap<String, BTreeMap<DateTime<Utc>, f64>>,
 }
 
 impl Fx {
+    /// Keep a pair's daily closes (bars the stage's data layer returned).
+    pub fn add_bars(&mut self, pair: &str, bars: &[BarRow]) {
+        for b in bars {
+            if let Some(c) = b.close.to_f64() {
+                self.closes
+                    .entry(pair.to_string())
+                    .or_default()
+                    .insert(b.bar_date, c);
+                self.closes_by_open
+                    .entry(pair.to_string())
+                    .or_default()
+                    .insert(b.bar_open_utc, c);
+            }
+        }
+    }
+
+    /// USD per one unit of `ccy` at the close of the deal day's daily bar:
+    /// the latest bar opened at or before `at`, when it opened within
+    /// [`DEAL_DAY_WINDOW`] of it (a weekend or holiday deal takes the last
+    /// trading day's close). `None` without such a bar or pair.
+    pub fn usd_per_at(&self, ccy: &str, at: DateTime<Utc>) -> Option<f64> {
+        if ccy == "USD" {
+            return Some(1.0);
+        }
+        let (pair, usd_base) = fx_pair(ccy)?;
+        let (open, c) = self.closes_by_open.get(pair)?.range(..=at).next_back()?;
+        if at - *open >= DEAL_DAY_WINDOW {
+            return None;
+        }
+        Some(if usd_base { 1.0 / c } else { *c })
+    }
+
     /// USD per one unit of `ccy` on `date`: the latest close on or before
     /// the date; before the pair's first bar, its first close (estimated).
     pub fn usd_per(&self, ccy: &str, date: NaiveDate) -> Option<(f64, bool)> {
@@ -224,6 +230,69 @@ impl Fx {
         };
         Some((if usd_base { 1.0 / c } else { c }, estimated))
     }
+}
+
+/// How far a deal's quote → deposit rate may stand from the FX close of its
+/// day (owner, 24-10-2026).
+pub const RATE_TOLERANCE: f64 = 0.01;
+
+/// A deal's day is the latest FX daily bar opened before it within this
+/// window (a weekend and a holiday); a deal with none is not checked rather
+/// than compared with an older close.
+pub const DEAL_DAY_WINDOW: Duration = Duration::days(4);
+
+/// The deal cross-check of a symbol's broker-stated quote currency (owner,
+/// 24-10-2026): each closing deal's quote → deposit rate (deposit per one
+/// unit of the quote currency; the deposit is USD) must agree within 1% with
+/// the FX close of the deal's day, the close of the daily bar containing the
+/// execution. `deals` are only those the stage may read (executed before its
+/// end); a symbol without one is "not cross-checked". `Err` is a
+/// disagreement: it fails the job.
+pub fn cross_check_quote(
+    quote: &str,
+    fx: &Fx,
+    deals: &[(DateTime<Utc>, f64)],
+    before: DateTime<Utc>,
+) -> Result<String, String> {
+    if deals.is_empty() {
+        return Ok(format!(
+            "not cross-checked: no closing deal executed before {before}"
+        ));
+    }
+    let mut checked = 0usize;
+    let mut unpriced = 0usize;
+    let mut worst = 0.0f64;
+    for (at, rate) in deals {
+        let Some(expected) = fx.usd_per_at(quote, *at) else {
+            unpriced += 1;
+            continue;
+        };
+        let diff = (rate / expected - 1.0).abs();
+        if diff.is_nan() || diff > RATE_TOLERANCE {
+            return Err(format!(
+                "the broker-stated quote currency {quote} disagrees with a deal: the closing deal at {at} converted quote → deposit at {rate}, the {quote} FX close of that day gives {expected} ({:.2}% apart, more than {}%)",
+                diff * 100.0,
+                RATE_TOLERANCE * 100.0
+            ));
+        }
+        checked += 1;
+        worst = worst.max(diff);
+    }
+    if checked == 0 {
+        return Ok(format!(
+            "not cross-checked: {unpriced} closing deals executed before {before}, none with an FX close of its day"
+        ));
+    }
+    Ok(format!(
+        "{checked} closing deals executed before {before} agree within {}% (largest difference {:.3}%){}",
+        RATE_TOLERANCE * 100.0,
+        worst * 100.0,
+        if unpriced > 0 {
+            format!("; {unpriced} without an FX close of their day not checked")
+        } else {
+            String::new()
+        }
+    ))
 }
 
 /// Commission per unit of volume in the deposit currency (USD), by class.
@@ -372,8 +441,14 @@ pub struct SymbolCosts {
     pub commission_usd_per_unit: f64,
     pub commission_label: String,
     pub swap: SwapTerms,
+    /// The quote currency: the name of the symbol's quote asset in the
+    /// broker's asset list (ProtoOAAssetListRes), never inferred.
     pub quote: String,
-    pub quote_label: &'static str,
+    /// Where the quote currency was read (the load run of the asset list).
+    pub quote_label: String,
+    /// The deal cross-check of the quote → deposit rate over the deals the
+    /// stage may read ("not cross-checked" without one).
+    pub quote_cross_check: String,
     /// Broker volume limits in units (volume in cents ÷ 100).
     pub min_units: Option<f64>,
     pub step_units: Option<f64>,
@@ -493,6 +568,7 @@ mod tests {
                 ("USDJPY".into(), BTreeMap::from([(d("2020-01-02"), 100.0)])),
                 ("EURUSD".into(), BTreeMap::from([(d("2020-01-02"), 1.25)])),
             ]),
+            ..Default::default()
         };
         // USD per yen = 1 / 100; per euro = 1.25.
         assert_eq!(fx.usd_per("JPY", d("2020-01-03")), Some((0.01, false)));
@@ -528,14 +604,86 @@ mod tests {
         .unwrap();
         // −3.65% a year of a price of 100: 100 × −3.65 / 100 / 365 = −0.01.
         assert!((pct.per_night(true, 100.0) - -0.01).abs() < 1e-15);
-        assert_eq!(
-            quote_currency("USDJPY", AssetClass::Fx),
-            Some(("JPY".into(), "from the symbol name"))
+        assert_eq!(fx_pair("JPY"), Some(("USDJPY", true)));
+        assert_eq!(fx_pair("EUR"), Some(("EURUSD", false)));
+        assert_eq!(fx_pair("CHF"), None);
+    }
+
+    /// Owner, 24-10-2026: a deal's quote → deposit rate must agree with the
+    /// FX close of its day within 1%, or the job fails.
+    #[test]
+    fn the_quote_cross_check_takes_the_close_of_the_deals_day() {
+        let at = |s: &str| s.parse::<DateTime<Utc>>().unwrap();
+        let bar = |open: &str, close: &str| BarRow {
+            bar_date: at(open).date_naive(),
+            bar_open_utc: at(open),
+            open: close.parse().unwrap(),
+            high: close.parse().unwrap(),
+            low: close.parse().unwrap(),
+            close: close.parse().unwrap(),
+            tick_volume: 1,
+        };
+        let mut fx = Fx::default();
+        fx.add_bars(
+            "USDJPY",
+            &[
+                bar("2025-03-03T22:00:00Z", "150"),
+                bar("2025-03-04T22:00:00Z", "100"),
+            ],
         );
-        assert_eq!(
-            quote_currency("GER40", AssetClass::EquityIndex).unwrap().0,
-            "EUR"
+        let end = at("2025-10-24T00:00:00Z");
+        // A deal at 14:00 on the 5th is inside the bar opened on the 4th:
+        // its close is 100, so USD per yen is 0.01.
+        let ok = cross_check_quote("JPY", &fx, &[(at("2025-03-05T14:00:00Z"), 0.01009)], end);
+        assert!(ok.unwrap().starts_with("1 closing deals"));
+        // 1.5% apart: the job fails.
+        let bad = cross_check_quote("JPY", &fx, &[(at("2025-03-05T14:00:00Z"), 0.01015)], end);
+        assert!(bad.unwrap_err().contains("disagrees"));
+        // A yen rate read as if the quote were USD: 0.01 against 1.
+        let wrong_ccy = cross_check_quote("USD", &fx, &[(at("2025-03-05T14:00:00Z"), 0.01)], end);
+        assert!(wrong_ccy.is_err());
+        // The bar of the 3rd (close 150) is the deal day for a deal on the 4th
+        // before 22:00: 1/150.
+        assert!(cross_check_quote(
+            "JPY",
+            &fx,
+            &[(at("2025-03-04T10:00:00Z"), 1.0 / 150.0)],
+            end
+        )
+        .is_ok());
+        assert!(cross_check_quote("JPY", &fx, &[(at("2025-03-04T10:00:00Z"), 0.01)], end).is_err());
+        // No deal: not cross-checked.
+        assert!(cross_check_quote("JPY", &fx, &[], end)
+            .unwrap()
+            .starts_with("not cross-checked"));
+        // Before the first close, or with no close in the 4 days before the
+        // deal: not checked (never compared with an older close), not failed.
+        assert!(
+            cross_check_quote("JPY", &fx, &[(at("2020-01-01T00:00:00Z"), 5.0)], end)
+                .unwrap()
+                .starts_with("not cross-checked")
         );
-        assert_eq!(quote_currency("XYZ", AssetClass::EquityIndex), None);
+        assert!(
+            cross_check_quote("JPY", &fx, &[(at("2025-03-08T22:00:00Z"), 5.0)], end)
+                .unwrap()
+                .starts_with("not cross-checked")
+        );
+        // Within the window the last bar's close is the day's close (here the
+        // bar opened on the 4th, 3.6 days before); 4.6 days is beyond it.
+        let both = cross_check_quote(
+            "JPY",
+            &fx,
+            &[
+                (at("2025-03-08T12:00:00Z"), 0.01),
+                (at("2025-03-09T12:00:00Z"), 5.0),
+            ],
+            end,
+        )
+        .unwrap();
+        assert!(both.starts_with("1 closing deals"), "{both}");
+        assert!(
+            both.ends_with("; 1 without an FX close of their day not checked"),
+            "{both}"
+        );
     }
 }

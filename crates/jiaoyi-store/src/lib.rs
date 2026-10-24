@@ -115,8 +115,11 @@ pub struct RunSummary {
     pub spreads_measured: i32,
     pub crosscheck: Vec<Value>,
     pub errors: Vec<String>,
-    /// The broker's symbol list as this load read it: [{id, name, enabled}].
+    /// The broker's symbol list as this load read it: [{id, name, enabled,
+    /// base_asset_id, quote_asset_id, base_asset, quote_asset}].
     pub listed_symbols: Option<Value>,
+    /// The account's asset list as this load read it: [{asset_id, name, ...}].
+    pub assets: Option<Value>,
 }
 
 impl RunSummary {
@@ -134,7 +137,7 @@ pub async fn finish_run(pool: &PgPool, run_id: i64, status: &str, s: &RunSummary
             symbols_resolved = $3, symbols_unresolved = $4, bars_inserted = $5,
             bars_changed = $6, bars_unchanged = $7, bars_refused = $8,
             forming_bars_dropped = $9, spreads_measured = $10, crosscheck = $11, errors = $12,
-            settings_version = $13, listed_symbols = $14
+            settings_version = $13, listed_symbols = $14, assets = $15
          WHERE id = $1 AND status = 'running'",
     )
     .bind(run_id)
@@ -151,6 +154,7 @@ pub async fn finish_run(pool: &PgPool, run_id: i64, status: &str, s: &RunSummary
     .bind(json!(s.errors))
     .bind(s.settings_version)
     .bind(&s.listed_symbols)
+    .bind(&s.assets)
     .execute(pool)
     .await?;
     Ok(())
@@ -224,6 +228,37 @@ pub async fn latest_listed_symbols(
     .fetch_optional(pool)
     .await?;
     Ok(r.map(|r| (r.get("id"), r.get("started_at"), r.get("listed_symbols"))))
+}
+
+/// The latest load of an account that stored the broker's asset list:
+/// (load run id, assets, symbol list).
+pub async fn latest_assets(pool: &PgPool, account_id: i64) -> Result<Option<(i64, Value, Value)>> {
+    let r = sqlx::query(
+        "SELECT id, assets, listed_symbols FROM load_runs
+         WHERE account_id = $1 AND assets IS NOT NULL AND listed_symbols IS NOT NULL
+         ORDER BY started_at DESC, id DESC LIMIT 1",
+    )
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(r.map(|r| (r.get("id"), r.get("assets"), r.get("listed_symbols"))))
+}
+
+/// One load run's stored asset list and symbol list (both must be stored).
+pub async fn assets_of_run(
+    pool: &PgPool,
+    account_id: i64,
+    run_id: i64,
+) -> Result<Option<(Value, Value)>> {
+    let r = sqlx::query(
+        "SELECT assets, listed_symbols FROM load_runs
+         WHERE id = $1 AND account_id = $2 AND assets IS NOT NULL AND listed_symbols IS NOT NULL",
+    )
+    .bind(run_id)
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(r.map(|r| (r.get("assets"), r.get("listed_symbols"))))
 }
 
 // ---------------------------------------------------------------- universe
