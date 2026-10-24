@@ -84,6 +84,12 @@ async fn migrations_create_every_phase1_table(pool: PgPool) {
         "symbols",
         "ticks",
         "universe_resolutions",
+        "ticks_history",
+        "history_fetches",
+        "deals",
+        "deal_fetches",
+        "account_snapshots",
+        "research_trials",
     ] {
         assert!(tables.iter().any(|x| x == t), "{t} missing from {tables:?}");
     }
@@ -243,9 +249,11 @@ async fn a_universe_miss_is_recorded_with_its_reason(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn seeded_settings_are_the_rulebook_values_at_version_17(pool: PgPool) {
+async fn seeded_settings_are_the_rulebook_values_at_version_21(pool: PgPool) {
     let s = settings::snapshot(&pool, None).await.unwrap();
-    assert_eq!(s.version, 17);
+    // 17 phase-1 seeds plus 4 history seeds (migration 0004).
+    assert_eq!(s.version, 21);
+    assert_eq!(s.integer("history.tick_days_back").unwrap(), 7);
     let u = s.universe("universe.symbols").unwrap();
     let names: Vec<&str> = u.iter().map(|(n, _)| n.as_str()).collect();
     // Rulebook §3, in its order.
@@ -265,7 +273,7 @@ async fn seeded_settings_are_the_rulebook_values_at_version_17(pool: PgPool) {
     assert_eq!(s.integer("spread.sample_secs").unwrap(), 60);
     // Every seed is a logged change.
     let h = settings::history(&pool, None).await.unwrap();
-    assert_eq!(h.len(), 17);
+    assert_eq!(h.len(), 21);
     assert!(h
         .iter()
         .all(|c| c.changed_by == "migration" && c.old_value.is_none()));
@@ -304,7 +312,7 @@ async fn an_out_of_bounds_value_is_refused_and_nothing_changes(pool: PgPool) {
         30,
         "not clamped, not changed"
     );
-    assert_eq!(s.version, 17, "a refused change does not bump the version");
+    assert_eq!(s.version, 21, "a refused change does not bump the version");
     assert!(matches!(
         settings::change(
             &pool,
@@ -335,11 +343,11 @@ async fn a_change_is_logged_with_old_and_new_values_and_bumps_the_version(pool: 
     )
     .await
     .unwrap();
-    assert_eq!(v, 18);
+    assert_eq!(v, 22);
     let h = settings::history(&pool, Some("ticks.retention_days"))
         .await
         .unwrap();
-    assert_eq!(h[0].version, 18);
+    assert_eq!(h[0].version, 22);
     assert_eq!(h[0].old_value, Some(json!(30)));
     assert_eq!(h[0].new_value, Some(json!(14)));
     assert_eq!(h[0].changed_by, "owner");
@@ -528,4 +536,178 @@ async fn a_failed_flush_stores_nothing_and_a_retry_stores_each_tick_once(pool: P
     // The same flush again (a retry after an unknown outcome) adds nothing.
     assert_eq!(ticks::insert_chunked(&pool, &rows, 4).await.unwrap(), 0);
     assert_eq!(count().await, 10);
+}
+
+fn fetch(kind: &'static str, error: Option<&str>) -> jiaoyi_store::history::FetchRecord {
+    jiaoyi_store::history::FetchRecord {
+        account_id: A,
+        broker_symbol_id: 1,
+        side: "bid",
+        kind,
+        window_from: Utc.with_ymd_and_hms(2024, 3, 4, 0, 0, 0).unwrap(),
+        window_to: Utc.with_ymd_and_hms(2024, 3, 10, 23, 59, 59).unwrap(),
+        complete: true,
+        ticks: 3,
+        pages: 1,
+        first_tick: None,
+        last_tick: None,
+        delta_signs: vec!["add".into()],
+        error: error.map(String::from),
+    }
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_tick_window_is_stored_once_with_its_fetch_record(pool: PgPool) {
+    use jiaoyi_store::history::{self as hist, HistoryTick};
+    let t = |s: u32, p: i64, dup: i32| HistoryTick {
+        ts: Utc.with_ymd_and_hms(2024, 3, 5, 9, 0, s).unwrap(),
+        price_e5: p,
+        dup,
+    };
+    let ticks = vec![t(0, 108_500, 0), t(1, 108_501, 0), t(1, 108_501, 1)];
+    let (_, stored) = hist::record_window(&pool, &fetch("download", None), &ticks)
+        .await
+        .unwrap();
+    assert_eq!(
+        stored, 3,
+        "a repeated tick at the same instant is kept as dup 1"
+    );
+    // The same window again: no new ticks, but the fetch itself is recorded.
+    let (_, stored) = hist::record_window(&pool, &fetch("download", None), &ticks)
+        .await
+        .unwrap();
+    assert_eq!(stored, 0);
+    let fetches: i64 = sqlx::query_scalar("SELECT count(*) FROM history_fetches")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(fetches, 2);
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM ticks_history")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 3);
+    let source: String = sqlx::query_scalar("SELECT DISTINCT source FROM ticks_history")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(source, "broker_history");
+    // A failed window must carry its error; it is still recorded.
+    hist::record_window(
+        &pool,
+        &fetch("download", Some("tick data does not decode")),
+        &[],
+    )
+    .await
+    .unwrap();
+    let done = hist::complete_windows(&pool, A, 1, "bid", "download")
+        .await
+        .unwrap();
+    assert_eq!(done.len(), 1);
+    // Append-only.
+    assert!(sqlx::query("UPDATE history_fetches SET ticks = 0")
+        .execute(&pool)
+        .await
+        .is_err());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_deal_the_broker_reports_differently_is_recorded_then_replaced(pool: PgPool) {
+    use jiaoyi_store::history::{self as hist, DealRow};
+    let deal = |commission: i64| DealRow {
+        deal_id: 9,
+        order_id: 8,
+        position_id: 7,
+        broker_symbol_id: 1,
+        volume: 100_000,
+        filled_volume: 100_000,
+        trade_side: "BUY".into(),
+        deal_status: "FILLED".into(),
+        created_at: Utc.with_ymd_and_hms(2024, 3, 5, 9, 0, 0).unwrap(),
+        executed_at: Utc.with_ymd_and_hms(2024, 3, 5, 9, 0, 0).unwrap(),
+        last_update_at: None,
+        execution_price: Some(1.085),
+        margin_rate: None,
+        commission: Some(commission),
+        money_digits: Some(2),
+        base_to_usd_rate: None,
+        is_closing: false,
+        close_entry_price: None,
+        close_gross_profit: None,
+        close_swap: None,
+        close_commission: None,
+        close_balance: None,
+        close_quote_to_deposit_rate: None,
+        close_closed_volume: None,
+        close_balance_version: None,
+        close_money_digits: None,
+        close_pnl_conversion_fee: None,
+        raw: vec![commission as u8],
+    };
+    let u = hist::upsert_deals(&pool, A, &[deal(-336)], Utc::now())
+        .await
+        .unwrap();
+    assert_eq!((u.inserted, u.changed), (1, 0));
+    let u = hist::upsert_deals(&pool, A, &[deal(-336)], Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(u.unchanged, 1);
+    let u = hist::upsert_deals(&pool, A, &[deal(-484)], Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(u.changed, 1);
+    let c: Option<i64> = sqlx::query_scalar("SELECT commission FROM deals")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        c,
+        Some(-484),
+        "the broker's value, as an integer in 10^-money_digits"
+    );
+    let ev: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM reconcile_events WHERE kind = 'deal_changed'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(ev, 1);
+    assert!(sqlx::query("DELETE FROM deals")
+        .execute(&pool)
+        .await
+        .is_err());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn research_trials_are_kept_whatever_their_result(pool: PgPool) {
+    use jiaoyi_store::history::{self as hist, Trial};
+    let id = hist::record_trial(
+        &pool,
+        &Trial {
+            hypothesis: "H0 placeholder",
+            params: &json!({}),
+            data_range: &json!({"from": "2024-01-01"}),
+            sample: "development",
+            results: None,
+            verdict: None,
+            settings_version: 21,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(id > 0);
+    assert!(sqlx::query("UPDATE research_trials SET verdict = 'edge'")
+        .execute(&pool)
+        .await
+        .is_err());
+    assert!(sqlx::query("DELETE FROM research_trials")
+        .execute(&pool)
+        .await
+        .is_err());
+    let bad = sqlx::query(
+        "INSERT INTO research_trials (hypothesis, params, data_range, sample, settings_version)
+         VALUES ('x', '{}', '{}', 'peeked', 1)",
+    )
+    .execute(&pool)
+    .await;
+    assert!(bad.is_err(), "sample is development or held_out");
 }

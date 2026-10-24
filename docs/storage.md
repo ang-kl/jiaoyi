@@ -66,6 +66,25 @@ Owner, 24-10-2026: *"no hard code settings, the UI should have setting to tweak.
 - Sessions use an HttpOnly cookie.
 - The only write routes change settings, through the bounds check and the change log above. The UI cannot place orders.
 
+## Edge verification data (owner-approved plan, 24-10-2026)
+
+Read-only against the broker. Migration 0004.
+
+| Table | Kind | Notes |
+|---|---|---|
+| `ticks_history` | market data, partitioned by UTC month | The broker's historical bid and ask ticks (`ProtoOAGetTickDataReq`), `source = broker_history`, price in 1/100000 as sent. `dup` numbers identical ticks at one instant, so repeats are kept and a re-download stores nothing twice. |
+| `history_fetches` | event, append-only | Every tick request window: what was asked, how many ticks came back, how many were new, which difference sign decoded them, and any error. `kind = probe` rows only count ticks, to find how far back the history goes. |
+| `deals` | broker record | Every deal exactly as `ProtoOADeal` gives it, money as the broker's integers with `money_digits`, plus the raw message. Deletes are refused; a deal the broker later reports differently is written to `reconcile_events` first. |
+| `deal_fetches` | event, append-only | Every deal-list window and its outcome. |
+| `account_snapshots` | event, append-only | `ProtoOATraderRes` each time it is read: login, deposit asset, balance, registration date. |
+| `research_trials` | research log, append-only | Every trial, pass or fail, with its parameters, data range, sample (`development` or `held_out`) and settings version. |
+
+### Ticks history: depth and size
+
+- Tick requests span at most one week (Spotware). Windows are Monday-to-Monday UTC weeks on a fixed grid, so a sync resumes, and a week fetched completely is not fetched again.
+- The depth downloaded is the setting `history.tick_days_back` (default 7 days). The probe (`history.probe_years`, default 15) finds the earliest week with ticks without downloading the years in between.
+- Size is the limit, not the broker. As an order of magnitude only (not measured), a busy FX pair can carry 100,000–200,000 quote changes a day per side; 20 symbols × 2 sides × a year would be on the order of 100 GB. The depth is raised once the first week's real volume is measured from `/research/inventory`.
+
 ## Volume and retention
 
 - **Daily bars:** about 20 symbols × 20 years × 260 days ≈ 104,000 rows per account.

@@ -119,3 +119,26 @@ pub fn start_recorders(
         })
         .collect()
 }
+
+/// Start one history sync per permitted account (deals, ticks, probe).
+pub fn start_history(
+    pool: &PgPool,
+    cfg: &Config,
+    status: &crate::history::HistoryStatusMap,
+    shutdown: &Shutdown,
+) -> Vec<JoinHandle<()>> {
+    cfg.plan
+        .permitted
+        .iter()
+        .map(|(account, env)| {
+            tokio::spawn(crate::history::run(
+                pool.clone(),
+                cfg.broker.clone(),
+                account.clone(),
+                *env,
+                status.clone(),
+                shutdown.clone(),
+            ))
+        })
+        .collect()
+}

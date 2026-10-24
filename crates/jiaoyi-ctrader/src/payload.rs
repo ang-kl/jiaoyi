@@ -10,7 +10,7 @@
 //! 2. **Runtime.** The frame writer calls [`check_sendable`] on every outgoing
 //!    payload type, so even a frame built by hand is refused unless listed.
 //!
-//! Phase 1 lists read requests only. No trading request type is listed.
+//! Only read requests are listed. No trading request type is listed.
 
 use crate::pb::{self, ProtoOaPayloadType as Oa, ProtoPayloadType as Common};
 
@@ -42,6 +42,18 @@ pub const SENDABLE: &[(i32, &str)] = &[
     (
         Oa::ProtoOaUnsubscribeSpotsReq as i32,
         "stop sampling spreads",
+    ),
+    (
+        Oa::ProtoOaGetTickdataReq as i32,
+        "read historical bid and ask ticks",
+    ),
+    (
+        Oa::ProtoOaDealListReq as i32,
+        "read the account's deal history",
+    ),
+    (
+        Oa::ProtoOaTraderReq as i32,
+        "read the account's registration date and deposit asset",
     ),
 ];
 
@@ -124,6 +136,12 @@ request!(pb::ProtoOaSubscribeSpotsReq => Oa::ProtoOaSubscribeSpotsReq,
          pb::ProtoOaSubscribeSpotsRes => Oa::ProtoOaSubscribeSpotsRes);
 request!(pb::ProtoOaUnsubscribeSpotsReq => Oa::ProtoOaUnsubscribeSpotsReq,
          pb::ProtoOaUnsubscribeSpotsRes => Oa::ProtoOaUnsubscribeSpotsRes);
+request!(pb::ProtoOaGetTickDataReq => Oa::ProtoOaGetTickdataReq,
+         pb::ProtoOaGetTickDataRes => Oa::ProtoOaGetTickdataRes);
+request!(pb::ProtoOaDealListReq => Oa::ProtoOaDealListReq,
+         pb::ProtoOaDealListRes => Oa::ProtoOaDealListRes);
+request!(pb::ProtoOaTraderReq => Oa::ProtoOaTraderReq,
+         pb::ProtoOaTraderRes => Oa::ProtoOaTraderRes);
 
 #[cfg(test)]
 mod tests {
@@ -140,7 +158,7 @@ mod tests {
     assert_not_impl_any!(pb::ProtoOaMarginCallUpdateReq: Request);
 
     /// The read requests phase 1 needs, and nothing else.
-    const EXPECTED_SENDABLE: [i32; 9] = [
+    const EXPECTED_SENDABLE: [i32; 12] = [
         Common::HeartbeatEvent as i32,
         Oa::ProtoOaApplicationAuthReq as i32,
         Oa::ProtoOaAccountAuthReq as i32,
@@ -150,6 +168,9 @@ mod tests {
         Oa::ProtoOaGetTrendbarsReq as i32,
         Oa::ProtoOaSubscribeSpotsReq as i32,
         Oa::ProtoOaUnsubscribeSpotsReq as i32,
+        Oa::ProtoOaGetTickdataReq as i32,
+        Oa::ProtoOaDealListReq as i32,
+        Oa::ProtoOaTraderReq as i32,
     ];
 
     #[test]
@@ -203,6 +224,9 @@ mod tests {
             pt::<pb::ProtoOaGetTrendbarsReq>(),
             pt::<pb::ProtoOaSubscribeSpotsReq>(),
             pt::<pb::ProtoOaUnsubscribeSpotsReq>(),
+            pt::<pb::ProtoOaGetTickDataReq>(),
+            pt::<pb::ProtoOaDealListReq>(),
+            pt::<pb::ProtoOaTraderReq>(),
         ] {
             assert!(check_sendable(t).is_ok(), "{t}");
         }

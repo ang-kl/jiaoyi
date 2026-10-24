@@ -141,7 +141,7 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         .unwrap();
     assert_eq!(out.status, "ok", "{:?}", out.summary.errors);
     let s = &out.summary;
-    assert_eq!(s.settings_version, Some(19));
+    assert_eq!(s.settings_version, Some(23));
     assert_eq!((s.symbols_resolved, s.symbols_unresolved), (1, 2));
     assert_eq!(s.bars_inserted, 4018, "every closed bar");
     assert_eq!(s.forming_bars_dropped, 1, "today's bar is not stored");
@@ -220,7 +220,7 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         sym["UKOIL"].verdict.decision,
         jiaoyi_core::verdict::Decision::Drop
     );
-    assert_eq!(r.settings_version, 19);
+    assert_eq!(r.settings_version, 23);
 
     // A second load stores nothing new and changes nothing.
     let (conn, _) = fake().spawn();

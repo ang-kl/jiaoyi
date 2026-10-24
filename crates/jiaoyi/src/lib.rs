@@ -3,9 +3,11 @@
 //! and report on them.
 
 pub mod config;
+pub mod history;
 pub mod http;
 pub mod loader;
 pub mod recorder;
 pub mod report;
+pub mod research;
 pub mod service;
 pub mod shutdown;

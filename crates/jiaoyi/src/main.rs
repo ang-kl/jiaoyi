@@ -40,17 +40,23 @@ async fn main() -> anyhow::Result<()> {
 
     let loading = Arc::new(AtomicBool::new(false));
     let recorders = jiaoyi::recorder::StatusMap::default();
+    let history = jiaoyi::history::HistoryStatusMap::default();
     let app = router(AppState {
         pool: pool.clone(),
         loading: loading.clone(),
         recorders: recorders.clone(),
+        history: history.clone(),
     });
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.http_port)).await?;
-    tracing::info!(port = cfg.http_port, "serving /health and /phase1/report");
+    tracing::info!(
+        port = cfg.http_port,
+        "serving /health, /phase1/report and /research/inventory"
+    );
 
     let (trigger, stop) = shutdown::channel();
     let trigger = Arc::new(trigger);
     let mut tasks = service::start_recorders(&pool, &cfg, &recorders, &stop);
+    tasks.extend(service::start_history(&pool, &cfg, &history, &stop));
     tasks.push(tokio::spawn(service::run_loop(
         pool,
         cfg.clone(),
