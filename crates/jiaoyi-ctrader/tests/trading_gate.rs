@@ -606,3 +606,84 @@ async fn a_position_this_program_did_not_open_is_never_amended_or_closed() {
     .await;
     let _ = wait;
 }
+
+#[tokio::test]
+async fn an_amend_carries_the_take_profit_and_passes_the_brokers_own_stop() {
+    // cTrader's amend REPLACES the protection: a stop-only amend would
+    // delete a take-profit (Strategy 3 sets one). The fake replaces too.
+    let f = fake();
+    let (conn, log) = f.clone().spawn();
+    let s = session_on(&conn).await;
+    let ledger = MemLedger::default();
+    let wait = Duration::from_secs(2);
+    send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        open(1, 28_457_000),
+        "open",
+        wait,
+    )
+    .await
+    .unwrap();
+    f.positions.lock().unwrap()[0].take_profit = Some(3500.0);
+    let amend = |current: f64, new: f64| Command::AmendStop {
+        position_id: 1001,
+        side: Side::Buy,
+        current_stop: Some(current),
+        new_stop: new,
+    };
+    let sent = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        amend(2716.43, 2800.0),
+        "a1",
+        wait,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(sent.outcome, Outcome::Amended { .. }), "{sent:?}");
+    let a = log.lock().unwrap().amends[0];
+    assert_eq!(a.stop_loss, Some(2800.0));
+    assert_eq!(a.take_profit, Some(3500.0), "the take-profit is carried");
+    assert_eq!(f.positions.lock().unwrap()[0].take_profit, Some(3500.0));
+    let i = ledger.intents.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(i.take_profit, Some(3500.0), "and recorded on the intent");
+    // The broker's stop moved past the trader's view: an amend that would
+    // loosen it is refused, from the fresh read.
+    f.positions.lock().unwrap()[0].stop_loss = Some(2900.0);
+    let r = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        amend(2800.0, 2850.0),
+        "a2",
+        wait,
+    )
+    .await;
+    assert!(
+        matches!(&r, Err(SendError::Refused(x)) if x.reason.contains("the broker's 2900")),
+        "{r:?}"
+    );
+    // A position no longer open at the broker is not amended.
+    f.positions.lock().unwrap().clear();
+    let r = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        amend(2900.0, 2950.0),
+        "a3",
+        wait,
+    )
+    .await;
+    assert!(
+        matches!(&r, Err(SendError::Refused(x)) if x.reason.contains("not open at the broker")),
+        "{r:?}"
+    );
+    assert_eq!(log.lock().unwrap().amends.len(), 1);
+}

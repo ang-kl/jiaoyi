@@ -139,13 +139,13 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
 
 | Table | Kind | Holds |
 |---|---|---|
-| `trading_intents` | event, append-only | What the order gate wrote before each frame: entry key (unique, so never sent twice), client message id, kind (open, amend_stop, close), symbol, position, side, volume in cents, relative stop, stop price, the risk the gate recomputed and its allowance (deposit currency), settings version. |
-| `trading_events` | event, append-only | Every execution message: the answers to our requests (by client message id and entry key) and the broker's own (a stop hit), with the raw bytes. `RECONCILED_FILL`: an unconfirmed open that reconcile found filled, adopted once. |
+| `trading_intents` | event, append-only | What the order gate wrote before each frame: entry key (unique, so never sent twice), client message id, kind (open, amend_stop, close), symbol, position, side, volume in cents, relative stop, stop price, an amend's carried take-profit, the risk the gate recomputed and its allowance (deposit currency), settings version. |
+| `trading_events` | event, append-only | Every execution message: the answers to our requests (by client message id and entry key, late ones included) and the broker's own (a stop hit), with the raw bytes. One message is kept once (unique on account, client message id, kind, receive time): the gate and the trader both receive it. `RECONCILED_FILL`: an unresolved open that reconcile found filled, adopted once. `RECONCILED_ABSENT`: an unresolved open with nothing at the broker after one reconcile interval, released, never resent. |
 | `trading_decisions` | event, append-only | Strategy 1's decisions (reconcile with the external positions it found, a signal held by the edge gate, a skip and why, a refusal and why, a send), recorded when they change, not on every tick. |
 | `settings_seed_applied` | state | Which entries of `config/settings-changes.json` were applied, and the settings version each became. |
 
 - **Settings:**
-  - `trading.live_requires_edge_pass` 1
+  - `trading.live_requires_edge_pass` 1, set to 0 by the reviewed change `2026-10-25-live-edge-gate-lifted` (owner, 25-10: "Live too, from now")
   - `trading.risk_pct` 0.6
   - `trading.cap_factor` 1.1
   - `trading.live_allow_min_volume` 1
@@ -155,10 +155,11 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
   - `trading.trail_amend_secs` 60
   - `trading.order_wait_secs` 20
   - `trading.retry_secs` 60
-- **No on/off switch** (owner, 24-10). Demo accounts trade from start-up; a live account waits for the edge gate.
+- **No on/off switch** (owner, 24-10). Demo accounts trade from start-up; a live account waits for the edge gate while `trading.live_requires_edge_pass` is 1.
+- **Unresolved opens** (no fill and no end recorded: accepted only, or no answer) are read back from these tables at every reconcile: their risk is held in the open-risk budget, their symbol takes no entry.
 - **A reviewed settings change** is an entry in `config/settings-changes.json` (`id`, `key`, `account_id`, `value`, `changed_by`, `reason`), merged and deployed. Each entry is applied once through `settings::change`, so it is bounds-checked and logged. A refused entry is logged and not applied.
 - `/health` → `trading` and the status page show, per account:
-  - the strategy, and whether it trades (`yes`, or `armed: waits for the edge gate`);
+  - the strategy, and whether it trades (`yes`, `armed: waits for the edge gate`, or `trading (edge gate lifted by the owner DD-MM)`);
   - the edge gate and the minimum-volume rule;
   - the open-risk budget;
   - the last decision;

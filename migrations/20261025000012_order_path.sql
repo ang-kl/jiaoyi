@@ -22,6 +22,7 @@ CREATE TABLE trading_intents (
     volume            BIGINT,            -- cents of units
     relative_stop     BIGINT,            -- 1/100000 of a price
     stop_price        DOUBLE PRECISION,
+    take_profit       DOUBLE PRECISION,  -- an amend's, carried from the position (an amend replaces it)
     risk              DOUBLE PRECISION,  -- deposit currency, recomputed by the gate
     max_risk          DOUBLE PRECISION NOT NULL,
     settings_version  BIGINT,
@@ -58,6 +59,11 @@ CREATE TABLE trading_events (
 CREATE TRIGGER trading_events_append_only BEFORE UPDATE OR DELETE ON trading_events
     FOR EACH ROW EXECUTE FUNCTION jiaoyi_refuse_change();
 CREATE INDEX trading_events_position ON trading_events (account_id, position_id);
+-- The gate and the trader both receive every answer to an order (one
+-- broadcast message, one receive time); this keeps it recorded once.
+-- Events without a request id (the broker's own) never collide here.
+CREATE UNIQUE INDEX trading_events_once
+    ON trading_events (account_id, client_msg_id, kind, received_at);
 
 -- 3. The trader's decisions (a signal, a skip and why, a refusal, a send,
 --    a reconcile). Recorded when they change, not on every tick. Append-only.
