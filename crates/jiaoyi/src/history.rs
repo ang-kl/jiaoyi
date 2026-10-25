@@ -2,11 +2,16 @@
 //! permitted account (owner-approved plan, 24-10-2026).
 //!
 //! Each sync, per account, in this order:
-//! 1. the trader record (registration date: Spotware's floor for history requests);
+//! 1. the trader record (registration date: Spotware's floor for history
+//!    requests), stored with the broker's account facts (leverage, account
+//!    type) in `trader_reads`;
 //! 2. deal history (`ProtoOADealListReq`) from registration to now, in
 //!    `deals.window_days` windows, stored exactly as the broker reports it;
 //! 3. bid and ask ticks (`ProtoOAGetTickDataReq`) for every resolved symbol,
-//!    newest week first, `history.tick_days_back` days deep;
+//!    newest week first, `history.tick_days_back` days deep. Skipped for an
+//!    account named only by a `JIAOYI_DEMO_ACCOUNT_ID*` variable (owner,
+//!    25-10-2026: "Skip their tick history", Postgres disk); every other step
+//!    runs for it as for any account;
 //! 4. an availability probe: how far back the broker's tick history goes,
 //!    searched over `history.probe_years`, without downloading it.
 //!
@@ -28,11 +33,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use jiaoyi_core::allowlist::{Environment, PermittedAccount};
-use jiaoyi_ctrader::messages::{ProtoOaDeal, ProtoOaDealStatus, ProtoOaTradeSide};
+use jiaoyi_core::allowlist::{Environment, PermittedAccount, TickHistory};
+use jiaoyi_ctrader::messages::{ProtoOaDeal, ProtoOaDealStatus, ProtoOaTradeSide, ProtoOaTrader};
 use jiaoyi_ctrader::tickdata::QuoteSide;
 use jiaoyi_ctrader::{AccountSession, ClientError, Connection};
-use jiaoyi_store::history::{self as hist, DealFetchRecord, DealRow, FetchRecord, HistoryTick};
+use jiaoyi_store::history::{
+    self as hist, DealFetchRecord, DealRow, FetchRecord, HistoryTick, TraderRead,
+};
 use jiaoyi_store::sqlx::PgPool;
 use prost::Message;
 use serde::Serialize;
@@ -74,6 +81,9 @@ fn at(ms: i64) -> DateTime<Utc> {
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
 pub struct HistoryStatus {
+    /// Whether this account downloads tick history (step 3), and if not, why.
+    /// Set when the account's sync task starts.
+    pub tick_history: Option<TickHistory>,
     pub last_sync_started_at: Option<DateTime<Utc>>,
     pub last_sync_finished_at: Option<DateTime<Utc>>,
     pub settings_version: Option<i64>,
@@ -217,11 +227,41 @@ fn session_fatal(e: &ClientError) -> bool {
     ) || e.is_token_rejected()
 }
 
-/// One sync of one account on an authorised session.
+/// The broker's trader record as stored in `trader_reads`: every field the
+/// broker omitted stays `None`.
+pub fn trader_read(account_id: i64, t: &ProtoOaTrader) -> TraderRead {
+    TraderRead {
+        account_id,
+        leverage_in_cents: t.leverage_in_cents.map(i64::from),
+        max_leverage: t.max_leverage.map(i64::from),
+        balance: t.balance,
+        balance_version: t.balance_version,
+        money_digits: t.money_digits.map(|v| v as i32),
+        deposit_asset_id: t.deposit_asset_id,
+        account_type: t.account_type,
+        is_limited_risk: t.is_limited_risk,
+        limited_risk_margin_calculation_strategy: t.limited_risk_margin_calculation_strategy,
+        total_margin_calculation_type: t.total_margin_calculation_type,
+        access_rights: t.access_rights,
+        swap_free: t.swap_free,
+        fair_stop_out: t.fair_stop_out,
+        stop_out_strategy: t.stop_out_strategy,
+        manager_bonus: t.manager_bonus,
+        ib_bonus: t.ib_bonus,
+        non_withdrawable_bonus: t.non_withdrawable_bonus,
+        trader_login: t.trader_login,
+        broker_name: t.broker_name.clone(),
+        registration_at: t.registration_timestamp.map(at),
+    }
+}
+
+/// One sync of one account on an authorised session. `ticks` says whether
+/// step 3 (the tick download) runs; nothing else depends on it.
 pub async fn sync_account(
     pool: &PgPool,
     session: &AccountSession<'_>,
     account: &PermittedAccount,
+    ticks: &TickHistory,
     status: &HistoryStatusMap,
     shutdown: &Shutdown,
 ) -> anyhow::Result<()> {
@@ -256,6 +296,8 @@ pub async fn sync_account(
         },
     )
     .await?;
+    // Claude · № 16,973 25-Oct (ordered № 16,972·C; the broker's account facts)
+    hist::record_trader_read(pool, &trader_read(id, &trader)).await?;
 
     // 2. Deals, from registration (or as far as the probe looks) to now.
     let deal_from = registration
@@ -314,33 +356,37 @@ pub async fn sync_account(
         });
     }
 
-    // 3. Ticks for every resolved symbol, newest week first.
+    // 3. Ticks for every resolved symbol, newest week first; not for an
+    // account whose tick history is off.
     let symbols = jiaoyi_store::ticks::resolved_symbol_ids(pool, id, &cfg.names).await?;
     let tick_from = ms(now) - cfg.tick_days_back.max(1) * 86_400_000;
-    for &symbol in &symbols {
-        for side in [QuoteSide::Bid, QuoteSide::Ask] {
-            let done =
-                hist::complete_windows(pool, id, symbol, side_name(side), "download").await?;
-            for (from, to) in grid(tick_from, ms(now), GRID_ORIGIN_MS, WEEK_MS) {
-                if shutdown.is_set() {
-                    return Ok(());
+    // Claude · № 16,973 25-Oct (ordered № 16,972·C; owner: "Skip their tick history")
+    if matches!(ticks, TickHistory::On) {
+        for &symbol in &symbols {
+            for side in [QuoteSide::Bid, QuoteSide::Ask] {
+                let done =
+                    hist::complete_windows(pool, id, symbol, side_name(side), "download").await?;
+                for (from, to) in grid(tick_from, ms(now), GRID_ORIGIN_MS, WEEK_MS) {
+                    if shutdown.is_set() {
+                        return Ok(());
+                    }
+                    if done.covers(from, to) {
+                        continue;
+                    }
+                    check_session(session)?;
+                    download_window(
+                        pool,
+                        session,
+                        id,
+                        symbol,
+                        side,
+                        from,
+                        to.min(ms(now)),
+                        to < ms(now),
+                        status,
+                    )
+                    .await?;
                 }
-                if done.covers(from, to) {
-                    continue;
-                }
-                check_session(session)?;
-                download_window(
-                    pool,
-                    session,
-                    id,
-                    symbol,
-                    side,
-                    from,
-                    to.min(ms(now)),
-                    to < ms(now),
-                    status,
-                )
-                .await?;
             }
         }
     }
@@ -624,6 +670,7 @@ pub async fn run(
     broker: BrokerConfig,
     account: PermittedAccount,
     env: Environment,
+    ticks: TickHistory,
     status: HistoryStatusMap,
     shutdown: Shutdown,
 ) {
@@ -632,6 +679,7 @@ pub async fn run(
         pool,
         broker,
         account,
+        ticks,
         status,
         move || {
             let b = b.clone();
@@ -646,6 +694,7 @@ pub async fn run_with<C, F>(
     pool: PgPool,
     broker: BrokerConfig,
     account: PermittedAccount,
+    ticks: TickHistory,
     status: HistoryStatusMap,
     connect: C,
     mut shutdown: Shutdown,
@@ -653,6 +702,9 @@ pub async fn run_with<C, F>(
     C: Fn() -> F,
     F: std::future::Future<Output = anyhow::Result<Connection>>,
 {
+    with_status(&status, account.id(), |s| {
+        s.tick_history = Some(ticks.clone())
+    });
     // Was the previous pass cut short by a session end? A resumed pass whose
     // session ends again before it stores one window waits RETRY_AFTER rather
     // than `history.session_retry_secs`, so a session that keeps ending cannot
@@ -669,7 +721,7 @@ pub async fn run_with<C, F>(
         let result = async {
             let conn = connect().await?;
             let session = loader::authorise(&pool, &conn, &broker, &account).await?;
-            sync_account(&pool, &session, &account, &status, &watcher).await
+            sync_account(&pool, &session, &account, &ticks, &status, &watcher).await
         };
         let outcome = tokio::select! {
             r = result => r,

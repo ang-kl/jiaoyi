@@ -89,6 +89,7 @@ async fn migrations_create_every_phase1_table(pool: PgPool) {
         "deals",
         "deal_fetches",
         "account_snapshots",
+        "trader_reads",
         "research_trials",
         "token_grants",
     ] {

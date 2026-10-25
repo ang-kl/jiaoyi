@@ -40,6 +40,30 @@ The research behind this design is in the bot-trade conversation's report *Why t
 
 The old bot-trade program and the new system never trade the same account at the same time.
 
+### Demo accounts for data (owner, 25-10-2026)
+
+Added by the owner on 25-10-2026 (bot-trade conversation, № 16,972). The two accounts above and the text above are unchanged.
+
+| Account | Owner's figures | Role | When |
+|---|---|---|---|
+| Demo 46130058 (number 5203012) | leverage 1:200, USD | Data; orders as the owner sets them | Now |
+| Demo 47790949 (number 5306502) | leverage 1:25, USD | Data; orders as the owner sets them | Now |
+
+- **Purpose.** The goal is to trade across demo leverages.
+  - The owner first chose "Data now, orders after the edge".
+  - At about 08:30 SGT on 25-10-2026 the owner set the three demo accounts to trade from 13:00 SGT that day. The order path is a separate change.
+  - The change that reads these variables places no order.
+- **How an account is added.** Each one is named by a variable that holds one account id: `JIAOYI_DEMO_ACCOUNT_ID`, or `JIAOYI_DEMO_ACCOUNT_ID_<N>` with N a positive integer.
+  - The owner set `JIAOYI_DEMO_ACCOUNT_ID_2=46130058` and `JIAOYI_DEMO_ACCOUNT_ID_3=47790949` ("Code reads the new variables").
+  - Such an account is permitted and declared demo.
+  - `JIAOYI_ALLOWED_ACCOUNTS` is still required. A missing or empty list still refuses start-up.
+- **Refusals.**
+  - A malformed variable is refused and recorded under its name. It does not stop start-up.
+  - A variable that names an account `JIAOYI_ACCOUNT_ENVIRONMENTS` declares live is refused as contradictory. That account keeps the pair's declaration.
+- **No tick history.** An account named only by such a variable does not download tick history (owner: "Skip their tick history"; the Postgres volume held 26.8 GB of 50 GB with two accounts). Daily bars, live ticks, deals, the availability probe and the token-grant check run as for 49236051.
+- **Nothing else changes.** "All other rules and capabilities should not change with added accounts."
+- **Leverage check.** The owner's stated leverage is checked against the broker's trader record: table `trader_reads`, shown on `/health`.
+
 ## 3. Universe (candidates; phase 1 confirms each on each account)
 
 All 20 names below appear in the bot's own broker deal statements (bot-trade `agent/config/tick-shadow-sim.json`, measured 21-08-2026).

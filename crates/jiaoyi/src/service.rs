@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use jiaoyi_core::allowlist::{ALLOWLIST_VAR, ENVIRONMENTS_VAR};
+use jiaoyi_core::allowlist::{ALLOWLIST_VAR, DEMO_ACCOUNT_VAR, ENVIRONMENTS_VAR};
 use jiaoyi_store::sqlx::PgPool;
 use jiaoyi_store::{self as store};
 
@@ -28,7 +28,8 @@ pub async fn register_accounts(pool: &PgPool, cfg: &Config) -> store::Result<()>
     tracing::info!(
         permitted = ?cfg.plan.permitted.iter().map(|(a, e)| format!("{a}:{}", e.as_str())).collect::<Vec<_>>(),
         refused = cfg.plan.refused.len(),
-        "accounts from {ALLOWLIST_VAR} and {ENVIRONMENTS_VAR}"
+        tick_history_off = ?cfg.plan.tick_history_off.keys().collect::<Vec<_>>(),
+        "accounts from {ALLOWLIST_VAR}, {ENVIRONMENTS_VAR} and {DEMO_ACCOUNT_VAR}*"
     );
     Ok(())
 }
@@ -237,7 +238,8 @@ pub fn start_recorders(
         .collect()
 }
 
-/// Start one history sync per permitted account (deals, ticks, probe).
+/// Start one history sync per permitted account (deals, ticks, probe). An
+/// account named only by a demo variable skips the tick download.
 pub fn start_history(
     pool: &PgPool,
     cfg: &Config,
@@ -253,6 +255,7 @@ pub fn start_history(
                 cfg.broker.clone(),
                 account.clone(),
                 *env,
+                cfg.plan.tick_history(account.id()),
                 status.clone(),
                 shutdown.clone(),
             ))

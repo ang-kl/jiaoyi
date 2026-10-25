@@ -36,6 +36,8 @@ pub mod messages {
         ProtoOaAccountAuthReq,
         ProtoOaAccountAuthRes,
         ProtoOaAccountDisconnectEvent,
+        // The trader record's account type (read-only; `/health`).
+        ProtoOaAccountType,
         ProtoOaAccountsTokenInvalidatedEvent,
         ProtoOaApplicationAuthReq,
         ProtoOaApplicationAuthRes,
