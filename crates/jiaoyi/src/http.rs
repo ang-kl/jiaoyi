@@ -1,13 +1,13 @@
-//! HTTP on $PORT: `/health`, `/phase1/report`, `/research/inventory`,
-//! `/research/bars`, `/research/jobs` and `/research/trials`. Read-only: no
-//! route writes.
+//! HTTP on $PORT: `/` (the status page), `/health`, `/phase1/report`,
+//! `/research/inventory`, `/research/bars`, `/research/jobs` and
+//! `/research/trials`. Read-only: no route writes.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Json, Response};
+use axum::response::{Html, IntoResponse, Json, Response};
 use axum::routing::get;
 use axum::Router;
 use jiaoyi_store::sqlx::PgPool;
@@ -25,6 +25,7 @@ pub struct AppState {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(status_page))
         .route("/health", get(health))
         .route("/phase1/report", get(report))
         .route("/research/inventory", get(inventory))
@@ -51,6 +52,33 @@ async fn health(State(s): State<AppState>) -> Response {
             Json(v).into_response()
         }
         Err(e) => unavailable(e),
+    }
+}
+
+/// `/`: the read-only status page, drawn from the same values as `/health`,
+/// `/research/jobs` and `/research/trials`.
+async fn status_page(State(s): State<AppState>) -> Response {
+    let recorders = s.recorders.lock().unwrap().clone();
+    let values = async {
+        let health =
+            crate::report::health(&s.pool, s.loading.load(Ordering::Relaxed), recorders).await?;
+        let jobs = crate::edge::routes::jobs(&s.pool).await?;
+        let trials = crate::edge::routes::trials(&s.pool).await?;
+        Ok::<_, jiaoyi_store::StoreError>((health, jobs, trials))
+    };
+    match values.await {
+        Ok((health, jobs, trials)) => {
+            Html(crate::status_page::page(&health, &jobs, &trials, chrono::Utc::now()))
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Html(format!(
+                "<!doctype html><meta charset=\"utf-8\"><title>jiaoyi status</title><p>The status is unavailable: {}</p><p><a href=\"/health\">/health</a></p>",
+                crate::status_page::esc(&e.to_string())
+            )),
+        )
+            .into_response(),
     }
 }
 
