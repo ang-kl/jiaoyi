@@ -522,7 +522,8 @@ async fn an_accepted_only_open_is_unresolved_and_an_answer_is_kept_once(pool: Pg
         .await
         .unwrap();
     let keys: Vec<&str> = u.iter().map(|u| u.entry_key.as_str()).collect();
-    assert_eq!(keys, vec!["accepted", "silent"]);
+    // A partial fill leaves its remainder open (Codex round 3 on #14).
+    assert_eq!(keys, vec!["accepted", "partial", "silent"]);
     assert_eq!(u[0].risk, Some(6.0));
     assert_eq!(u[0].symbol_id, Some(ETH));
     // The gate and the trader both receive one answer: kept once.
@@ -844,4 +845,36 @@ async fn a_remainder_filled_after_the_wait_is_read_from_the_broker(pool: PgPool)
             )),
         "{d:?}"
     );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_open_remainder_is_reserved_until_it_fills(pool: PgPool) {
+    // Codex round 3 on #14: 60 of 100 cents fill inside the 1 s wait; at
+    // 1.5 s BTCUSD signals. Its $120.00 entry must not take the room the
+    // ETHUSD remainder (40 cents, $48.00) still needs; it fills at 2 s.
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let log = two_symbols_filled_in(
+        &pool,
+        vec![(0, 60, 3611.0), (2_000, 40, 3621.0)],
+        false,
+        vec![(0, ETH, q(3608.0, 3611.0)), (1_500, BTC, q(3608.0, 3611.0))],
+        3,
+    )
+    .await;
+    let d = decisions(&pool).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1, "{d:?}");
+    // $72.00 adopted (60 cents from 3611.00 to 3491.00) plus $48.00 reserved.
+    assert!(
+        d.iter().any(|(k, r)| k == "skip"
+            && r.contains(
+                "open risk 120.00 plus this entry's 120.00 would exceed its budget 200.01"
+            )),
+        "{d:?}"
+    );
+    // Once the remainder filled, the intent is resolved: nothing is reserved.
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert!(u.is_empty(), "{u:?}");
 }

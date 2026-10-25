@@ -140,10 +140,14 @@ pub async fn owns_position(
     .await
 }
 
-/// Event kinds that fill an open intent.
+/// Event kinds that fill an open intent, in part or in full.
 pub const FILL_KINDS: &[&str] = &["ORDER_FILLED", "ORDER_PARTIAL_FILL", "RECONCILED_FILL"];
-/// Event kinds that end an open intent without a fill. `RECONCILED_ABSENT`:
-/// reconcile found it neither filled nor pending at the broker after its grace.
+/// Event kinds that fill an open intent in full. A partial fill does not:
+/// its remainder may still fill (Codex round 3 on #14).
+pub const FULL_FILL_KINDS: &[&str] = &["ORDER_FILLED", "RECONCILED_FILL"];
+/// Event kinds that end an open intent's remainder without a fill.
+/// `RECONCILED_ABSENT`: reconcile found it neither filled nor pending at the
+/// broker after its grace.
 pub const END_KINDS: &[&str] = &[
     "ORDER_REJECTED",
     "ORDER_CANCELLED",
@@ -153,27 +157,40 @@ pub const END_KINDS: &[&str] = &[
     "RECONCILED_ABSENT",
 ];
 
-/// An open intent with neither a fill nor an end recorded: an order the
-/// broker may still fill (accepted only, or no answer at all).
+/// An open intent with neither a full fill nor an end recorded: an order the
+/// broker may still fill, in whole or in its remainder (accepted only, no
+/// answer at all, or partly filled).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct UnresolvedIntent {
     pub entry_key: String,
     pub client_msg_id: String,
     pub symbol_id: Option<i64>,
-    /// The risk the gate recomputed for it, in the deposit currency.
+    /// The volume requested, in cents.
+    pub volume: Option<i64>,
+    /// The volume its recorded deals filled so far, in cents.
+    pub filled: i64,
+    /// The position its partial fills went into, if any.
+    pub position_id: Option<i64>,
+    /// The risk the gate recomputed for the whole volume, in the deposit currency.
     pub risk: Option<f64>,
     pub created_at: DateTime<Utc>,
 }
 
 /// An account's unresolved open intents: reconcile matches them by label and
-/// symbol, the open-risk budget holds their risk, they are never resent.
+/// symbol, the open-risk budget holds their outstanding risk, they are never
+/// resent.
 pub async fn open_intents_unresolved(
     pool: &PgPool,
     account_id: i64,
 ) -> Result<Vec<UnresolvedIntent>, sqlx::Error> {
-    let done: Vec<&str> = FILL_KINDS.iter().chain(END_KINDS).copied().collect();
+    let done: Vec<&str> = FULL_FILL_KINDS.iter().chain(END_KINDS).copied().collect();
     let rows = sqlx::query(
-        "SELECT i.entry_key, i.client_msg_id, i.symbol_id, i.risk, i.created_at
+        "SELECT i.entry_key, i.client_msg_id, i.symbol_id, i.volume, i.risk, i.created_at,
+                COALESCE((SELECT SUM(e.volume) FROM trading_events e
+                          WHERE e.entry_key = i.entry_key
+                            AND e.kind IN ('ORDER_PARTIAL_FILL', 'ORDER_FILLED')), 0)::BIGINT AS filled,
+                (SELECT MAX(e.position_id) FROM trading_events e
+                 WHERE e.entry_key = i.entry_key AND e.kind = 'ORDER_PARTIAL_FILL') AS position_id
          FROM trading_intents i
          WHERE i.account_id = $1 AND i.kind = 'open'
            AND NOT EXISTS (SELECT 1 FROM trading_events e
@@ -190,6 +207,9 @@ pub async fn open_intents_unresolved(
             entry_key: r.get("entry_key"),
             client_msg_id: r.get("client_msg_id"),
             symbol_id: r.get("symbol_id"),
+            volume: r.get("volume"),
+            filled: r.get("filled"),
+            position_id: r.get("position_id"),
             risk: r.get("risk"),
             created_at: r.get("created_at"),
         })

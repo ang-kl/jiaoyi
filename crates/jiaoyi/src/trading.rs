@@ -635,6 +635,15 @@ struct Book {
     grace: chrono::Duration,
 }
 
+/// The risk of what is left of an open (`volume` requested, `filled` so far)
+/// at the intent's stop distance, from the gate's risk for the whole volume.
+pub fn outstanding_risk(risk: Option<f64>, volume: Option<i64>, filled: i64) -> Option<f64> {
+    match (risk, volume) {
+        (Some(r), Some(v)) if v > 0 => Some(r * (v - filled).clamp(0, v) as f64 / v as f64),
+        (r, _) => r,
+    }
+}
+
 /// Strategy 1's risk at its stops: its positions' and its unresolved opens'.
 fn held_risk(book: &Book, syms: &HashMap<i64, Sym>, deposit: Option<&str>) -> Result<f64, String> {
     let mut total = open_risk(&book.own, syms, deposit)?;
@@ -944,6 +953,29 @@ async fn reconcile(
     let now = Utc::now();
     let mut released = Vec::new();
     for u in unresolved {
+        // What of it is filled: the broker's position when it is held, else
+        // the deals recorded. The adopted part's risk is the position's; the
+        // remainder's is held here, never both (Codex round 3 on #14).
+        let filled = u
+            .position_id
+            .and_then(|p| book.own.get(&p))
+            .map(|o| o.volume)
+            .unwrap_or(u.filled);
+        if u.volume.is_some_and(|v| filled >= v) {
+            // Filled in full at the broker, the last answer missed.
+            ts::record_event(
+                pool,
+                &reconciled_row(
+                    account_id,
+                    &u.entry_key,
+                    "RECONCILED_FILL",
+                    None,
+                    "an open found filled in full at the broker by reconcile",
+                ),
+            )
+            .await?;
+            continue;
+        }
         let at_broker = res.order.iter().any(|o| {
             o.trade_data.label.as_deref() == Some(LABEL)
                 && Some(o.trade_data.symbol_id) == u.symbol_id
@@ -953,7 +985,7 @@ async fn reconcile(
                 u.entry_key,
                 Pending {
                     symbol_id: u.symbol_id,
-                    risk: u.risk,
+                    risk: outstanding_risk(u.risk, u.volume, filled),
                 },
             );
             continue;
@@ -1619,6 +1651,15 @@ mod tests {
         assert!(e.contains("exceed its budget"), "{e}");
         // Live at $38.98: 3% is $1.17, below ETHUSD's minimum-volume $2.85.
         assert!(within_budget(0.0, 2.85, 38.98, 3.0).is_err());
+    }
+
+    #[test]
+    fn an_open_remainder_holds_its_share_of_the_risk() {
+        // 100 cents requested at $120.00; 60 filled: the 40 left hold $48.00.
+        assert!((outstanding_risk(Some(120.0), Some(100), 60).unwrap() - 48.0).abs() < 1e-9);
+        assert_eq!(outstanding_risk(Some(120.0), Some(100), 0), Some(120.0));
+        assert_eq!(outstanding_risk(Some(120.0), Some(100), 130), Some(0.0));
+        assert_eq!(outstanding_risk(None, Some(100), 60), None);
     }
 
     #[test]
