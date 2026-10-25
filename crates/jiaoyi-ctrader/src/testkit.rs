@@ -34,6 +34,8 @@ pub struct FakeBroker {
     pub symbols: Vec<pb::ProtoOaSymbol>,
     /// D1 bars per symbol id.
     pub bars: HashMap<i64, Vec<pb::ProtoOaTrendbar>>,
+    /// M30 bars per symbol id (Strategy 3), served for M30 requests.
+    pub m30_bars: HashMap<i64, Vec<pb::ProtoOaTrendbar>>,
     /// Quotes (bid, ask) sent per symbol id after a spot subscription.
     pub quotes: HashMap<i64, Vec<SidedQuote>>,
     /// At most this many bars per trendbar response (0 = unlimited); more sets hasMore.
@@ -98,6 +100,9 @@ pub struct FakeBroker {
     pub reject_orders: Option<String>,
     /// Answer no trading request at all (the client then waits and gives up).
     pub silent_orders: bool,
+    /// Reject this many close requests (ORDER_REJECTED), then fill them.
+    /// Shared by clones.
+    pub reject_closes: Arc<std::sync::atomic::AtomicUsize>,
     /// Net unrealized P&L (deposit cents) answered for every open position.
     pub unrealized_net: i64,
     /// Answer a new order with ORDER_ACCEPTED at once and fill it this much
@@ -428,8 +433,8 @@ impl FakeBroker {
                             .unwrap()
                             .trendbar_requests
                             .push((req.symbol_id, from, to));
-                        let mut bars: Vec<_> = self
-                            .bars
+                        let m30 = req.period == pb::ProtoOaTrendbarPeriod::M30 as i32;
+                        let mut bars: Vec<_> = if m30 { &self.m30_bars } else { &self.bars }
                             .get(&req.symbol_id)
                             .cloned()
                             .unwrap_or_default()
@@ -454,7 +459,7 @@ impl FakeBroker {
                             pb::ProtoOaGetTrendbarsRes {
                                 payload_type: None,
                                 ctid_trader_account_id: self.account_id,
-                                period: pb::ProtoOaTrendbarPeriod::D1 as i32,
+                                period: req.period,
                                 trendbar: bars,
                                 symbol_id: Some(req.symbol_id),
                                 has_more: Some(has_more),
@@ -787,6 +792,7 @@ impl FakeBroker {
                             let buy = req.trade_side == pb::ProtoOaTradeSide::Buy as i32;
                             let price = if buy { ask } else { bid };
                             let rel = req.relative_stop_loss.unwrap_or(0) as f64 / 100_000.0;
+                            let rel_tp = req.relative_take_profit.unwrap_or(0) as f64 / 100_000.0;
                             let mut positions = self.positions.lock().unwrap();
                             let position_id = 1000 + positions.len() as i64 + 1;
                             let position = pb::ProtoOaPosition {
@@ -807,6 +813,11 @@ impl FakeBroker {
                                     price - rel
                                 } else {
                                     price + rel
+                                }),
+                                take_profit: (rel_tp > 0.0).then_some(if buy {
+                                    price + rel_tp
+                                } else {
+                                    price - rel_tp
                                 }),
                                 ..Default::default()
                             };
@@ -888,11 +899,59 @@ impl FakeBroker {
                         let req = pb::ProtoOaClosePositionReq::decode(body.as_slice())
                             .unwrap_or_default();
                         log2.lock().unwrap().closes.push(req);
+                        let rejected = self
+                            .reject_closes
+                            .fetch_update(
+                                std::sync::atomic::Ordering::SeqCst,
+                                std::sync::atomic::Ordering::SeqCst,
+                                |n| n.checked_sub(1),
+                            )
+                            .is_ok();
                         let mut positions = self.positions.lock().unwrap();
                         let found = positions
                             .iter()
                             .position(|p| p.position_id == req.position_id);
                         match found {
+                            Some(_) if rejected => {
+                                drop(positions);
+                                let mut m = execution(
+                                    id,
+                                    self.account_id,
+                                    pb::ProtoOaExecutionType::OrderRejected,
+                                    None,
+                                    None,
+                                );
+                                let mut ev = pb::ProtoOaExecutionEvent::decode(
+                                    m.payload.as_deref().unwrap(),
+                                )
+                                .unwrap();
+                                ev.error_code = Some("MARKET_CLOSED".into());
+                                m.payload = Some(ev.encode_to_vec());
+                                out.push(m);
+                            }
+                            // A partial close: the rest stays open with its protection.
+                            Some(i) if req.volume < positions[i].trade_data.volume => {
+                                positions[i].trade_data.volume -= req.volume;
+                                let p = positions[i].clone();
+                                drop(positions);
+                                let deal = pb::ProtoOaDeal {
+                                    deal_id: p.position_id * 10 + 5,
+                                    order_id: p.position_id * 10 + 6,
+                                    position_id: p.position_id,
+                                    volume: req.volume,
+                                    filled_volume: req.volume,
+                                    symbol_id: p.trade_data.symbol_id,
+                                    deal_status: pb::ProtoOaDealStatus::Filled as i32,
+                                    ..Default::default()
+                                };
+                                out.push(execution(
+                                    id,
+                                    self.account_id,
+                                    pb::ProtoOaExecutionType::OrderFilled,
+                                    Some(p),
+                                    Some(deal),
+                                ));
+                            }
                             Some(i) => {
                                 let p = positions.remove(i);
                                 drop(positions);
@@ -982,6 +1041,96 @@ impl FakeBroker {
             Connection::from_stream(client_side, Duration::from_secs(5)),
             log,
         )
+    }
+}
+
+/// A broker-side fill: ORDER_FILLED with no client message id and the
+/// position as it was. `closing`: the position's stop-loss/take-profit order
+/// (or, with `stop_out`, a stop-out) and its closing deal of `volume` cents
+/// at `price`; otherwise a late opening deal of a market order.
+pub fn server_fill(
+    account_id: i64,
+    position: pb::ProtoOaPosition,
+    deal_id: i64,
+    price: f64,
+    volume: i64,
+    closing: bool,
+    stop_out: bool,
+) -> crate::ReceivedExecution {
+    let open_side = position.trade_data.trade_side;
+    let exit_side = match open_side {
+        1 => 2,
+        _ => 1,
+    };
+    let deal_side = if closing { exit_side } else { open_side };
+    let order = pb::ProtoOaOrder {
+        order_id: deal_id + 1,
+        trade_data: pb::ProtoOaTradeData {
+            trade_side: deal_side,
+            ..position.trade_data.clone()
+        },
+        order_type: if closing {
+            pb::ProtoOaOrderType::StopLossTakeProfit as i32
+        } else {
+            pb::ProtoOaOrderType::Market as i32
+        },
+        order_status: pb::ProtoOaOrderStatus::OrderStatusFilled as i32,
+        closing_order: Some(closing),
+        position_id: Some(position.position_id),
+        is_stop_out: Some(stop_out),
+        ..Default::default()
+    };
+    let deal = pb::ProtoOaDeal {
+        deal_id,
+        order_id: deal_id + 1,
+        position_id: position.position_id,
+        volume,
+        filled_volume: volume,
+        symbol_id: position.trade_data.symbol_id,
+        execution_price: Some(price),
+        trade_side: deal_side,
+        deal_status: pb::ProtoOaDealStatus::Filled as i32,
+        close_position_detail: closing.then(|| pb::ProtoOaClosePositionDetail {
+            entry_price: position.price.unwrap_or_default(),
+            closed_volume: Some(volume),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    crate::ReceivedExecution {
+        received_at: chrono::Utc::now(),
+        client_msg_id: None,
+        payload_type: Oa::ProtoOaExecutionEvent as u32,
+        payload: pb::ProtoOaExecutionEvent {
+            payload_type: None,
+            ctid_trader_account_id: account_id,
+            execution_type: pb::ProtoOaExecutionType::OrderFilled as i32,
+            position: Some(position),
+            order: Some(order),
+            deal: Some(deal),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    }
+}
+
+/// An M30 trendbar from exact relative prices (1/100000) opening at `open_time`.
+pub fn m30_bar(
+    open_time: chrono::DateTime<chrono::Utc>,
+    open: i64,
+    high: i64,
+    low: i64,
+    close: i64,
+    volume: i64,
+) -> pb::ProtoOaTrendbar {
+    pb::ProtoOaTrendbar {
+        volume,
+        period: Some(pb::ProtoOaTrendbarPeriod::M30 as i32),
+        low: Some(low),
+        delta_open: Some((open - low) as u64),
+        delta_close: Some((close - low) as u64),
+        delta_high: Some((high - low) as u64),
+        utc_timestamp_in_minutes: Some((open_time.timestamp() / 60) as u32),
     }
 }
 

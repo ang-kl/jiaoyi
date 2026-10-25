@@ -779,12 +779,82 @@ impl AccountSession<'_> {
         from: DateTime<Utc>,
         to: DateTime<Utc>,
     ) -> Result<(Vec<ProtoOaTrendbar>, bool), ClientError> {
+        self.trendbars(symbol_id, ProtoOaTrendbarPeriod::D1, from, to)
+            .await
+    }
+
+    /// The M30 trendbars of `[from, to]`, walked back in weekly windows (a
+    /// window that reports `hasMore` is split in half). Sorted by open time,
+    /// de-duplicated. Strategy 3's session opens and noise band.
+    pub async fn m30_bars(
+        &self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<ProtoOaTrendbar>, ClientError> {
+        let mut out: HashMap<u32, ProtoOaTrendbar> = HashMap::new();
+        let mut hi = to;
+        while hi > from {
+            let lo = (hi - chrono::Duration::days(7)).max(from);
+            for b in self.m30_window(symbol_id, lo, hi, 0).await? {
+                if let Some(m) = b.utc_timestamp_in_minutes {
+                    out.insert(m, b);
+                }
+            }
+            hi = lo - chrono::Duration::milliseconds(1);
+        }
+        let mut v: Vec<_> = out.into_values().collect();
+        v.sort_by_key(|b| b.utc_timestamp_in_minutes);
+        Ok(v)
+    }
+
+    fn m30_window<'a>(
+        &'a self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        depth: u32,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<ProtoOaTrendbar>, ClientError>> + Send + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let (bars, has_more) = self
+                .trendbars(symbol_id, ProtoOaTrendbarPeriod::M30, from, to)
+                .await?;
+            if !has_more || depth >= 8 || to - from <= chrono::Duration::hours(2) {
+                return Ok(bars);
+            }
+            let mid = from + (to - from) / 2;
+            let mut a = self.m30_window(symbol_id, from, mid, depth + 1).await?;
+            a.extend(
+                self.m30_window(
+                    symbol_id,
+                    mid + chrono::Duration::milliseconds(1),
+                    to,
+                    depth + 1,
+                )
+                .await?,
+            );
+            Ok(a)
+        })
+    }
+
+    /// One trendbar request of `period` for `[from, to]`.
+    async fn trendbars(
+        &self,
+        symbol_id: i64,
+        period: ProtoOaTrendbarPeriod,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<(Vec<ProtoOaTrendbar>, bool), ClientError> {
         let req = pb::ProtoOaGetTrendbarsReq {
             payload_type: None,
             ctid_trader_account_id: self.account.id(),
             from_timestamp: Some(from.timestamp_millis().max(0)),
             to_timestamp: Some(to.timestamp_millis()),
-            period: ProtoOaTrendbarPeriod::D1 as i32,
+            period: period as i32,
             symbol_id,
             count: None,
         };

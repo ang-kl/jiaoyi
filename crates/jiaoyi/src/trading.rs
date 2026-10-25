@@ -860,7 +860,9 @@ async fn read_levels(session: &AccountSession<'_>, symbol_id: i64) -> Result<Lev
     levels(&bars)
 }
 
-async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
+/// Fresh equity: the broker's balance plus the open positions' unrealized
+/// P&L, in the deposit currency (also Strategy 3's).
+pub async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
     let t = session.trader().await.map_err(|e| e.to_string())?;
     let digits = t
         .money_digits
@@ -879,7 +881,7 @@ async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
 /// An event reconcile writes under an intent: a fill it found
 /// (`RECONCILED_FILL`, or `RECONCILED_PARTIAL_FILL` for part of it), or an
 /// unresolved open it released (`RECONCILED_ABSENT`).
-fn reconciled_row(
+pub fn reconciled_row(
     account_id: i64,
     entry_key: &str,
     kind: &str,
@@ -946,10 +948,23 @@ async fn reconcile(
             "label": p.trade_data.label,
         })
     };
-    let mut unresolved = ts::open_intents_unresolved(pool, account_id).await?;
+    // Strategy 1's own unresolved opens (Strategy 3 reconciles its own).
+    let mut unresolved: Vec<ts::UnresolvedIntent> = ts::open_intents_unresolved(pool, account_id)
+        .await?
+        .into_iter()
+        .filter(|u| u.entry_key.starts_with("s1:"))
+        .collect();
     for p in &res.position {
+        // Claude · № 17,020 25-Oct (Strategy 3 v2: each strategy manages only its own label)
         if p.trade_data.label.as_deref() != Some(LABEL) {
-            external.push(ext(p));
+            if !p
+                .trade_data
+                .label
+                .as_deref()
+                .is_some_and(|l| gate::PROGRAM_LABELS.contains(&l))
+            {
+                external.push(ext(p));
+            }
             continue;
         }
         let mut owned = ts::owns_position(pool, account_id, p.position_id).await?;
@@ -1345,6 +1360,15 @@ async fn server_event(
         },
     };
     let mut e = gate::decode_execution(account_id, m)?;
+    // Claude · № 17,020 25-Oct: another strategy's position (a broker event
+    // with no request of ours): its own loop records it.
+    if key.is_none()
+        && e.label
+            .as_deref()
+            .is_some_and(|l| l != LABEL && gate::PROGRAM_LABELS.contains(&l))
+    {
+        return None;
+    }
     e.entry_key = key.clone();
     let new = match ts::record_event(pool, &event_row(&e)).await {
         Ok(new) => new,
@@ -1555,6 +1579,20 @@ async fn on_quote(
             return Ok(());
         }
     };
+    // Claude · № 17,020 25-Oct (Codex P1 on #15): a live broker-minimum entry
+    // is admitted account-wide, across Strategy 1 and Strategy 3, from fresh
+    // broker state; the account's lock is held through the send.
+    let _admission = if sized.mode == "broker_minimum" {
+        let g = crate::admission::lock(account_id).await;
+        if let Err(why) = crate::admission::live_minimum(pool, session).await {
+            d.note(Some(name), "skip", &why, detail).await;
+            tried.remove(&key);
+            return Ok(());
+        }
+        Some(g)
+    } else {
+        None
+    };
     // Strategy 1's open-risk budget (owner, № 16,806), its unresolved opens
     // included (Codex P1 on #14); one minimum trade at a time (owner, 25-10).
     let admitted = admit(
@@ -1582,6 +1620,7 @@ async fn on_quote(
         side,
         volume: sized.volume,
         relative_stop: rel,
+        relative_take_profit: None,
         limits,
         quote_to_deposit: Some(rate),
         label: LABEL.into(),

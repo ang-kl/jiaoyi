@@ -731,6 +731,55 @@ async fn live_takes_one_minimum_trade_at_a_time_with_the_gate_lifted(pool: PgPoo
     assert_eq!(demo["trades"], "yes");
 }
 
+// Claude · № 17,020 25-Oct (Codex P1 on #15): the live rule is account-wide.
+/// A Strategy 3 position open on the live account (another symbol) stops
+/// Strategy 1's broker-minimum entry: read fresh, across both loops.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_live_minimum_waits_for_a_strategy_3_position_on_the_account(pool: PgPool) {
+    loaded_with(
+        &pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    trading::apply_seed(&pool, trading::SEED_FILE)
+        .await
+        .unwrap();
+    let mut f = fake_on(&[ETH, BTC], 4_750);
+    f.trader.as_mut().unwrap().balance = 3_898;
+    f.fill_quotes = HashMap::from([(ETH, (3636.0, 3638.0))]);
+    f.quote_sequence = vec![(0, ETH, q(3636.0, 3638.0))];
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 900,
+        trade_data: ProtoOaTradeData {
+            symbol_id: BTC,
+            volume: 1,
+            trade_side: 1,
+            label: Some("jiaoyi-s3".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        ..Default::default()
+    });
+    let log = trade(&pool, &f, 2, Environment::Live).await;
+    let d = decisions(&pool).await;
+    assert!(log.lock().unwrap().orders.is_empty(), "{d:?}");
+    assert!(
+        d.iter()
+            .any(|(k, r)| k == "skip" && r.contains("account-wide") && r.contains("1 position(s)")),
+        "{d:?}"
+    );
+    // Strategy 3's position is neither Strategy 1's nor external.
+    assert!(
+        d.iter()
+            .any(|(k, r)| k == "reconcile" && r.contains("0 external")),
+        "{d:?}"
+    );
+}
+
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_demo_account_never_takes_the_minimum(pool: PgPool) {
     loaded(&pool).await;

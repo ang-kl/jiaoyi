@@ -324,6 +324,7 @@ pub async fn health(
     .await?;
     let grants = store::latest_grants(pool).await?;
     let trading = crate::trading::health(pool, &trading_loops).await?;
+    let strategy3 = crate::strategy3::health(pool).await?;
     // Claude · № 16,973 25-Oct (ordered № 16,972·C; the broker's own leverage, no money)
     let traders = store::history::latest_trader_reads(pool).await?;
     let broker_accounts: Vec<Value> = accounts
@@ -353,6 +354,7 @@ pub async fn health(
         "token_grants": token_grants,
         "broker_accounts": broker_accounts,
         "trading": trading,
+        "strategy3": strategy3,
         "last_loads": runs.iter().map(|r| serde_json::json!({
             "account_id": r.account_id,
             "run_id": r.id,

@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 /// The JSON routes, linked from the page.
-pub const ROUTES: [(&str, &str); 6] = [
+pub const ROUTES: [(&str, &str); 7] = [
     (
         "/health",
         "service health, token grants, last loads, tick recorders",
@@ -31,6 +31,10 @@ pub const ROUTES: [(&str, &str); 6] = [
     (
         "/research/trials",
         "trial verdicts, counts and R (no money)",
+    ),
+    (
+        "/trading/costs",
+        "Strategy 3's actual costs and order-to-fill times from its fills (no money)",
     ),
     (
         "/research/bars?account=…&symbol=…&from=…&to=…",
@@ -284,6 +288,78 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     }
     h.push_str("</tbody></table></div></section>");
 
+    // Claude · № 17,020 25-Oct (owner's Strategy 3 v2: a section per account)
+    // Strategy 3 per account: its open positions, today's decisions and
+    // today's trades. Prices and volumes only, no money.
+    h.push_str(r#"<section><h2>Strategy 3: intraday momentum</h2>"#);
+    let s3 = rows(&health["strategy3"]);
+    if s3.is_empty() {
+        h.push_str(r#"<p class="sub">No account recorded yet.</p>"#);
+    }
+    if let Some(first) = s3.first() {
+        h.push_str(&format!(
+            r#"<p class="sub">Pre-registration <span class="mono">{}</span>, hash <span class="mono">{}</span>; label <span class="mono">{}</span>. Entries on the first quote beyond the noise band.</p>"#,
+            txt(&first["prereg_file"]),
+            esc(&short(first["prereg_hash"].as_str().unwrap_or("—"), 12)),
+            txt(&first["label"]),
+        ));
+    }
+    for a in s3 {
+        let positions = rows(&a["open_positions"]);
+        let pos = if positions.is_empty() {
+            "none".to_string()
+        } else {
+            positions
+                .iter()
+                .map(|p| {
+                    format!(
+                        "{} {} {} at {} (stop {}, take-profit {})",
+                        txt(&p["symbol"]),
+                        txt(&p["side"]),
+                        txt(&p["volume"]),
+                        txt(&p["entry"]),
+                        txt(&p["stop"]),
+                        txt(&p["take_profit"]),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        let counts = rows(&a["today"]["decisions_today"])
+            .iter()
+            .map(|c| format!("{} {}", txt(&c["kind"]), txt(&c["count"])))
+            .collect::<Vec<_>>()
+            .join(", ");
+        h.push_str(&format!(
+            r#"<h3 class="mono">{} <span class="sub">{} · {}</span></h3><p class="note">Open: {pos}</p><p class="note">Decisions today: {}</p>"#,
+            txt(&a["account_id"]),
+            txt(&a["environment"]),
+            txt(&a["sizing"]),
+            if counts.is_empty() { "none".to_string() } else { counts },
+        ));
+        h.push_str(r#"<div class="scroll"><table><thead><tr><th>Time</th><th>Symbol</th><th>Order</th><th>Side</th><th>Outcome</th><th class="num">Price</th><th class="num">Volume</th><th class="num">Order to fill (ms)</th><th class="num">Slippage</th></tr></thead><tbody>"#);
+        let trades = rows(&a["today"]["trades_today"]);
+        if trades.is_empty() {
+            h.push_str(r#"<tr><td colspan="9" class="empty">No trade today.</td></tr>"#);
+        }
+        for t in trades {
+            h.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td></tr>",
+                txt(&t["at"]),
+                txt(&t["symbol"]),
+                txt(&t["kind"]),
+                txt(&t["side"]),
+                txt(&t["outcome"]),
+                txt(&t["price"]),
+                txt(&t["volume"]),
+                txt(&t["order_to_fill_ms"]),
+                num(&t["slippage"], 2),
+            ));
+        }
+        h.push_str("</tbody></table></div>");
+    }
+    h.push_str("</section>");
+
     // Research jobs, with their trial's verdict.
     h.push_str(r#"<section><h2>Research jobs</h2>"#);
     h.push_str(&format!(
@@ -484,6 +560,30 @@ mod tests {
         assert!(!p.contains("ctraderapi"));
         // No write: no form, no POST.
         assert!(!p.contains("<form") && !p.to_lowercase().contains("post"));
+    }
+
+    #[test]
+    fn the_strategy_3_section_shows_positions_decisions_and_trades_without_money() {
+        let now = "2026-10-25T05:00:00Z".parse().unwrap();
+        let h = json!({"strategy3": [
+            {"account_id": 49236051, "environment": "demo", "label": "jiaoyi-s3",
+             "sizing": "risk_pct of fresh equity",
+             "prereg_file": "docs/preregistration-2026-10-25-strategy3.md",
+             "prereg_hash": "35a3c9071cb73d6d09c72ea492af0ba2b7c7ebee",
+             "open_positions": [{"symbol": "BTCUSD", "side": "buy", "volume": 8, "entry": 60462.0,
+                                  "stop": 60012.0, "take_profit": 62563.21}],
+             "today": {"decisions_today": [{"kind": "s3_sent", "count": 1}],
+                       "trades_today": [{"at": "2026-10-25T00:45:00Z", "symbol": "BTCUSD", "kind": "open",
+                                          "side": "buy", "outcome": "filled", "price": 60462.0, "volume": 13,
+                                          "order_to_fill_ms": 182, "slippage": 2.0}]}}
+        ]});
+        let p = page(&h, &json!({}), &json!({}), now);
+        assert!(p.contains("<h2>Strategy 3: intraday momentum</h2>"));
+        assert!(p.contains("BTCUSD buy 8 at 60462.0 (stop 60012.0, take-profit 62563.21)"));
+        assert!(p.contains("s3_sent 1"));
+        assert!(p.contains(">182<") && p.contains(">2.00<"));
+        assert!(p.contains("jiaoyi-s3"));
+        assert!(!p.to_lowercase().contains("balance") && !p.to_lowercase().contains("equity "));
     }
 
     #[test]

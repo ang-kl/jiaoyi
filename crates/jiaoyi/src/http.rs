@@ -34,6 +34,7 @@ pub fn router(state: AppState) -> Router {
         .route("/research/bars", get(bars))
         .route("/research/jobs", get(jobs))
         .route("/research/trials", get(trials))
+        .route("/trading/costs", get(trading_costs))
         .with_state(state)
 }
 
@@ -124,6 +125,15 @@ async fn bars(State(s): State<AppState>, Query(q): Query<crate::research::BarsQu
 
 async fn jobs(State(s): State<AppState>) -> Response {
     match crate::edge::routes::jobs(&s.pool).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => unavailable(e),
+    }
+}
+
+/// `/trading/costs`: Strategy 3's actual costs and order-to-fill times from
+/// its own fills. Prices and milliseconds only, no money.
+async fn trading_costs(State(s): State<AppState>) -> Response {
+    match jiaoyi_store::strategy3::costs(&s.pool).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => unavailable(e),
     }
