@@ -100,6 +100,9 @@ pub struct FakeBroker {
     pub reject_orders: Option<String>,
     /// Answer no trading request at all (the client then waits and gives up).
     pub silent_orders: bool,
+    /// Reject this many close requests (ORDER_REJECTED), then fill them.
+    /// Shared by clones.
+    pub reject_closes: Arc<std::sync::atomic::AtomicUsize>,
     /// Net unrealized P&L (deposit cents) answered for every open position.
     pub unrealized_net: i64,
     /// Answer a new order with ORDER_ACCEPTED at once and fill it this much
@@ -786,11 +789,36 @@ impl FakeBroker {
                         let req = pb::ProtoOaClosePositionReq::decode(body.as_slice())
                             .unwrap_or_default();
                         log2.lock().unwrap().closes.push(req);
+                        let rejected = self
+                            .reject_closes
+                            .fetch_update(
+                                std::sync::atomic::Ordering::SeqCst,
+                                std::sync::atomic::Ordering::SeqCst,
+                                |n| n.checked_sub(1),
+                            )
+                            .is_ok();
                         let mut positions = self.positions.lock().unwrap();
                         let found = positions
                             .iter()
                             .position(|p| p.position_id == req.position_id);
                         match found {
+                            Some(_) if rejected => {
+                                drop(positions);
+                                let mut m = execution(
+                                    id,
+                                    self.account_id,
+                                    pb::ProtoOaExecutionType::OrderRejected,
+                                    None,
+                                    None,
+                                );
+                                let mut ev = pb::ProtoOaExecutionEvent::decode(
+                                    m.payload.as_deref().unwrap(),
+                                )
+                                .unwrap();
+                                ev.error_code = Some("MARKET_CLOSED".into());
+                                m.payload = Some(ev.encode_to_vec());
+                                out.push(m);
+                            }
                             // A partial close: the rest stays open with its protection.
                             Some(i) if req.volume < positions[i].trade_data.volume => {
                                 positions[i].trade_data.volume -= req.volume;

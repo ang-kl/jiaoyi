@@ -1446,6 +1446,20 @@ async fn on_quote(
             return Ok(());
         }
     };
+    // Claude · № 17,020 25-Oct (Codex P1 on #15): a live broker-minimum entry
+    // is admitted account-wide, across Strategy 1 and Strategy 3, from fresh
+    // broker state; the account's lock is held through the send.
+    let _admission = if sized.mode == "broker_minimum" {
+        let g = crate::admission::lock(account_id).await;
+        if let Err(why) = crate::admission::live_minimum(pool, session).await {
+            d.note(Some(name), "skip", &why, detail).await;
+            tried.remove(&key);
+            return Ok(());
+        }
+        Some(g)
+    } else {
+        None
+    };
     // Strategy 1's open-risk budget (owner, № 16,806), its unresolved opens
     // included (Codex P1 on #14); one minimum trade at a time (owner, 25-10).
     let admitted = admit(

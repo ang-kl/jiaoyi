@@ -397,8 +397,16 @@ pub struct Own {
     pub session_date: Option<chrono::NaiveDate>,
     pub entry_key: Option<String>,
     pub tp1_sent: bool,
-    pub end_sent: bool,
+    /// Session-end closes tried so far (each its own intent key), and when
+    /// the next may go (Codex P1 on #15: a refused or rejected close is
+    /// retried, never given up).
+    pub end_attempts: i64,
+    pub end_next_try: Option<DateTime<Utc>>,
 }
+
+/// After a session-end close the broker refused or rejected, the next try
+/// waits this long (self-derived).
+pub const END_RETRY: Duration = Duration::from_secs(10);
 
 /// An open sent but not answered (Unconfirmed): its risk is held in the
 /// budget, and on a live account it counts as an open position, until a
@@ -599,7 +607,7 @@ impl<'a, 'c> Trader<'a, 'c> {
     pub async fn reconcile(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
         let account_id = self.account_id();
         let res = self.session.reconcile().await?;
-        let plans = s3s::open_plans(self.pool, account_id).await?;
+        let mut plans = s3s::open_plans(self.pool, account_id).await?;
         // Strategy 3's unresolved opens: accepted only, or no answer (Codex P1
         // on #14). Never resent.
         let mut unresolved: Vec<ts::UnresolvedIntent> =
@@ -626,6 +634,9 @@ impl<'a, 'c> Trader<'a, 'c> {
                 {
                     let u = unresolved.remove(i);
                     self.adopt(&u.entry_key, p).await?;
+                    // Claude · № 17,020 25-Oct (Codex P1 on #15): the adopted
+                    // position's plan is read after its fill row exists.
+                    plans = s3s::open_plans(self.pool, account_id).await?;
                     owned = true;
                 }
             }
@@ -639,8 +650,8 @@ impl<'a, 'c> Trader<'a, 'c> {
             let plan = plans.iter().rev().find(|x| x.position_id == p.position_id);
             let tp1_sent =
                 s3s::order_for_position(self.pool, account_id, p.position_id, "tp1").await?;
-            let end_sent =
-                s3s::order_for_position(self.pool, account_id, p.position_id, "session_end")
+            let end_attempts =
+                s3s::orders_for_position(self.pool, account_id, p.position_id, "session_end")
                     .await?;
             let e = self.own.entry(p.position_id).or_insert_with(|| Own {
                 position_id: p.position_id,
@@ -662,8 +673,27 @@ impl<'a, 'c> Trader<'a, 'c> {
                 }),
                 entry_key: plan.map(|x| x.entry_key.clone()),
                 tp1_sent,
-                end_sent,
+                end_attempts,
+                end_next_try: None,
             });
+            // A plan recorded after the position was first seen fills what is
+            // still unknown.
+            if let Some(x) = plan {
+                if e.tp1_distance.is_none() {
+                    e.tp1_distance = x.detail["order"]["tp1_distance"].as_f64();
+                    e.close_volume = x.detail["order"]["plan"]["close_volume"].as_i64();
+                    e.partial =
+                        x.detail["order"]["plan"]["mode"].as_str() == Some("partial_runner");
+                }
+                if e.session_date.is_none() {
+                    e.session_date = x.detail["session_date"]
+                        .as_str()
+                        .and_then(|d| d.parse().ok());
+                }
+                if e.entry_key.is_none() {
+                    e.entry_key = Some(x.entry_key.clone());
+                }
+            }
             // The broker wins.
             e.volume = p.trade_data.volume;
             e.stop = p.stop_loss;
@@ -981,7 +1011,8 @@ impl<'a, 'c> Trader<'a, 'c> {
         if let Some(x) = self.own.get_mut(&position_id) {
             x.tp1_sent = true;
         }
-        self.close(&o, close, "tp1", bid, ask, now).await
+        self.close(&o, close, "tp1", None, bid, ask, now).await?;
+        Ok(())
     }
 
     /// The session end: every Strategy 3 position whose session is over, or
@@ -989,7 +1020,7 @@ impl<'a, 'c> Trader<'a, 'c> {
     pub async fn session_end(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
         let owns: Vec<Own> = self.own.values().cloned().collect();
         for o in owns {
-            if o.end_sent {
+            if o.end_next_try.is_some_and(|t| now < t) {
                 continue;
             }
             let Some(sym) = self.syms.get(&o.symbol_id) else {
@@ -1005,24 +1036,41 @@ impl<'a, 'c> Trader<'a, 'c> {
                 continue;
             }
             let (bid, ask) = (sym.bid, sym.ask);
-            if let Some(x) = self.own.get_mut(&o.position_id) {
-                x.end_sent = true;
-            }
-            self.close(&o, o.volume, "session_end", bid, ask, now)
+            // Claude · № 17,020 25-Oct (Codex P1 on #15): every attempt is its
+            // own intent; a refusal or rejection is tried again after
+            // END_RETRY, a sent close after one reconcile interval if the
+            // broker still shows the position.
+            let attempt = o.end_attempts + 1;
+            let outcome = self
+                .close(&o, o.volume, "session_end", Some(attempt), bid, ask, now)
                 .await?;
+            let r = rules(self.pool, self.account_id(), self.env).await?;
+            let wait = match outcome {
+                Some(Outcome::Filled { .. }) | Some(Outcome::Unconfirmed) => {
+                    chrono::Duration::seconds(r.reconcile_secs as i64)
+                }
+                _ => chrono::Duration::from_std(END_RETRY).unwrap_or_default(),
+            };
+            if let Some(x) = self.own.get_mut(&o.position_id) {
+                x.end_attempts = attempt;
+                x.end_next_try = Some(now + wait);
+            }
         }
         Ok(())
     }
 
+    /// Send a close; `None` when the gate refused it (nothing sent).
+    #[allow(clippy::too_many_arguments)]
     async fn close(
         &mut self,
         o: &Own,
         volume: i64,
         kind: &str,
+        attempt: Option<i64>,
         bid: Option<f64>,
         ask: Option<f64>,
         now: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<Outcome>> {
         let account_id = self.account_id();
         let r = rules(self.pool, account_id, self.env).await?;
         let name = self
@@ -1030,11 +1078,10 @@ impl<'a, 'c> Trader<'a, 'c> {
             .get(&o.symbol_id)
             .map(|s| s.name.clone())
             .unwrap_or_default();
-        let key = format!(
-            "s3-{}:{account_id}:{}",
-            if kind == "tp1" { "tp1" } else { "end" },
-            o.position_id
-        );
+        let key = match attempt {
+            Some(n) => format!("s3-end:{account_id}:{}:{n}", o.position_id),
+            None => format!("s3-tp1:{account_id}:{}", o.position_id),
+        };
         let decision_price = match o.side {
             Side::Buy => bid,
             Side::Sell => ask,
@@ -1110,6 +1157,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                         json!({"entry_key": key}),
                     )
                     .await;
+                Ok(Some(sent.outcome))
             }
             Err(SendError::Refused(x)) => {
                 self.d
@@ -1120,10 +1168,10 @@ impl<'a, 'c> Trader<'a, 'c> {
                         json!({"entry_key": key}),
                     )
                     .await;
+                Ok(None)
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => Err(e.into()),
         }
-        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1342,6 +1390,19 @@ impl<'a, 'c> Trader<'a, 'c> {
         detail["quote_to_deposit"] = json!(rate);
         let r = rules(self.pool, self.account_id(), self.env).await?;
         self.d.version = Some(r.version);
+        // Claude · № 17,020 25-Oct (Codex P1 on #15): a live entry is one
+        // broker minimum, admitted account-wide (both strategies' loops) from
+        // fresh broker state; the account's lock is held through the send.
+        let _admission = if r.live {
+            let g = crate::admission::lock(self.account_id()).await;
+            if let Err(why) = crate::admission::live_minimum(self.pool, self.session).await {
+                self.skip(symbol_id, &name, &why, detail, now).await;
+                return Ok(());
+            }
+            Some(g)
+        } else {
+            None
+        };
         let equity = match fresh_equity(self.session).await {
             Ok(x) => x,
             Err(why) => {
@@ -1356,7 +1417,12 @@ impl<'a, 'c> Trader<'a, 'c> {
                 return Ok(());
             }
         };
-        let open_programs = self.program_positions + self.pending.len();
+        // Live: the fresh account-wide admission above is the count.
+        let open_programs = if r.live {
+            0
+        } else {
+            self.program_positions + self.pending.len()
+        };
         let sized = match size(&r, equity, rel, rate, &limits, open_programs) {
             Ok(x) => x,
             Err(why) => {
@@ -1477,7 +1543,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                                 session_date: Some(s.date),
                                 entry_key: Some(key.clone()),
                                 tp1_sent: false,
-                                end_sent: false,
+                                end_attempts: 0,
+                                end_next_try: None,
                             },
                         );
                         self.program_positions += 1;

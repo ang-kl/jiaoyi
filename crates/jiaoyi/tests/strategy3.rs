@@ -579,3 +579,220 @@ fn the_sessions_of_the_seven_indices_follow_their_exchanges() {
         assert_eq!(s.open.format("%H:%M").to_string(), open, "{n}");
     }
 }
+
+fn s3_position(id: i64, volume: i64, price: f64) -> ProtoOaPosition {
+    ProtoOaPosition {
+        position_id: id,
+        trade_data: ProtoOaTradeData {
+            symbol_id: BTC,
+            volume,
+            trade_side: 1,
+            label: Some("jiaoyi-s3".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        price: Some(price),
+        stop_loss: Some(price - 450.0),
+        take_profit: Some(price + 2_101.21),
+        ..Default::default()
+    }
+}
+
+/// Codex P1 on #15: an Unconfirmed open adopted at a reconcile (here after a
+/// restart) keeps its plan: its TP1 partial and its session-end close.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_unconfirmed_open_adopted_at_reconcile_takes_its_tp1_and_its_session_end(pool: PgPool) {
+    loaded(&pool).await;
+    settings::change(
+        &pool,
+        "trading.order_wait_secs",
+        Some(DEMO),
+        Some(json!(1)),
+        "test",
+        "short wait",
+    )
+    .await
+    .unwrap();
+    let silent = FakeBroker {
+        silent_orders: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, silent, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1, "sent, no answer");
+    });
+    let outcome: String =
+        sqlx::query_scalar("SELECT outcome FROM strategy3_fills WHERE kind = 'open'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(outcome, "unconfirmed");
+    // The broker did fill it.
+    silent
+        .positions
+        .lock()
+        .unwrap()
+        .push(s3_position(5001, 13, 60_462.0));
+    let answering = FakeBroker {
+        silent_orders: false,
+        ..silent.clone()
+    };
+    with_trader!(&pool, answering, Environment::Demo, |t, log| {
+        let o = t.own.get(&5001).cloned().expect("adopted");
+        assert!((o.tp1_distance.unwrap() - 1_651.21).abs() < 1e-9, "{o:?}");
+        assert_eq!(o.close_volume, Some(5));
+        assert!(o.partial);
+        assert_eq!(o.session_date, Some(today().date));
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+            .await
+            .unwrap();
+        t.reconcile(Utc::now()).await.unwrap();
+        t.session_end(at(24 * 60)).await.unwrap();
+        let closes: Vec<i64> = log
+            .lock()
+            .unwrap()
+            .closes
+            .iter()
+            .map(|c| c.volume)
+            .collect();
+        assert_eq!(closes, vec![5, 8]);
+    });
+}
+
+async fn end_orders(pool: &PgPool) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT o.entry_key, f.outcome FROM strategy3_orders o
+         JOIN strategy3_fills f ON f.entry_key = o.entry_key
+         WHERE o.kind = 'session_end' ORDER BY o.id",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+/// Codex P1 on #15: a rejected session-end close is tried again, with a new
+/// intent key, until it fills.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_rejected_session_end_close_is_retried_with_a_new_key(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_closes: Arc::new(std::sync::atomic::AtomicUsize::new(1)),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let end = at(24 * 60);
+        t.session_end(end).await.unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1);
+        t.session_end(end + Duration::seconds(5)).await.unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1, "waits 10 s");
+        t.session_end(end + Duration::seconds(11)).await.unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 2);
+    });
+    let e = end_orders(&pool).await;
+    assert_eq!(e.len(), 2, "{e:?}");
+    assert!(e[0].0.ends_with(":1") && e[0].1 == "rejected", "{e:?}");
+    assert!(e[1].0.ends_with(":2") && e[1].1 == "filled", "{e:?}");
+}
+
+/// Codex P1 on #15: after a restart, a session-end close that was rejected
+/// is tried again at once, with the next key.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_restart_after_a_rejected_session_end_close_retries_it(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_closes: Arc::new(std::sync::atomic::AtomicUsize::new(1)),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        t.session_end(at(24 * 60)).await.unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1);
+    });
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.session_end(at(24 * 60) + Duration::seconds(1))
+            .await
+            .unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1, "retried at once");
+    });
+    let e = end_orders(&pool).await;
+    assert_eq!(e.len(), 2, "{e:?}");
+    assert!(e[1].0.ends_with(":2") && e[1].1 == "filled", "{e:?}");
+}
+
+/// Codex P1 on #15: the live rule is account-wide. A Strategy 1 position
+/// opened since Strategy 3's last reconcile, or an unresolved Strategy 1
+/// open, stops Strategy 3's live minimum entry (read fresh, not cached).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_live_minimum_waits_for_a_strategy_1_trade_opened_since_the_last_reconcile(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_460.0));
+    with_trader!(&pool, f, Environment::Live, |t, log| {
+        // Strategy 1 opens ETHUSD after this loop's reconcile.
+        f.positions.lock().unwrap().push(ProtoOaPosition {
+            position_id: 77,
+            trade_data: ProtoOaTradeData {
+                symbol_id: 5,
+                volume: 1,
+                trade_side: 1,
+                label: Some("jiaoyi-s1".into()),
+                ..Default::default()
+            },
+            position_status: 1,
+            swap: 0,
+            ..Default::default()
+        });
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert!(orders(&log).is_empty());
+    });
+    let d = decisions(&pool).await;
+    assert!(
+        d.iter()
+            .any(|(k, r)| k == "s3_skip" && r.contains("account-wide")),
+        "{d:?}"
+    );
+    // An unresolved Strategy 1 open (no answer yet) counts too.
+    f.positions.lock().unwrap().clear();
+    store::trading::record_intent(
+        &pool,
+        &store::trading::IntentRow {
+            account_id: DEMO,
+            entry_key: format!("s1:{DEMO}:5:2026-10-24"),
+            client_msg_id: "t9".into(),
+            kind: "open".into(),
+            symbol_id: Some(5),
+            position_id: None,
+            side: Some("buy".into()),
+            volume: Some(1),
+            relative_stop: Some(1_000),
+            stop_price: None,
+            take_profit: None,
+            risk: Some(1.0),
+            max_risk: 4.0,
+            settings_version: None,
+        },
+    )
+    .await
+    .unwrap();
+    with_trader!(&pool, f, Environment::Live, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert!(orders(&log).is_empty());
+    });
+    let d = decisions(&pool).await;
+    assert!(
+        d.iter()
+            .any(|(k, r)| k == "s3_skip" && r.contains("1 unresolved open(s)")),
+        "{d:?}"
+    );
+}

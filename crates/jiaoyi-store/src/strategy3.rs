@@ -155,6 +155,24 @@ pub async fn order_for_position(
     .await
 }
 
+/// How many orders of `kind` were decided for a position.
+pub async fn orders_for_position(
+    pool: &PgPool,
+    account_id: i64,
+    position_id: i64,
+    kind: &str,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM strategy3_orders
+         WHERE account_id = $1 AND position_id = $2 AND kind = $3",
+    )
+    .bind(account_id)
+    .bind(position_id)
+    .bind(kind)
+    .fetch_one(pool)
+    .await
+}
+
 /// The number of Strategy 3 opens decided on a symbol in a session (the next
 /// entry's number).
 pub async fn opens_in_session(

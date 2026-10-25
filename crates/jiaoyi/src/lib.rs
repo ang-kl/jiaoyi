@@ -2,6 +2,7 @@
 //! and costs from cTrader into PostgreSQL, record the live quote stream,
 //! and report on them.
 
+pub mod admission;
 pub mod config;
 pub mod edge;
 pub mod history;
