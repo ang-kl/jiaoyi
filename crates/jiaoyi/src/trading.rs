@@ -826,8 +826,8 @@ async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
 }
 
 /// An event reconcile writes under an intent: a fill it found
-/// (`RECONCILED_FILL`), or an unresolved open it released
-/// (`RECONCILED_ABSENT`).
+/// (`RECONCILED_FILL`, or `RECONCILED_PARTIAL_FILL` for part of it), or an
+/// unresolved open it released (`RECONCILED_ABSENT`).
 fn reconciled_row(
     account_id: i64,
     entry_key: &str,
@@ -903,23 +903,38 @@ async fn reconcile(
         }
         let mut owned = ts::owns_position(pool, account_id, p.position_id).await?;
         if !owned {
-            // An unresolved open that did fill: adopted once, recorded.
-            if let Some(i) = unresolved
-                .iter()
-                .position(|u| u.symbol_id == Some(p.trade_data.symbol_id))
-            {
-                let u = unresolved.remove(i);
+            // An unresolved open that did fill: adopted once, recorded. In
+            // full only at the requested volume; a part keeps the intent
+            // unresolved, its remainder reserved below until it fills, ends
+            // or is absent after the grace (Codex round 4 on #14).
+            // Claude · № 17,020 25-Oct (ordered: owner "Merge now, fix next")
+            if let Some(i) = unresolved.iter().position(|u| {
+                u.symbol_id == Some(p.trade_data.symbol_id) && u.position_id.is_none()
+            }) {
+                let part = unresolved[i]
+                    .volume
+                    .is_some_and(|v| p.trade_data.volume < v);
+                let (kind, why) = if part {
+                    (
+                        "RECONCILED_PARTIAL_FILL",
+                        "an unresolved open found partly filled by reconcile: the position adopted, the remainder held",
+                    )
+                } else {
+                    (
+                        "RECONCILED_FILL",
+                        "an unresolved open found filled by reconcile",
+                    )
+                };
                 ts::record_event(
                     pool,
-                    &reconciled_row(
-                        account_id,
-                        &u.entry_key,
-                        "RECONCILED_FILL",
-                        Some(p),
-                        "an unresolved open found filled by reconcile",
-                    ),
+                    &reconciled_row(account_id, &unresolved[i].entry_key, kind, Some(p), why),
                 )
                 .await?;
+                if part {
+                    unresolved[i].position_id = Some(p.position_id);
+                } else {
+                    unresolved.remove(i);
+                }
                 owned = true;
             }
         }

@@ -132,7 +132,8 @@ pub async fn owns_position(
         "SELECT EXISTS (
             SELECT 1 FROM trading_events e JOIN trading_intents i ON i.entry_key = e.entry_key
             WHERE e.account_id = $1 AND e.position_id = $2 AND i.kind = 'open'
-              AND e.kind IN ('ORDER_FILLED', 'ORDER_PARTIAL_FILL', 'RECONCILED_FILL'))",
+              AND e.kind IN ('ORDER_FILLED', 'ORDER_PARTIAL_FILL', 'RECONCILED_FILL',
+                             'RECONCILED_PARTIAL_FILL'))",
     )
     .bind(account_id)
     .bind(position_id)
@@ -141,7 +142,14 @@ pub async fn owns_position(
 }
 
 /// Event kinds that fill an open intent, in part or in full.
-pub const FILL_KINDS: &[&str] = &["ORDER_FILLED", "ORDER_PARTIAL_FILL", "RECONCILED_FILL"];
+/// `RECONCILED_PARTIAL_FILL`: reconcile found part of an unresolved open at
+/// the broker (Codex round 4 on #14); its remainder stays unresolved.
+pub const FILL_KINDS: &[&str] = &[
+    "ORDER_FILLED",
+    "ORDER_PARTIAL_FILL",
+    "RECONCILED_FILL",
+    "RECONCILED_PARTIAL_FILL",
+];
 /// Event kinds that fill an open intent in full. A partial fill does not:
 /// its remainder may still fill (Codex round 3 on #14).
 pub const FULL_FILL_KINDS: &[&str] = &["ORDER_FILLED", "RECONCILED_FILL"];
@@ -188,9 +196,11 @@ pub async fn open_intents_unresolved(
         "SELECT i.entry_key, i.client_msg_id, i.symbol_id, i.volume, i.risk, i.created_at,
                 COALESCE((SELECT SUM(e.volume) FROM trading_events e
                           WHERE e.entry_key = i.entry_key
-                            AND e.kind IN ('ORDER_PARTIAL_FILL', 'ORDER_FILLED')), 0)::BIGINT AS filled,
+                            AND e.kind IN ('ORDER_PARTIAL_FILL', 'ORDER_FILLED',
+                                           'RECONCILED_PARTIAL_FILL')), 0)::BIGINT AS filled,
                 (SELECT MAX(e.position_id) FROM trading_events e
-                 WHERE e.entry_key = i.entry_key AND e.kind = 'ORDER_PARTIAL_FILL') AS position_id
+                 WHERE e.entry_key = i.entry_key
+                   AND e.kind IN ('ORDER_PARTIAL_FILL', 'RECONCILED_PARTIAL_FILL')) AS position_id
          FROM trading_intents i
          WHERE i.account_id = $1 AND i.kind = 'open'
            AND NOT EXISTS (SELECT 1 FROM trading_events e

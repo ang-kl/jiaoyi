@@ -878,3 +878,113 @@ async fn an_open_remainder_is_reserved_until_it_fills(pool: PgPool) {
         .unwrap();
     assert!(u.is_empty(), "{u:?}");
 }
+
+/// Codex round 4 on #14: an accepted open of 100 cents filled 60 while the
+/// service was down. At startup the position is adopted at the broker's 60,
+/// the intent stays unresolved and its 40-cent remainder ($48.00) stays
+/// reserved, so BTCUSD's $120.00 entry is skipped. Once the broker holds all
+/// 100, the open is recorded filled in full and nothing is reserved.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partial_fill_recovered_at_startup_keeps_its_remainder_reserved(pool: PgPool) {
+    loaded_with(
+        &pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake_on(&[ETH, BTC], 2_000);
+    f.trader.as_mut().unwrap().balance = 2_000_100;
+    // Accepted, and not filled within this session.
+    f.fill_delay = Some(Duration::from_secs(600));
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    let o = log.lock().unwrap().orders.clone();
+    assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
+    assert_eq!(o[0].volume, 100);
+    let key = trading::entry_key(DEMO, ETH, Utc::now().date_naive() - Days::days(1));
+    // While the service was down, 60 of the 100 cents filled.
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 1001,
+        trade_data: ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 60,
+            trade_side: 1,
+            label: Some("jiaoyi-s1".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        price: Some(3611.0),
+        stop_loss: Some(3491.0),
+        ..Default::default()
+    });
+    // A second labelled ETHUSD position no intent of this program filled.
+    let mut other = f.positions.lock().unwrap()[0].clone();
+    other.position_id = 1002;
+    other.trade_data.volume = 10;
+    f.positions.lock().unwrap().push(other);
+    f.fill_delay = None;
+    f.quote_sequence = vec![(500, BTC, q(3608.0, 3611.0))];
+    let log2 = trade(&pool, &f, 2, Environment::Demo).await;
+    let d = decisions(&pool).await;
+    assert!(log2.lock().unwrap().orders.is_empty(), "{d:?}");
+    // $72.00 adopted (60 cents from 3611.00 to 3491.00) plus $48.00 reserved.
+    assert!(
+        d.iter().any(|(k, r)| k == "skip"
+            && r.contains(
+                "open risk 120.00 plus this entry's 120.00 would exceed its budget 200.01"
+            )),
+        "{d:?}"
+    );
+    let ev: Vec<(String, Option<i64>, Option<i64>)> = sqlx::query_as(
+        "SELECT kind, position_id, volume FROM trading_events
+         WHERE entry_key = $1 AND kind LIKE 'RECONCILED%' ORDER BY id",
+    )
+    .bind(&key)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        ev,
+        vec![("RECONCILED_PARTIAL_FILL".into(), Some(1001), Some(60))],
+        "adopted at the broker's volume, not filled in full"
+    );
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert_eq!(u.len(), 1, "{u:?}");
+    assert_eq!((u[0].filled, u[0].position_id), (60, Some(1001)), "{u:?}");
+    // The adopted intent claims no second position.
+    let h = trading::health(&pool).await.unwrap();
+    assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
+    let ext = &h[0]["last_reconcile"]["external_positions"];
+    assert_eq!(ext.as_array().map(Vec::len), Some(1), "{h}");
+    assert_eq!(ext[0]["position_id"], 1002, "{h}");
+    f.positions
+        .lock()
+        .unwrap()
+        .retain(|p| p.position_id == 1001);
+    // The remainder fills: the broker holds all 100 cents.
+    f.positions.lock().unwrap()[0].trade_data.volume = 100;
+    f.quote_sequence = vec![];
+    let log3 = trade(&pool, &f, 2, Environment::Demo).await;
+    assert!(log3.lock().unwrap().orders.is_empty(), "never resent");
+    let kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT kind FROM trading_events WHERE entry_key = $1 AND kind LIKE 'RECONCILED%' ORDER BY id",
+    )
+    .bind(&key)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(kinds, vec!["RECONCILED_PARTIAL_FILL", "RECONCILED_FILL"]);
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert!(u.is_empty(), "{u:?}");
+    let h = trading::health(&pool).await.unwrap();
+    assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
+}
