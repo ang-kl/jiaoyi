@@ -796,3 +796,193 @@ async fn a_live_minimum_waits_for_a_strategy_1_trade_opened_since_the_last_recon
         "{d:?}"
     );
 }
+
+async fn tp1_orders(pool: &PgPool) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT o.entry_key, f.outcome FROM strategy3_orders o
+         JOIN strategy3_fills f ON f.entry_key = o.entry_key
+         WHERE o.kind = 'tp1' ORDER BY o.id",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+/// Codex P2 on #15: a TP1 close the broker rejects is tried again, with a
+/// new intent key, while TP1 is still reached; once filled it is never sent
+/// again.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_rejected_tp1_close_is_retried_with_a_new_key(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_closes: Arc::new(std::sync::atomic::AtomicUsize::new(1)),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let tp1 = at(61);
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), tp1)
+            .await
+            .unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1, "rejected");
+        t.on_quote(
+            BTC,
+            Some(62_113.21),
+            Some(62_118.0),
+            tp1 + Duration::seconds(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1, "waits 10 s");
+        t.on_quote(
+            BTC,
+            Some(62_113.21),
+            Some(62_118.0),
+            tp1 + Duration::seconds(11),
+        )
+        .await
+        .unwrap();
+        let closes: Vec<i64> = log
+            .lock()
+            .unwrap()
+            .closes
+            .iter()
+            .map(|c| c.volume)
+            .collect();
+        assert_eq!(closes, vec![5, 5], "retried for the same 5 cents");
+        t.on_quote(
+            BTC,
+            Some(62_200.0),
+            Some(62_205.0),
+            tp1 + Duration::seconds(30),
+        )
+        .await
+        .unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 2, "filled: never again");
+    });
+    let e = tp1_orders(&pool).await;
+    assert_eq!(e.len(), 2, "{e:?}");
+    assert!(e[0].0.ends_with(":1") && e[0].1 == "rejected", "{e:?}");
+    assert!(e[1].0.ends_with(":2") && e[1].1 == "filled", "{e:?}");
+}
+
+/// Codex P2 on #15: after a restart a rejected TP1 close is tried again at
+/// once, with the next key; a filled one is not.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_restart_after_a_rejected_tp1_close_retries_it(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_closes: Arc::new(std::sync::atomic::AtomicUsize::new(1)),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+            .await
+            .unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1);
+    });
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(
+            BTC,
+            Some(62_113.21),
+            Some(62_118.0),
+            at(61) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 1, "retried at once");
+    });
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(62_200.0), Some(62_205.0), at(62))
+            .await
+            .unwrap();
+        assert!(
+            log.lock().unwrap().closes.is_empty(),
+            "filled before the restart"
+        );
+    });
+    let e = tp1_orders(&pool).await;
+    assert_eq!(e.len(), 2, "{e:?}");
+    assert!(e[1].0.ends_with(":2") && e[1].1 == "filled", "{e:?}");
+}
+
+/// Codex P2 on #15: the broker's own exits (the stop, the take-profit it
+/// holds) are in `/trading/costs`, once per deal, with the fill against the
+/// level that executed. A late opening deal and another program's exit are
+/// not.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
+    use jiaoyi_ctrader::testkit::server_fill;
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        let p = f.positions.lock().unwrap()[0].clone();
+        let stop = p.stop_loss.unwrap();
+        // The stop (60,012.00) fills 3.00 lower, for all 13 cents; the same
+        // event again is the same deal.
+        let sl = server_fill(DEMO, p.clone(), 901, stop - 3.0, 13, true, false);
+        t.server_event(&sl).await;
+        t.server_event(&sl).await;
+        // Another long's take-profit, at 0.50 better than its level.
+        let other = s3_position(5002, 8, 60_000.0);
+        let tp = other.take_profit.unwrap();
+        t.server_event(&server_fill(DEMO, other, 902, tp + 0.5, 8, true, false))
+            .await;
+        // A late opening deal, and another program's stop: not Strategy 3 exits.
+        t.server_event(&server_fill(
+            DEMO,
+            p.clone(),
+            903,
+            60_462.0,
+            13,
+            false,
+            false,
+        ))
+        .await;
+        let mut s1 = p.clone();
+        s1.trade_data.label = Some("jiaoyi-s1".into());
+        t.server_event(&server_fill(DEMO, s1, 904, stop, 13, true, false))
+            .await;
+    });
+    let rows: Vec<(String, String, f64, f64, i64)> = sqlx::query_as(
+        "SELECT o.detail->>'reason', f.outcome, f.decision_price, f.slippage, f.volume
+         FROM strategy3_fills f JOIN strategy3_orders o ON o.entry_key = f.entry_key
+         WHERE f.kind = 'broker_exit' ORDER BY f.id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(
+        (rows[0].0.as_str(), rows[0].1.as_str()),
+        ("stop_loss", "filled")
+    );
+    assert!((rows[0].2 - 60_012.0).abs() < 1e-6, "{rows:?}");
+    assert!((rows[0].3 - 3.0).abs() < 1e-6, "adverse 3.00: {rows:?}");
+    assert_eq!(rows[0].4, 13);
+    assert_eq!(rows[1].0, "take_profit");
+    assert!((rows[1].2 - (60_000.0 + 2_101.21)).abs() < 1e-6, "{rows:?}");
+    assert!((rows[1].3 + 0.5).abs() < 1e-6, "favourable 0.50: {rows:?}");
+    let c = store::strategy3::costs(&pool).await.unwrap();
+    let row = &c["rows"][0];
+    assert_eq!(row["entries_filled"], 1);
+    assert_eq!(row["exits_filled"], 2, "{row}");
+    assert_eq!(row["broker_exits_filled"], 2, "{row}");
+    assert!(
+        (row["exit_slippage_median"].as_f64().unwrap() - 1.25).abs() < 1e-9,
+        "{row}"
+    );
+    assert!(
+        (row["spread_at_exit_median"].as_f64().unwrap() - 5.0).abs() < 1e-9,
+        "{row}"
+    );
+}

@@ -6,13 +6,15 @@
 -- 1. Each Strategy 3 order as decided, written with its intent, before the
 --    frame: the quote at the decision, the band, σ, R, the cost reserve C
 --    and its parts, and the plan (TP1, TP2, close volume). Append-only.
+--    A broker_exit row stands for an order the broker executed itself (the
+--    stop or the take-profit), one per deal, so its cost is reported too.
 CREATE TABLE strategy3_orders (
     id            BIGSERIAL PRIMARY KEY,
     account_id    BIGINT NOT NULL,
     entry_key     TEXT NOT NULL UNIQUE,
     label         TEXT NOT NULL,
     prereg_hash   TEXT NOT NULL,
-    kind          TEXT NOT NULL CHECK (kind IN ('open', 'tp1', 'session_end')),
+    kind          TEXT NOT NULL CHECK (kind IN ('open', 'tp1', 'session_end', 'broker_exit')),
     symbol        TEXT NOT NULL,
     symbol_id     BIGINT NOT NULL,
     position_id   BIGINT,
@@ -40,7 +42,7 @@ CREATE TABLE strategy3_fills (
     entry_key        TEXT NOT NULL REFERENCES strategy3_orders (entry_key),
     label            TEXT NOT NULL,
     prereg_hash      TEXT NOT NULL,
-    kind             TEXT NOT NULL CHECK (kind IN ('open', 'tp1', 'session_end')),
+    kind             TEXT NOT NULL CHECK (kind IN ('open', 'tp1', 'session_end', 'broker_exit')),
     symbol           TEXT NOT NULL,
     position_id      BIGINT,
     side             TEXT,

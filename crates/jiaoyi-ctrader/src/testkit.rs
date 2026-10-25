@@ -1044,6 +1044,76 @@ impl FakeBroker {
     }
 }
 
+/// A broker-side fill: ORDER_FILLED with no client message id and the
+/// position as it was. `closing`: the position's stop-loss/take-profit order
+/// (or, with `stop_out`, a stop-out) and its closing deal of `volume` cents
+/// at `price`; otherwise a late opening deal of a market order.
+pub fn server_fill(
+    account_id: i64,
+    position: pb::ProtoOaPosition,
+    deal_id: i64,
+    price: f64,
+    volume: i64,
+    closing: bool,
+    stop_out: bool,
+) -> crate::ReceivedExecution {
+    let open_side = position.trade_data.trade_side;
+    let exit_side = match open_side {
+        1 => 2,
+        _ => 1,
+    };
+    let deal_side = if closing { exit_side } else { open_side };
+    let order = pb::ProtoOaOrder {
+        order_id: deal_id + 1,
+        trade_data: pb::ProtoOaTradeData {
+            trade_side: deal_side,
+            ..position.trade_data.clone()
+        },
+        order_type: if closing {
+            pb::ProtoOaOrderType::StopLossTakeProfit as i32
+        } else {
+            pb::ProtoOaOrderType::Market as i32
+        },
+        order_status: pb::ProtoOaOrderStatus::OrderStatusFilled as i32,
+        closing_order: Some(closing),
+        position_id: Some(position.position_id),
+        is_stop_out: Some(stop_out),
+        ..Default::default()
+    };
+    let deal = pb::ProtoOaDeal {
+        deal_id,
+        order_id: deal_id + 1,
+        position_id: position.position_id,
+        volume,
+        filled_volume: volume,
+        symbol_id: position.trade_data.symbol_id,
+        execution_price: Some(price),
+        trade_side: deal_side,
+        deal_status: pb::ProtoOaDealStatus::Filled as i32,
+        close_position_detail: closing.then(|| pb::ProtoOaClosePositionDetail {
+            entry_price: position.price.unwrap_or_default(),
+            closed_volume: Some(volume),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    crate::ReceivedExecution {
+        received_at: chrono::Utc::now(),
+        client_msg_id: None,
+        payload_type: Oa::ProtoOaExecutionEvent as u32,
+        payload: pb::ProtoOaExecutionEvent {
+            payload_type: None,
+            ctid_trader_account_id: account_id,
+            execution_type: pb::ProtoOaExecutionType::OrderFilled as i32,
+            position: Some(position),
+            order: Some(order),
+            deal: Some(deal),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    }
+}
+
 /// An M30 trendbar from exact relative prices (1/100000) opening at `open_time`.
 pub fn m30_bar(
     open_time: chrono::DateTime<chrono::Utc>,

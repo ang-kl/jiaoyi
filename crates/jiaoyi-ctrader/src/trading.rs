@@ -345,6 +345,63 @@ pub fn decode_execution(account_id: i64, m: &ReceivedExecution) -> Option<EventR
     Some(e)
 }
 
+/// A closing deal in an execution event: what a broker-executed exit needs
+/// for its cost record. The position's own side and levels, when the event
+/// carries its position.
+// Claude · № 17,020 25-Oct (Codex P2 on jiaoyi #15): broker exits are costs too.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosingDeal {
+    pub deal_id: i64,
+    pub order_id: i64,
+    pub position_id: i64,
+    pub symbol_id: i64,
+    /// The deal's side (a long's exit sells).
+    pub deal_side: Option<Side>,
+    pub position_side: Option<Side>,
+    pub price: Option<f64>,
+    pub volume: i64,
+    pub stop_loss: Option<f64>,
+    pub take_profit: Option<f64>,
+    /// The order was the position's stop-loss/take-profit order.
+    pub sl_tp_order: bool,
+    pub stop_out: bool,
+}
+
+/// The closing deal of a fill event on `account_id`; `None` for anything
+/// else (an opening deal, no deal, another account, another message).
+pub fn closing_deal(account_id: i64, m: &ReceivedExecution) -> Option<ClosingDeal> {
+    if m.payload_type as i32 != Oa::ProtoOaExecutionEvent as i32 {
+        return None;
+    }
+    let ev = pb::ProtoOaExecutionEvent::decode(m.payload.as_slice()).ok()?;
+    if ev.ctid_trader_account_id != account_id {
+        return None;
+    }
+    let fill = ev.execution_type == pb::ProtoOaExecutionType::OrderFilled as i32
+        || ev.execution_type == pb::ProtoOaExecutionType::OrderPartialFill as i32;
+    let d = ev.deal.as_ref()?;
+    if !fill || d.close_position_detail.is_none() {
+        return None;
+    }
+    let p = ev.position.as_ref();
+    let o = ev.order.as_ref();
+    Some(ClosingDeal {
+        deal_id: d.deal_id,
+        order_id: d.order_id,
+        position_id: d.position_id,
+        symbol_id: d.symbol_id,
+        deal_side: Side::from_proto(d.trade_side),
+        position_side: p.and_then(|p| Side::from_proto(p.trade_data.trade_side)),
+        price: d.execution_price,
+        volume: d.filled_volume,
+        stop_loss: p.and_then(|p| p.stop_loss),
+        take_profit: p.and_then(|p| p.take_profit),
+        sl_tp_order: o
+            .is_some_and(|o| o.order_type == pb::ProtoOaOrderType::StopLossTakeProfit as i32),
+        stop_out: o.and_then(|o| o.is_stop_out).unwrap_or(false),
+    })
+}
+
 /// The risk of `volume` cents with a stop `relative_stop` (1/100000 of a
 /// price) away, in the deposit currency.
 pub fn risk_of(volume: i64, relative_stop: i64, quote_to_deposit: f64) -> f64 {

@@ -13,7 +13,7 @@ pub struct OrderRow {
     pub entry_key: String,
     pub label: String,
     pub prereg_hash: String,
-    /// `open`, `tp1` or `session_end`.
+    /// `open`, `tp1`, `session_end` or `broker_exit`.
     pub kind: String,
     pub symbol: String,
     pub symbol_id: i64,
@@ -106,6 +106,74 @@ pub async fn record_fill(pool: &PgPool, f: &FillRow) -> Result<(), sqlx::Error> 
     Ok(())
 }
 
+/// A broker-executed exit (a stop, a take-profit, or a close made outside
+/// this program), recorded once per deal: the order row stands for the
+/// broker's own order, so `costs` reads it with the program's closes.
+/// Returns whether it was new.
+// Claude · № 17,020 25-Oct (Codex P2 on #15): broker exits are costs too.
+pub async fn record_broker_exit(
+    pool: &PgPool,
+    o: &OrderRow,
+    f: &FillRow,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let inserted = sqlx::query(
+        "INSERT INTO strategy3_orders (account_id, entry_key, label, prereg_hash, kind, symbol,
+            symbol_id, position_id, side, session_date, decided_at, bid, ask, volume, detail)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         ON CONFLICT (entry_key) DO NOTHING",
+    )
+    .bind(o.account_id)
+    .bind(&o.entry_key)
+    .bind(&o.label)
+    .bind(&o.prereg_hash)
+    .bind(&o.kind)
+    .bind(&o.symbol)
+    .bind(o.symbol_id)
+    .bind(o.position_id)
+    .bind(&o.side)
+    .bind(o.session_date)
+    .bind(o.decided_at)
+    .bind(o.bid)
+    .bind(o.ask)
+    .bind(o.volume)
+    .bind(&o.detail)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected()
+        == 1;
+    if inserted {
+        sqlx::query(
+            "INSERT INTO strategy3_fills (account_id, entry_key, label, prereg_hash, kind, symbol,
+                position_id, side, outcome, sent_at, answered_at, latency_ms, decision_price,
+                fill_price, slippage, spread, volume, detail)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)",
+        )
+        .bind(f.account_id)
+        .bind(&f.entry_key)
+        .bind(&f.label)
+        .bind(&f.prereg_hash)
+        .bind(&f.kind)
+        .bind(&f.symbol)
+        .bind(f.position_id)
+        .bind(&f.side)
+        .bind(&f.outcome)
+        .bind(f.sent_at)
+        .bind(f.answered_at)
+        .bind(f.latency_ms)
+        .bind(f.decision_price)
+        .bind(f.fill_price)
+        .bind(f.slippage)
+        .bind(f.spread)
+        .bind(f.volume)
+        .bind(&f.detail)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(inserted)
+}
+
 /// The plan of a filled Strategy 3 open: its decision detail, and the fill.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenPlan {
@@ -137,20 +205,23 @@ pub async fn open_plans(pool: &PgPool, account_id: i64) -> Result<Vec<OpenPlan>,
         .collect())
 }
 
-/// Whether an order of `kind` was already decided for a position.
-pub async fn order_for_position(
+/// Whether a position's TP1 close is done: one was filled, partly filled,
+/// or left unresolved (no answer, or no answer recorded). Only rejected
+/// attempts leave it open for another try.
+// Claude · № 17,020 25-Oct (Codex P2 on #15): a rejection is not a TP1.
+pub async fn tp1_done(
     pool: &PgPool,
     account_id: i64,
     position_id: i64,
-    kind: &str,
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM strategy3_orders
-                        WHERE account_id = $1 AND position_id = $2 AND kind = $3)",
+        "SELECT EXISTS (SELECT 1 FROM strategy3_orders o
+                        LEFT JOIN strategy3_fills f ON f.entry_key = o.entry_key
+                        WHERE o.account_id = $1 AND o.position_id = $2 AND o.kind = 'tp1'
+                          AND f.outcome IS DISTINCT FROM 'rejected')",
     )
     .bind(account_id)
     .bind(position_id)
-    .bind(kind)
     .fetch_one(pool)
     .await
 }
@@ -273,6 +344,7 @@ pub async fn costs(pool: &PgPool) -> Result<Value, sqlx::Error> {
     struct Acc {
         entries: u64,
         exits: u64,
+        broker_exits: u64,
         not_filled: u64,
         entry_latency: Vec<f64>,
         exit_latency: Vec<f64>,
@@ -319,6 +391,9 @@ pub async fn costs(pool: &PgPool) -> Result<Value, sqlx::Error> {
             }
         } else {
             e.exits += 1;
+            if kind == "broker_exit" {
+                e.broker_exits += 1;
+            }
             e.exit_latency.extend(lat.map(|v| v as f64));
             e.exit_slippage.extend(slip);
             e.spread_exit.extend(spread);
@@ -332,6 +407,7 @@ pub async fn costs(pool: &PgPool) -> Result<Value, sqlx::Error> {
                 "symbol": symbol,
                 "entries_filled": e.entries,
                 "exits_filled": e.exits,
+                "broker_exits_filled": e.broker_exits,
                 "orders_not_filled": e.not_filled,
                 "entry_order_to_fill_ms_median": median(e.entry_latency),
                 "exit_order_to_fill_ms_median": median(e.exit_latency),
@@ -349,8 +425,9 @@ pub async fn costs(pool: &PgPool) -> Result<Value, sqlx::Error> {
         "strategy": "Strategy 3: intraday momentum",
         "units": {
             "prices": "price units of the symbol",
-            "slippage": "fill price against the quote at the decision (the ask for a buy, the bid for a sell); positive is adverse",
-            "order_to_fill_ms": "from the frame's send to the broker's fill answer",
+            "slippage": "fill price against the quote at the decision (the ask for a buy, the bid for a sell); for a broker exit, against the stop or take-profit level it executed; positive is adverse",
+            "order_to_fill_ms": "from the frame's send to the broker's fill answer (none for a broker exit: no order was sent)",
+            "broker_exits": "stops and take-profits the broker executed, one per deal, counted in exits_filled; the spread is the last quote's when the event arrived",
             "commission": "the broker's deal commissions of the position (all deals so far) per unit of the opening volume, in price units (deposit money ÷ the order's quote → deposit rate); pending until history sync stores the deals",
         },
         "rows": rows,

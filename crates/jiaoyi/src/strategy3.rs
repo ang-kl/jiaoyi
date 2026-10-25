@@ -396,7 +396,11 @@ pub struct Own {
     pub partial: bool,
     pub session_date: Option<chrono::NaiveDate>,
     pub entry_key: Option<String>,
+    /// A TP1 close filled, partly filled or unanswered: never sent again.
     pub tp1_sent: bool,
+    /// After a TP1 close refused or rejected with nothing filled, when the
+    /// next may go (Codex P2 on #15).
+    pub tp1_next_try: Option<DateTime<Utc>>,
     /// Session-end closes tried so far (each its own intent key), and when
     /// the next may go (Codex P1 on #15: a refused or rejected close is
     /// retried, never given up).
@@ -404,9 +408,14 @@ pub struct Own {
     pub end_next_try: Option<DateTime<Utc>>,
 }
 
-/// After a session-end close the broker refused or rejected, the next try
-/// waits this long (self-derived).
+/// After a session-end or TP1 close the gate refused or the broker rejected,
+/// the next try waits this long (self-derived).
 pub const END_RETRY: Duration = Duration::from_secs(10);
+
+/// Whether part of a sent order filled before its terminal answer.
+fn partly_filled(sent: &gate::Sent) -> bool {
+    sent.events.iter().any(|e| e.kind == "ORDER_PARTIAL_FILL")
+}
 
 /// An open sent but not answered (Unconfirmed): its risk is held in the
 /// budget, and on a live account it counts as an open position, until a
@@ -648,8 +657,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             };
             seen.push(p.position_id);
             let plan = plans.iter().rev().find(|x| x.position_id == p.position_id);
-            let tp1_sent =
-                s3s::order_for_position(self.pool, account_id, p.position_id, "tp1").await?;
+            let tp1_sent = s3s::tp1_done(self.pool, account_id, p.position_id).await?;
             let end_attempts =
                 s3s::orders_for_position(self.pool, account_id, p.position_id, "session_end")
                     .await?;
@@ -673,6 +681,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 }),
                 entry_key: plan.map(|x| x.entry_key.clone()),
                 tp1_sent,
+                tp1_next_try: None,
                 end_attempts,
                 end_next_try: None,
             });
@@ -1005,13 +1014,33 @@ impl<'a, 'c> Trader<'a, 'c> {
             .get(&o.symbol_id)
             .and_then(|s| s.limits)
             .map_or(5, |l| l.digits);
+        if o.tp1_next_try.is_some_and(|t| now < t) {
+            return Ok(());
+        }
         if !tp1_reached(o.side, fill, dist, digits, bid, ask) || close >= o.volume {
             return Ok(());
         }
+        // Claude · № 17,020 25-Oct (Codex P2 on #15): every attempt is its own
+        // intent, numbered from the recorded ones. A refusal, or a rejection
+        // with nothing filled, is tried again after END_RETRY while TP1 is
+        // still reached; a fill, a partial fill or no answer is never resent.
+        let attempt =
+            s3s::orders_for_position(self.pool, self.account_id(), position_id, "tp1").await? + 1;
         if let Some(x) = self.own.get_mut(&position_id) {
             x.tp1_sent = true;
         }
-        self.close(&o, close, "tp1", None, bid, ask, now).await?;
+        let sent = self.close(&o, close, "tp1", attempt, bid, ask, now).await?;
+        let again = match &sent {
+            None => true,
+            Some(s) => matches!(s.outcome, Outcome::Rejected { .. }) && !partly_filled(s),
+        };
+        if again {
+            if let Some(x) = self.own.get_mut(&position_id) {
+                x.tp1_sent = false;
+                x.tp1_next_try =
+                    Some(now + chrono::Duration::from_std(END_RETRY).unwrap_or_default());
+            }
+        }
         Ok(())
     }
 
@@ -1041,11 +1070,11 @@ impl<'a, 'c> Trader<'a, 'c> {
             // END_RETRY, a sent close after one reconcile interval if the
             // broker still shows the position.
             let attempt = o.end_attempts + 1;
-            let outcome = self
-                .close(&o, o.volume, "session_end", Some(attempt), bid, ask, now)
+            let sent = self
+                .close(&o, o.volume, "session_end", attempt, bid, ask, now)
                 .await?;
             let r = rules(self.pool, self.account_id(), self.env).await?;
-            let wait = match outcome {
+            let wait = match sent.map(|s| s.outcome) {
                 Some(Outcome::Filled { .. }) | Some(Outcome::Unconfirmed) => {
                     chrono::Duration::seconds(r.reconcile_secs as i64)
                 }
@@ -1059,18 +1088,19 @@ impl<'a, 'c> Trader<'a, 'c> {
         Ok(())
     }
 
-    /// Send a close; `None` when the gate refused it (nothing sent).
+    /// Send a close (attempt `attempt` of its kind, each its own intent key);
+    /// `None` when the gate refused it (nothing sent).
     #[allow(clippy::too_many_arguments)]
     async fn close(
         &mut self,
         o: &Own,
         volume: i64,
         kind: &str,
-        attempt: Option<i64>,
+        attempt: i64,
         bid: Option<f64>,
         ask: Option<f64>,
         now: DateTime<Utc>,
-    ) -> anyhow::Result<Option<Outcome>> {
+    ) -> anyhow::Result<Option<gate::Sent>> {
         let account_id = self.account_id();
         let r = rules(self.pool, account_id, self.env).await?;
         let name = self
@@ -1078,9 +1108,9 @@ impl<'a, 'c> Trader<'a, 'c> {
             .get(&o.symbol_id)
             .map(|s| s.name.clone())
             .unwrap_or_default();
-        let key = match attempt {
-            Some(n) => format!("s3-end:{account_id}:{}:{n}", o.position_id),
-            None => format!("s3-tp1:{account_id}:{}", o.position_id),
+        let key = match kind {
+            "tp1" => format!("s3-tp1:{account_id}:{}:{attempt}", o.position_id),
+            _ => format!("s3-end:{account_id}:{}:{attempt}", o.position_id),
         };
         let decision_price = match o.side {
             Side::Buy => bid,
@@ -1157,7 +1187,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                         json!({"entry_key": key}),
                     )
                     .await;
-                Ok(Some(sent.outcome))
+                Ok(Some(sent))
             }
             Err(SendError::Refused(x)) => {
                 self.d
@@ -1197,6 +1227,19 @@ impl<'a, 'c> Trader<'a, 'c> {
                 price,
                 volume: v,
             } => ("filled", *price, p.or(position_id), v.or(Some(volume))),
+            // A rejection after part of the order filled is a partial fill.
+            Outcome::Rejected { .. } if partly_filled(sent) => (
+                "partly_filled",
+                None,
+                position_id,
+                Some(
+                    sent.events
+                        .iter()
+                        .filter(|e| e.kind == "ORDER_PARTIAL_FILL")
+                        .filter_map(|e| e.volume)
+                        .sum(),
+                ),
+            ),
             Outcome::Rejected { .. } => ("rejected", None, position_id, None),
             Outcome::Amended { .. } => ("amended", None, position_id, None),
             Outcome::Unconfirmed => ("unconfirmed", None, position_id, None),
@@ -1543,6 +1586,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                                 session_date: Some(s.date),
                                 entry_key: Some(key.clone()),
                                 tp1_sent: false,
+                                tp1_next_try: None,
                                 end_attempts: 0,
                                 end_next_try: None,
                             },
@@ -1582,7 +1626,8 @@ impl<'a, 'c> Trader<'a, 'c> {
     }
 
     /// A broker-side execution message on a Strategy 3 position (a stop or
-    /// TP2 hit): recorded as it came.
+    /// a take-profit hit): recorded as it came, and a closing deal also as a
+    /// broker exit, so `/trading/costs` reports it.
     pub async fn server_event(&self, m: &ReceivedExecution) {
         if m.client_msg_id.is_some() {
             return;
@@ -1594,7 +1639,123 @@ impl<'a, 'c> Trader<'a, 'c> {
             if let Err(err) = ts::record_event(self.pool, &crate::trading::event_row(&e)).await {
                 tracing::error!(error = %err, "strategy 3 server execution event not recorded");
             }
+            if let Err(err) = self.broker_exit(m).await {
+                tracing::error!(error = %err, "strategy 3 broker exit not recorded");
+            }
         }
+    }
+
+    /// A closing deal the broker executed itself (the stop, the take-profit
+    /// it holds, a stop-out, or a close made outside this program), once per
+    /// deal: its fill against the level it executed, and the spread of the
+    /// last quote.
+    // Claude · № 17,020 25-Oct (Codex P2 on #15): broker exits are costs too.
+    async fn broker_exit(&self, m: &ReceivedExecution) -> anyhow::Result<()> {
+        let account_id = self.account_id();
+        // An opening deal (a late fill of an open) is not an exit.
+        let Some(deal) = gate::closing_deal(account_id, m) else {
+            return Ok(());
+        };
+        let own = self.own.get(&deal.position_id);
+        let side = deal.position_side.or(own.map(|o| o.side)).or_else(|| {
+            deal.deal_side.map(|s| match s {
+                Side::Buy => Side::Sell,
+                Side::Sell => Side::Buy,
+            })
+        });
+        let Some(side) = side else {
+            return Ok(());
+        };
+        let fill = deal.price;
+        let stop = deal.stop_loss.or(own.and_then(|o| o.stop));
+        let target = deal.take_profit.or(own.and_then(|o| o.take_profit));
+        // The level it executed: the nearer of the stop and the take-profit.
+        let level: Option<(&str, f64)> =
+            match (deal.sl_tp_order && !deal.stop_out, fill, stop, target) {
+                (true, Some(f), Some(s), Some(t)) if (f - s).abs() <= (f - t).abs() => {
+                    Some(("stop_loss", s))
+                }
+                (true, Some(_), _, Some(t)) => Some(("take_profit", t)),
+                (true, Some(_), Some(s), None) => Some(("stop_loss", s)),
+                _ => None,
+            };
+        let reason = match level {
+            Some((l, _)) => l,
+            None if deal.stop_out => "stop_out",
+            None => "other",
+        };
+        let decision_price = level.map(|(_, p)| p);
+        // An exit of a long is a sell, of a short a buy: positive is adverse.
+        let slippage = match (fill, decision_price) {
+            (Some(f), Some(q)) => Some(match side {
+                Side::Buy => q - f,
+                Side::Sell => f - q,
+            }),
+            _ => None,
+        };
+        let sym = self.syms.get(&deal.symbol_id);
+        let (bid, ask) = (sym.and_then(|s| s.bid), sym.and_then(|s| s.ask));
+        let name = sym.map(|s| s.name.clone()).unwrap_or_default();
+        let key = format!(
+            "s3-broker:{account_id}:{}:{}",
+            deal.position_id, deal.deal_id
+        );
+        let detail = json!({"strategy": STRATEGY, "reason": reason, "deal_id": deal.deal_id,
+            "order_id": deal.order_id, "level": decision_price,
+            "open_entry_key": own.and_then(|o| o.entry_key.clone())});
+        let new = s3s::record_broker_exit(
+            self.pool,
+            &s3s::OrderRow {
+                account_id,
+                entry_key: key.clone(),
+                label: LABEL.into(),
+                prereg_hash: self.hash.clone(),
+                kind: "broker_exit".into(),
+                symbol: name.clone(),
+                symbol_id: deal.symbol_id,
+                position_id: Some(deal.position_id),
+                side: Some(side.as_str().into()),
+                session_date: own.and_then(|o| o.session_date),
+                decided_at: m.received_at,
+                bid,
+                ask,
+                volume: Some(deal.volume),
+                detail: detail.clone(),
+            },
+            &s3s::FillRow {
+                account_id,
+                entry_key: key.clone(),
+                label: LABEL.into(),
+                prereg_hash: self.hash.clone(),
+                kind: "broker_exit".into(),
+                symbol: name.clone(),
+                position_id: Some(deal.position_id),
+                side: Some(side.as_str().into()),
+                outcome: "filled".into(),
+                sent_at: m.received_at,
+                answered_at: Some(m.received_at),
+                latency_ms: None,
+                decision_price,
+                fill_price: fill,
+                slippage,
+                spread: match (bid, ask) {
+                    (Some(b), Some(a)) => Some(a - b),
+                    _ => None,
+                },
+                volume: Some(deal.volume),
+                detail,
+            },
+        )
+        .await?;
+        if new {
+            tracing::info!(
+                account = account_id,
+                position = deal.position_id,
+                reason,
+                "strategy 3 broker exit recorded"
+            );
+        }
+        Ok(())
     }
 }
 
