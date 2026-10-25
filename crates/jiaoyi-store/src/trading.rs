@@ -775,9 +775,13 @@ pub async fn orders(pool: &PgPool, q: &OrdersQuery) -> Result<Vec<OrderView>, sq
             // An amend fills nothing.
             let filled_volume = (kind != "amend_stop").then(|| {
                 let f = deals.max(rec.unwrap_or(0));
-                // Found filled in full at the broker, with no position read.
-                if full && f == 0 {
-                    requested.unwrap_or(0)
+                // Filled in full: at least the requested volume, also when the
+                // full fill was found by reconcile with no position read after
+                // earlier partial deals (Codex P2 on #18).
+                // Claude · № 17,120 25-Oct (ordered: owner "merge when green
+                // and deploy"; Codex P2 on #18)
+                if full {
+                    f.max(requested.unwrap_or(0))
                 } else {
                     f
                 }
