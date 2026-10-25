@@ -140,7 +140,7 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
 | Table | Kind | Holds |
 |---|---|---|
 | `trading_intents` | event, append-only | What the order gate wrote before each frame: entry key (unique, so never sent twice), client message id, kind (open, amend_stop, close), symbol, position, side, volume in cents, relative stop, stop price, an amend's carried take-profit, the risk the gate recomputed and its allowance (deposit currency), settings version. |
-| `trading_events` | event, append-only | Every execution message: the answers to our requests (by client message id and entry key, late ones included) and the broker's own (a stop hit), with the raw bytes. One message is kept once (unique on account, client message id, kind, receive time): the gate and the trader both receive it. `RECONCILED_FILL`: an unresolved open that reconcile found filled, adopted once. `RECONCILED_ABSENT`: an unresolved open with nothing at the broker after one reconcile interval, released, never resent. |
+| `trading_events` | event, append-only | Every execution message: the answers to our requests (by client message id and entry key, late ones included) and the broker's own (a stop hit), with the raw bytes. One message is kept once (unique on account, client message id, kind, receive time): the gate and the trader both receive it. `RECONCILED_FILL`: an unresolved open that reconcile found filled at its requested volume, adopted once. `RECONCILED_PARTIAL_FILL`: one it found filled below that volume (after a restart, say): the position is adopted at the broker's volume and the intent stays unresolved, its remainder reserved. `RECONCILED_ABSENT`: an unresolved open with nothing at the broker after one reconcile interval, released, never resent. |
 | `trading_decisions` | event, append-only | Strategy 1's decisions (reconcile with the external positions it found, a signal held by the edge gate, a skip and why, a refusal and why, a send), recorded when they change, not on every tick. |
 | `settings_seed_applied` | state | Which entries of `config/settings-changes.json` were applied, and the settings version each became. |
 
@@ -162,7 +162,8 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
   - the strategy, and whether it trades (`yes`, `armed: waits for the edge gate`, or `trading (edge gate lifted by the owner DD-MM)`);
   - the edge gate and the minimum-volume rule;
   - the open-risk budget;
-  - the last decision;
+  - the last decision (recorded only when its reason changes, so its time can stand still while the loop runs);
+  - the loop's `liveness`, kept in memory and never recorded: when the loop started, when a reconcile last ran (every run, recorded or not), when it last processed a quote, and its state: `alive`, `starting` (no reconcile yet), `stalled` (no reconcile within 2 × `trading.reconcile_secs`, counted from the start before the first), or `not running` (no loop in this process). Strategy 3 has no such field yet (#15 is not merged);
   - the external positions found at the last reconcile (symbol, side, volume).
   No money.
 

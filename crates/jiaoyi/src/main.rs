@@ -43,11 +43,13 @@ async fn main() -> anyhow::Result<()> {
     let loading = Arc::new(AtomicBool::new(false));
     let recorders = jiaoyi::recorder::StatusMap::default();
     let history = jiaoyi::history::HistoryStatusMap::default();
+    let trading_loops = jiaoyi::trading::LivenessMap::default();
     let app = router(AppState {
         pool: pool.clone(),
         loading: loading.clone(),
         recorders: recorders.clone(),
         history: history.clone(),
+        trading_loops: trading_loops.clone(),
         allowed_accounts: Arc::new(cfg.plan.permitted.iter().map(|(a, _)| a.id()).collect()),
     });
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.http_port)).await?;
@@ -72,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
     tasks.push(tokio::spawn(jiaoyi::trading::run(
         pool.clone(),
         cfg.clone(),
+        trading_loops,
         stop.clone(),
     )));
     tasks.push(tokio::spawn(service::run_loop(

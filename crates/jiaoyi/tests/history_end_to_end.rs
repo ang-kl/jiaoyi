@@ -394,6 +394,7 @@ async fn health_shows_the_broker_leverage_and_tick_history_and_no_money(pool: Pg
         loading: Default::default(),
         recorders: Default::default(),
         history: status,
+        trading_loops: Default::default(),
         allowed_accounts: Arc::new(std::collections::BTreeSet::from([A])),
     });
     let res = app

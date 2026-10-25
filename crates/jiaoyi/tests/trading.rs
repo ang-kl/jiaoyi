@@ -194,6 +194,17 @@ async fn trade(
     secs: u64,
     env: Environment,
 ) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
+    trade_with(pool, f, secs, env, &trading::LivenessMap::default()).await
+}
+
+/// `trade`, with the loop's liveness kept in `live`.
+async fn trade_with(
+    pool: &PgPool,
+    f: &FakeBroker,
+    secs: u64,
+    env: Environment,
+    live: &trading::LivenessMap,
+) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
     let (conn, log) = f.clone().spawn();
     let session = loader::authorise(pool, &conn, &broker(), &permitted())
         .await
@@ -203,7 +214,7 @@ async fn trade(
     let mut d = trading::decisions(pool, DEMO);
     let list = allowlist();
     tokio::select! {
-        r = trading::run_session(pool, &list, env, &session, &mut d, &mut ends, &mut stop) => {
+        r = trading::run_session(pool, &list, env, &session, &mut d, live, &mut ends, &mut stop) => {
             r.unwrap();
         }
         _ = tokio::time::sleep(Duration::from_secs(secs)) => trigger.fire(),
@@ -370,7 +381,7 @@ async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
     let log2 = trade(&pool, &f, 2, Environment::Demo).await;
     assert!(log2.lock().unwrap().orders.is_empty());
     // /health shows the strategy and the decision, and no money.
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     assert_eq!(h[0]["strategy"], "Strategy 1: tick-triggered trend");
     assert_eq!(h[0]["trades"], "yes");
     assert_eq!(h[0]["edge_gate"], "not required (demo)");
@@ -439,7 +450,7 @@ async fn a_position_this_program_did_not_open_blocks_the_entry_and_is_reported(p
             .any(|(k, r)| k == "refused" && r.contains("external")),
         "{d:?}"
     );
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     let ext = &h[0]["last_reconcile"]["external_positions"];
     assert_eq!(ext[0]["position_id"], 77);
     assert_eq!(ext[0]["side"], "sell");
@@ -600,7 +611,7 @@ async fn an_accepted_only_open_is_adopted_after_a_restart(pool: PgPool) {
         ev.contains(&(Some(key), "RECONCILED_FILL".into())),
         "adopted, not external: {ev:?}"
     );
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
     assert_eq!(h[0]["last_reconcile"]["external_positions"], json!([]));
 }
@@ -699,7 +710,7 @@ async fn live_takes_one_minimum_trade_at_a_time_with_the_gate_lifted(pool: PgPoo
     store::upsert_account(&pool, LIVE, Environment::Live)
         .await
         .unwrap();
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     let live = h
         .as_array()
         .unwrap()
@@ -877,4 +888,270 @@ async fn an_open_remainder_is_reserved_until_it_fills(pool: PgPool) {
         .await
         .unwrap();
     assert!(u.is_empty(), "{u:?}");
+}
+
+/// Codex round 4 on #14: an accepted open of 100 cents filled 60 while the
+/// service was down. At startup the position is adopted at the broker's 60,
+/// the intent stays unresolved and its 40-cent remainder ($48.00) stays
+/// reserved, so BTCUSD's $120.00 entry is skipped. Once the broker holds all
+/// 100, the open is recorded filled in full and nothing is reserved.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partial_fill_recovered_at_startup_keeps_its_remainder_reserved(pool: PgPool) {
+    loaded_with(
+        &pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake_on(&[ETH, BTC], 2_000);
+    f.trader.as_mut().unwrap().balance = 2_000_100;
+    // Accepted, and not filled within this session.
+    f.fill_delay = Some(Duration::from_secs(600));
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    let o = log.lock().unwrap().orders.clone();
+    assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
+    assert_eq!(o[0].volume, 100);
+    let key = trading::entry_key(DEMO, ETH, Utc::now().date_naive() - Days::days(1));
+    // While the service was down, 60 of the 100 cents filled.
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 1001,
+        trade_data: ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 60,
+            trade_side: 1,
+            label: Some("jiaoyi-s1".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        price: Some(3611.0),
+        stop_loss: Some(3491.0),
+        ..Default::default()
+    });
+    // A second labelled ETHUSD position no intent of this program filled.
+    let mut other = f.positions.lock().unwrap()[0].clone();
+    other.position_id = 1002;
+    other.trade_data.volume = 10;
+    f.positions.lock().unwrap().push(other);
+    f.fill_delay = None;
+    f.quote_sequence = vec![(500, BTC, q(3608.0, 3611.0))];
+    let log2 = trade(&pool, &f, 2, Environment::Demo).await;
+    let d = decisions(&pool).await;
+    assert!(log2.lock().unwrap().orders.is_empty(), "{d:?}");
+    // $72.00 adopted (60 cents from 3611.00 to 3491.00) plus $48.00 reserved.
+    assert!(
+        d.iter().any(|(k, r)| k == "skip"
+            && r.contains(
+                "open risk 120.00 plus this entry's 120.00 would exceed its budget 200.01"
+            )),
+        "{d:?}"
+    );
+    let ev: Vec<(String, Option<i64>, Option<i64>)> = sqlx::query_as(
+        "SELECT kind, position_id, volume FROM trading_events
+         WHERE entry_key = $1 AND kind LIKE 'RECONCILED%' ORDER BY id",
+    )
+    .bind(&key)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        ev,
+        vec![("RECONCILED_PARTIAL_FILL".into(), Some(1001), Some(60))],
+        "adopted at the broker's volume, not filled in full"
+    );
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert_eq!(u.len(), 1, "{u:?}");
+    assert_eq!((u[0].filled, u[0].position_id), (60, Some(1001)), "{u:?}");
+    // The adopted intent claims no second position.
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
+    let ext = &h[0]["last_reconcile"]["external_positions"];
+    assert_eq!(ext.as_array().map(Vec::len), Some(1), "{h}");
+    assert_eq!(ext[0]["position_id"], 1002, "{h}");
+    f.positions
+        .lock()
+        .unwrap()
+        .retain(|p| p.position_id == 1001);
+    // The remainder fills: the broker holds all 100 cents.
+    f.positions.lock().unwrap()[0].trade_data.volume = 100;
+    f.quote_sequence = vec![];
+    let log3 = trade(&pool, &f, 2, Environment::Demo).await;
+    assert!(log3.lock().unwrap().orders.is_empty(), "never resent");
+    let kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT kind FROM trading_events WHERE entry_key = $1 AND kind LIKE 'RECONCILED%' ORDER BY id",
+    )
+    .bind(&key)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(kinds, vec!["RECONCILED_PARTIAL_FILL", "RECONCILED_FILL"]);
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert!(u.is_empty(), "{u:?}");
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
+}
+
+/// Codex on #16: a reconcile can adopt a partial fill before the deal's own
+/// execution message is processed; the message then records the same 60
+/// cents. They are one fill, not 120 cents: once the position stops out with
+/// the remainder still within its grace, the open is not recorded filled in
+/// full and its 40-cent remainder stays reserved.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_reconciled_partial_and_its_late_deal_are_one_fill(pool: PgPool) {
+    loaded_with(&pool, &[(ETH, "ETHUSD", AssetClass::Crypto, 1)]).await;
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake_on(&[ETH], 2_000);
+    f.trader.as_mut().unwrap().balance = 2_000_100;
+    f.fill_delay = Some(Duration::from_secs(600));
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1);
+    let key = trading::entry_key(DEMO, ETH, Utc::now().date_naive() - Days::days(1));
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 1001,
+        trade_data: ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 60,
+            trade_side: 1,
+            label: Some("jiaoyi-s1".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        price: Some(3611.0),
+        stop_loss: Some(3491.0),
+        ..Default::default()
+    });
+    f.fill_delay = None;
+    f.quote_sequence = vec![];
+    trade(&pool, &f, 2, Environment::Demo).await;
+    // The same deal's execution message, processed after that reconcile.
+    let deal = store::trading::EventRow {
+        account_id: DEMO,
+        entry_key: Some(key.clone()),
+        client_msg_id: None,
+        payload_type: 2126,
+        kind: "ORDER_PARTIAL_FILL".into(),
+        position_id: Some(1001),
+        order_id: Some(9001),
+        deal_id: Some(7001),
+        symbol_id: Some(ETH),
+        side: Some("buy".into()),
+        price: Some(3611.0),
+        volume: Some(60),
+        stop_loss: Some(3491.0),
+        label: Some("jiaoyi-s1".into()),
+        error_code: None,
+        description: None,
+        is_server_event: Some(false),
+        raw: vec![],
+        received_at: Utc::now(),
+    };
+    assert!(store::trading::record_event(&pool, &deal).await.unwrap());
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert_eq!(u.len(), 1, "{u:?}");
+    assert_eq!(u[0].filled, 60, "one fill, not two: {u:?}");
+    // The position stops out; the remainder is within its grace.
+    f.positions.lock().unwrap().clear();
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT kind FROM trading_events WHERE entry_key = $1 AND kind LIKE 'RECONCILED%' ORDER BY id",
+    )
+    .bind(&key)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(kinds, vec!["RECONCILED_PARTIAL_FILL"], "not filled in full");
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert_eq!((u.len(), u[0].filled), (1, 60), "{u:?}");
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT (detail->>'pending')::BIGINT FROM trading_decisions
+         WHERE account_id = $1 AND kind = 'reconcile' ORDER BY id DESC LIMIT 1",
+    )
+    .bind(DEMO)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending, 1, "the remainder stays reserved");
+}
+
+/// Production read-back 04:26Z: decisions are recorded only when their
+/// reason changes, so /health stayed at the first reconcile while the loops
+/// ran. A quiet loop's reconcile runs keep its liveness advancing, with the
+/// recorded reconcile decision kept once.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_quiet_loop_keeps_its_reconcile_runs_advancing(pool: PgPool) {
+    loaded(&pool).await;
+    set(&pool, "trading.reconcile_secs", json!(30)).await;
+    let f = fake_on(&[ETH], 2_000);
+    let live = trading::LivenessMap::default();
+    trade_with(&pool, &f, 40, Environment::Demo, &live).await;
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    let (start, ran) = (l.started_at.unwrap(), l.last_reconcile_run_at.unwrap());
+    assert!(
+        ran - start >= Days::seconds(25),
+        "a second reconcile ran: {l:?}"
+    );
+    // The unchanged reason is recorded once.
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM trading_decisions WHERE account_id = $1 AND kind = 'reconcile'",
+    )
+    .bind(DEMO)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 1);
+    let loops = live.lock().unwrap().clone();
+    let h = trading::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert_eq!(h[0]["liveness"]["stalled_after_secs"], 60, "{h}");
+    let recorded: chrono::DateTime<Utc> =
+        serde_json::from_value(h[0]["last_reconcile"]["at"].clone()).unwrap();
+    assert!(ran - recorded >= Days::seconds(25), "{h}");
+}
+
+/// A loop stopped for more than twice its reconcile interval reads stalled;
+/// its last quote is shown.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_stopped_loop_reads_stalled_after_twice_its_reconcile_interval(pool: PgPool) {
+    loaded(&pool).await;
+    // Below the level (3610.00): quotes, no entry.
+    let f = fake(vec![(3500.0, 3501.0)]);
+    let live = trading::LivenessMap::default();
+    let log = trade_with(&pool, &f, 2, Environment::Demo, &live).await;
+    assert!(log.lock().unwrap().orders.is_empty());
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    assert!(l.last_quote_at.is_some(), "{l:?}");
+    let loops = live.lock().unwrap().clone();
+    let h = trading::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert!(h[0]["liveness"]["last_quote_at"].is_string(), "{h}");
+    // The loop is stopped. As if its last reconcile ran `age` ago: within
+    // 2 × 300 s it is alive, past it stalled.
+    let aged = |age: i64| {
+        let mut m = loops.clone();
+        let e = m.get_mut(&DEMO).unwrap();
+        let at = Utc::now() - Days::seconds(age);
+        e.started_at = Some(at - Days::seconds(5));
+        e.last_reconcile_run_at = Some(at);
+        m
+    };
+    let h = trading::health(&pool, &aged(590)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    let h = trading::health(&pool, &aged(610)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "stalled", "{h}");
 }

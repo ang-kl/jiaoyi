@@ -27,6 +27,7 @@ fn app(pool: &PgPool, recorders: jiaoyi::recorder::StatusMap) -> axum::Router {
         loading: Arc::new(AtomicBool::new(false)),
         recorders,
         history: Default::default(),
+        trading_loops: Default::default(),
         allowed_accounts: Arc::new(BTreeSet::from([LIVE])),
     })
 }
