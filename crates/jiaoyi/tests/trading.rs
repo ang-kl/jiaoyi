@@ -1645,3 +1645,209 @@ async fn a_lost_strategy_1_broker_exit_record_ends_the_session(pool: PgPool) {
     let e = r.expect("the session ended").expect_err("with the error");
     assert!(format!("{e:#}").contains("no broker_exit record"), "{e:#}");
 }
+
+// ---------------------------------------------------------------- limits and the owner's pause
+// Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+
+/// The owner's word on Strategy 1's pause on this account (1 paused, 0 not).
+async fn owner_sets_pause(pool: &PgPool, value: i64) {
+    settings::change(
+        pool,
+        "trading.s1_paused",
+        Some(DEMO),
+        Some(json!(value)),
+        "owner",
+        "owner, in writing (test)",
+    )
+    .await
+    .unwrap();
+}
+
+/// `n` closed Strategy 1 trades of −1R on this account (the gate's $6.00,
+/// the broker's net −$6.00), two days ago, on a symbol not traded here.
+async fn closed_losses(pool: &PgPool, n: i32) {
+    sqlx::query(
+        "INSERT INTO trading_intents (account_id, entry_key, client_msg_id, kind, symbol_id,
+            side, volume, risk, max_risk)
+         SELECT $1, 's1:old:' || n, 'c-old-' || n, 'open', 99, 'buy', 10, 6.0, 100
+         FROM generate_series(1, $2) n",
+    )
+    .bind(DEMO)
+    .bind(n)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO trading_events (account_id, entry_key, client_msg_id, payload_type, kind,
+            position_id, raw, received_at)
+         SELECT $1, 's1:old:' || n, 'c-old-' || n, 2126, 'ORDER_FILLED', 900000 + n, '\\x',
+                now() - interval '2 days'
+         FROM generate_series(1, $2) n",
+    )
+    .bind(DEMO)
+    .bind(n)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO deals (account_id, deal_id, order_id, position_id, broker_symbol_id, volume,
+            filled_volume, trade_side, deal_status, created_at, executed_at, money_digits,
+            is_closing, close_gross_profit, close_swap, close_commission, close_money_digits,
+            raw, fetched_at)
+         SELECT $1, 9000000 + 2 * n + c, 9000000 + 2 * n + c, 900000 + n, 99, 10, 10,
+                'BUY', 'FILLED', t, t, 2, c = 1,
+                CASE WHEN c = 1 THEN -560 END, CASE WHEN c = 1 THEN 0 END,
+                CASE WHEN c = 1 THEN -40 END, CASE WHEN c = 1 THEN 2 END, '\\x', now()
+         FROM generate_series(1, $2) n, generate_series(0, 1) c,
+              LATERAL (SELECT now() - interval '2 days' + n * interval '1 minute' + c * interval '10 seconds' AS t) x",
+    )
+    .bind(DEMO)
+    .bind(n)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// Every write of a pause key not made by a migration: (key, by).
+async fn pause_writes(pool: &PgPool) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT key, changed_by FROM settings_changes
+         WHERE key IN ('trading.s1_paused', 'trading.s3_paused') AND changed_by <> 'migration'
+         ORDER BY version",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+/// "only human can pause trade" (owner, 25-10): with ETHUSD held, the owner
+/// pauses Strategy 1 on this account. ETHUSD's stop is still trailed; a
+/// BTCUSD breakout sends nothing, recorded once, and its signal is not spent,
+/// so it enters once the owner lifts the pause.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_owners_pause_stops_new_entries_and_the_trail_still_runs(pool: PgPool) {
+    loaded_with(
+        &pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    let mut f = fake_on(&[ETH, BTC], 2_000);
+    f.fill_quotes = HashMap::from([(ETH, (3608.0, 3611.0)), (BTC, (3608.0, 3611.0))]);
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1, "ETHUSD entered");
+    owner_sets_pause(&pool, 1).await;
+    // ETHUSD's bid rises to 3700.00; BTCUSD's ask reaches its level (3610.00).
+    f.quote_sequence = vec![(0, ETH, q(3700.0, 3701.0)), (500, BTC, q(3608.0, 3611.0))];
+    let live = trading::LivenessMap::default();
+    let log = trade_with(&pool, &f, 3, Environment::Demo, &live).await;
+    let l = log.lock().unwrap().clone();
+    let d = decisions(&pool).await;
+    assert!(l.orders.is_empty(), "paused: no new entry: {d:?}");
+    assert_eq!(l.amends.len(), 1, "the trail still runs: {d:?}");
+    assert_eq!(l.amends[0].stop_loss, Some(3580.0));
+    let paused: Vec<&(String, String)> = d.iter().filter(|(k, _)| k == "paused").collect();
+    assert_eq!(paused.len(), 1, "{d:?}");
+    assert!(paused[0].1.contains("paused by the owner"));
+    // /health: paused, by whom, and how near BTCUSD is to its level.
+    let map = live.lock().unwrap().clone();
+    let h = trading::health(&pool, &map).await.unwrap();
+    assert_eq!(h[0]["trades"], "paused by the owner: no new entry");
+    assert_eq!(h[0]["owner_pause"]["paused"], true);
+    assert_eq!(h[0]["owner_pause"]["changed_by"], "owner");
+    let btc = &h[0]["trigger_distance"]["BTCUSD"];
+    assert_eq!(btc["filter"], "buy");
+    assert_eq!(btc["level"], 3610.0);
+    // (3610.00 − 3611.00) / 40.00 = −0.025: through the level.
+    assert!(
+        (btc["distance_atr"].as_f64().unwrap() + 0.025).abs() < 1e-9,
+        "{btc}"
+    );
+    // Lifted by the owner: BTCUSD's signal is still there.
+    owner_sets_pause(&pool, 0).await;
+    f.quote_sequence = vec![(0, BTC, q(3608.0, 3611.0))];
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    let orders = log.lock().unwrap().orders.clone();
+    assert_eq!(orders.len(), 1, "{:?}", decisions(&pool).await);
+    assert_eq!(orders[0].symbol_id, BTC);
+    let w = pause_writes(&pool).await;
+    assert_eq!(w.len(), 2);
+    assert!(
+        w.iter()
+            .all(|(k, by)| k == "trading.s1_paused" && by == "owner"),
+        "{w:?}"
+    );
+}
+
+/// A limit reached is an alert: recorded once, on /health, and Strategy 1
+/// keeps trading. Nothing pauses it.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_limit_reached_is_flagged_and_strategy_1_keeps_trading(pool: PgPool) {
+    loaded(&pool).await;
+    closed_losses(&pool, 10).await;
+    let log = trade(&pool, &fake(vec![(3608.0, 3611.0)]), 2, Environment::Demo).await;
+    let d = decisions(&pool).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1, "still trading: {d:?}");
+    let reached: Vec<&(String, String)> = d.iter().filter(|(k, _)| k == "limit_reached").collect();
+    assert_eq!(reached.len(), 1, "{d:?}");
+    assert!(reached[0].1.contains("drawdown 10.00R ≥ 10R"), "{d:?}");
+    assert!(pause_writes(&pool).await.is_empty(), "nothing paused");
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["trades"], "yes");
+    assert_eq!(h[0]["performance"]["owner_decision_needed"], true);
+    assert_eq!(h[0]["performance"]["closed_trades"], 10);
+}
+
+/// The distance to Strategy 1's trigger, in ATR from the allowed side's
+/// 50-day level: positive below it, zero on it (a trigger), negative through it.
+#[test]
+fn the_distance_to_the_level_is_in_atr_and_turns_negative_through_it() {
+    let at = Utc::now();
+    let buy = trading::Levels {
+        last_completed: at.date_naive(),
+        side: Some(jiaoyi_ctrader::trading::Side::Buy),
+        level: 3610.0,
+        atr: 40.0,
+        ema_fast: 2.0,
+        ema_slow: 1.0,
+    };
+    let sell = trading::Levels {
+        side: Some(jiaoyi_ctrader::trading::Side::Sell),
+        ..buy.clone()
+    };
+    for (l, bid, ask, want) in [
+        (&buy, 3565.0, 3570.0, 1.0),
+        (&buy, 3609.0, 3610.0, 0.0),
+        (&buy, 3645.0, 3650.0, -1.0),
+        (&sell, 3650.0, 3655.0, 1.0),
+        (&sell, 3570.0, 3575.0, -1.0),
+    ] {
+        let x = trading::trigger_distance(&Ok(l.clone()), Some(bid), Some(ask), at);
+        let d = x["distance_atr"].as_f64().unwrap();
+        assert!((d - want).abs() < 1e-9, "{x}");
+        assert_eq!(
+            trading::triggered(l, Some(bid), Some(ask)).is_some(),
+            d <= 0.0,
+            "the sign agrees with the trigger: {x}"
+        );
+    }
+    let none = trading::Levels {
+        side: None,
+        ..buy.clone()
+    };
+    let x = trading::trigger_distance(&Ok(none), Some(1.0), Some(2.0), at);
+    assert_eq!(x["distance_atr"], serde_json::Value::Null);
+    assert!(x["reason"].as_str().unwrap().contains("EMAs are equal"));
+    let x = trading::trigger_distance(&Err("fewer than 120 days".into()), None, None, at);
+    assert_eq!(x["distance_atr"], serde_json::Value::Null);
+    assert!(x["reason"]
+        .as_str()
+        .unwrap()
+        .contains("fewer than 120 days"));
+    let x = trading::trigger_distance(&Ok(buy), Some(3600.0), None, at);
+    assert_eq!(x["distance_atr"], serde_json::Value::Null);
+    assert!(x["reason"].as_str().unwrap().contains("no quote"));
+}

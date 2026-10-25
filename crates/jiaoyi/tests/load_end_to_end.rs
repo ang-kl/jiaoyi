@@ -209,10 +209,11 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         .unwrap();
     assert_eq!(out.status, "ok", "{:?}", out.summary.errors);
     let s = &out.summary;
-    // 39 after the migrations (26, the 0007 seed, the 0008 SpotBrent change,
-    // the 0012 trading settings: 10, the 0013 Strategy 3 budget), plus the
-    // test's two changes.
-    assert_eq!(s.settings_version, Some(41));
+    // 44 after the migrations (26, the 0007 seed, the 0008 SpotBrent change,
+    // the 0012 trading settings: 10, the 0013 Strategy 3 budget, the 0015
+    // limits and the owner's pause: 5), plus the test's two changes.
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    assert_eq!(s.settings_version, Some(46));
     assert_eq!((s.symbols_resolved, s.symbols_unresolved), (1, 2));
     assert_eq!(s.bars_inserted, 4018, "every closed bar");
     assert_eq!(s.forming_bars_dropped, 1, "today's bar is not stored");
@@ -330,7 +331,9 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         sym["UKOIL"].verdict.decision,
         jiaoyi_core::verdict::Decision::Drop
     );
-    assert_eq!(r.settings_version, 42);
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    // 47: migration 0015 seeds five settings (the limits and the owner's pause).
+    assert_eq!(r.settings_version, 47);
 
     // A second load stores nothing new and changes nothing.
     let (conn, _) = fake().spawn();

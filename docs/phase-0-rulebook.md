@@ -210,3 +210,13 @@ Owner, 25-10-2026: *"I want live to execute trading by 1 PM today"*, then *"Keep
   - Reconcile adopts an unresolved open in full only at the requested volume. A smaller position is `RECONCILED_PARTIAL_FILL`, with the remainder's risk held in the budget until it fills, ends or is absent after the grace.
   - TP1's close is planned again for the volume the broker holds, with the entry's own price, R and C, so TP1's level does not move. A volume that cannot be split closes whole at TP1 (Codex round-4 P2 on #15).
 - **Where this departs from the sections above.** Live trades Strategy 3 without a PASS, by the owner's order. The PASS rules of the pre-registration are judged on the forward demo results. Nothing above is edited.
+
+## 13. The factory's limits and the owner's pause (owner, 25-10-2026)
+
+The owner made Claude the quant trading factory (№ 17,104), accepted the limit numbers (№ 17,105) and ruled *"only human can pause trade"* and *"always live trade"* (№ 17,115). The charter is `docs/factory-charter.md`. Nothing above is edited.
+
+- **Limits alert; they never pause.** Per strategy and account: the largest fall in cumulative net R reaching 10R, or a profit factor below 0.8 after 50 closed trades, shows "LIMIT REACHED: owner's decision needed" on `/health` and the status page, with one decision recorded. Trading continues.
+- **The owner's pause.** `trading.s1_paused` and `trading.s3_paused`, per account, are set only on the owner's word. A paused strategy takes no new entry; its open positions keep every exit. This is the owner's own switch; §6a's "no trading switch" still holds for the program, which never pauses itself.
+- **§6's drawdown brake** (equity 25% below its peak → no new entries) is not built and, under the owner's rule, would alert rather than stop entries.
+- **Live always trades** every strategy that runs, under §11's live rules. There is no demo-only phase.
+

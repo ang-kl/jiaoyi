@@ -215,6 +215,33 @@ The owner approved the instrument plan after "show your instrument design". Noth
   - the commission per unit, in price units.
 - **The status page** shows Strategy 1's trades today in the same columns as Strategy 3's, and each strategy's section links to its orders.
 
+## The factory's limits and the owner's pause (migration 0015; owner, 25-10-2026)
+
+The owner accepted the limit numbers ("pause numbers fine", № 17,105), then ruled *"only human can pause trade"* and *"always live trade"* (№ 17,115). The limits only alert. The charter is `docs/factory-charter.md`. No new table: everything is read from the tables above.
+
+| Setting | Default | Bounds | Meaning |
+|---|---|---|---|
+| `trading.pause_drawdown_r` | 10 | 1–100 | A strategy on an account whose largest fall in cumulative net R reaches this is flagged. |
+| `trading.pause_pf_floor` | 0.8 | 0–5 | After `trading.pause_pf_min_trades` closed trades, a profit factor below this is flagged. |
+| `trading.pause_pf_min_trades` | 50 | 10–1000 | The closed trades before the profit factor is judged. |
+| `trading.s1_paused` | 0 | 0–1 | The owner's pause of Strategy 1 on an account: no new entry; open positions keep their exits. No code writes it. |
+| `trading.s3_paused` | 0 | 0–1 | The same for Strategy 3. |
+
+- **Net R of a closed position** (`trading::closed_trades`): the broker's net money for it ÷ the risk the gate recorded for its open.
+  - Net money is each closing deal's `close_gross_profit` + `close_swap` − |`close_commission`| − |`close_pnl_conversion_fee`|, ÷ 10^money digits. The closing deal's commission covers both sides of the closed volume (on the owner's broker the balance moves at the close and not at the open: measured on 47790949, bot-trade `commission-terms.js`), so the opening deal's commission is not taken again.
+  - The risk is `trading_intents.risk` for the open (deposit currency, for the requested volume), scaled by the filled share (opening deals' volume ÷ requested, at most 1).
+  - A position belongs to a strategy through its open intent's fill events (`s1:` or `s3:` entry key, the same account). It is closed when its closing deals' volume reaches its opening deals'. A closed position without a recorded risk or a money field is counted as `unmeasured`, not guessed.
+- **Performance** (`trading::performance`), per strategy and account, closes in time order: closed trades, net R, profit factor (Σ winning R ÷ |Σ losing R|; none without a loss), the largest drawdown (peak-to-trough of cumulative R, the peak starting at 0) and the current one.
+- **The check** (`limits::check`) runs at each reconcile of each strategy's loop. When what is reached changes it records one decision: `limit_reached` / `s3_limit_reached` with the limits, the numbers, the thresholds and the strategy (for Strategy 3 its label and pre-registration hash), or `limit_cleared` / `s3_limit_cleared`. The latest of these is read from `trading_decisions`, so a restart records nothing twice. It never writes a setting.
+- **The pause** is read with the traders' rules. A paused strategy records `paused` (Strategy 1) or `s3_paused` (Strategy 3) once per symbol and sends nothing; Strategy 1 keeps the signal for when the pause is lifted. A reviewed seed entry for a pause key is applied only with `changed_by` "owner".
+- `/health` → `trading[]` and `strategy3[]` add, per account:
+  - `performance`: closed trades, unmeasured, net R, profit factor, drawdowns, the last close, the limits, the room to each (`to_limits`), `limit_reached` (each limit with its value and threshold, or null) and `owner_decision_needed`. R only.
+  - `owner_pause`: paused or not, and the last change of the key for that account (or the global one): who, when, why.
+  - `trigger_distance`: per symbol, from each loop's last quote, held in memory (nothing stored).
+    - Strategy 1: the 50-day level on the side the EMA filter allows, the filter, ATR, the bid and ask, and `distance_atr` = (level − ask) ÷ ATR for a buy, (bid − level) ÷ ATR for a sell. At or below 0 it triggers.
+    - Strategy 3: the band at that instant (open × (1 ± σ(t))), σ, the bid and ask, the nearer edge, and `distance_half_widths` = (upper − ask) or (bid − lower) ÷ (open × σ), the nearer of the two. Below 0 it triggers (a quote on the band is inside). `null` with the reason outside the entry window (the first and last 30 minutes, lunch), outside the session, or before the session is prepared.
+- **The status page** shows, in each strategy's section, a Performance and limits table ("LIMIT REACHED: owner's decision needed", "PAUSED by the owner") and the distance to each trigger.
+
 ## Volume and retention
 
 - **Daily bars:** about 20 symbols × 20 years × 260 days ≈ 104,000 rows per account.
