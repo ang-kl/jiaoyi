@@ -21,6 +21,7 @@ One binary, `jiaoyi`, deployed by `railway.toml` (Dockerfile build, healthcheck 
 |---|---|---|
 | `JIAOYI_ALLOWED_ACCOUNTS` | yes | cTrader account ids (`ctidTraderAccountId`) this service may touch, e.g. `49236051,43002148`. Missing or empty: the service refuses to start. |
 | `JIAOYI_ACCOUNT_ENVIRONMENTS` | yes | Which server each account is on, e.g. `49236051:demo,43002148:live`. An allowlisted account without one is refused and recorded; the server is not guessed. |
+| `JIAOYI_DEMO_ACCOUNT_ID`, `JIAOYI_DEMO_ACCOUNT_ID_<N>` | no | One more demo account each, N a positive integer, e.g. `JIAOYI_DEMO_ACCOUNT_ID_2=46130058` (owner, 25-10-2026). Permitted and declared demo, in addition to the pair above. No tick history download, unless the pair names the account too. A malformed one is refused and recorded under its name; start-up goes on. |
 | `DATABASE_URL` | yes | PostgreSQL. Migrations run on start. |
 | `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET` | yes | The Open API application. |
 | `CTRADER_ACCESS_TOKEN`, `CTRADER_REFRESH_TOKEN` | first start, or a new grant | Seed the token store. After a refresh the database holds the current pair; the same seed is not stored over it again. A NEW seed (a different access token, e.g. after re-granting the app access to an added account) replaces the stored pair, and the replacement is recorded by fingerprint (docs/storage.md). |

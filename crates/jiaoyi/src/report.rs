@@ -324,6 +324,15 @@ pub async fn health(
     let grants = store::latest_grants(pool).await?;
     let trading = crate::trading::health(pool).await?;
     let strategy3 = crate::strategy3::health(pool).await?;
+    // Claude · № 16,973 25-Oct (ordered № 16,972·C; the broker's own leverage, no money)
+    let traders = store::history::latest_trader_reads(pool).await?;
+    let broker_accounts: Vec<Value> = accounts
+        .iter()
+        .map(|a| {
+            let id: i64 = a.get("account_id");
+            broker_account(id, traders.iter().find(|t| t.account_id == id))
+        })
+        .collect();
     let token_grants: Vec<Value> = accounts
         .iter()
         .map(|a| {
@@ -342,6 +351,7 @@ pub async fn health(
         "ticks": ticks,
         "account_refusals_recorded": refusals,
         "token_grants": token_grants,
+        "broker_accounts": broker_accounts,
         "trading": trading,
         "strategy3": strategy3,
         "last_loads": runs.iter().map(|r| serde_json::json!({
@@ -359,6 +369,38 @@ pub async fn health(
             "errors": r.errors,
         })).collect::<Vec<_>>(),
     }))
+}
+
+/// `1:N` from the broker's `leverageInCents` (1:50 is 5000); a fraction
+/// stays a fraction (2550 is `1:25.5`).
+pub fn leverage(leverage_in_cents: i64) -> String {
+    if leverage_in_cents % 100 == 0 {
+        format!("1:{}", leverage_in_cents / 100)
+    } else {
+        format!("1:{}", leverage_in_cents as f64 / 100.0)
+    }
+}
+
+/// One account's latest trader read for `/health`: the broker's leverage
+/// and account type, never its money. `max_leverage` is shown as the broker
+/// gives it (Spotware does not document its unit).
+pub fn broker_account(account_id: i64, t: Option<&store::history::LatestTraderRead>) -> Value {
+    use jiaoyi_ctrader::messages::ProtoOaAccountType;
+    let account_type = t.and_then(|t| t.account_type).map(|v| {
+        ProtoOaAccountType::try_from(v)
+            .map(|k| k.as_str_name().to_string())
+            .unwrap_or_else(|_| format!("unknown ({v})"))
+    });
+    serde_json::json!({
+        "account_id": account_id,
+        "read_at": t.map(|t| t.read_at),
+        "leverage": t.and_then(|t| t.leverage_in_cents).map(leverage),
+        "leverage_in_cents": t.and_then(|t| t.leverage_in_cents),
+        "max_leverage": t.and_then(|t| t.max_leverage),
+        "account_type": account_type,
+        "is_limited_risk": t.and_then(|t| t.is_limited_risk),
+        "state": if t.is_some() { "read" } else { "unread" },
+    })
 }
 
 /// One account's grant state for `/health`: `listed`, `not_listed`,
@@ -380,4 +422,18 @@ pub fn grant_state(account_id: i64, environment: &str, g: Option<&store::GrantRo
         "host": g.map(|g| g.host.clone()),
         "read_at": g.map(|g| g.read_at),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::leverage;
+
+    #[test]
+    fn leverage_is_one_to_leverage_in_cents_over_100() {
+        // ProtoOATrader.leverageInCents: "if leverage = 1:50 then value = 5000".
+        assert_eq!(leverage(5000), "1:50");
+        assert_eq!(leverage(20_000), "1:200");
+        assert_eq!(leverage(2500), "1:25");
+        assert_eq!(leverage(2550), "1:25.5");
+    }
 }

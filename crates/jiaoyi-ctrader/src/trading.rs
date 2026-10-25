@@ -24,7 +24,10 @@
 //!      rate is known; the risk recomputed from the exact volume, stop and
 //!      rate is within the policy's maximum;
 //!    - amend: the position is one this program opened; the new stop moves
-//!      only in the trade's favour;
+//!      only in the trade's favour, from the trader's stop and from the
+//!      broker's own, read fresh (`ProtoOAReconcileReq`); the position's
+//!      take-profit is carried, because cTrader's amend REPLACES the
+//!      protection and a stop-only amend would delete it;
 //!    - close: the position is one this program opened;
 //! 4. the intent is persisted (a unique entry key: an intent already recorded
 //!    is never sent again, after a restart included). A failing ledger means
@@ -150,6 +153,9 @@ pub struct Intent {
     pub volume: Option<i64>,
     pub relative_stop: Option<i64>,
     pub stop_price: Option<f64>,
+    /// An amend's take-profit: the position's own, read fresh, carried so the
+    /// amend (which replaces the protection) does not delete it.
+    pub take_profit: Option<f64>,
     /// The risk recomputed by the gate, in the deposit currency.
     pub risk: Option<f64>,
     pub max_risk: f64,
@@ -528,8 +534,13 @@ async fn check<L: Ledger>(
     }
 }
 
-/// The frame for a command.
-fn frame(account_id: i64, cmd: &Command, entry_key: &str) -> (u32, Vec<u8>) {
+/// The frame for a command. `take_profit`: an amend's, carried from the position.
+fn frame(
+    account_id: i64,
+    cmd: &Command,
+    entry_key: &str,
+    take_profit: Option<f64>,
+) -> (u32, Vec<u8>) {
     match cmd {
         Command::Open {
             symbol_id,
@@ -568,8 +579,9 @@ fn frame(account_id: i64, cmd: &Command, entry_key: &str) -> (u32, Vec<u8>) {
                 ctid_trader_account_id: account_id,
                 position_id: *position_id,
                 stop_loss: Some(*new_stop),
-                // No take-profit is set: H1 has none, and an amend replaces
-                // the position's protection.
+                // An amend replaces the position's protection: the
+                // take-profit it holds is sent again, or it would be deleted.
+                take_profit,
                 ..Default::default()
             }
             .encode_to_vec(),
@@ -603,25 +615,61 @@ pub async fn send<L: Ledger>(
 ) -> Result<Sent, SendError> {
     let account_id = session.account().id();
     let (risk, stop_price) = check(account_id, allowlist, ledger, policy, &cmd).await?;
-    if let Command::Open {
-        symbol_id, label, ..
-    } = &cmd
-    {
-        // Read fresh from the broker, every time: the account type and the
-        // open positions on this symbol.
-        let trader = session.trader().await.map_err(|e| Refused {
-            reason: format!("the account type is unreadable ({e}): no entry"),
-        })?;
-        let rec = session.reconcile().await.map_err(|e| Refused {
-            reason: format!("the open positions are unreadable ({e}): no entry"),
-        })?;
-        let positions: Vec<(i64, Option<String>)> = rec
-            .position
-            .iter()
-            .map(|p| (p.trade_data.symbol_id, p.trade_data.label.clone()))
-            .collect();
-        entry_allowed(trader.account_type, &positions, *symbol_id, label)
-            .map_err(|reason| Refused { reason })?;
+    let mut take_profit = None;
+    match &cmd {
+        Command::Open {
+            symbol_id, label, ..
+        } => {
+            // Read fresh from the broker, every time: the account type and
+            // the open positions on this symbol.
+            let trader = session.trader().await.map_err(|e| Refused {
+                reason: format!("the account type is unreadable ({e}): no entry"),
+            })?;
+            let rec = session.reconcile().await.map_err(|e| Refused {
+                reason: format!("the open positions are unreadable ({e}): no entry"),
+            })?;
+            let positions: Vec<(i64, Option<String>)> = rec
+                .position
+                .iter()
+                .map(|p| (p.trade_data.symbol_id, p.trade_data.label.clone()))
+                .collect();
+            entry_allowed(trader.account_type, &positions, *symbol_id, label)
+                .map_err(|reason| Refused { reason })?;
+        }
+        Command::AmendStop {
+            position_id,
+            side,
+            new_stop,
+            ..
+        } => {
+            // The position as the broker holds it now: its stop must be
+            // passed in the trade's favour, and its take-profit is carried.
+            let rec = session.reconcile().await.map_err(|e| Refused {
+                reason: format!("the open positions are unreadable ({e}): no amend"),
+            })?;
+            let Some(p) = rec.position.iter().find(|p| p.position_id == *position_id) else {
+                return Err(Refused {
+                    reason: format!("position {position_id} is not open at the broker: no amend"),
+                }
+                .into());
+            };
+            if let Some(cur) = p.stop_loss {
+                let favourable = match side {
+                    Side::Buy => *new_stop > cur,
+                    Side::Sell => *new_stop < cur,
+                };
+                if !favourable {
+                    return Err(Refused {
+                        reason: format!(
+                            "stop {new_stop} does not move in the trade's favour from the broker's {cur}: refused"
+                        ),
+                    }
+                    .into());
+                }
+            }
+            take_profit = p.take_profit.filter(|t| t.is_finite() && *t > 0.0);
+        }
+        Command::Close { .. } => {}
     }
     let conn = session.connection();
     let client_msg_id = conn.next_trading_id();
@@ -653,6 +701,7 @@ pub async fn send<L: Ledger>(
             _ => None,
         },
         stop_price,
+        take_profit,
         risk,
         max_risk: policy.max_risk,
     };
@@ -675,7 +724,7 @@ pub async fn send<L: Ledger>(
     }
     // Subscribe before writing, so no answer is missed.
     let mut rx = conn.executions();
-    let (pt, payload) = frame(account_id, &cmd, entry_key);
+    let (pt, payload) = frame(account_id, &cmd, entry_key, take_profit);
     conn.send_trading_frame(pt, payload, client_msg_id.clone())
         .await?;
     let deadline = tokio::time::Instant::now() + wait;

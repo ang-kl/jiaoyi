@@ -6,7 +6,8 @@
 use chrono::{DateTime, Utc};
 use jiaoyi_core::allowlist::Environment;
 use jiaoyi_core::allowlist::{
-    plan_accounts, AccountPlan, Allowlist, AllowlistError, ENVIRONMENTS_VAR,
+    demo_accounts, plan_accounts, AccountPlan, Allowlist, AllowlistError, DEMO_ACCOUNT_VAR,
+    ENVIRONMENTS_VAR,
 };
 use jiaoyi_core::secret::Secret;
 
@@ -63,6 +64,20 @@ fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
 }
 
+/// The `JIAOYI_DEMO_ACCOUNT_ID*` variables of the process environment. Only
+/// names with that prefix are read; no other variable's value is touched. A
+/// value that is not valid Unicode reaches the parser as replacement
+/// characters and is refused there, under its name.
+fn demo_account_vars() -> Vec<(String, String)> {
+    std::env::vars_os()
+        .filter_map(|(k, v)| {
+            let k = k.to_string_lossy().into_owned();
+            k.starts_with(DEMO_ACCOUNT_VAR)
+                .then(|| (k, v.to_string_lossy().into_owned()))
+        })
+        .collect()
+}
+
 fn parse<T: std::str::FromStr>(name: &'static str, default: T) -> Result<T, ConfigError>
 where
     T::Err: std::fmt::Display,
@@ -78,9 +93,13 @@ where
 
 impl Config {
     /// Read the environment. The allowlist is checked first: a missing or
-    /// empty list stops start-up before anything else happens.
+    /// empty list stops start-up before anything else happens. The demo
+    /// account variables add accounts to it; a malformed one is refused and
+    /// recorded, and does not stop start-up (owner, 25-10-2026).
     pub fn from_env() -> Result<Config, ConfigError> {
-        let allowlist = Allowlist::from_env()?;
+        // Claude · № 16,973 25-Oct (ordered № 16,972·C; demo accounts by variable)
+        let allowlist =
+            Allowlist::from_env()?.with_demo_accounts(demo_accounts(demo_account_vars()));
         let plan = plan_accounts(&allowlist, var(ENVIRONMENTS_VAR).as_deref());
         let database_url = Secret::new(var("DATABASE_URL").ok_or(ConfigError::NoDatabase)?);
         let seed_expires_at = match var("CTRADER_ACCESS_TOKEN_EXPIRES_AT") {

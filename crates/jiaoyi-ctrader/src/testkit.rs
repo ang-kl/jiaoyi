@@ -102,6 +102,13 @@ pub struct FakeBroker {
     pub silent_orders: bool,
     /// Net unrealized P&L (deposit cents) answered for every open position.
     pub unrealized_net: i64,
+    /// Answer a new order with ORDER_ACCEPTED at once and fill it this much
+    /// later (the position appears at the fill), as a slow market would.
+    pub fill_delay: Option<Duration>,
+    /// Spot quotes in one global order across symbols, each this many
+    /// milliseconds after the spot subscription: (ms, symbol id, quote).
+    /// Sent after `quotes`, for the subscribed symbols only.
+    pub quote_sequence: Vec<(u64, i64, SidedQuote)>,
 }
 
 /// One account in a token's grant.
@@ -460,6 +467,37 @@ impl FakeBroker {
                             }
                             .encode_to_vec(),
                         ));
+                        let seq: Vec<(u64, i64, SidedQuote)> = self
+                            .quote_sequence
+                            .iter()
+                            .filter(|(_, s, _)| req.symbol_id.contains(s))
+                            .cloned()
+                            .collect();
+                        if !seq.is_empty() {
+                            let (wr, account) = (wr.clone(), self.account_id);
+                            tokio::spawn(async move {
+                                let start = tokio::time::Instant::now();
+                                for (ms, sid, (bid, ask)) in seq {
+                                    tokio::time::sleep_until(start + Duration::from_millis(ms))
+                                        .await;
+                                    let m = reply(
+                                        None,
+                                        Oa::ProtoOaSpotEvent as i32,
+                                        pb::ProtoOaSpotEvent {
+                                            ctid_trader_account_id: account,
+                                            symbol_id: sid,
+                                            bid,
+                                            ask,
+                                            ..Default::default()
+                                        }
+                                        .encode_to_vec(),
+                                    );
+                                    if write_frame(&mut *wr.lock().await, &m).await.is_err() {
+                                        return;
+                                    }
+                                }
+                            });
+                        }
                         for sid in &req.symbol_id {
                             for (bid, ask) in self.quotes.get(sid).cloned().unwrap_or_default() {
                                 out.push(reply(
@@ -670,7 +708,9 @@ impl FakeBroker {
                                 }),
                                 ..Default::default()
                             };
-                            positions.push(position.clone());
+                            if self.fill_delay.is_none() {
+                                positions.push(position.clone());
+                            }
                             drop(positions);
                             let deal = pb::ProtoOaDeal {
                                 deal_id: position_id * 10,
@@ -693,13 +733,25 @@ impl FakeBroker {
                                 Some(position.clone()),
                                 None,
                             ));
-                            out.push(execution(
+                            let filled = execution(
                                 id,
                                 self.account_id,
                                 pb::ProtoOaExecutionType::OrderFilled,
-                                Some(position),
+                                Some(position.clone()),
                                 Some(deal),
-                            ));
+                            );
+                            match self.fill_delay {
+                                None => out.push(filled),
+                                Some(delay) => {
+                                    // The fill comes later, on its own.
+                                    let (wr, positions) = (wr.clone(), self.positions.clone());
+                                    tokio::spawn(async move {
+                                        tokio::time::sleep(delay).await;
+                                        positions.lock().unwrap().push(position);
+                                        let _ = write_frame(&mut *wr.lock().await, &filled).await;
+                                    });
+                                }
+                            }
                         }
                     } else if pt == Oa::ProtoOaAmendPositionSltpReq as i32 {
                         let req = pb::ProtoOaAmendPositionSltpReq::decode(body.as_slice())
@@ -711,7 +763,10 @@ impl FakeBroker {
                             .find(|p| p.position_id == req.position_id)
                         {
                             Some(p) => {
+                                // The amend replaces the protection, as the
+                                // broker's does: a field not sent is removed.
                                 p.stop_loss = req.stop_loss;
+                                p.take_profit = req.take_profit;
                                 let p = p.clone();
                                 drop(positions);
                                 out.push(execution(

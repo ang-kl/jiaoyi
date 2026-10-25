@@ -99,12 +99,19 @@ Read-only against the broker. Migration 0004.
 | `deals` | broker record | Every deal exactly as `ProtoOADeal` gives it, money as the broker's integers with `money_digits`, plus the raw message. Deletes are refused; a deal the broker later reports differently is written to `reconcile_events` first. |
 | `deal_fetches` | event, append-only | Every deal-list window and its outcome. |
 | `account_snapshots` | event, append-only | `ProtoOATraderRes` each time it is read: login, deposit asset, balance, registration date. |
+| `trader_reads` | event, append-only | Migration 0011 (owner, 25-10-2026). Every `ProtoOATrader` field of each read: leverage (`leverage_in_cents`, so 1:50 is 5000), max leverage, account type, limited risk, margin and stop-out settings, money (balance, bonuses, with `money_digits`), login, broker name, registration date. A field the broker omits is NULL, never a default; enumerations are the broker's integers. `/health` shows each account's latest leverage as `1:N`, the account type and the read time. No route shows the money. |
 | `research_trials` | research log, append-only | Every trial, pass or fail, with its parameters, data range, sample (`development` or `held_out`) and settings version. |
 
 ### Ticks history: depth and size
 
 - Tick requests span at most one week (Spotware). Windows are Monday-to-Monday UTC weeks on a fixed grid, so a sync resumes, and a week fetched completely is not fetched again.
 - The depth downloaded is the setting `history.tick_days_back` (default 7 days). The probe (`history.probe_years`, default 15) finds the earliest week with ticks without downloading the years in between.
+- **Tick history off (owner, 25-10-2026: "Skip their tick history").**
+  - An account named only by a `JIAOYI_DEMO_ACCOUNT_ID*` variable skips the tick download (sync step 3).
+  - The reason was disk: the Postgres volume held 26.8 GB of 50 GB with two accounts, flat for 12 h. One account's 7-day broker download is about 30M rows a week.
+  - Its deals, trader record, availability probe, daily bars and live tick recorder are unchanged.
+  - An account the pair (`JIAOYI_ALLOWED_ACCOUNTS` with `JIAOYI_ACCOUNT_ENVIRONMENTS`) also permits downloads ticks as before.
+  - `/health` shows `history_sync.<account>.tick_history`: `on`, or `off` with the reason.
 - Size is the limit, not the broker. As an order of magnitude only (not measured), a busy FX pair can carry 100,000–200,000 quote changes a day per side; 20 symbols × 2 sides × a year would be on the order of 100 GB. The depth is raised once the first week's real volume is measured from `/research/inventory`.
 
 ## Research engine: the pre-registered edge test (migration 0009)
@@ -132,13 +139,13 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
 
 | Table | Kind | Holds |
 |---|---|---|
-| `trading_intents` | event, append-only | What the order gate wrote before each frame: entry key (unique, so never sent twice), client message id, kind (open, amend_stop, close), symbol, position, side, volume in cents, relative stop, stop price, the risk the gate recomputed and its allowance (deposit currency), settings version. |
-| `trading_events` | event, append-only | Every execution message: the answers to our requests (by client message id and entry key) and the broker's own (a stop hit), with the raw bytes. `RECONCILED_FILL`: an unconfirmed open that reconcile found filled, adopted once. |
+| `trading_intents` | event, append-only | What the order gate wrote before each frame: entry key (unique, so never sent twice), client message id, kind (open, amend_stop, close), symbol, position, side, volume in cents, relative stop, stop price, an amend's carried take-profit, the risk the gate recomputed and its allowance (deposit currency), settings version. |
+| `trading_events` | event, append-only | Every execution message: the answers to our requests (by client message id and entry key, late ones included) and the broker's own (a stop hit), with the raw bytes. One message is kept once (unique on account, client message id, kind, receive time): the gate and the trader both receive it. `RECONCILED_FILL`: an unresolved open that reconcile found filled, adopted once. `RECONCILED_ABSENT`: an unresolved open with nothing at the broker after one reconcile interval, released, never resent. |
 | `trading_decisions` | event, append-only | Strategy 1's decisions (reconcile with the external positions it found, a signal held by the edge gate, a skip and why, a refusal and why, a send), recorded when they change, not on every tick. |
 | `settings_seed_applied` | state | Which entries of `config/settings-changes.json` were applied, and the settings version each became. |
 
 - **Settings:**
-  - `trading.live_requires_edge_pass` 1
+  - `trading.live_requires_edge_pass` 1, set to 0 by the reviewed change `2026-10-25-live-edge-gate-lifted` (owner, 25-10: "Live too, from now")
   - `trading.risk_pct` 0.6
   - `trading.cap_factor` 1.1
   - `trading.live_allow_min_volume` 1
@@ -148,10 +155,11 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
   - `trading.trail_amend_secs` 60
   - `trading.order_wait_secs` 20
   - `trading.retry_secs` 60
-- **No on/off switch** (owner, 24-10). Demo accounts trade from start-up; a live account waits for the edge gate.
+- **No on/off switch** (owner, 24-10). Demo accounts trade from start-up; a live account waits for the edge gate while `trading.live_requires_edge_pass` is 1.
+- **Unresolved opens** (no fill and no end recorded: accepted only, or no answer) are read back from these tables at every reconcile: their risk is held in the open-risk budget, their symbol takes no entry.
 - **A reviewed settings change** is an entry in `config/settings-changes.json` (`id`, `key`, `account_id`, `value`, `changed_by`, `reason`), merged and deployed. Each entry is applied once through `settings::change`, so it is bounds-checked and logged. A refused entry is logged and not applied.
 - `/health` → `trading` and the status page show, per account:
-  - the strategy, and whether it trades (`yes`, or `armed: waits for the edge gate`);
+  - the strategy, and whether it trades (`yes`, `armed: waits for the edge gate`, or `trading (edge gate lifted by the owner DD-MM)`);
   - the edge gate and the minimum-volume rule;
   - the open-risk budget;
   - the last decision;

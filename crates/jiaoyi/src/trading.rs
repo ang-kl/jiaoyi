@@ -86,6 +86,9 @@ pub struct Rules {
     pub version: i64,
     pub live: bool,
     pub edge_required: bool,
+    /// A live account whose edge gate is lifted (`trading.live_requires_edge_pass`
+    /// 0; owner, 25-10-2026: "Live too, from now").
+    pub edge_lifted: bool,
     pub risk_pct: f64,
     pub cap_factor: f64,
     pub allow_min_volume: bool,
@@ -102,10 +105,12 @@ pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::
     let i = |k: &str| s.integer(k).map_err(anyhow::Error::msg);
     let n = |k: &str| s.number(k).map_err(anyhow::Error::msg);
     let live = env == Environment::Live;
+    let pass = i("trading.live_requires_edge_pass")?;
     Ok(Rules {
         version: s.version,
         live,
-        edge_required: live && i("trading.live_requires_edge_pass")? == 1,
+        edge_required: live && pass == 1,
+        edge_lifted: live && pass == 0,
         risk_pct: n("trading.risk_pct")?,
         cap_factor: n("trading.cap_factor")?,
         allow_min_volume: live && i("trading.live_allow_min_volume")? == 1,
@@ -156,6 +161,31 @@ pub fn within_budget(open_risk: f64, new_risk: f64, equity: f64, pct: f64) -> Re
     } else {
         Ok(())
     }
+}
+
+/// Whether Strategy 1 may take one more entry (`open`: its positions and
+/// unresolved opens on the account; `held`: their risk at the stops).
+/// - An entry sized at `risk_pct` must fit the open-risk budget.
+/// - A broker-minimum entry (live only) is taken only while Strategy 1 holds
+///   nothing else on the account, and then replaces the budget check for
+///   itself (owner, 25-10-2026: "One minimum trade at a time"). A second
+///   entry waits until it closes.
+pub fn admit(
+    sized: &Sized,
+    open: usize,
+    held: Result<f64, String>,
+    equity: f64,
+    pct: f64,
+) -> Result<(), String> {
+    if sized.mode == "broker_minimum" {
+        if open > 0 {
+            return Err(format!(
+                "one minimum trade at a time: Strategy 1 holds {open} other position(s) or unresolved open(s) on this account; this broker-minimum entry waits until they close"
+            ));
+        }
+        return Ok(());
+    }
+    within_budget(held?, sized.risk, equity, pct)
 }
 
 /// The risk still at stake at a position's stop, in the deposit currency:
@@ -390,6 +420,7 @@ impl Ledger for PgLedger<'_> {
             volume: i.volume,
             relative_stop: i.relative_stop,
             stop_price: i.stop_price,
+            take_profit: i.take_profit,
             risk: i.risk,
             max_risk: i.max_risk,
             settings_version: self.settings_version,
@@ -492,10 +523,14 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
         } else {
             Environment::Demo
         };
+        let lifted = lifted_by(pool, id).await?;
         let (r, gate) = match rules(pool, id, environment).await {
             Ok(r) => {
                 let g = match edge_gate(pool, &r).await {
                     Ok(Ok(())) if r.edge_required => "met".to_string(),
+                    Ok(Ok(())) if r.edge_lifted => {
+                        format!("{lifted} (trading.live_requires_edge_pass 0)")
+                    }
                     Ok(Ok(())) => "not required (demo)".to_string(),
                     Ok(Err(why)) => format!("not met: {why}"),
                     Err(e) => format!("unreadable: {e}"),
@@ -511,9 +546,12 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
             "environment": env,
             "strategy": STRATEGY,
             "trades": match &r {
-                Some(r) if r.edge_required && gate != "met" => "armed: waits for the edge gate",
-                Some(_) => "yes",
-                None => "unknown",
+                Some(r) if r.edge_required && gate != "met" => {
+                    "armed: waits for the edge gate".to_string()
+                }
+                Some(r) if r.edge_lifted => format!("trading ({lifted})"),
+                Some(_) => "yes".to_string(),
+                None => "unknown".to_string(),
             },
             "edge_gate": gate,
             "allow_min_volume": r.as_ref().map(|r| r.allow_min_volume),
@@ -527,6 +565,24 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
         }));
     }
     Ok(json!(out))
+}
+
+/// Who lifted a live account's edge gate and when, from the settings log:
+/// the account's own change when it has one, else the global one.
+async fn lifted_by(pool: &PgPool, account_id: i64) -> jiaoyi_store::Result<String> {
+    let h = jiaoyi_store::settings::history(pool, Some("trading.live_requires_edge_pass")).await?;
+    let row = match h.iter().find(|c| c.account_id == Some(account_id)) {
+        Some(c) if c.new_value.is_some() => Some(c),
+        _ => h.iter().find(|c| c.account_id.is_none()),
+    };
+    Ok(match row {
+        Some(c) => format!(
+            "edge gate lifted by the {} {}",
+            c.changed_by,
+            c.changed_at.format("%d-%m")
+        ),
+        None => "edge gate lifted".into(),
+    })
 }
 
 // ---------------------------------------------------------------- trader
@@ -553,6 +609,41 @@ struct Own {
     stop: Option<f64>,
     best: Option<f64>,
     last_amend: Option<tokio::time::Instant>,
+}
+
+/// An open with neither a fill nor an end recorded (Unconfirmed, or accepted
+/// only): the broker may still fill it, so its risk is held in the budget and
+/// its symbol takes no entry until reconcile resolves it (Codex P1 on #14).
+#[derive(Debug, Clone, PartialEq)]
+struct Pending {
+    symbol_id: Option<i64>,
+    /// The risk the gate recomputed for it, in the deposit currency.
+    risk: Option<f64>,
+}
+
+/// Strategy 1's book on one session.
+#[derive(Default)]
+struct Book {
+    own: HashMap<i64, Own>,
+    /// Unresolved opens, by entry key.
+    pending: HashMap<String, Pending>,
+    /// Each frame this session sent: its request id to its entry key, so a
+    /// late answer is recorded under its intent.
+    sent: HashMap<String, String>,
+}
+
+/// Strategy 1's risk at its stops: its positions' and its unresolved opens'.
+fn held_risk(book: &Book, syms: &HashMap<i64, Sym>, deposit: Option<&str>) -> Result<f64, String> {
+    let mut total = open_risk(&book.own, syms, deposit)?;
+    for (key, p) in &book.pending {
+        let Some(r) = p.risk else {
+            return Err(format!(
+                "the unresolved open {key} has no recorded risk: Strategy 1's open risk is unknown"
+            ));
+        };
+        total += r;
+    }
+    Ok(total)
 }
 
 /// Records decisions when they change, not on every tick.
@@ -724,11 +815,63 @@ pub async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
     Ok(t.balance as f64 / scale + unrealized)
 }
 
+/// An event reconcile writes under an intent: a fill it found
+/// (`RECONCILED_FILL`), or an unresolved open it released
+/// (`RECONCILED_ABSENT`).
+pub fn reconciled_row(
+    account_id: i64,
+    entry_key: &str,
+    kind: &str,
+    p: Option<&jiaoyi_ctrader::messages::ProtoOaPosition>,
+    description: &str,
+) -> ts::EventRow {
+    ts::EventRow {
+        account_id,
+        entry_key: Some(entry_key.to_string()),
+        client_msg_id: None,
+        payload_type: 0,
+        kind: kind.into(),
+        position_id: p.map(|p| p.position_id),
+        order_id: None,
+        deal_id: None,
+        symbol_id: p.map(|p| p.trade_data.symbol_id),
+        side: p
+            .and_then(|p| Side::from_proto(p.trade_data.trade_side))
+            .map(|s| s.as_str().to_string()),
+        price: p.and_then(|p| p.price),
+        volume: p.map(|p| p.trade_data.volume),
+        stop_loss: p.and_then(|p| p.stop_loss),
+        label: p.and_then(|p| p.trade_data.label.clone()),
+        error_code: None,
+        description: Some(description.into()),
+        is_server_event: None,
+        raw: vec![],
+        received_at: Utc::now(),
+    }
+}
+
+/// What a reconcile found.
+struct Reconciled {
+    own: usize,
+    pending: usize,
+    external: Vec<Value>,
+    /// Unresolved opens released (neither filled nor pending at the broker
+    /// after their grace).
+    released: Vec<String>,
+}
+
+/// The broker wins. Positions with this program's label are adopted when an
+/// intent of its own filled them, or when an unresolved open on their symbol
+/// did (accepted only, or no answer: Codex P1 on #14); any other position is
+/// external. An unresolved open still pending at the broker, or younger than
+/// `grace`, stays pending; an older one with nothing at the broker is
+/// released (`RECONCILED_ABSENT`), never resent.
 async fn reconcile(
     pool: &PgPool,
     session: &AccountSession<'_>,
-    own: &mut HashMap<i64, Own>,
-) -> anyhow::Result<(usize, Vec<Value>)> {
+    book: &mut Book,
+    grace: chrono::Duration,
+) -> anyhow::Result<Reconciled> {
     let res = session.reconcile().await?;
     let account_id = session.account().id();
     let mut seen = HashSet::new();
@@ -742,7 +885,12 @@ async fn reconcile(
             "label": p.trade_data.label,
         })
     };
-    let unconfirmed = ts::open_intents_without_fill(pool, account_id).await?;
+    // Strategy 1's own unresolved opens (Strategy 3 reconciles its own).
+    let mut unresolved: Vec<ts::UnresolvedIntent> = ts::open_intents_unresolved(pool, account_id)
+        .await?
+        .into_iter()
+        .filter(|u| u.entry_key.starts_with("s1:"))
+        .collect();
     for p in &res.position {
         // Claude · № 17,020 25-Oct (Strategy 3 v2: each strategy manages only its own label)
         if p.trade_data.label.as_deref() != Some(LABEL) {
@@ -758,36 +906,21 @@ async fn reconcile(
         }
         let mut owned = ts::owns_position(pool, account_id, p.position_id).await?;
         if !owned {
-            // An Unconfirmed open that did fill: adopted once, recorded.
-            if let Some((key, _)) = unconfirmed
+            // An unresolved open that did fill: adopted once, recorded.
+            if let Some(i) = unresolved
                 .iter()
-                .filter(|(k, _)| k.starts_with("s1:"))
-                .find(|(_, s)| *s == Some(p.trade_data.symbol_id))
+                .position(|u| u.symbol_id == Some(p.trade_data.symbol_id))
             {
+                let u = unresolved.remove(i);
                 ts::record_event(
                     pool,
-                    &ts::EventRow {
+                    &reconciled_row(
                         account_id,
-                        entry_key: Some(key.clone()),
-                        client_msg_id: None,
-                        payload_type: 0,
-                        kind: "RECONCILED_FILL".into(),
-                        position_id: Some(p.position_id),
-                        order_id: None,
-                        deal_id: None,
-                        symbol_id: Some(p.trade_data.symbol_id),
-                        side: Side::from_proto(p.trade_data.trade_side)
-                            .map(|s| s.as_str().to_string()),
-                        price: p.price,
-                        volume: Some(p.trade_data.volume),
-                        stop_loss: p.stop_loss,
-                        label: p.trade_data.label.clone(),
-                        error_code: None,
-                        description: Some("an unconfirmed open found filled by reconcile".into()),
-                        is_server_event: None,
-                        raw: vec![],
-                        received_at: Utc::now(),
-                    },
+                        &u.entry_key,
+                        "RECONCILED_FILL",
+                        Some(p),
+                        "an unresolved open found filled by reconcile",
+                    ),
                 )
                 .await?;
                 owned = true;
@@ -801,7 +934,7 @@ async fn reconcile(
             continue;
         };
         seen.insert(p.position_id);
-        let e = own.entry(p.position_id).or_insert(Own {
+        let e = book.own.entry(p.position_id).or_insert(Own {
             position_id: p.position_id,
             symbol_id: p.trade_data.symbol_id,
             side,
@@ -818,14 +951,62 @@ async fn reconcile(
             e.entry = p.price;
         }
     }
-    own.retain(|id, _| seen.contains(id));
-    Ok((own.len(), external))
+    book.own.retain(|id, _| seen.contains(id));
+    book.pending.clear();
+    let now = Utc::now();
+    let mut released = Vec::new();
+    for u in unresolved {
+        let at_broker = res.order.iter().any(|o| {
+            o.trade_data.label.as_deref() == Some(LABEL)
+                && Some(o.trade_data.symbol_id) == u.symbol_id
+        });
+        if at_broker || now - u.created_at < grace {
+            book.pending.insert(
+                u.entry_key,
+                Pending {
+                    symbol_id: u.symbol_id,
+                    risk: u.risk,
+                },
+            );
+            continue;
+        }
+        ts::record_event(
+            pool,
+            &reconciled_row(
+                account_id,
+                &u.entry_key,
+                "RECONCILED_ABSENT",
+                None,
+                "an unresolved open neither filled nor pending at the broker after its grace: released, never resent",
+            ),
+        )
+        .await?;
+        released.push(u.entry_key);
+    }
+    Ok(Reconciled {
+        own: book.own.len(),
+        pending: book.pending.len(),
+        external,
+        released,
+    })
 }
 
-/// The reconcile decision: own and external positions (symbol, side, volume;
-/// never money), recorded when they change.
-async fn note_reconcile(d: &mut Decisions<'_>, n_own: usize, external: Vec<Value>) {
-    let summary: Vec<String> = external
+/// The reconcile decision: own positions, unresolved opens and external
+/// positions (symbol, side, volume; never money), recorded when they change.
+async fn note_reconcile(d: &mut Decisions<'_>, r: Reconciled) {
+    for key in &r.released {
+        d.note(
+            None,
+            "released",
+            &format!(
+                "the unresolved open {key} was neither filled nor pending at the broker after its grace: released, never resent"
+            ),
+            json!({ "entry_key": key }),
+        )
+        .await;
+    }
+    let summary: Vec<String> = r
+        .external
         .iter()
         .map(|e| {
             format!(
@@ -840,11 +1021,13 @@ async fn note_reconcile(d: &mut Decisions<'_>, n_own: usize, external: Vec<Value
         None,
         "reconcile",
         &format!(
-            "{n_own} own position(s); {} external, never touched [{}]",
-            external.len(),
+            "{} own position(s); {} unresolved open(s); {} external, never touched [{}]",
+            r.own,
+            r.pending,
+            r.external.len(),
             summary.join(", ")
         ),
-        json!({ "own": n_own, "external": external }),
+        json!({ "own": r.own, "pending": r.pending, "external": r.external }),
     )
     .await;
 }
@@ -871,6 +1054,12 @@ async fn session(
         &mut shutdown,
     )
     .await
+}
+
+/// How long an unresolved open with nothing at the broker stays pending:
+/// one reconcile interval.
+fn grace_of(r: &Rules) -> chrono::Duration {
+    chrono::Duration::seconds(r.reconcile_secs as i64)
 }
 
 /// The Strategy 1 loop on an authorised session (also driven by the tests on
@@ -942,15 +1131,16 @@ pub async fn run_session(
             s.levels = l;
         }
     }
-    let mut own: HashMap<i64, Own> = HashMap::new();
-    let (n_own, ext) = reconcile(pool, session, &mut own).await?;
-    note_reconcile(d, n_own, ext).await;
-    let mut spots = conn.spot_events();
-    let mut execs = conn.executions();
-    session.subscribe_spots(&ids).await?;
     let r0 = rules(pool, account_id, env).await?;
     d.version = Some(r0.version);
+    let mut grace = grace_of(&r0);
     let mut trail_amend_secs = r0.trail_amend_secs;
+    let mut book = Book::default();
+    let mut execs = conn.executions();
+    let rec = reconcile(pool, session, &mut book, grace).await?;
+    note_reconcile(d, rec).await;
+    let mut spots = conn.spot_events();
+    session.subscribe_spots(&ids).await?;
     let mut reconcile_tick = tokio::time::interval(Duration::from_secs(r0.reconcile_secs));
     reconcile_tick.tick().await;
     let mut levels_tick = tokio::time::interval(LEVELS_REFRESH);
@@ -973,11 +1163,12 @@ pub async fn run_session(
                 }
             }
             _ = reconcile_tick.tick() => {
-                let (n_own, ext) = reconcile(pool, session, &mut own).await?;
-                note_reconcile(d, n_own, ext).await;
                 let r = rules(pool, account_id, env).await?;
                 d.version = Some(r.version);
                 trail_amend_secs = r.trail_amend_secs;
+                grace = grace_of(&r);
+                let rec = reconcile(pool, session, &mut book, grace).await?;
+                note_reconcile(d, rec).await;
             }
             _ = levels_tick.tick() => {
                 for id in &ids {
@@ -986,7 +1177,18 @@ pub async fn run_session(
                 }
             }
             m = execs.recv() => match m {
-                Ok(m) => server_event(pool, account_id, &m).await,
+                Ok(m) => {
+                    // A late end to an open still unresolved: reconcile now,
+                    // so a fill is adopted and trailed and a refusal frees
+                    // its risk (Codex P1 on #14).
+                    if let Some((key, kind)) = server_event(pool, account_id, &m, &book.sent).await {
+                        let ends_it = ts::FILL_KINDS.iter().chain(ts::END_KINDS).any(|k| *k == kind);
+                        if ends_it && book.pending.contains_key(&key) {
+                            let rec = reconcile(pool, session, &mut book, grace).await?;
+                            note_reconcile(d, rec).await;
+                        }
+                    }
+                }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
             },
@@ -997,7 +1199,7 @@ pub async fn run_session(
                     if let Some(b) = ev.bid { sym.bid = Some(b as f64 / 100_000.0); }
                     if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0); }
                     let sym = sym.clone();
-                    on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut own, &mut tried, trail_amend_secs).await?;
+                    on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut book, &mut tried, trail_amend_secs).await?;
                 }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
@@ -1013,24 +1215,40 @@ struct Ctx<'a, 'c> {
     env: Environment,
 }
 
-/// A broker-side execution message (no request of ours): recorded as it came.
-async fn server_event(pool: &PgPool, account_id: i64, m: &ReceivedExecution) {
-    if m.client_msg_id.is_some() {
-        // An answer to one of our requests: the gate records it.
-        return;
-    }
-    if let Some(e) = gate::decode_execution(account_id, m) {
-        // Another strategy's position: its own loop records it.
-        if e.label
+/// An execution message outside the gate's wait, recorded as it came: the
+/// broker's own (a stop hit), or a late answer to a frame this session sent,
+/// recorded under its intent (Codex P1 on #14: a late fill was dropped). An
+/// answer the gate already recorded is kept once. Returns a late answer's
+/// entry key and kind.
+async fn server_event(
+    pool: &PgPool,
+    account_id: i64,
+    m: &ReceivedExecution,
+    sent: &HashMap<String, String>,
+) -> Option<(String, String)> {
+    let key = match &m.client_msg_id {
+        None => None,
+        Some(id) => match sent.get(id) {
+            Some(k) => Some(k.clone()),
+            // Not a frame of the trading path.
+            None => return None,
+        },
+    };
+    let mut e = gate::decode_execution(account_id, m)?;
+    // Claude · № 17,020 25-Oct: another strategy's position (a broker event
+    // with no request of ours): its own loop records it.
+    if key.is_none()
+        && e.label
             .as_deref()
             .is_some_and(|l| l != LABEL && gate::PROGRAM_LABELS.contains(&l))
-        {
-            return;
-        }
-        if let Err(err) = ts::record_event(pool, &event_row(&e)).await {
-            tracing::error!(error = %err, "server execution event not recorded");
-        }
+    {
+        return None;
     }
+    e.entry_key = key.clone();
+    if let Err(err) = ts::record_event(pool, &event_row(&e)).await {
+        tracing::error!(error = %err, "execution event not recorded");
+    }
+    key.map(|k| (k, e.kind))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1040,7 +1258,7 @@ async fn on_quote(
     syms: &HashMap<i64, Sym>,
     sym: &Sym,
     deposit: Option<&str>,
-    own: &mut HashMap<i64, Own>,
+    book: &mut Book,
     tried: &mut HashSet<String>,
     trail_amend_secs: u64,
 ) -> anyhow::Result<()> {
@@ -1049,7 +1267,7 @@ async fn on_quote(
     let name = sym.name.as_str();
     // Trail Strategy 1's positions on this symbol.
     let lv = sym.levels.as_ref().ok();
-    for o in own.values_mut().filter(|o| o.symbol_id == sym.id) {
+    for o in book.own.values_mut().filter(|o| o.symbol_id == sym.id) {
         let price = match o.side {
             Side::Buy => sym.bid,
             Side::Sell => sym.ask,
@@ -1109,6 +1327,7 @@ async fn on_quote(
         .await
         {
             Ok(sent) => {
+                book.sent.insert(sent.client_msg_id.clone(), key);
                 if matches!(sent.outcome, Outcome::Amended { .. }) {
                     o.stop = Some(new_stop);
                 }
@@ -1132,7 +1351,7 @@ async fn on_quote(
         }
     }
     // An entry, when the symbol has no Strategy 1 position.
-    if own.values().any(|o| o.symbol_id == sym.id) {
+    if book.own.values().any(|o| o.symbol_id == sym.id) {
         return Ok(());
     }
     let l = match &sym.levels {
@@ -1146,6 +1365,17 @@ async fn on_quote(
     let Some(side) = triggered(l, sym.bid, sym.ask) else {
         return Ok(());
     };
+    // An unresolved open on this symbol may still fill: one per symbol.
+    if book.pending.values().any(|p| p.symbol_id == Some(sym.id)) {
+        d.note(
+            Some(name),
+            "skip",
+            "an unresolved open on this symbol may still fill: no entry until reconcile resolves it",
+            json!({}),
+        )
+        .await;
+        return Ok(());
+    }
     let key = entry_key(account_id, sym.id, l.last_completed);
     if tried.contains(&key) || ts::intent_exists(pool, &key).await? {
         tried.insert(key);
@@ -1191,6 +1421,8 @@ async fn on_quote(
             detail,
         )
         .await;
+        // The conversion quote may arrive later the same day (Codex P2 on #14).
+        tried.remove(&key);
         return Ok(());
     };
     let equity = match fresh_equity(session).await {
@@ -1214,10 +1446,16 @@ async fn on_quote(
             return Ok(());
         }
     };
-    // Strategy 1's open-risk budget (owner, № 16,806).
-    let budget = open_risk(own, syms, deposit)
-        .and_then(|held| within_budget(held, sized.risk, equity, r.trend_open_risk_pct));
-    if let Err(why) = budget {
+    // Strategy 1's open-risk budget (owner, № 16,806), its unresolved opens
+    // included (Codex P1 on #14); one minimum trade at a time (owner, 25-10).
+    let admitted = admit(
+        &sized,
+        book.own.len() + book.pending.len(),
+        held_risk(book, syms, deposit),
+        equity,
+        r.trend_open_risk_pct,
+    );
+    if let Err(why) = admitted {
         d.note(Some(name), "skip", &why, detail).await;
         tried.remove(&key);
         return Ok(());
@@ -1252,28 +1490,45 @@ async fn on_quote(
     .await
     {
         Ok(sent) => {
-            if let Outcome::Filled {
-                position_id: Some(pid),
-                price,
-                volume,
-            } = &sent.outcome
-            {
-                own.insert(
-                    *pid,
-                    Own {
-                        position_id: *pid,
-                        symbol_id: sym.id,
-                        side,
-                        volume: volume.unwrap_or(sized.volume),
-                        entry: *price,
-                        stop: price.map(|p| match side {
-                            Side::Buy => p - rel as f64 / 100_000.0,
-                            Side::Sell => p + rel as f64 / 100_000.0,
-                        }),
-                        best: *price,
-                        last_amend: None,
-                    },
-                );
+            book.sent.insert(sent.client_msg_id.clone(), key.clone());
+            match &sent.outcome {
+                Outcome::Filled {
+                    position_id: Some(pid),
+                    price,
+                    volume,
+                } => {
+                    book.own.insert(
+                        *pid,
+                        Own {
+                            position_id: *pid,
+                            symbol_id: sym.id,
+                            side,
+                            volume: volume.unwrap_or(sized.volume),
+                            entry: *price,
+                            stop: price.map(|p| match side {
+                                Side::Buy => p - rel as f64 / 100_000.0,
+                                Side::Sell => p + rel as f64 / 100_000.0,
+                            }),
+                            best: *price,
+                            last_amend: None,
+                        },
+                    );
+                }
+                // The broker may still fill it: its risk is held and its
+                // symbol takes no entry until reconcile resolves it.
+                Outcome::Filled {
+                    position_id: None, ..
+                }
+                | Outcome::Unconfirmed => {
+                    book.pending.insert(
+                        key.clone(),
+                        Pending {
+                            symbol_id: Some(sym.id),
+                            risk: Some(sized.risk),
+                        },
+                    );
+                }
+                Outcome::Rejected { .. } | Outcome::Amended { .. } => {}
             }
             d.note(
                 Some(name),
@@ -1316,6 +1571,7 @@ mod tests {
             version: 1,
             live: false,
             edge_required: false,
+            edge_lifted: false,
             risk_pct: 0.6,
             cap_factor: 1.1,
             allow_min_volume: false,
@@ -1380,6 +1636,33 @@ mod tests {
         assert!(e.contains("exceed its budget"), "{e}");
         // Live at $38.98: 3% is $1.17, below ETHUSD's minimum-volume $2.85.
         assert!(within_budget(0.0, 2.85, 38.98, 3.0).is_err());
+    }
+
+    #[test]
+    fn one_minimum_trade_at_a_time_replaces_the_budget_for_itself() {
+        // Owner, 25-10: "One minimum trade at a time". Live at $38.98, the
+        // ETHUSD minimum risks $2.85, above the 3% budget ($1.17): taken
+        // alone, never beside another position or unresolved open.
+        let min = Sized {
+            volume: 1,
+            max_risk: 3.898,
+            mode: "broker_minimum",
+            risk: 2.85,
+        };
+        assert!(admit(&min, 0, Ok(0.0), 38.98, 3.0).is_ok());
+        let e = admit(&min, 1, Ok(2.85), 38.98, 3.0).unwrap_err();
+        assert!(e.contains("one minimum trade at a time"), "{e}");
+        // A 0.6%-sized entry keeps the budget, unresolved opens included.
+        let normal = Sized {
+            volume: 5,
+            max_risk: 6.62,
+            mode: "risk_pct",
+            risk: 6.0,
+        };
+        assert!(admit(&normal, 0, Ok(0.0), 1002.44, 3.0).is_ok());
+        let e = admit(&normal, 1, Ok(6.0), 1002.44, 1.0).unwrap_err();
+        assert!(e.contains("exceed its budget"), "{e}");
+        assert!(admit(&normal, 1, Err("unknown".into()), 1002.44, 3.0).is_err());
     }
 
     #[test]
@@ -1454,7 +1737,14 @@ mod tests {
 
     #[test]
     fn the_seed_file_parses_and_refuses_duplicate_ids() {
-        assert_eq!(parse_seed(SEED_FILE).unwrap(), vec![]);
+        // The shipped seed: the owner's 25-10 "Live too, from now".
+        let seed = parse_seed(SEED_FILE).unwrap();
+        assert_eq!(seed.len(), 1);
+        assert_eq!(seed[0].key, "trading.live_requires_edge_pass");
+        assert_eq!(seed[0].value, json!(0));
+        assert_eq!(seed[0].account_id, None);
+        assert_eq!(seed[0].changed_by, "owner");
+        assert!(seed[0].reason.contains("Live too, from now"));
         let dup = r#"[{"id":"a","key":"trading.risk_pct","account_id":1,"value":0.6,"changed_by":"x","reason":"y"},
                      {"id":"a","key":"trading.risk_pct","account_id":2,"value":0.6,"changed_by":"x","reason":"y"}]"#;
         assert!(parse_seed(dup).unwrap_err().contains("twice"));

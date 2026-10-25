@@ -40,6 +40,30 @@ The research behind this design is in the bot-trade conversation's report *Why t
 
 The old bot-trade program and the new system never trade the same account at the same time.
 
+### Demo accounts for data (owner, 25-10-2026)
+
+Added by the owner on 25-10-2026 (bot-trade conversation, № 16,972). The two accounts above and the text above are unchanged.
+
+| Account | Owner's figures | Role | When |
+|---|---|---|---|
+| Demo 46130058 (number 5203012) | leverage 1:200, USD | Data; orders as the owner sets them | Now |
+| Demo 47790949 (number 5306502) | leverage 1:25, USD | Data; orders as the owner sets them | Now |
+
+- **Purpose.** The goal is to trade across demo leverages.
+  - The owner first chose "Data now, orders after the edge".
+  - At about 08:30 SGT on 25-10-2026 the owner set the three demo accounts to trade from 13:00 SGT that day. The order path is a separate change.
+  - The change that reads these variables places no order.
+- **How an account is added.** Each one is named by a variable that holds one account id: `JIAOYI_DEMO_ACCOUNT_ID`, or `JIAOYI_DEMO_ACCOUNT_ID_<N>` with N a positive integer.
+  - The owner set `JIAOYI_DEMO_ACCOUNT_ID_2=46130058` and `JIAOYI_DEMO_ACCOUNT_ID_3=47790949` ("Code reads the new variables").
+  - Such an account is permitted and declared demo.
+  - `JIAOYI_ALLOWED_ACCOUNTS` is still required. A missing or empty list still refuses start-up.
+- **Refusals.**
+  - A malformed variable is refused and recorded under its name. It does not stop start-up.
+  - A variable that names an account `JIAOYI_ACCOUNT_ENVIRONMENTS` declares live is refused as contradictory. That account keeps the pair's declaration.
+- **No tick history.** An account named only by such a variable does not download tick history (owner: "Skip their tick history"; the Postgres volume held 26.8 GB of 50 GB with two accounts). Daily bars, live ticks, deals, the availability probe and the token-grant check run as for 49236051.
+- **Nothing else changes.** "All other rules and capabilities should not change with added accounts."
+- **Leverage check.** The owner's stated leverage is checked against the broker's trader record: table `trader_reads`, shown on `/health`.
+
 ## 3. Universe (candidates; phase 1 confirms each on each account)
 
 All 20 names below appear in the bot's own broker deal statements (bot-trade `agent/config/tick-shadow-sim.json`, measured 21-08-2026).
@@ -145,13 +169,15 @@ There is no on/off trading switch. Owner, 24-10-2026: *"you don't need to be bot
 Owner, 25-10-2026: *"I want live to execute trading by 1 PM today"*, then *"Keep the gate; demo trades at 1 PM"* and, for live, *"Allow the minimum volume"*. This section records what the order path does and where it departs from the sections above. Nothing above is edited.
 
 - **Strategy 1: tick-triggered trend** (the owner's naming, № 16,806; H1 is its pre-registration label, `docs/preregistration-2026-10-24.md`). It runs the pre-registered default: breakout 50, stop 3 × ATR(20), the entry triggered on the tick, and a trail behind the best bid (ask for shorts) since the fill. Where §4, §5 and §7 differ (once-a-day signals, a trail on closes, "no tick entries"), Strategy 1 is what runs, because it is the hypothesis under test, approved by the owner on 24-10.
-- **No on/off switch** (§6a; owner, 24-10: *"why do i need JIAOYI_TRADING_ENABLED, removed it. it should not be doing so"*). Every permitted demo account trades Strategy 1 as soon as the service runs. A live account runs the same loop armed, and sends nothing until the H1 held-out trial under the running pre-registration hash has verdict PASS (`trading.live_requires_edge_pass` 1).
-- **One gate.** Every order, amend and close goes through `jiaoyi_ctrader::trading::send`. It re-checks the allowlist and the edge gate. For an open it also reads the broker's account type and open positions fresh: on a NETTED account there is no entry on a symbol with any position, on a HEDGED account no entry beside a position on the same symbol, and an unknown account type refuses every entry. It requires a stop, a volume on the step and at or above the broker minimum (never rounded up), and the broker's quote→deposit rate. It recomputes the risk and refuses anything above the allowance (§5's hard cap). The intent is written before the frame, under a unique entry key, so an order is never sent twice. Amends move an owned stop only in the trade's favour; amends and closes touch only positions this program opened.
-- **Size.** Strategy 1 sizes at 0.6% of fresh equity, and below the broker minimum it skips. On a live account (`trading.live_allow_min_volume` 1) the broker minimum is taken instead when its risk is within `trading.min_volume_max_risk_pct` (10%) of equity.
+- **No on/off switch** (§6a; owner, 24-10: *"why do i need JIAOYI_TRADING_ENABLED, removed it. it should not be doing so"*). Every permitted demo account trades Strategy 1 as soon as the service runs. A live account runs the same loop, and waits for the H1 held-out trial under the running pre-registration hash to say PASS while `trading.live_requires_edge_pass` is 1.
+- **The live edge gate is lifted** (owner, 25-10-2026, in writing: *"Live too, from now"*, overriding the 24-10 rule that live waits for a demonstrated edge). It ships as a reviewed, logged settings change in `config/settings-changes.json`: `trading.live_requires_edge_pass` 0. The gate's code and its tests are kept; only the value changes. `/health` and the status page show a live account as `trading (edge gate lifted by the owner DD-MM)`, from the settings log.
+- **One gate.** Every order, amend and close goes through `jiaoyi_ctrader::trading::send`. It re-checks the allowlist and the edge gate. For an open it also reads the broker's account type and open positions fresh: on a NETTED account there is no entry on a symbol with any position, on a HEDGED account no entry beside a position on the same symbol, and an unknown account type refuses every entry. It requires a stop, a volume on the step and at or above the broker minimum (never rounded up), and the broker's quote→deposit rate. It recomputes the risk and refuses anything above the allowance (§5's hard cap). The intent is written before the frame, under a unique entry key, so an order is never sent twice. Amends move an owned stop only in the trade's favour, from the trader's view and from the broker's own stop, read fresh; amends and closes touch only positions this program opened. cTrader's amend REPLACES a position's protection, so a stop-only amend would delete its take-profit: the gate reads the position fresh and sends its take-profit again (Strategy 1 has none; Strategy 3 will).
+- **An answer that comes late is kept** (Codex round 1 on #14). An open is unresolved while it has neither a fill nor an end recorded: accepted only, or no answer within `trading.order_wait_secs`. It is never resent. A late answer to a frame of the session is recorded under its intent; a late fill is adopted at once and trailed. An unresolved open's risk is held in the open-risk budget and its symbol takes no entry. Reconcile adopts a position with this program's label on an unresolved open's symbol (after a restart too). An unresolved open with nothing at the broker after one reconcile interval is released (`RECONCILED_ABSENT`), never resent. A signal skipped for a missing conversion quote may be taken when the quote arrives.
+- **Size.** Strategy 1 sizes at 0.6% of fresh equity, and below the broker minimum it skips. On a live account (`trading.live_allow_min_volume` 1) the broker minimum is taken instead when its risk is within `trading.min_volume_max_risk_pct` (10%) of equity, and only while Strategy 1 holds no other position or unresolved open on the account (owner, 25-10-2026: *"One minimum trade at a time"*). That single minimum position replaces the open-risk budget check for itself; a second entry waits until it closes. Demo accounts never take the minimum.
 - **Open-risk budget** (owner, № 16,806). Strategy 1 holds at most `trading.trend_open_risk_pct` (3%) of equity in open risk at its stops: half of a 6% account limit. The other half is for Strategy 2 (stat arb on tick bars, not built). An entry that would exceed the budget is skipped with the reason.
-  - **Conflict for the owner:** at live's $38.98, the budget is $1.17. ETHUSD's minimum-volume trade risks $2.85 (7.3%), which the minimum-volume rule admits and the budget refuses. Both rules apply, so live sends nothing at that balance.
+  - The conflict raised on 25-10 (at live's $38.98 the budget is $1.17, and ETHUSD's minimum-volume trade risks $2.85, 7.3%) is settled by the owner's *"One minimum trade at a time"* above. Entries sized at 0.6% keep the 3% budget, unresolved opens included.
 - **Not yet enforced:** §5's cost guard, and §6's limits other than the open-risk budget (12 positions, 2.4% per class, the drawdown brake).
-- **Reviewed settings changes** are listed in `config/settings-changes.json` (shipped empty). Each entry is applied once at start-up through `settings::change`: bounds-checked and logged.
+- **Reviewed settings changes** are listed in `config/settings-changes.json` (the first: the lifted live edge gate). Each entry is applied once at start-up through `settings::change`: bounds-checked and logged.
 - **Unverifiable until the first demo fill:**
   - whether the broker accepts a relative stop on a MARKET order on these accounts;
   - the shape of its execution events (accepted, then filled, carrying the request's id);

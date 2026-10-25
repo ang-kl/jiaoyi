@@ -88,6 +88,8 @@ fn short(s: &str, n: usize) -> String {
 fn pill(state: &str) -> String {
     let kind = match state {
         "ok" | "listed" | "done" | "measured" | "trading" => "good",
+        // A live account trading with its edge gate lifted, and by whom.
+        s if s.starts_with("trading (") => "good",
         "partial" | "pending" | "running" | "unread" => "warn",
         "failed" | "refused" | "not_listed" | "environment_mismatch" => "bad",
         _ => "neutral",
@@ -224,7 +226,7 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     h.push_str("</tbody></table></div></section>");
 
     // Strategy 1 per account: whether it trades (demo at once, live once the
-    // edge gate passes), the gate, the minimum-volume rule, the open-risk
+    // edge gate passes or the owner lifts it), the gate, the minimum-volume rule, the open-risk
     // budget, the last decision and the positions it found that it did not
     // open. No money.
     h.push_str(r#"<section><h2>Strategy 1: tick-triggered trend</h2><div class="scroll"><table><thead><tr><th>Account</th><th>Environment</th><th>Trades</th><th>Edge gate</th><th>Minimum volume</th><th class="num">Open-risk budget</th><th>Last decision</th><th class="num">External positions</th></tr></thead><tbody>"#);
@@ -595,6 +597,19 @@ mod tests {
         assert!(
             p.contains(r#"<td class="num">1</td>"#),
             "one external position on 46130058"
+        );
+        // Live with the edge gate lifted by the owner (25-10): trading, and by whom.
+        let h = json!({"trading": [
+            {"account_id": 43002148, "environment": "live",
+             "trades": "trading (edge gate lifted by the owner 25-10)",
+             "edge_gate": "edge gate lifted by the owner 25-10 (trading.live_requires_edge_pass 0)"}
+        ]});
+        let p = page(&h, &json!({}), &json!({}), now);
+        assert!(
+            p.contains(
+                r#"<span class="pill good">trading (edge gate lifted by the owner 25-10)</span>"#
+            ),
+            "{p}"
         );
     }
 

@@ -600,11 +600,13 @@ impl<'a, 'c> Trader<'a, 'c> {
         let account_id = self.account_id();
         let res = self.session.reconcile().await?;
         let plans = s3s::open_plans(self.pool, account_id).await?;
-        let unconfirmed: Vec<(String, Option<i64>)> =
-            ts::open_intents_without_fill(self.pool, account_id)
+        // Strategy 3's unresolved opens: accepted only, or no answer (Codex P1
+        // on #14). Never resent.
+        let mut unresolved: Vec<ts::UnresolvedIntent> =
+            ts::open_intents_unresolved(self.pool, account_id)
                 .await?
                 .into_iter()
-                .filter(|(k, _)| k.starts_with("s3:"))
+                .filter(|u| u.entry_key.starts_with("s3:"))
                 .collect();
         let mut seen = Vec::new();
         self.program_positions = 0;
@@ -618,11 +620,12 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
             let mut owned = ts::owns_position(self.pool, account_id, p.position_id).await?;
             if !owned {
-                if let Some((key, _)) = unconfirmed
+                if let Some(i) = unresolved
                     .iter()
-                    .find(|(_, s)| *s == Some(p.trade_data.symbol_id))
+                    .position(|u| u.symbol_id == Some(p.trade_data.symbol_id))
                 {
-                    self.adopt(key, p).await?;
+                    let u = unresolved.remove(i);
+                    self.adopt(&u.entry_key, p).await?;
                     owned = true;
                 }
             }
@@ -671,14 +674,39 @@ impl<'a, 'c> Trader<'a, 'c> {
             e.tp1_sent |= tp1_sent;
         }
         self.own.retain(|id, _| seen.contains(id));
-        // A pending open is settled once its key is no longer without a fill,
-        // or after two reconciles' time.
-        let still: Vec<String> = unconfirmed.iter().map(|(k, _)| k.clone()).collect();
+        // An unresolved open still pending at the broker, or younger than one
+        // reconcile interval, stays pending (its risk held, its symbol
+        // blocked); an older one with nothing at the broker is released
+        // (RECONCILED_ABSENT), never resent.
         let r = rules(self.pool, account_id, self.env).await?;
-        self.pending.retain(|x| {
-            still.contains(&x.entry_key)
-                && now - x.at < chrono::Duration::seconds(2 * r.reconcile_secs as i64)
-        });
+        let grace = chrono::Duration::seconds(r.reconcile_secs as i64);
+        self.pending.clear();
+        for u in unresolved {
+            let at_broker = res.order.iter().any(|o| {
+                o.trade_data.label.as_deref() == Some(LABEL)
+                    && Some(o.trade_data.symbol_id) == u.symbol_id
+            });
+            if at_broker || now - u.created_at < grace {
+                self.pending.push(Pending {
+                    entry_key: u.entry_key,
+                    symbol_id: u.symbol_id.unwrap_or_default(),
+                    risk: u.risk.unwrap_or(0.0),
+                    at: u.created_at,
+                });
+                continue;
+            }
+            ts::record_event(
+                self.pool,
+                &crate::trading::reconciled_row(
+                    account_id,
+                    &u.entry_key,
+                    "RECONCILED_ABSENT",
+                    None,
+                    "an unresolved Strategy 3 open neither filled nor pending at the broker after its grace: released, never resent",
+                ),
+            )
+            .await?;
+        }
         self.d.version = Some(r.version);
         let detail = json!({
             "positions": self.own.values().map(|o| json!({
@@ -1783,15 +1811,18 @@ mod tests {
         let o = plan_order(&e, &lim, 100).unwrap();
         assert_eq!(o.plan.mode, targets::Mode::WholePositionMinimum);
         assert_eq!(o.relative_take_profit, 3_040_000);
-        // TP1 distance not above C: refused with bot-trade's reason.
+        // A short whose TP1 would fall below zero: refused with bot-trade's
+        // reason (target_price_invalid).
         let dear = Entry {
+            side: Dir::Sell,
             cost: CostReserve {
-                total: 1e9,
+                total: 1e3,
                 ..e.cost
             },
             ..e.clone()
         };
-        assert!(plan_order(&dear, &lim, 10_000).is_err());
+        let why = plan_order(&dear, &lim, 10_000).unwrap_err();
+        assert!(why.contains("target_price_invalid"), "{why}");
         // TP1 is reached on the bid for a long, on the ask for a short.
         assert!(tp1_reached(Side::Buy, 100.0, 30.4, 2, Some(130.4), None));
         assert!(!tp1_reached(

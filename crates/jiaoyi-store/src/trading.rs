@@ -20,6 +20,7 @@ pub struct IntentRow {
     pub volume: Option<i64>,
     pub relative_stop: Option<i64>,
     pub stop_price: Option<f64>,
+    pub take_profit: Option<f64>,
     pub risk: Option<f64>,
     pub max_risk: f64,
     pub settings_version: Option<i64>,
@@ -29,8 +30,9 @@ pub struct IntentRow {
 pub async fn record_intent(pool: &PgPool, i: &IntentRow) -> Result<bool, sqlx::Error> {
     let r = sqlx::query(
         "INSERT INTO trading_intents (account_id, entry_key, client_msg_id, kind, symbol_id,
-            position_id, side, volume, relative_stop, stop_price, risk, max_risk, settings_version)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            position_id, side, volume, relative_stop, stop_price, take_profit, risk, max_risk,
+            settings_version)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          ON CONFLICT (entry_key) DO NOTHING",
     )
     .bind(i.account_id)
@@ -43,6 +45,7 @@ pub async fn record_intent(pool: &PgPool, i: &IntentRow) -> Result<bool, sqlx::E
     .bind(i.volume)
     .bind(i.relative_stop)
     .bind(i.stop_price)
+    .bind(i.take_profit)
     .bind(i.risk)
     .bind(i.max_risk)
     .bind(i.settings_version)
@@ -84,12 +87,15 @@ pub struct EventRow {
     pub received_at: DateTime<Utc>,
 }
 
+/// Record an execution message. A message already recorded (the gate and the
+/// trader both receive each answer) is kept once.
 pub async fn record_event(pool: &PgPool, e: &EventRow) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO trading_events (account_id, entry_key, client_msg_id, payload_type, kind,
             position_id, order_id, deal_id, symbol_id, side, price, volume, stop_loss, label,
             error_code, description, is_server_event, raw, received_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)",
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         ON CONFLICT DO NOTHING",
     )
     .bind(e.account_id)
     .bind(&e.entry_key)
@@ -134,23 +140,59 @@ pub async fn owns_position(
     .await
 }
 
-/// The open intents of an account with no answer recorded (Unconfirmed):
-/// reconcile matches them by label and symbol, they are never resent.
-pub async fn open_intents_without_fill(
+/// Event kinds that fill an open intent.
+pub const FILL_KINDS: &[&str] = &["ORDER_FILLED", "ORDER_PARTIAL_FILL", "RECONCILED_FILL"];
+/// Event kinds that end an open intent without a fill. `RECONCILED_ABSENT`:
+/// reconcile found it neither filled nor pending at the broker after its grace.
+pub const END_KINDS: &[&str] = &[
+    "ORDER_REJECTED",
+    "ORDER_CANCELLED",
+    "ORDER_EXPIRED",
+    "ORDER_ERROR",
+    "ERROR_RES",
+    "RECONCILED_ABSENT",
+];
+
+/// An open intent with neither a fill nor an end recorded: an order the
+/// broker may still fill (accepted only, or no answer at all).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UnresolvedIntent {
+    pub entry_key: String,
+    pub client_msg_id: String,
+    pub symbol_id: Option<i64>,
+    /// The risk the gate recomputed for it, in the deposit currency.
+    pub risk: Option<f64>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// An account's unresolved open intents: reconcile matches them by label and
+/// symbol, the open-risk budget holds their risk, they are never resent.
+pub async fn open_intents_unresolved(
     pool: &PgPool,
     account_id: i64,
-) -> Result<Vec<(String, Option<i64>)>, sqlx::Error> {
+) -> Result<Vec<UnresolvedIntent>, sqlx::Error> {
+    let done: Vec<&str> = FILL_KINDS.iter().chain(END_KINDS).copied().collect();
     let rows = sqlx::query(
-        "SELECT i.entry_key, i.symbol_id FROM trading_intents i
+        "SELECT i.entry_key, i.client_msg_id, i.symbol_id, i.risk, i.created_at
+         FROM trading_intents i
          WHERE i.account_id = $1 AND i.kind = 'open'
-           AND NOT EXISTS (SELECT 1 FROM trading_events e WHERE e.entry_key = i.entry_key)",
+           AND NOT EXISTS (SELECT 1 FROM trading_events e
+                           WHERE e.entry_key = i.entry_key AND e.kind = ANY($2))
+         ORDER BY i.id",
     )
     .bind(account_id)
+    .bind(&done)
     .fetch_all(pool)
     .await?;
     Ok(rows
         .into_iter()
-        .map(|r| (r.get("entry_key"), r.get("symbol_id")))
+        .map(|r| UnresolvedIntent {
+            entry_key: r.get("entry_key"),
+            client_msg_id: r.get("client_msg_id"),
+            symbol_id: r.get("symbol_id"),
+            risk: r.get("risk"),
+            created_at: r.get("created_at"),
+        })
         .collect())
 }
 
