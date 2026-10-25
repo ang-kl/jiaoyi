@@ -175,7 +175,10 @@ pub struct UnresolvedIntent {
     pub symbol_id: Option<i64>,
     /// The volume requested, in cents.
     pub volume: Option<i64>,
-    /// The volume its recorded deals filled so far, in cents.
+    /// The volume filled so far, in cents, as a lower bound: the larger of
+    /// its recorded deals' sum and the broker position reconcile adopted it
+    /// at. That position is a snapshot that can include a deal whose own
+    /// event is recorded after it, so the two are never added (Codex on #16).
     pub filled: i64,
     /// The position its partial fills went into, if any.
     pub position_id: Option<i64>,
@@ -192,12 +195,17 @@ pub async fn open_intents_unresolved(
     account_id: i64,
 ) -> Result<Vec<UnresolvedIntent>, sqlx::Error> {
     let done: Vec<&str> = FULL_FILL_KINDS.iter().chain(END_KINDS).copied().collect();
+    // Claude · № 17,044 25-Oct (ordered: owner "merge when green and deploy";
+    // Codex P2 on #16, a reconciled snapshot and its late deal counted twice)
     let rows = sqlx::query(
         "SELECT i.entry_key, i.client_msg_id, i.symbol_id, i.volume, i.risk, i.created_at,
-                COALESCE((SELECT SUM(e.volume) FROM trading_events e
-                          WHERE e.entry_key = i.entry_key
-                            AND e.kind IN ('ORDER_PARTIAL_FILL', 'ORDER_FILLED',
-                                           'RECONCILED_PARTIAL_FILL')), 0)::BIGINT AS filled,
+                GREATEST(
+                    COALESCE((SELECT SUM(e.volume) FROM trading_events e
+                              WHERE e.entry_key = i.entry_key
+                                AND e.kind IN ('ORDER_PARTIAL_FILL', 'ORDER_FILLED')), 0),
+                    COALESCE((SELECT MAX(e.volume) FROM trading_events e
+                              WHERE e.entry_key = i.entry_key
+                                AND e.kind = 'RECONCILED_PARTIAL_FILL'), 0))::BIGINT AS filled,
                 (SELECT MAX(e.position_id) FROM trading_events e
                  WHERE e.entry_key = i.entry_key
                    AND e.kind IN ('ORDER_PARTIAL_FILL', 'RECONCILED_PARTIAL_FILL')) AS position_id

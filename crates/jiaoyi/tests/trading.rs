@@ -1000,6 +1000,95 @@ async fn a_partial_fill_recovered_at_startup_keeps_its_remainder_reserved(pool: 
     assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
 }
 
+/// Codex on #16: a reconcile can adopt a partial fill before the deal's own
+/// execution message is processed; the message then records the same 60
+/// cents. They are one fill, not 120 cents: once the position stops out with
+/// the remainder still within its grace, the open is not recorded filled in
+/// full and its 40-cent remainder stays reserved.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_reconciled_partial_and_its_late_deal_are_one_fill(pool: PgPool) {
+    loaded_with(&pool, &[(ETH, "ETHUSD", AssetClass::Crypto, 1)]).await;
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake_on(&[ETH], 2_000);
+    f.trader.as_mut().unwrap().balance = 2_000_100;
+    f.fill_delay = Some(Duration::from_secs(600));
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1);
+    let key = trading::entry_key(DEMO, ETH, Utc::now().date_naive() - Days::days(1));
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 1001,
+        trade_data: ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 60,
+            trade_side: 1,
+            label: Some("jiaoyi-s1".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        price: Some(3611.0),
+        stop_loss: Some(3491.0),
+        ..Default::default()
+    });
+    f.fill_delay = None;
+    f.quote_sequence = vec![];
+    trade(&pool, &f, 2, Environment::Demo).await;
+    // The same deal's execution message, processed after that reconcile.
+    let deal = store::trading::EventRow {
+        account_id: DEMO,
+        entry_key: Some(key.clone()),
+        client_msg_id: None,
+        payload_type: 2126,
+        kind: "ORDER_PARTIAL_FILL".into(),
+        position_id: Some(1001),
+        order_id: Some(9001),
+        deal_id: Some(7001),
+        symbol_id: Some(ETH),
+        side: Some("buy".into()),
+        price: Some(3611.0),
+        volume: Some(60),
+        stop_loss: Some(3491.0),
+        label: Some("jiaoyi-s1".into()),
+        error_code: None,
+        description: None,
+        is_server_event: Some(false),
+        raw: vec![],
+        received_at: Utc::now(),
+    };
+    assert!(store::trading::record_event(&pool, &deal).await.unwrap());
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert_eq!(u.len(), 1, "{u:?}");
+    assert_eq!(u[0].filled, 60, "one fill, not two: {u:?}");
+    // The position stops out; the remainder is within its grace.
+    f.positions.lock().unwrap().clear();
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT kind FROM trading_events WHERE entry_key = $1 AND kind LIKE 'RECONCILED%' ORDER BY id",
+    )
+    .bind(&key)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(kinds, vec!["RECONCILED_PARTIAL_FILL"], "not filled in full");
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert_eq!((u.len(), u[0].filled), (1, 60), "{u:?}");
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT (detail->>'pending')::BIGINT FROM trading_decisions
+         WHERE account_id = $1 AND kind = 'reconcile' ORDER BY id DESC LIMIT 1",
+    )
+    .bind(DEMO)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending, 1, "the remainder stays reserved");
+}
+
 /// Production read-back 04:26Z: decisions are recorded only when their
 /// reason changes, so /health stayed at the first reconcile while the loops
 /// ran. A quiet loop's reconcile runs keep its liveness advancing, with the
