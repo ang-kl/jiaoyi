@@ -113,6 +113,13 @@ async fn the_root_shows_the_status_page(pool: PgPool) {
     ] {
         assert!(body.contains(want), "missing {want:?}");
     }
+    // The engine guard, read from the running binary (R1b).
+    let engine = format!(
+        "Engine version {} running; the held-out job waits for engine {} or later.",
+        jiaoyi::edge::ENGINE_VERSION,
+        jiaoyi::edge::HELD_OUT_MIN_ENGINE
+    );
+    assert!(body.contains(&engine), "missing {engine:?}");
     // The ten pre-registered jobs, each with its status.
     assert_eq!(body.matches("breakout ").count(), 10, "one row per job");
     assert_eq!(

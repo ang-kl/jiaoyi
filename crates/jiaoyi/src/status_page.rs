@@ -226,6 +226,12 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
         txt(&jobs["prereg_file"]),
         esc(&short(jobs["prereg_hash_running"].as_str().unwrap_or("—"), 12)),
     ));
+    // Claude · № 16,901 25-Oct (ordered № 16,900; R1b's engine guard on the page)
+    h.push_str(&format!(
+        r#"<p class="sub">Engine version {} running; the held-out job waits for engine {} or later.</p>"#,
+        txt(&jobs["engine_version_running"]),
+        txt(&jobs["held_out_min_engine"]),
+    ));
     let sampling = &jobs["spread_sampling"];
     if sampling.is_object() {
         h.push_str(&format!(
@@ -359,6 +365,8 @@ mod tests {
         json!({
             "prereg_file": "docs/preregistration-2026-10-24.md",
             "prereg_hash_running": "9105c5eb812ff6b3d267627a53e64d924018c799753d70e598830381a909098f",
+            "engine_version_running": 2,
+            "held_out_min_engine": 2,
             "spread_sampling": {"weeks_measured": 26, "weeks_without_ticks": 4, "weeks_failed": 0,
                 "ticks_downloaded": 5000, "ticks_per_second": 812.5},
             "jobs": [
@@ -395,6 +403,7 @@ mod tests {
             ">0.041<",
             ">1.18<",
             "812.5 per second",
+            "Engine version 2 running; the held-out job waits for engine 2 or later.",
             r#"href="/research/trials""#,
             r#"href="/research/bars""#,
             r#"href="/health""#,
