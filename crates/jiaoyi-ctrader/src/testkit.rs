@@ -89,6 +89,17 @@ pub struct FakeBroker {
     /// every later account request on that connection ACCOUNT_NOT_AUTHORIZED
     /// until the account is authorised again.
     pub invalidate_on: Option<(i32, Arc<std::sync::atomic::AtomicUsize>)>,
+    /// The account's open positions, shared by clones (spans connections).
+    /// A filled order adds one; a close removes it; reconcile reads them.
+    pub positions: Arc<Mutex<Vec<pb::ProtoOaPosition>>>,
+    /// The (bid, ask) a market order fills at, per symbol id.
+    pub fill_quotes: HashMap<i64, (f64, f64)>,
+    /// Reject every new order with this error code (ORDER_REJECTED).
+    pub reject_orders: Option<String>,
+    /// Answer no trading request at all (the client then waits and gives up).
+    pub silent_orders: bool,
+    /// Net unrealized P&L (deposit cents) answered for every open position.
+    pub unrealized_net: i64,
 }
 
 /// One account in a token's grant.
@@ -120,6 +131,31 @@ pub struct FakeLog {
     pub tick_requests: Vec<(i64, i32, i64, i64)>,
     pub deal_requests: Vec<(i64, i64)>,
     pub account_auths: Vec<i64>,
+    pub orders: Vec<pb::ProtoOaNewOrderReq>,
+    pub amends: Vec<pb::ProtoOaAmendPositionSltpReq>,
+    pub closes: Vec<pb::ProtoOaClosePositionReq>,
+}
+
+fn execution(
+    id: Option<String>,
+    account_id: i64,
+    kind: pb::ProtoOaExecutionType,
+    position: Option<pb::ProtoOaPosition>,
+    deal: Option<pb::ProtoOaDeal>,
+) -> ProtoMessage {
+    reply(
+        id,
+        Oa::ProtoOaExecutionEvent as i32,
+        pb::ProtoOaExecutionEvent {
+            payload_type: None,
+            ctid_trader_account_id: account_id,
+            execution_type: kind as i32,
+            position,
+            deal,
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    )
 }
 
 fn reply(id: Option<String>, pt: i32, payload: Vec<u8>) -> ProtoMessage {
@@ -562,6 +598,182 @@ impl FakeBroker {
                                 payload_type: None,
                                 ctid_trader_account_id: self.account_id,
                                 trader,
+                            }
+                            .encode_to_vec(),
+                        ));
+                    } else if self.silent_orders
+                        && (pt == Oa::ProtoOaNewOrderReq as i32
+                            || pt == Oa::ProtoOaAmendPositionSltpReq as i32
+                            || pt == Oa::ProtoOaClosePositionReq as i32)
+                    {
+                        // No answer; the request is still logged.
+                        if pt == Oa::ProtoOaNewOrderReq as i32 {
+                            let req =
+                                pb::ProtoOaNewOrderReq::decode(body.as_slice()).unwrap_or_default();
+                            log2.lock().unwrap().orders.push(req);
+                        }
+                    } else if pt == Oa::ProtoOaNewOrderReq as i32 {
+                        let req =
+                            pb::ProtoOaNewOrderReq::decode(body.as_slice()).unwrap_or_default();
+                        log2.lock().unwrap().orders.push(req.clone());
+                        if let Some(code) = &self.reject_orders {
+                            let mut m = execution(
+                                id,
+                                self.account_id,
+                                pb::ProtoOaExecutionType::OrderRejected,
+                                None,
+                                None,
+                            );
+                            let mut ev =
+                                pb::ProtoOaExecutionEvent::decode(m.payload.as_deref().unwrap())
+                                    .unwrap();
+                            ev.error_code = Some(code.clone());
+                            m.payload = Some(ev.encode_to_vec());
+                            out.push(m);
+                        } else {
+                            let (bid, ask) = self
+                                .fill_quotes
+                                .get(&req.symbol_id)
+                                .copied()
+                                .unwrap_or((1.0, 1.0));
+                            let buy = req.trade_side == pb::ProtoOaTradeSide::Buy as i32;
+                            let price = if buy { ask } else { bid };
+                            let rel = req.relative_stop_loss.unwrap_or(0) as f64 / 100_000.0;
+                            let mut positions = self.positions.lock().unwrap();
+                            let position_id = 1000 + positions.len() as i64 + 1;
+                            let position = pb::ProtoOaPosition {
+                                position_id,
+                                trade_data: pb::ProtoOaTradeData {
+                                    symbol_id: req.symbol_id,
+                                    volume: req.volume,
+                                    trade_side: req.trade_side,
+                                    open_timestamp: Some(0),
+                                    label: req.label.clone(),
+                                    ..Default::default()
+                                },
+                                position_status: pb::ProtoOaPositionStatus::PositionStatusOpen
+                                    as i32,
+                                swap: 0,
+                                price: Some(price),
+                                stop_loss: (rel > 0.0).then_some(if buy {
+                                    price - rel
+                                } else {
+                                    price + rel
+                                }),
+                                ..Default::default()
+                            };
+                            positions.push(position.clone());
+                            drop(positions);
+                            let deal = pb::ProtoOaDeal {
+                                deal_id: position_id * 10,
+                                order_id: position_id * 10 + 1,
+                                position_id,
+                                volume: req.volume,
+                                filled_volume: req.volume,
+                                symbol_id: req.symbol_id,
+                                create_timestamp: 0,
+                                execution_timestamp: 0,
+                                execution_price: Some(price),
+                                trade_side: req.trade_side,
+                                deal_status: pb::ProtoOaDealStatus::Filled as i32,
+                                ..Default::default()
+                            };
+                            out.push(execution(
+                                id.clone(),
+                                self.account_id,
+                                pb::ProtoOaExecutionType::OrderAccepted,
+                                Some(position.clone()),
+                                None,
+                            ));
+                            out.push(execution(
+                                id,
+                                self.account_id,
+                                pb::ProtoOaExecutionType::OrderFilled,
+                                Some(position),
+                                Some(deal),
+                            ));
+                        }
+                    } else if pt == Oa::ProtoOaAmendPositionSltpReq as i32 {
+                        let req = pb::ProtoOaAmendPositionSltpReq::decode(body.as_slice())
+                            .unwrap_or_default();
+                        log2.lock().unwrap().amends.push(req);
+                        let mut positions = self.positions.lock().unwrap();
+                        match positions
+                            .iter_mut()
+                            .find(|p| p.position_id == req.position_id)
+                        {
+                            Some(p) => {
+                                p.stop_loss = req.stop_loss;
+                                let p = p.clone();
+                                drop(positions);
+                                out.push(execution(
+                                    id,
+                                    self.account_id,
+                                    pb::ProtoOaExecutionType::OrderReplaced,
+                                    Some(p),
+                                    None,
+                                ));
+                            }
+                            None => {
+                                drop(positions);
+                                out.push(oa_error(id, "POSITION_NOT_FOUND"));
+                            }
+                        }
+                    } else if pt == Oa::ProtoOaClosePositionReq as i32 {
+                        let req = pb::ProtoOaClosePositionReq::decode(body.as_slice())
+                            .unwrap_or_default();
+                        log2.lock().unwrap().closes.push(req);
+                        let mut positions = self.positions.lock().unwrap();
+                        let found = positions
+                            .iter()
+                            .position(|p| p.position_id == req.position_id);
+                        match found {
+                            Some(i) => {
+                                let p = positions.remove(i);
+                                drop(positions);
+                                out.push(execution(
+                                    id,
+                                    self.account_id,
+                                    pb::ProtoOaExecutionType::OrderFilled,
+                                    Some(p),
+                                    None,
+                                ));
+                            }
+                            None => {
+                                drop(positions);
+                                out.push(oa_error(id, "POSITION_NOT_FOUND"));
+                            }
+                        }
+                    } else if pt == Oa::ProtoOaReconcileReq as i32 {
+                        let positions = self.positions.lock().unwrap().clone();
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaReconcileRes as i32,
+                            pb::ProtoOaReconcileRes {
+                                payload_type: None,
+                                ctid_trader_account_id: self.account_id,
+                                position: positions,
+                                order: vec![],
+                            }
+                            .encode_to_vec(),
+                        ));
+                    } else if pt == Oa::ProtoOaGetPositionUnrealizedPnlReq as i32 {
+                        let positions = self.positions.lock().unwrap().clone();
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaGetPositionUnrealizedPnlRes as i32,
+                            pb::ProtoOaGetPositionUnrealizedPnLRes {
+                                payload_type: None,
+                                ctid_trader_account_id: self.account_id,
+                                position_unrealized_pn_l: positions
+                                    .iter()
+                                    .map(|p| pb::ProtoOaPositionUnrealizedPnL {
+                                        position_id: p.position_id,
+                                        gross_unrealized_pn_l: self.unrealized_net,
+                                        net_unrealized_pn_l: self.unrealized_net,
+                                    })
+                                    .collect(),
+                                money_digits: 2,
                             }
                             .encode_to_vec(),
                         ));

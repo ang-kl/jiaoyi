@@ -98,9 +98,9 @@ async fn sigterm_stops_the_service_after_its_tasks_finish(pool: sqlx::PgPool) {
     );
     assert!(status.success(), "{status:?}\n{text}");
     assert!(text.contains("SIGTERM received"), "{text}");
-    // One recorder, one history sync, the loader and the research runner,
-    // all finished, none aborted.
-    assert!(text.contains("finished=4"), "{text}");
+    // One recorder, one history sync, the loader, the research runner and
+    // the trader (0012), all finished, none aborted.
+    assert!(text.contains("finished=5"), "{text}");
     assert!(text.contains("aborted=0"), "{text}");
 }
 

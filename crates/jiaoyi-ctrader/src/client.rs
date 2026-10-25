@@ -6,8 +6,12 @@
 //! Another task sends a heartbeat every 10 seconds (the proxy expects one
 //! within 30 s of silence; `ProtoHeartbeatEvent` docs).
 //!
-//! Every outgoing frame goes through [`Connection::send_message`], which calls
-//! [`check_sendable`] before writing. There is no other write path.
+//! Every outgoing read frame goes through [`Connection::send_message`], which
+//! calls [`check_sendable`] before writing. The one other write path,
+//! [`Connection::send_trading_frame`], is crate-private, checks
+//! [`check_tradable`] instead, and is called only by `crate::trading::send`
+//! (the order gate). Execution events, order errors and unmatched error
+//! responses go to the execution broadcast.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -25,7 +29,9 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 use crate::frame::{read_frame, write_frame, FrameError};
-use crate::payload::{check_sendable, payload_name, NotSendable, Request, Response};
+use crate::payload::{
+    check_sendable, check_tradable, payload_name, NotSendable, Request, Response,
+};
 use crate::pb::{
     self, ProtoErrorRes, ProtoMessage, ProtoOaErrorRes, ProtoOaPayloadType as Oa, ProtoOaSpotEvent,
     ProtoOaTrendbar, ProtoOaTrendbarPeriod, ProtoPayloadType as Common,
@@ -95,6 +101,17 @@ impl SessionEnd {
     }
 }
 
+/// An execution-related message as the reader received it: a
+/// `ProtoOAExecutionEvent`, a `ProtoOAOrderErrorEvent`, or an error response
+/// to a request nobody was waiting on (a trading request's refusal).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReceivedExecution {
+    pub received_at: DateTime<Utc>,
+    pub client_msg_id: Option<String>,
+    pub payload_type: u32,
+    pub payload: Vec<u8>,
+}
+
 /// A spot event and the moment the reader task decoded it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReceivedSpot {
@@ -113,6 +130,8 @@ pub struct Connection {
     /// for events that can no longer arrive.
     spots: Arc<StdMutex<Option<broadcast::Sender<ReceivedSpot>>>>,
     notices: Arc<StdMutex<Vec<String>>>,
+    /// Execution events and order errors, for the order gate and the trader.
+    executions: broadcast::Sender<ReceivedExecution>,
     /// Account sessions the broker ended, in order, and their broadcast.
     session_ends: Arc<StdMutex<Vec<SessionEnd>>>,
     session_end_tx: broadcast::Sender<SessionEnd>,
@@ -210,6 +229,7 @@ impl Connection {
         let notices: Arc<StdMutex<Vec<String>>> = Arc::default();
         let session_ends: Arc<StdMutex<Vec<SessionEnd>>> = Arc::default();
         let (session_end_tx, _) = broadcast::channel(64);
+        let (executions_tx, _) = broadcast::channel(1024);
         let closed: Arc<StdMutex<Option<String>>> = Arc::default();
 
         let read_task = {
@@ -217,11 +237,12 @@ impl Connection {
             let spots_slot = spots.clone();
             let notices = notices.clone();
             let ends = (session_ends.clone(), session_end_tx.clone());
+            let executions = executions_tx.clone();
             let closed = closed.clone();
             tokio::spawn(async move {
                 let reason = loop {
                     match read_frame(&mut reader).await {
-                        Ok(msg) => route(msg, &pending, &spots_tx, &notices, &ends),
+                        Ok(msg) => route(msg, &pending, &spots_tx, &notices, &ends, &executions),
                         Err(e) => break e.to_string(),
                     }
                 };
@@ -241,6 +262,7 @@ impl Connection {
             next_id: AtomicU64::new(1),
             spots,
             notices,
+            executions: executions_tx,
             session_ends,
             session_end_tx,
             closed,
@@ -278,6 +300,40 @@ impl Connection {
         client_msg_id: Option<String>,
     ) -> Result<(), ClientError> {
         send_checked(&self.writer, payload_type, payload, client_msg_id).await
+    }
+
+    /// The trading write path: only a payload type on `TRADING`, only from the
+    /// order gate (`crate::trading::send`). Its responses arrive on
+    /// [`Connection::executions`], never as a pending request's response.
+    pub(crate) async fn send_trading_frame(
+        &self,
+        payload_type: u32,
+        payload: Vec<u8>,
+        client_msg_id: String,
+    ) -> Result<(), ClientError> {
+        if let Some(reason) = self.closed.lock().unwrap().clone() {
+            return Err(ClientError::Disconnected(reason));
+        }
+        check_tradable(payload_type)?;
+        let msg = ProtoMessage {
+            payload_type,
+            payload: Some(payload),
+            client_msg_id: Some(client_msg_id),
+        };
+        let mut w = self.writer.lock().await;
+        write_frame(&mut *w, &msg).await?;
+        Ok(())
+    }
+
+    /// A receiver of execution events and order errors. Subscribe before
+    /// sending the order whose events you want.
+    pub fn executions(&self) -> broadcast::Receiver<ReceivedExecution> {
+        self.executions.subscribe()
+    }
+
+    /// A fresh trading message id, never reused on this connection.
+    pub(crate) fn next_trading_id(&self) -> String {
+        format!("t{}", self.next_id.fetch_add(1, Ordering::Relaxed))
     }
 
     /// Send a request and wait for its response.
@@ -471,6 +527,7 @@ fn route(
         Arc<StdMutex<Vec<SessionEnd>>>,
         broadcast::Sender<SessionEnd>,
     ),
+    executions: &broadcast::Sender<ReceivedExecution>,
 ) {
     let end = |account_ids: Vec<i64>, reason: String| {
         let e = SessionEnd {
@@ -488,7 +545,18 @@ fn route(
     }
     let payload = msg.payload.as_deref().unwrap_or(&[]);
     let pt = msg.payload_type as i32;
-    if pt == Oa::ProtoOaSpotEvent as i32 {
+    if pt == Oa::ProtoOaExecutionEvent as i32
+        || pt == Oa::ProtoOaOrderErrorEvent as i32
+        || pt == Oa::ProtoOaErrorRes as i32
+        || pt == Common::ErrorRes as i32
+    {
+        let _ = executions.send(ReceivedExecution {
+            received_at: Utc::now(),
+            client_msg_id: msg.client_msg_id.clone(),
+            payload_type: msg.payload_type,
+            payload: payload.to_vec(),
+        });
+    } else if pt == Oa::ProtoOaSpotEvent as i32 {
         if let Ok(event) = ProtoOaSpotEvent::decode(payload) {
             let _ = spots.send(ReceivedSpot {
                 received_at: Utc::now(),
@@ -591,6 +659,41 @@ impl SpreadSamples {
 impl AccountSession<'_> {
     pub fn account(&self) -> &PermittedAccount {
         &self.account
+    }
+
+    /// The connection this session is authorised on.
+    pub fn connection(&self) -> &Connection {
+        self.conn
+    }
+
+    /// Open positions and pending orders (`ProtoOAReconcileReq`, read-only).
+    pub async fn reconcile(&self) -> Result<pb::ProtoOaReconcileRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaReconcileReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                return_protection_orders: None,
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
+    /// The open positions' unrealized P&L in the deposit currency, as the
+    /// broker states it (`ProtoOAGetPositionUnrealizedPnLReq`, read-only).
+    pub async fn unrealized_pnl(
+        &self,
+    ) -> Result<pb::ProtoOaGetPositionUnrealizedPnLRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaGetPositionUnrealizedPnLReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
     }
 
     /// The broker ended this account's session on its connection (token

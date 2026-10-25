@@ -253,9 +253,9 @@ async fn a_universe_miss_is_recorded_with_its_reason(pool: PgPool) {
 async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(pool: PgPool) {
     let s = settings::snapshot(&pool, None).await.unwrap();
     // 17 phase-1 seeds, 4 history seeds (0004), 4 load/spread seeds (0005),
-    // the owner's universe change (0005), the session-retry seed (0007) and
-    // the owner's SpotBrent change (0008).
-    assert_eq!(s.version, 28);
+    // the owner's universe change (0005), the session-retry seed (0007), the
+    // owner's SpotBrent change (0008) and the 10 trading seeds (0012).
+    assert_eq!(s.version, 38);
     assert_eq!(s.integer("history.session_retry_secs").unwrap(), 5);
     assert_eq!(s.integer("history.tick_days_back").unwrap(), 7);
     assert_eq!(s.integer("spread.min_samples").unwrap(), 30);
@@ -324,9 +324,10 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     assert_eq!(s.number("verdict.max_spread_to_atr").unwrap(), 0.10);
     assert_eq!(s.integer("ticks.retention_days").unwrap(), 30);
     assert_eq!(s.integer("spread.sample_secs").unwrap(), 60);
-    // Every seed and the owner's change are logged.
+    // Every seed and the owner's change are logged (28, then the 10 trading
+    // seeds of 0012).
     let h = settings::history(&pool, None).await.unwrap();
-    assert_eq!(h.len(), 28);
+    assert_eq!(h.len(), 38);
     assert!(h
         .iter()
         .filter(|c| c.version != 26 && c.version != 28)
@@ -366,7 +367,7 @@ async fn an_out_of_bounds_value_is_refused_and_nothing_changes(pool: PgPool) {
         30,
         "not clamped, not changed"
     );
-    assert_eq!(s.version, 28, "a refused change does not bump the version");
+    assert_eq!(s.version, 38, "a refused change does not bump the version");
     assert!(matches!(
         settings::change(
             &pool,
@@ -397,11 +398,11 @@ async fn a_change_is_logged_with_old_and_new_values_and_bumps_the_version(pool: 
     )
     .await
     .unwrap();
-    assert_eq!(v, 29);
+    assert_eq!(v, 39);
     let h = settings::history(&pool, Some("ticks.retention_days"))
         .await
         .unwrap();
-    assert_eq!(h[0].version, 29);
+    assert_eq!(h[0].version, 39);
     assert_eq!(h[0].old_value, Some(json!(30)));
     assert_eq!(h[0].new_value, Some(json!(14)));
     assert_eq!(h[0].changed_by, "owner");
@@ -964,7 +965,9 @@ async fn the_owner_adds_spot_brent_to_the_energy_class(pool: PgPool) {
         .unwrap();
     assert_eq!(h.len(), 3, "seed, energy names, SpotBrent");
     let c = &h[0];
-    assert_eq!(c.version, s.version, "the latest change");
+    // The latest universe change: SpotBrent (0008) at version 28; the 0012
+    // trading seeds come after it.
+    assert_eq!(c.version, 28, "the latest universe change");
     assert_eq!(
         h[1].version,
         c.version - 2,

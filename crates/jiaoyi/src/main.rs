@@ -37,6 +37,8 @@ async fn main() -> anyhow::Result<()> {
     jiaoyi_store::migrate(&pool).await?;
     tracing::info!("migrations applied");
     service::register_accounts(&pool, &cfg).await?;
+    // Reviewed settings changes (config/settings-changes.json), each once.
+    jiaoyi::trading::apply_seed(&pool, jiaoyi::trading::SEED_FILE).await?;
 
     let loading = Arc::new(AtomicBool::new(false));
     let recorders = jiaoyi::recorder::StatusMap::default();
@@ -63,6 +65,12 @@ async fn main() -> anyhow::Result<()> {
         pool.clone(),
         cfg.broker.clone(),
         cfg.plan.permitted.clone(),
+        stop.clone(),
+    )));
+    // The H1 trader: one loop per account, idle while trading.enabled is 0.
+    tasks.push(tokio::spawn(jiaoyi::trading::run(
+        pool.clone(),
+        cfg.clone(),
         stop.clone(),
     )));
     tasks.push(tokio::spawn(service::run_loop(

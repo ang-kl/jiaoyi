@@ -20,6 +20,7 @@ pub mod history;
 pub mod research;
 pub mod settings;
 pub mod ticks;
+pub mod trading;
 
 pub use sqlx;
 
