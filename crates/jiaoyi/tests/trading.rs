@@ -1357,6 +1357,35 @@ async fn a_strategy_1_partial_fill_then_cancel_is_listed_with_its_part(pool: PgP
     );
 }
 
+/// Codex P2 on #18: an open part-filled (60 of 100) whose remainder reconcile
+/// later finds filled is listed at the full 100, not at the 60 its recorded
+/// deal carries.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partial_open_reconciled_in_full_is_listed_at_its_full_volume(pool: PgPool) {
+    loaded_with(&pool, &[(ETH, "ETHUSD", AssetClass::Crypto, 1)]).await;
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake_on(&[ETH], 2_000);
+    f.trader.as_mut().unwrap().balance = 2_000_100;
+    f.fill_parts = vec![(0, 60, 3611.0)];
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    trade(&pool, &f, 3, Environment::Demo).await;
+    let o = s1_orders(&pool).await;
+    assert_eq!((o.len(), o[0].filled_volume), (1, Some(60)), "{o:?}");
+    // The remainder fills: the broker holds all 100 cents.
+    f.positions.lock().unwrap()[0].trade_data.volume = 100;
+    f.fill_parts = vec![];
+    f.quote_sequence = vec![];
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let o = s1_orders(&pool).await;
+    assert_eq!(o[0].outcome.as_deref(), Some("RECONCILED_FILL"), "{o:?}");
+    assert_eq!(
+        (o[0].requested_volume, o[0].filled_volume),
+        (Some(100), Some(100)),
+        "{o:?}"
+    );
+}
+
 /// An open with no answer in the wait, found filled at the next session's
 /// reconcile: listed as RECONCILED_FILL at the broker's 5 cents and price.
 #[sqlx::test(migrator = "store::MIGRATOR")]
