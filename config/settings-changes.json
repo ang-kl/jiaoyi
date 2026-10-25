@@ -1,0 +1,10 @@
+[
+  {
+    "id": "2026-10-25-live-edge-gate-lifted",
+    "key": "trading.live_requires_edge_pass",
+    "account_id": null,
+    "value": 0,
+    "changed_by": "owner",
+    "reason": "owner 25-10-2026, in writing: \"Live too, from now\". Overrides the 24-10 rule that live trading waits for a demonstrated edge (the H1 held-out PASS). The gate stays in the code; only this value changes"
+  }
+]

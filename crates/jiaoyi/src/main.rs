@@ -37,6 +37,8 @@ async fn main() -> anyhow::Result<()> {
     jiaoyi_store::migrate(&pool).await?;
     tracing::info!("migrations applied");
     service::register_accounts(&pool, &cfg).await?;
+    // Reviewed settings changes (config/settings-changes.json), each once.
+    jiaoyi::trading::apply_seed(&pool, jiaoyi::trading::SEED_FILE).await?;
 
     let loading = Arc::new(AtomicBool::new(false));
     let recorders = jiaoyi::recorder::StatusMap::default();
@@ -63,6 +65,13 @@ async fn main() -> anyhow::Result<()> {
         pool.clone(),
         cfg.broker.clone(),
         cfg.plan.permitted.clone(),
+        stop.clone(),
+    )));
+    // Strategy 1 (tick-triggered trend): one loop per account; demo trades at
+    // once, live sends nothing until the edge gate passes.
+    tasks.push(tokio::spawn(jiaoyi::trading::run(
+        pool.clone(),
+        cfg.clone(),
         stop.clone(),
     )));
     tasks.push(tokio::spawn(service::run_loop(

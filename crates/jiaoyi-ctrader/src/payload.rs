@@ -10,7 +10,11 @@
 //! 2. **Runtime.** The frame writer calls [`check_sendable`] on every outgoing
 //!    payload type, so even a frame built by hand is refused unless listed.
 //!
-//! Only read requests are listed. No trading request type is listed.
+//! Only read requests are listed here. The three trading requests are on a
+//! separate list, [`TRADING`], which only the trading gate
+//! (`crate::trading::send`) writes through: it checks [`check_tradable`], never
+//! [`check_sendable`], and nothing else in the program can send them (owner,
+//! 25-10-2026: the gated order path).
 
 use crate::pb::{self, ProtoOaPayloadType as Oa, ProtoPayloadType as Common};
 
@@ -63,7 +67,44 @@ pub const SENDABLE: &[(i32, &str)] = &[
         Oa::ProtoOaAssetListReq as i32,
         "read the account's asset names (quote and deposit currencies)",
     ),
+    (
+        Oa::ProtoOaReconcileReq as i32,
+        "read the account's open positions and pending orders",
+    ),
+    (
+        Oa::ProtoOaGetPositionUnrealizedPnlReq as i32,
+        "read the open positions' unrealized P&L (fresh equity)",
+    ),
 ];
+
+/// The trading requests, sent only by the trading gate (`crate::trading`),
+/// never by `Connection::request`.
+pub const TRADING: &[(i32, &str)] = &[
+    (
+        Oa::ProtoOaNewOrderReq as i32,
+        "open a position (MARKET, with a relative stop)",
+    ),
+    (
+        Oa::ProtoOaAmendPositionSltpReq as i32,
+        "move an owned position's stop in its favour",
+    ),
+    (
+        Oa::ProtoOaClosePositionReq as i32,
+        "close a position this program opened",
+    ),
+];
+
+/// The trading gate's frame check: only a payload type on [`TRADING`].
+pub fn check_tradable(payload_type: u32) -> Result<(), NotSendable> {
+    if TRADING.iter().any(|(t, _)| *t as u32 == payload_type) {
+        Ok(())
+    } else {
+        Err(NotSendable {
+            payload_type,
+            name: payload_name(payload_type),
+        })
+    }
+}
 
 /// A payload type that is not on [`SENDABLE`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -154,6 +195,10 @@ request!(pb::ProtoOaGetAccountListByAccessTokenReq => Oa::ProtoOaGetAccountsByAc
          pb::ProtoOaGetAccountListByAccessTokenRes => Oa::ProtoOaGetAccountsByAccessTokenRes);
 request!(pb::ProtoOaAssetListReq => Oa::ProtoOaAssetListReq,
          pb::ProtoOaAssetListRes => Oa::ProtoOaAssetListRes);
+request!(pb::ProtoOaReconcileReq => Oa::ProtoOaReconcileReq,
+         pb::ProtoOaReconcileRes => Oa::ProtoOaReconcileRes);
+request!(pb::ProtoOaGetPositionUnrealizedPnLReq => Oa::ProtoOaGetPositionUnrealizedPnlReq,
+         pb::ProtoOaGetPositionUnrealizedPnLRes => Oa::ProtoOaGetPositionUnrealizedPnlRes);
 
 #[cfg(test)]
 mod tests {
@@ -169,8 +214,8 @@ mod tests {
     assert_not_impl_any!(pb::ProtoOaAmendOrderReq: Request);
     assert_not_impl_any!(pb::ProtoOaMarginCallUpdateReq: Request);
 
-    /// The read requests phase 1 needs, and nothing else.
-    const EXPECTED_SENDABLE: [i32; 14] = [
+    /// The read requests, and nothing else.
+    const EXPECTED_SENDABLE: [i32; 16] = [
         Common::HeartbeatEvent as i32,
         Oa::ProtoOaApplicationAuthReq as i32,
         Oa::ProtoOaAccountAuthReq as i32,
@@ -185,7 +230,36 @@ mod tests {
         Oa::ProtoOaTraderReq as i32,
         Oa::ProtoOaGetAccountsByAccessTokenReq as i32,
         Oa::ProtoOaAssetListReq as i32,
+        Oa::ProtoOaReconcileReq as i32,
+        Oa::ProtoOaGetPositionUnrealizedPnlReq as i32,
     ];
+
+    #[test]
+    fn only_the_three_trading_requests_are_tradable() {
+        let mut tradable = vec![];
+        for t in 0..=3000u32 {
+            if check_tradable(t).is_ok() {
+                tradable.push(t);
+            }
+            // The two lists never overlap: a read path cannot send a trade.
+            assert!(
+                !(check_tradable(t).is_ok() && check_sendable(t).is_ok()),
+                "{t}"
+            );
+        }
+        assert_eq!(
+            tradable,
+            vec![
+                Oa::ProtoOaNewOrderReq as u32,
+                Oa::ProtoOaClosePositionReq as u32,
+                Oa::ProtoOaAmendPositionSltpReq as u32,
+            ]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+        );
+    }
 
     #[test]
     fn trading_payload_types_are_not_sendable() {
@@ -243,6 +317,8 @@ mod tests {
             pt::<pb::ProtoOaTraderReq>(),
             pt::<pb::ProtoOaGetAccountListByAccessTokenReq>(),
             pt::<pb::ProtoOaAssetListReq>(),
+            pt::<pb::ProtoOaReconcileReq>(),
+            pt::<pb::ProtoOaGetPositionUnrealizedPnLReq>(),
         ] {
             assert!(check_sendable(t).is_ok(), "{t}");
         }

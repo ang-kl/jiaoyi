@@ -22,6 +22,7 @@ pub mod client;
 pub mod frame;
 pub mod payload;
 pub mod tickdata;
+pub mod trading;
 pub mod trendbar;
 
 #[cfg(feature = "testkit")]
@@ -52,6 +53,8 @@ pub mod messages {
         ProtoOaDealListRes,
         ProtoOaDealStatus,
         ProtoOaErrorRes,
+        ProtoOaExecutionType,
+        ProtoOaGetPositionUnrealizedPnLRes,
         ProtoOaGetTickDataReq,
         ProtoOaGetTickDataRes,
         ProtoOaGetTrendbarsReq,
@@ -60,7 +63,10 @@ pub mod messages {
         ProtoOaLightSymbol,
         ProtoOaMinCommissionType,
         ProtoOaPayloadType,
+        ProtoOaPosition,
+        ProtoOaPositionUnrealizedPnL,
         ProtoOaQuoteType,
+        ProtoOaReconcileRes,
         ProtoOaRefreshTokenReq,
         ProtoOaRefreshTokenRes,
         ProtoOaSpotEvent,
@@ -73,6 +79,7 @@ pub mod messages {
         ProtoOaSymbolsListReq,
         ProtoOaSymbolsListRes,
         ProtoOaTickData,
+        ProtoOaTradeData,
         ProtoOaTradeSide,
         ProtoOaTrader,
         ProtoOaTraderReq,
@@ -87,8 +94,8 @@ pub mod messages {
 }
 
 pub use client::{
-    AccountSession, Asset, ClientError, Connection, GrantedAccount, ReceivedSpot, RefreshedToken,
-    SessionEnd, TokenGrant,
+    AccountSession, Asset, ClientError, Connection, GrantedAccount, ReceivedExecution,
+    ReceivedSpot, RefreshedToken, SessionEnd, TokenGrant,
 };
 pub use payload::{check_sendable, NotSendable};
 pub use trendbar::{closed_daily_bars, decode_trendbar, DailyBar, TrendbarError};

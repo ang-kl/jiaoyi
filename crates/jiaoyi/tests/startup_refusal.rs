@@ -98,9 +98,9 @@ async fn sigterm_stops_the_service_after_its_tasks_finish(pool: sqlx::PgPool) {
     );
     assert!(status.success(), "{status:?}\n{text}");
     assert!(text.contains("SIGTERM received"), "{text}");
-    // One recorder, one history sync, the loader and the research runner,
-    // all finished, none aborted.
-    assert!(text.contains("finished=4"), "{text}");
+    // One recorder, one history sync, the loader, the research runner and
+    // the trader (0012), all finished, none aborted.
+    assert!(text.contains("finished=5"), "{text}");
     assert!(text.contains("aborted=0"), "{text}");
 }
 
@@ -190,8 +190,9 @@ async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
     assert!(!text.contains("refusing to start"), "{text}");
     assert!(text.contains("tick_history_off=[46130058]"), "{text}");
     assert!(!text.contains("do-not-read-me"), "{text}");
-    // Two recorders, two history syncs, the loader and the research runner.
-    assert!(text.contains("finished=6"), "{text}");
+    // Two recorders, two history syncs, the loader, the research runner and
+    // Strategy 1's trader (0012).
+    assert!(text.contains("finished=7"), "{text}");
 }
 
 /// Remove terminal colour codes (ESC [ ... m) from log text.
