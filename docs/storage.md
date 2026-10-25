@@ -156,7 +156,7 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
   - `trading.order_wait_secs` 20
   - `trading.retry_secs` 60
 - **No on/off switch** (owner, 24-10). Demo accounts trade from start-up; a live account waits for the edge gate while `trading.live_requires_edge_pass` is 1.
-- **Unresolved opens** (no fill and no end recorded: accepted only, or no answer) are read back from these tables at every reconcile: their risk is held in the open-risk budget, their symbol takes no entry.
+- **Unresolved opens** (no full fill and no end recorded: accepted only, no answer, or partly filled) are read back from these tables at every reconcile. Their outstanding risk (the remainder's share for a partial fill) is held in the open-risk budget, and their symbol takes no entry.
 - **A reviewed settings change** is an entry in `config/settings-changes.json` (`id`, `key`, `account_id`, `value`, `changed_by`, `reason`), merged and deployed. Each entry is applied once through `settings::change`, so it is bounds-checked and logged. A refused entry is logged and not applied.
 - `/health` → `trading` and the status page show, per account:
   - the strategy, and whether it trades (`yes`, `armed: waits for the edge gate`, or `trading (edge gate lifted by the owner DD-MM)`);

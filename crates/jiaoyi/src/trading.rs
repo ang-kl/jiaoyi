@@ -434,6 +434,7 @@ impl Ledger for PgLedger<'_> {
     async fn record_event(&self, e: &EventRecord) -> Result<(), String> {
         ts::record_event(self.pool, &event_row(e))
             .await
+            .map(|_| ())
             .map_err(|e| e.to_string())
     }
     async fn owns_position(&self, account_id: i64, position_id: i64) -> Result<bool, String> {
@@ -630,6 +631,17 @@ struct Book {
     /// Each frame this session sent: its request id to its entry key, so a
     /// late answer is recorded under its intent.
     sent: HashMap<String, String>,
+    /// How long an unresolved open with nothing at the broker stays pending.
+    grace: chrono::Duration,
+}
+
+/// The risk of what is left of an open (`volume` requested, `filled` so far)
+/// at the intent's stop distance, from the gate's risk for the whole volume.
+pub fn outstanding_risk(risk: Option<f64>, volume: Option<i64>, filled: i64) -> Option<f64> {
+    match (risk, volume) {
+        (Some(r), Some(v)) if v > 0 => Some(r * (v - filled).clamp(0, v) as f64 / v as f64),
+        (r, _) => r,
+    }
 }
 
 /// Strategy 1's risk at its stops: its positions' and its unresolved opens'.
@@ -864,14 +876,14 @@ struct Reconciled {
 /// intent of its own filled them, or when an unresolved open on their symbol
 /// did (accepted only, or no answer: Codex P1 on #14); any other position is
 /// external. An unresolved open still pending at the broker, or younger than
-/// `grace`, stays pending; an older one with nothing at the broker is
+/// the book's grace, stays pending; an older one with nothing at the broker is
 /// released (`RECONCILED_ABSENT`), never resent.
 async fn reconcile(
     pool: &PgPool,
     session: &AccountSession<'_>,
     book: &mut Book,
-    grace: chrono::Duration,
 ) -> anyhow::Result<Reconciled> {
+    let grace = book.grace;
     let res = session.reconcile().await?;
     let account_id = session.account().id();
     let mut seen = HashSet::new();
@@ -956,6 +968,29 @@ async fn reconcile(
     let now = Utc::now();
     let mut released = Vec::new();
     for u in unresolved {
+        // What of it is filled: the broker's position when it is held, else
+        // the deals recorded. The adopted part's risk is the position's; the
+        // remainder's is held here, never both (Codex round 3 on #14).
+        let filled = u
+            .position_id
+            .and_then(|p| book.own.get(&p))
+            .map(|o| o.volume)
+            .unwrap_or(u.filled);
+        if u.volume.is_some_and(|v| filled >= v) {
+            // Filled in full at the broker, the last answer missed.
+            ts::record_event(
+                pool,
+                &reconciled_row(
+                    account_id,
+                    &u.entry_key,
+                    "RECONCILED_FILL",
+                    None,
+                    "an open found filled in full at the broker by reconcile",
+                ),
+            )
+            .await?;
+            continue;
+        }
         let at_broker = res.order.iter().any(|o| {
             o.trade_data.label.as_deref() == Some(LABEL)
                 && Some(o.trade_data.symbol_id) == u.symbol_id
@@ -965,7 +1000,7 @@ async fn reconcile(
                 u.entry_key,
                 Pending {
                     symbol_id: u.symbol_id,
-                    risk: u.risk,
+                    risk: outstanding_risk(u.risk, u.volume, filled),
                 },
             );
             continue;
@@ -1133,11 +1168,13 @@ pub async fn run_session(
     }
     let r0 = rules(pool, account_id, env).await?;
     d.version = Some(r0.version);
-    let mut grace = grace_of(&r0);
     let mut trail_amend_secs = r0.trail_amend_secs;
-    let mut book = Book::default();
+    let mut book = Book {
+        grace: grace_of(&r0),
+        ..Book::default()
+    };
     let mut execs = conn.executions();
-    let rec = reconcile(pool, session, &mut book, grace).await?;
+    let rec = reconcile(pool, session, &mut book).await?;
     note_reconcile(d, rec).await;
     let mut spots = conn.spot_events();
     session.subscribe_spots(&ids).await?;
@@ -1166,8 +1203,8 @@ pub async fn run_session(
                 let r = rules(pool, account_id, env).await?;
                 d.version = Some(r.version);
                 trail_amend_secs = r.trail_amend_secs;
-                grace = grace_of(&r);
-                let rec = reconcile(pool, session, &mut book, grace).await?;
+                book.grace = grace_of(&r);
+                let rec = reconcile(pool, session, &mut book).await?;
                 note_reconcile(d, rec).await;
             }
             _ = levels_tick.tick() => {
@@ -1178,13 +1215,15 @@ pub async fn run_session(
             }
             m = execs.recv() => match m {
                 Ok(m) => {
-                    // A late end to an open still unresolved: reconcile now,
-                    // so a fill is adopted and trailed and a refusal frees
-                    // its risk (Codex P1 on #14).
-                    if let Some((key, kind)) = server_event(pool, account_id, &m, &book.sent).await {
-                        let ends_it = ts::FILL_KINDS.iter().chain(ts::END_KINDS).any(|k| *k == kind);
-                        if ends_it && book.pending.contains_key(&key) {
-                            let rec = reconcile(pool, session, &mut book, grace).await?;
+                    // A late answer (the gate had stopped listening): a fill
+                    // of any size is read from the broker at once, adopted and
+                    // trailed; an end of an unresolved open frees its risk
+                    // (Codex rounds 1 and 2 on #14).
+                    if let Some(late) = server_event(pool, account_id, &m, &book.sent).await {
+                        let fill = ts::FILL_KINDS.contains(&late.kind.as_str());
+                        let end = ts::END_KINDS.contains(&late.kind.as_str());
+                        if late.new && (fill || (end && book.pending.contains_key(&late.entry_key))) {
+                            let rec = reconcile(pool, session, &mut book).await?;
                             note_reconcile(d, rec).await;
                         }
                     }
@@ -1215,17 +1254,24 @@ struct Ctx<'a, 'c> {
     env: Environment,
 }
 
+/// An answer to a frame this session sent, as the trader received it.
+struct Answer {
+    entry_key: String,
+    kind: String,
+    /// Not recorded before: it came after the gate stopped listening.
+    new: bool,
+}
+
 /// An execution message outside the gate's wait, recorded as it came: the
-/// broker's own (a stop hit), or a late answer to a frame this session sent,
+/// broker's own (a stop hit), or an answer to a frame this session sent,
 /// recorded under its intent (Codex P1 on #14: a late fill was dropped). An
-/// answer the gate already recorded is kept once. Returns a late answer's
-/// entry key and kind.
+/// answer the gate already recorded is kept once.
 async fn server_event(
     pool: &PgPool,
     account_id: i64,
     m: &ReceivedExecution,
     sent: &HashMap<String, String>,
-) -> Option<(String, String)> {
+) -> Option<Answer> {
     let key = match &m.client_msg_id {
         None => None,
         Some(id) => match sent.get(id) {
@@ -1245,10 +1291,18 @@ async fn server_event(
         return None;
     }
     e.entry_key = key.clone();
-    if let Err(err) = ts::record_event(pool, &event_row(&e)).await {
-        tracing::error!(error = %err, "execution event not recorded");
-    }
-    key.map(|k| (k, e.kind))
+    let new = match ts::record_event(pool, &event_row(&e)).await {
+        Ok(new) => new,
+        Err(err) => {
+            tracing::error!(error = %err, "execution event not recorded");
+            true
+        }
+    };
+    key.map(|entry_key| Answer {
+        entry_key,
+        kind: e.kind,
+        new,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1505,44 +1559,30 @@ async fn on_quote(
     {
         Ok(sent) => {
             book.sent.insert(sent.client_msg_id.clone(), key.clone());
-            match &sent.outcome {
-                Outcome::Filled {
-                    position_id: Some(pid),
-                    price,
-                    volume,
-                } => {
-                    book.own.insert(
-                        *pid,
-                        Own {
-                            position_id: *pid,
-                            symbol_id: sym.id,
-                            side,
-                            volume: volume.unwrap_or(sized.volume),
-                            entry: *price,
-                            stop: price.map(|p| match side {
-                                Side::Buy => p - rel as f64 / 100_000.0,
-                                Side::Sell => p + rel as f64 / 100_000.0,
-                            }),
-                            best: *price,
-                            last_amend: None,
-                        },
-                    );
-                }
-                // The broker may still fill it: its risk is held and its
-                // symbol takes no entry until reconcile resolves it.
-                Outcome::Filled {
-                    position_id: None, ..
-                }
-                | Outcome::Unconfirmed => {
-                    book.pending.insert(
-                        key.clone(),
-                        Pending {
-                            symbol_id: Some(sym.id),
-                            risk: Some(sized.risk),
-                        },
-                    );
-                }
-                Outcome::Rejected { .. } | Outcome::Amended { .. } => {}
+            // Any fill, whatever the last answer (a fill in several deals, or
+            // a partial fill whose remainder was cancelled or expired: Codex
+            // round 2 on #14), is read from the broker at once: its aggregate
+            // volume, entry price and stop are adopted before any further
+            // entry is admitted. An event carries one deal, not the position.
+            let filled = sent
+                .events
+                .iter()
+                .any(|e| e.kind == "ORDER_FILLED" || e.kind == "ORDER_PARTIAL_FILL");
+            if filled {
+                let rec = reconcile(pool, session, book).await?;
+                note_reconcile(d, rec).await;
+            }
+            let adopted = book.own.values().any(|o| o.symbol_id == sym.id);
+            if !adopted && (filled || matches!(sent.outcome, Outcome::Unconfirmed)) {
+                // The broker may hold it, or still fill it: its risk is held
+                // and its symbol takes no entry until reconcile resolves it.
+                book.pending.insert(
+                    key.clone(),
+                    Pending {
+                        symbol_id: Some(sym.id),
+                        risk: Some(sized.risk),
+                    },
+                );
             }
             d.note(
                 Some(name),
@@ -1650,6 +1690,15 @@ mod tests {
         assert!(e.contains("exceed its budget"), "{e}");
         // Live at $38.98: 3% is $1.17, below ETHUSD's minimum-volume $2.85.
         assert!(within_budget(0.0, 2.85, 38.98, 3.0).is_err());
+    }
+
+    #[test]
+    fn an_open_remainder_holds_its_share_of_the_risk() {
+        // 100 cents requested at $120.00; 60 filled: the 40 left hold $48.00.
+        assert!((outstanding_risk(Some(120.0), Some(100), 60).unwrap() - 48.0).abs() < 1e-9);
+        assert_eq!(outstanding_risk(Some(120.0), Some(100), 0), Some(120.0));
+        assert_eq!(outstanding_risk(Some(120.0), Some(100), 130), Some(0.0));
+        assert_eq!(outstanding_risk(None, Some(100), 60), None);
     }
 
     #[test]

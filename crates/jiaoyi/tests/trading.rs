@@ -14,7 +14,7 @@ use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::secret::Secret;
 use jiaoyi_core::universe::{AssetClass, Resolution};
 use jiaoyi_ctrader::messages::{ProtoOaPosition, ProtoOaSymbol, ProtoOaTradeData, ProtoOaTrader};
-use jiaoyi_ctrader::testkit::{d1_bar, FakeBroker, GrantEntry};
+use jiaoyi_ctrader::testkit::{d1_bar, FakeBroker, GrantEntry, SidedQuote};
 use jiaoyi_store::{self as store, settings};
 use serde_json::json;
 use sqlx::PgPool;
@@ -149,7 +149,7 @@ fn bars(half: i64) -> Vec<jiaoyi_ctrader::messages::ProtoOaTrendbar> {
 }
 
 /// A quote in the fake's units.
-fn q(bid: f64, ask: f64) -> (Option<u64>, Option<u64>) {
+fn q(bid: f64, ask: f64) -> SidedQuote {
     (
         Some((bid * 100_000.0).round() as u64),
         Some((ask * 100_000.0).round() as u64),
@@ -522,7 +522,8 @@ async fn an_accepted_only_open_is_unresolved_and_an_answer_is_kept_once(pool: Pg
         .await
         .unwrap();
     let keys: Vec<&str> = u.iter().map(|u| u.entry_key.as_str()).collect();
-    assert_eq!(keys, vec!["accepted", "silent"]);
+    // A partial fill leaves its remainder open (Codex round 3 on #14).
+    assert_eq!(keys, vec!["accepted", "partial", "silent"]);
     assert_eq!(u[0].risk, Some(6.0));
     assert_eq!(u[0].symbol_id, Some(ETH));
     // The gate and the trader both receive one answer: kept once.
@@ -786,4 +787,143 @@ async fn a_demo_account_never_takes_the_minimum(pool: PgPool) {
             .any(|(k, r)| k == "skip" && r.contains("below the broker minimum")),
         "{d:?}"
     );
+}
+
+/// Two crypto symbols at $20,001.00: a 0.6% entry is 100 cents (risk
+/// $120.00 at the 120.00 stop). The fake fills ETHUSD's order in `parts`.
+async fn two_symbols_filled_in(
+    pool: &PgPool,
+    parts: Vec<(u64, i64, f64)>,
+    cancel: bool,
+    quotes: Vec<(u64, i64, SidedQuote)>,
+    secs: u64,
+) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
+    loaded_with(
+        pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    let mut f = fake_on(&[ETH, BTC], 2_000);
+    f.trader.as_mut().unwrap().balance = 2_000_100;
+    f.fill_parts = parts;
+    f.cancel_remainder = cancel;
+    f.quote_sequence = quotes;
+    trade(pool, &f, secs, Environment::Demo).await
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_fill_in_several_deals_is_adopted_at_the_brokers_aggregate(pool: PgPool) {
+    // Codex round 2 on #14: 90 + 10 cents was tracked as the last deal's 10.
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    let log = two_symbols_filled_in(
+        &pool,
+        vec![(0, 90, 3611.0), (0, 10, 3621.0)],
+        false,
+        vec![(0, ETH, q(3608.0, 3611.0)), (500, BTC, q(3608.0, 3611.0))],
+        3,
+    )
+    .await;
+    let d = decisions(&pool).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1, "{d:?}");
+    // 100 cents at the broker's VWAP 3612.00 with its stop 3491.00: $121.00.
+    assert!(
+        d.iter().any(|(k, r)| k == "skip"
+            && r.contains(
+                "open risk 121.00 plus this entry's 120.00 would exceed its budget 200.01"
+            )),
+        "{d:?}"
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partial_fill_with_its_remainder_cancelled_is_adopted_and_trailed(pool: PgPool) {
+    // Codex round 2 on #14: the gate answers Rejected (the remainder was
+    // cancelled), yet 60 cents are open at the broker.
+    set(&pool, "trading.trend_open_risk_pct", json!(0.9)).await;
+    let log = two_symbols_filled_in(
+        &pool,
+        vec![(0, 60, 3611.0)],
+        true,
+        vec![
+            (0, ETH, q(3608.0, 3611.0)),
+            (300, BTC, q(3608.0, 3611.0)),
+            (600, ETH, q(3700.0, 3701.0)),
+        ],
+        3,
+    )
+    .await;
+    let d = decisions(&pool).await;
+    let l = log.lock().unwrap().clone();
+    assert_eq!(l.orders.len(), 1, "{d:?}");
+    // Trailed: 3700.00 − 120.00.
+    assert_eq!(l.amends.len(), 1, "{d:?}");
+    assert_eq!(l.amends[0].stop_loss, Some(3580.0));
+    // The second entry sees its risk: 60 cents from 3611.00 to 3491.00 = $72.00.
+    assert!(
+        d.iter().any(|(k, r)| k == "skip"
+            && r.contains(
+                "open risk 72.00 plus this entry's 120.00 would exceed its budget 180.01"
+            )),
+        "{d:?}"
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_remainder_filled_after_the_wait_is_read_from_the_broker(pool: PgPool) {
+    // 60 cents within the 1 s wait, the other 40 at 2 s.
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let log = two_symbols_filled_in(
+        &pool,
+        vec![(0, 60, 3611.0), (2_000, 40, 3621.0)],
+        false,
+        vec![(0, ETH, q(3608.0, 3611.0)), (3_000, BTC, q(3608.0, 3611.0))],
+        4,
+    )
+    .await;
+    let d = decisions(&pool).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1, "{d:?}");
+    // 100 cents at the broker's VWAP 3615.00 with its stop 3491.00: $124.00.
+    assert!(
+        d.iter().any(|(k, r)| k == "skip"
+            && r.contains(
+                "open risk 124.00 plus this entry's 120.00 would exceed its budget 200.01"
+            )),
+        "{d:?}"
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_open_remainder_is_reserved_until_it_fills(pool: PgPool) {
+    // Codex round 3 on #14: 60 of 100 cents fill inside the 1 s wait; at
+    // 1.5 s BTCUSD signals. Its $120.00 entry must not take the room the
+    // ETHUSD remainder (40 cents, $48.00) still needs; it fills at 2 s.
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let log = two_symbols_filled_in(
+        &pool,
+        vec![(0, 60, 3611.0), (2_000, 40, 3621.0)],
+        false,
+        vec![(0, ETH, q(3608.0, 3611.0)), (1_500, BTC, q(3608.0, 3611.0))],
+        3,
+    )
+    .await;
+    let d = decisions(&pool).await;
+    assert_eq!(log.lock().unwrap().orders.len(), 1, "{d:?}");
+    // $72.00 adopted (60 cents from 3611.00 to 3491.00) plus $48.00 reserved.
+    assert!(
+        d.iter().any(|(k, r)| k == "skip"
+            && r.contains(
+                "open risk 120.00 plus this entry's 120.00 would exceed its budget 200.01"
+            )),
+        "{d:?}"
+    );
+    // Once the remainder filled, the intent is resolved: nothing is reserved.
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert!(u.is_empty(), "{u:?}");
 }
