@@ -99,12 +99,19 @@ Read-only against the broker. Migration 0004.
 | `deals` | broker record | Every deal exactly as `ProtoOADeal` gives it, money as the broker's integers with `money_digits`, plus the raw message. Deletes are refused; a deal the broker later reports differently is written to `reconcile_events` first. |
 | `deal_fetches` | event, append-only | Every deal-list window and its outcome. |
 | `account_snapshots` | event, append-only | `ProtoOATraderRes` each time it is read: login, deposit asset, balance, registration date. |
+| `trader_reads` | event, append-only | Migration 0011 (owner, 25-10-2026). Every `ProtoOATrader` field of each read: leverage (`leverage_in_cents`, so 1:50 is 5000), max leverage, account type, limited risk, margin and stop-out settings, money (balance, bonuses, with `money_digits`), login, broker name, registration date. A field the broker omits is NULL, never a default; enumerations are the broker's integers. `/health` shows each account's latest leverage as `1:N`, the account type and the read time. No route shows the money. |
 | `research_trials` | research log, append-only | Every trial, pass or fail, with its parameters, data range, sample (`development` or `held_out`) and settings version. |
 
 ### Ticks history: depth and size
 
 - Tick requests span at most one week (Spotware). Windows are Monday-to-Monday UTC weeks on a fixed grid, so a sync resumes, and a week fetched completely is not fetched again.
 - The depth downloaded is the setting `history.tick_days_back` (default 7 days). The probe (`history.probe_years`, default 15) finds the earliest week with ticks without downloading the years in between.
+- **Tick history off (owner, 25-10-2026: "Skip their tick history").**
+  - An account named only by a `JIAOYI_DEMO_ACCOUNT_ID*` variable skips the tick download (sync step 3).
+  - The reason was disk: the Postgres volume held 26.8 GB of 50 GB with two accounts, flat for 12 h. One account's 7-day broker download is about 30M rows a week.
+  - Its deals, trader record, availability probe, daily bars and live tick recorder are unchanged.
+  - An account the pair (`JIAOYI_ALLOWED_ACCOUNTS` with `JIAOYI_ACCOUNT_ENVIRONMENTS`) also permits downloads ticks as before.
+  - `/health` shows `history_sync.<account>.tick_history`: `on`, or `off` with the reason.
 - Size is the limit, not the broker. As an order of magnitude only (not measured), a busy FX pair can carry 100,000–200,000 quote changes a day per side; 20 symbols × 2 sides × a year would be on the order of 100 GB. The depth is raised once the first week's real volume is measured from `/research/inventory`.
 
 ## Research engine: the pre-registered edge test (migration 0009)
