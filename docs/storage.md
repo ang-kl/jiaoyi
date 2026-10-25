@@ -163,7 +163,7 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
   - the edge gate and the minimum-volume rule;
   - the open-risk budget;
   - the last decision (recorded only when its reason changes, so its time can stand still while the loop runs);
-  - the loop's `liveness`, kept in memory and never recorded: when the loop started, when a reconcile last ran (every run, recorded or not), when it last processed a quote, and its state: `alive`, `starting` (no reconcile yet), `stalled` (no reconcile within 2 × `trading.reconcile_secs`, counted from the start before the first), or `not running` (no loop in this process). Strategy 3 has no such field yet (#15 is not merged);
+  - the loop's `liveness`, kept in memory and never recorded: when the loop started, when a reconcile last ran (every run, recorded or not), when it last processed a quote, and its state: `alive`, `starting` (no reconcile yet), `stalled` (no reconcile within 2 × `trading.reconcile_secs`, counted from the start before the first), or `not running` (no loop in this process).;
   - the external positions found at the last reconcile (symbol, side, volume).
   No money.
 
@@ -178,6 +178,7 @@ The rules are `docs/preregistration-2026-10-25-strategy3.md`, embedded and hashe
 
 - **Settings.** `trading.s3_open_risk_pct` is 3 (owner, 25-10-2026). Strategy 3 also reads `trading.risk_pct`, `trading.cap_factor`, `trading.min_volume_max_risk_pct`, `trading.reconcile_secs`, `trading.order_wait_secs` and `trading.retry_secs`.
 - **Decisions** are in `trading_decisions` under kinds `s3_*`, each with the hash and the label in its detail. Strategy 1's last decision on `/health` leaves them out.
+- **Liveness.** `/health` → `strategy3[].liveness` and the status page's Loop line show each Strategy 3 loop the same way as Strategy 1's: kept in memory, never recorded, with each reconcile run (the first, each periodic one, and the one after a fill) and each processed quote.
 - **Commission** comes from the broker's deals of the position (table `deals`, from history sync).
 - `GET /trading/costs` summarises, per account and symbol: the entries and exits filled (the broker's own exits included, and counted apart as `broker_exits_filled`), the median entry and exit slippage, the spread at entry and exit, the order-to-fill time, and the commission per unit in price units. No money.
 - `/health` → `strategy3` and the status page show, per account:

@@ -498,6 +498,11 @@ pub struct Trader<'a, 'c> {
     program_positions: usize,
     pub d: Decisions<'a>,
     hash: String,
+    /// The loops' liveness, shared with `/health` (each reconcile run beats
+    /// it). A trader driven on its own keeps its own map.
+    // Claude · № 17,074 25-Oct (ordered: owner "merge when green and deploy";
+    // Strategy 3's heartbeat, as #16 gave Strategy 1)
+    pub live: crate::trading::LivenessMap,
 }
 
 impl<'a, 'c> Trader<'a, 'c> {
@@ -581,6 +586,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             program_positions: 0,
             d: Decisions::new(pool, account_id),
             hash: prereg_hash(),
+            live: Default::default(),
         };
         t.read_commission().await;
         Ok(t)
@@ -805,6 +811,11 @@ impl<'a, 'c> Trader<'a, 'c> {
                 detail,
             )
             .await;
+        // Every run, recorded or not: the decision is kept only when it
+        // changes, so its time cannot tell a quiet loop from a stalled one.
+        crate::trading::beat(&self.live, account_id, |l| {
+            l.last_reconcile_run_at = Some(Utc::now())
+        });
         Ok(())
     }
 
@@ -1810,12 +1821,18 @@ impl<'a, 'c> Trader<'a, 'c> {
 // ---------------------------------------------------------------- loop
 
 /// Run every permitted account's Strategy 3 loop until shutdown.
-pub async fn run(pool: PgPool, cfg: Arc<Config>, shutdown: Shutdown) {
+pub async fn run(
+    pool: PgPool,
+    cfg: Arc<Config>,
+    live: crate::trading::LivenessMap,
+    shutdown: Shutdown,
+) {
     let mut tasks = Vec::new();
     for (account, env) in cfg.plan.permitted.clone() {
-        let (pool, cfg, shutdown) = (pool.clone(), cfg.clone(), shutdown.clone());
+        let (pool, cfg, live, shutdown) =
+            (pool.clone(), cfg.clone(), live.clone(), shutdown.clone());
         tasks.push(tokio::spawn(async move {
-            account_loop(&pool, &cfg, &account, env, shutdown).await
+            account_loop(&pool, &cfg, &account, env, &live, shutdown).await
         }));
     }
     for t in tasks {
@@ -1828,13 +1845,15 @@ async fn account_loop(
     cfg: &Config,
     account: &PermittedAccount,
     env: Environment,
+    live: &crate::trading::LivenessMap,
     mut shutdown: Shutdown,
 ) {
+    crate::trading::beat(live, account.id(), |l| l.started_at = Some(Utc::now()));
     loop {
         if shutdown.is_set() {
             return;
         }
-        let r = session(pool, cfg, account, env, shutdown.clone()).await;
+        let r = session(pool, cfg, account, env, live, shutdown.clone()).await;
         if shutdown.is_set() {
             return;
         }
@@ -1864,6 +1883,7 @@ async fn session(
     cfg: &Config,
     account: &PermittedAccount,
     env: Environment,
+    live: &crate::trading::LivenessMap,
     mut shutdown: Shutdown,
 ) -> anyhow::Result<()> {
     let conn: Connection = loader::connect(&cfg.broker, env).await?;
@@ -1874,6 +1894,7 @@ async fn session(
         &cfg.allowlist,
         env,
         &session,
+        live,
         &mut ends,
         &mut shutdown,
     )
@@ -1886,12 +1907,17 @@ pub async fn run_session(
     allowlist: &Allowlist,
     env: Environment,
     session: &AccountSession<'_>,
+    live: &crate::trading::LivenessMap,
     ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let account_id = session.account().id();
+    crate::trading::beat(live, account_id, |l| {
+        l.started_at.get_or_insert_with(Utc::now);
+    });
     let conn = session.connection();
     let mut t = Trader::new(pool, allowlist, env, session).await?;
+    t.live = live.clone();
     if t.syms.is_empty() {
         anyhow::bail!("no resolved symbols stored for this account yet (a data load comes first)");
     }
@@ -1934,6 +1960,7 @@ pub async fn run_session(
                         spot.received_at,
                     )
                     .await?;
+                    crate::trading::beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
                 }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
@@ -1947,7 +1974,10 @@ pub async fn run_session(
 /// `/health` → `strategy3`: per account, the label, the pre-registration,
 /// the open positions at the last reconcile and today's decisions and
 /// trades. No money.
-pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
+pub async fn health(
+    pool: &PgPool,
+    live: &HashMap<i64, crate::trading::Liveness>,
+) -> jiaoyi_store::Result<Value> {
     let accounts = jiaoyi_store::sqlx::query(
         "SELECT account_id, environment FROM accounts WHERE enabled ORDER BY account_id",
     )
@@ -1957,6 +1987,25 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
     for a in accounts {
         let id: i64 = a.get("account_id");
         let env: String = a.get("environment");
+        let environment = if env == "live" {
+            Environment::Live
+        } else {
+            Environment::Demo
+        };
+        // In memory: every reconcile run and the last quote, recorded or not
+        // (as Strategy 1's).
+        let reconcile_secs = rules(pool, id, environment)
+            .await
+            .ok()
+            .map(|r| r.reconcile_secs);
+        let l = live.get(&id);
+        let liveness = json!({
+            "state": reconcile_secs.map(|s| crate::trading::liveness_state(l, s, Utc::now())),
+            "stalled_after_secs": reconcile_secs.map(|s| 2 * s),
+            "started_at": l.and_then(|l| l.started_at),
+            "last_reconcile_run_at": l.and_then(|l| l.last_reconcile_run_at),
+            "last_quote_at": l.and_then(|l| l.last_quote_at),
+        });
         let rec = ts::latest_decision_detail(pool, id, "s3_reconcile").await?;
         let today = s3s::today(pool, id).await?;
         out.push(json!({
@@ -1971,6 +2020,7 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
             "open_positions": rec.as_ref().map(|(_, d)| d["positions"].clone()).unwrap_or(json!([])),
             "last_reconcile_at": rec.map(|(at, _)| at),
             "today": today,
+            "liveness": liveness,
         }));
     }
     Ok(json!(out))

@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use jiaoyi::config::BrokerConfig;
-use jiaoyi::{history, loader, strategy3};
+use jiaoyi::{history, loader, shutdown, strategy3, trading};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::secret::Secret;
 use jiaoyi_core::strategy3::sessions::{rule_for, session_on, Session};
@@ -1122,4 +1122,105 @@ async fn an_unconfirmed_open_found_partly_filled_keeps_its_remainder_reserved(po
         .await
         .unwrap();
     assert!(u.is_empty(), "{u:?}");
+}
+
+/// Run the Strategy 3 loop on `f` for `secs` as the demo account, its
+/// liveness kept in `live`, then stop it.
+async fn run_s3(pool: &PgPool, f: &FakeBroker, secs: u64, live: &trading::LivenessMap) {
+    let (conn, _log) = f.clone().spawn();
+    let session = loader::authorise(pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let mut ends = conn.session_ends();
+    let (trigger, mut stop) = shutdown::channel();
+    let list = allowlist();
+    tokio::select! {
+        r = strategy3::run_session(pool, &list, Environment::Demo, &session, live, &mut ends, &mut stop) => {
+            r.unwrap();
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => trigger.fire(),
+    }
+}
+
+/// As #16 for Strategy 1: Strategy 3's reconcile decision is recorded only
+/// when it changes, so a quiet loop's reconcile runs keep its liveness
+/// advancing, with the recorded decision kept once.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_quiet_strategy_3_loop_keeps_its_reconcile_runs_advancing(pool: PgPool) {
+    loaded(&pool).await;
+    settings::change(
+        &pool,
+        "trading.reconcile_secs",
+        Some(DEMO),
+        Some(json!(30)),
+        "test",
+        "a short interval",
+    )
+    .await
+    .unwrap();
+    let live = trading::LivenessMap::default();
+    run_s3(&pool, &fake((60_455.0, 60_462.0)), 40, &live).await;
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    let (start, ran) = (l.started_at.unwrap(), l.last_reconcile_run_at.unwrap());
+    assert!(
+        ran - start >= Duration::seconds(25),
+        "a second reconcile ran: {l:?}"
+    );
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM trading_decisions WHERE account_id = $1 AND kind = 's3_reconcile'",
+    )
+    .bind(DEMO)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 1, "the unchanged reason is recorded once");
+    let loops = live.lock().unwrap().clone();
+    let h = strategy3::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert_eq!(h[0]["liveness"]["stalled_after_secs"], 60, "{h}");
+    let recorded: DateTime<Utc> =
+        serde_json::from_value(h[0]["last_reconcile_at"].clone()).unwrap();
+    assert!(ran - recorded >= Duration::seconds(25), "{h}");
+}
+
+/// A Strategy 3 loop stopped for more than twice its reconcile interval
+/// reads stalled; its last quote is shown; an account with no loop reads
+/// not running.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_stopped_strategy_3_loop_reads_stalled_after_twice_its_reconcile_interval(pool: PgPool) {
+    loaded(&pool).await;
+    // At the session's open: inside the band, no entry.
+    let f = FakeBroker {
+        quote_sequence: vec![(
+            0,
+            BTC,
+            (
+                Some((OPEN * 100_000.0) as u64),
+                Some(((OPEN + 1.0) * 100_000.0) as u64),
+            ),
+        )],
+        ..fake((60_455.0, 60_462.0))
+    };
+    let live = trading::LivenessMap::default();
+    run_s3(&pool, &f, 2, &live).await;
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    assert!(l.last_quote_at.is_some(), "{l:?}");
+    let loops = live.lock().unwrap().clone();
+    let h = strategy3::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert!(h[0]["liveness"]["last_quote_at"].is_string(), "{h}");
+    let aged = |age: i64| {
+        let mut m = loops.clone();
+        let e = m.get_mut(&DEMO).unwrap();
+        let at = Utc::now() - Duration::seconds(age);
+        e.started_at = Some(at - Duration::seconds(5));
+        e.last_reconcile_run_at = Some(at);
+        m
+    };
+    let h = strategy3::health(&pool, &aged(590)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    let h = strategy3::health(&pool, &aged(610)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "stalled", "{h}");
+    let h = strategy3::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "not running", "{h}");
 }

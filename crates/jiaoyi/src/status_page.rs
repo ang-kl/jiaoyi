@@ -97,6 +97,20 @@ fn pill(state: &str) -> String {
     format!(r#"<span class="pill {kind}">{}</span>"#, esc(state))
 }
 
+/// A loop's liveness: its state, and when its reconcile last ran and it
+/// last processed a quote (Strategy 1's and Strategy 3's alike).
+fn loop_cell(live: &Value) -> String {
+    match live["state"].as_str() {
+        Some(state) => format!(
+            r#"{}<div class="note">reconcile {} · quote {}</div>"#,
+            pill(state),
+            txt(&live["last_reconcile_run_at"]),
+            txt(&live["last_quote_at"]),
+        ),
+        None => "—".into(),
+    }
+}
+
 fn rows(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -256,16 +270,7 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             })
             .unwrap_or_else(|| "—".into());
         // Claude · № 17,020 25-Oct (production read-back 04:26Z)
-        let live = &t["liveness"];
-        let looping = match live["state"].as_str() {
-            Some(state) => format!(
-                r#"{}<div class="note">reconcile {} · quote {}</div>"#,
-                pill(state),
-                txt(&live["last_reconcile_run_at"]),
-                txt(&live["last_quote_at"]),
-            ),
-            None => "—".into(),
-        };
+        let looping = loop_cell(&t["liveness"]);
         let external = t["last_reconcile"]["external_positions"]
             .as_array()
             .map(|a| a.len().to_string())
@@ -330,11 +335,14 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             .map(|c| format!("{} {}", txt(&c["kind"]), txt(&c["count"])))
             .collect::<Vec<_>>()
             .join(", ");
+        // Claude · № 17,074 25-Oct (ordered: owner "merge when green and
+        // deploy"; Strategy 3's heartbeat, as #16 gave Strategy 1)
         h.push_str(&format!(
-            r#"<h3 class="mono">{} <span class="sub">{} · {}</span></h3><p class="note">Open: {pos}</p><p class="note">Decisions today: {}</p>"#,
+            r#"<h3 class="mono">{} <span class="sub">{} · {}</span></h3><div class="note">Loop: {}</div><p class="note">Open: {pos}</p><p class="note">Decisions today: {}</p>"#,
             txt(&a["account_id"]),
             txt(&a["environment"]),
             txt(&a["sizing"]),
+            loop_cell(&a["liveness"]),
             if counts.is_empty() { "none".to_string() } else { counts },
         ));
         h.push_str(r#"<div class="scroll"><table><thead><tr><th>Time</th><th>Symbol</th><th>Order</th><th>Side</th><th>Outcome</th><th class="num">Price</th><th class="num">Volume</th><th class="num">Order to fill (ms)</th><th class="num">Slippage</th></tr></thead><tbody>"#);
@@ -570,6 +578,7 @@ mod tests {
              "sizing": "risk_pct of fresh equity",
              "prereg_file": "docs/preregistration-2026-10-25-strategy3.md",
              "prereg_hash": "35a3c9071cb73d6d09c72ea492af0ba2b7c7ebee",
+             "liveness": {"state": "stalled", "last_reconcile_run_at": "2026-10-25T04:02:28Z", "last_quote_at": "2026-10-25T04:03:00Z"},
              "open_positions": [{"symbol": "BTCUSD", "side": "buy", "volume": 8, "entry": 60462.0,
                                   "stop": 60012.0, "take_profit": 62563.21}],
              "today": {"decisions_today": [{"kind": "s3_sent", "count": 1}],
@@ -579,6 +588,11 @@ mod tests {
         ]});
         let p = page(&h, &json!({}), &json!({}), now);
         assert!(p.contains("<h2>Strategy 3: intraday momentum</h2>"));
+        // The loop's liveness, whether or not a decision changed (as Strategy 1's).
+        assert!(
+            p.contains(r#"Loop: <span class="pill bad">stalled</span><div class="note">reconcile 2026-10-25T04:02:28Z · quote 2026-10-25T04:03:00Z</div>"#),
+            "{p}"
+        );
         assert!(p.contains("BTCUSD buy 8 at 60462.0 (stop 60012.0, take-profit 62563.21)"));
         assert!(p.contains("s3_sent 1"));
         assert!(p.contains(">182<") && p.contains(">2.00<"));
