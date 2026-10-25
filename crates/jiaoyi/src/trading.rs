@@ -90,7 +90,7 @@ pub struct Liveness {
 /// The accounts' loops, shared by the loops and `/health`.
 pub type LivenessMap = Arc<Mutex<HashMap<i64, Liveness>>>;
 
-fn beat(live: &LivenessMap, account_id: i64, f: impl FnOnce(&mut Liveness)) {
+pub fn beat(live: &LivenessMap, account_id: i64, f: impl FnOnce(&mut Liveness)) {
     f(live.lock().unwrap().entry(account_id).or_default());
 }
 

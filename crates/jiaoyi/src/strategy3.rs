@@ -277,6 +277,57 @@ pub fn plan_order(e: &Entry, limits: &VolumeLimits, volume: i64) -> Result<Order
     })
 }
 
+/// What an entry planned its exits with: the side, the decision price, R and
+/// the cost reserve C, read back from its recorded order.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlanBasis {
+    pub side: Dir,
+    pub entry: f64,
+    pub r: f64,
+    pub cost: f64,
+}
+
+/// The plan basis in a recorded order's detail (`entry`), if complete.
+pub fn plan_basis(detail: &Value) -> Option<PlanBasis> {
+    let e = &detail["entry"];
+    let side = match e["side"].as_str()? {
+        "buy" => Dir::Buy,
+        "sell" => Dir::Sell,
+        _ => return None,
+    };
+    Some(PlanBasis {
+        side,
+        entry: e["entry_price"].as_f64()?,
+        r: e["r"].as_f64()?,
+        cost: e["cost"]["total"].as_f64()?,
+    })
+}
+
+/// TP1's close for `volume`, the volume the broker holds: the entry's plan
+/// made again by bot-trade's arithmetic with the same price, R and C, so
+/// TP1's level is unchanged and only the split follows the volume. A volume
+/// that cannot be split, or that the plan refuses, closes whole at TP1.
+pub fn tp1_close_volume(b: &PlanBasis, limits: &VolumeLimits, volume: i64) -> i64 {
+    let stop = match b.side {
+        Dir::Buy => b.entry - b.r,
+        Dir::Sell => b.entry + b.r,
+    };
+    match targets::plan(&targets::Input {
+        side: b.side,
+        entry: b.entry,
+        original_stop: stop,
+        required_rr: targets::REQUIRED_RR,
+        cost_reserve: b.cost,
+        digits: limits.digits,
+        volume,
+        min_volume: limits.min,
+        step_volume: limits.step,
+    }) {
+        Ok(p) if p.mode == targets::Mode::PartialRunner => p.close_volume,
+        _ => volume,
+    }
+}
+
 /// Whether a quote reaches a long's (bid) or a short's (ask) TP1, compared
 /// in whole ticks of `digits`.
 pub fn tp1_reached(
@@ -394,6 +445,9 @@ pub struct Own {
     pub tp1_distance: Option<f64>,
     pub close_volume: Option<i64>,
     pub partial: bool,
+    /// What the entry planned with, so TP1's close is planned again for the
+    /// volume the broker holds (a partial fill: Codex P2 on #15).
+    pub plan_basis: Option<PlanBasis>,
     pub session_date: Option<chrono::NaiveDate>,
     pub entry_key: Option<String>,
     /// A TP1 close filled, partly filled or unanswered: never sent again.
@@ -498,6 +552,11 @@ pub struct Trader<'a, 'c> {
     program_positions: usize,
     pub d: Decisions<'a>,
     hash: String,
+    /// The loops' liveness, shared with `/health` (each reconcile run beats
+    /// it). A trader driven on its own keeps its own map.
+    // Claude · № 17,074 25-Oct (ordered: owner "merge when green and deploy";
+    // Strategy 3's heartbeat, as #16 gave Strategy 1)
+    pub live: crate::trading::LivenessMap,
 }
 
 impl<'a, 'c> Trader<'a, 'c> {
@@ -581,6 +640,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             program_positions: 0,
             d: Decisions::new(pool, account_id),
             hash: prereg_hash(),
+            live: Default::default(),
         };
         t.read_commission().await;
         Ok(t)
@@ -687,6 +747,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 partial: plan.is_some_and(|x| {
                     x.detail["order"]["plan"]["mode"].as_str() == Some("partial_runner")
                 }),
+                plan_basis: plan.and_then(|x| plan_basis(&x.detail)),
                 session_date: plan.and_then(|x| {
                     x.detail["session_date"]
                         .as_str()
@@ -706,6 +767,9 @@ impl<'a, 'c> Trader<'a, 'c> {
                     e.close_volume = x.detail["order"]["plan"]["close_volume"].as_i64();
                     e.partial =
                         x.detail["order"]["plan"]["mode"].as_str() == Some("partial_runner");
+                }
+                if e.plan_basis.is_none() {
+                    e.plan_basis = plan_basis(&x.detail);
                 }
                 if e.session_date.is_none() {
                     e.session_date = x.detail["session_date"]
@@ -805,6 +869,11 @@ impl<'a, 'c> Trader<'a, 'c> {
                 detail,
             )
             .await;
+        // Every run, recorded or not: the decision is kept only when it
+        // changes, so its time cannot tell a quiet loop from a stalled one.
+        crate::trading::beat(&self.live, account_id, |l| {
+            l.last_reconcile_run_at = Some(Utc::now())
+        });
         Ok(())
     }
 
@@ -1057,15 +1126,21 @@ impl<'a, 'c> Trader<'a, 'c> {
         ) else {
             return Ok(());
         };
-        let digits = self
-            .syms
-            .get(&o.symbol_id)
-            .and_then(|s| s.limits)
-            .map_or(5, |l| l.digits);
+        let limits = self.syms.get(&o.symbol_id).and_then(|s| s.limits);
+        let digits = limits.map_or(5, |l| l.digits);
         if o.tp1_next_try.is_some_and(|t| now < t) {
             return Ok(());
         }
-        if !tp1_reached(o.side, fill, dist, digits, bid, ask) || close >= o.volume {
+        // Claude · № 17,074 25-Oct (ordered: owner "merge when green and
+        // deploy"; Codex round-4 P2 on #15): the close is planned again for
+        // the volume the broker holds, the whole of it when it cannot be
+        // split. With no recorded basis, the recorded close, if it fits.
+        let close = match (o.plan_basis, limits) {
+            (Some(b), Some(l)) => tp1_close_volume(&b, &l, o.volume),
+            _ if close < o.volume => close,
+            _ => return Ok(()),
+        };
+        if !tp1_reached(o.side, fill, dist, digits, bid, ask) {
             return Ok(());
         }
         // Claude · № 17,020 25-Oct (Codex P2 on #15): every attempt is its own
@@ -1810,12 +1885,18 @@ impl<'a, 'c> Trader<'a, 'c> {
 // ---------------------------------------------------------------- loop
 
 /// Run every permitted account's Strategy 3 loop until shutdown.
-pub async fn run(pool: PgPool, cfg: Arc<Config>, shutdown: Shutdown) {
+pub async fn run(
+    pool: PgPool,
+    cfg: Arc<Config>,
+    live: crate::trading::LivenessMap,
+    shutdown: Shutdown,
+) {
     let mut tasks = Vec::new();
     for (account, env) in cfg.plan.permitted.clone() {
-        let (pool, cfg, shutdown) = (pool.clone(), cfg.clone(), shutdown.clone());
+        let (pool, cfg, live, shutdown) =
+            (pool.clone(), cfg.clone(), live.clone(), shutdown.clone());
         tasks.push(tokio::spawn(async move {
-            account_loop(&pool, &cfg, &account, env, shutdown).await
+            account_loop(&pool, &cfg, &account, env, &live, shutdown).await
         }));
     }
     for t in tasks {
@@ -1828,13 +1909,15 @@ async fn account_loop(
     cfg: &Config,
     account: &PermittedAccount,
     env: Environment,
+    live: &crate::trading::LivenessMap,
     mut shutdown: Shutdown,
 ) {
+    crate::trading::beat(live, account.id(), |l| l.started_at = Some(Utc::now()));
     loop {
         if shutdown.is_set() {
             return;
         }
-        let r = session(pool, cfg, account, env, shutdown.clone()).await;
+        let r = session(pool, cfg, account, env, live, shutdown.clone()).await;
         if shutdown.is_set() {
             return;
         }
@@ -1864,6 +1947,7 @@ async fn session(
     cfg: &Config,
     account: &PermittedAccount,
     env: Environment,
+    live: &crate::trading::LivenessMap,
     mut shutdown: Shutdown,
 ) -> anyhow::Result<()> {
     let conn: Connection = loader::connect(&cfg.broker, env).await?;
@@ -1874,6 +1958,7 @@ async fn session(
         &cfg.allowlist,
         env,
         &session,
+        live,
         &mut ends,
         &mut shutdown,
     )
@@ -1886,12 +1971,17 @@ pub async fn run_session(
     allowlist: &Allowlist,
     env: Environment,
     session: &AccountSession<'_>,
+    live: &crate::trading::LivenessMap,
     ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let account_id = session.account().id();
+    crate::trading::beat(live, account_id, |l| {
+        l.started_at.get_or_insert_with(Utc::now);
+    });
     let conn = session.connection();
     let mut t = Trader::new(pool, allowlist, env, session).await?;
+    t.live = live.clone();
     if t.syms.is_empty() {
         anyhow::bail!("no resolved symbols stored for this account yet (a data load comes first)");
     }
@@ -1934,6 +2024,7 @@ pub async fn run_session(
                         spot.received_at,
                     )
                     .await?;
+                    crate::trading::beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
                 }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
@@ -1947,7 +2038,10 @@ pub async fn run_session(
 /// `/health` → `strategy3`: per account, the label, the pre-registration,
 /// the open positions at the last reconcile and today's decisions and
 /// trades. No money.
-pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
+pub async fn health(
+    pool: &PgPool,
+    live: &HashMap<i64, crate::trading::Liveness>,
+) -> jiaoyi_store::Result<Value> {
     let accounts = jiaoyi_store::sqlx::query(
         "SELECT account_id, environment FROM accounts WHERE enabled ORDER BY account_id",
     )
@@ -1957,6 +2051,25 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
     for a in accounts {
         let id: i64 = a.get("account_id");
         let env: String = a.get("environment");
+        let environment = if env == "live" {
+            Environment::Live
+        } else {
+            Environment::Demo
+        };
+        // In memory: every reconcile run and the last quote, recorded or not
+        // (as Strategy 1's).
+        let reconcile_secs = rules(pool, id, environment)
+            .await
+            .ok()
+            .map(|r| r.reconcile_secs);
+        let l = live.get(&id);
+        let liveness = json!({
+            "state": reconcile_secs.map(|s| crate::trading::liveness_state(l, s, Utc::now())),
+            "stalled_after_secs": reconcile_secs.map(|s| 2 * s),
+            "started_at": l.and_then(|l| l.started_at),
+            "last_reconcile_run_at": l.and_then(|l| l.last_reconcile_run_at),
+            "last_quote_at": l.and_then(|l| l.last_quote_at),
+        });
         let rec = ts::latest_decision_detail(pool, id, "s3_reconcile").await?;
         let today = s3s::today(pool, id).await?;
         out.push(json!({
@@ -1971,6 +2084,7 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
             "open_positions": rec.as_ref().map(|(_, d)| d["positions"].clone()).unwrap_or(json!([])),
             "last_reconcile_at": rec.map(|(at, _)| at),
             "today": today,
+            "liveness": liveness,
         }));
     }
     Ok(json!(out))
@@ -2000,6 +2114,41 @@ mod tests {
         max: None,
         digits: 2,
     };
+
+    /// The fixture's entry: a buy at 60,460.00, R 450.00, C 301.208 (TP1
+    /// 1,651.21). Expected closes from the planner's own formula,
+    /// ceil(v × 751.208 / 2,101.21) with a runner of at least 1: self-derived.
+    #[test]
+    fn tp1_s_close_follows_the_volume_held() {
+        let b = PlanBasis {
+            side: Dir::Buy,
+            entry: 60_460.0,
+            r: 450.0,
+            cost: 301.208,
+        };
+        let close = |v| tp1_close_volume(&b, &BTC, v);
+        assert_eq!(close(13), 5, "the planned close");
+        assert_eq!(close(4), 2);
+        assert_eq!(close(2), 1);
+        assert_eq!(close(1), 1, "unsplittable: the whole position");
+        let sell = PlanBasis {
+            side: Dir::Sell,
+            ..b
+        };
+        assert_eq!(tp1_close_volume(&sell, &BTC, 13), 5);
+        let detail = json!({"entry": {"side": "sell", "entry_price": 60_455.0, "r": 450.0,
+                                       "cost": {"total": 301.208}}});
+        assert_eq!(
+            plan_basis(&detail),
+            Some(PlanBasis {
+                side: Dir::Sell,
+                entry: 60_455.0,
+                r: 450.0,
+                cost: 301.208
+            })
+        );
+        assert_eq!(plan_basis(&json!({"entry": {"side": "buy"}})), None);
+    }
 
     #[test]
     fn the_embedded_pre_registration_is_the_file() {

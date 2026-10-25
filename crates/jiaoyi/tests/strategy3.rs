@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use jiaoyi::config::BrokerConfig;
-use jiaoyi::{history, loader, strategy3};
+use jiaoyi::{history, loader, shutdown, strategy3, trading};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::secret::Secret;
 use jiaoyi_core::strategy3::sessions::{rule_for, session_on, Session};
@@ -1122,4 +1122,169 @@ async fn an_unconfirmed_open_found_partly_filled_keeps_its_remainder_reserved(po
         .await
         .unwrap();
     assert!(u.is_empty(), "{u:?}");
+}
+
+/// Run the Strategy 3 loop on `f` for `secs` as the demo account, its
+/// liveness kept in `live`, then stop it.
+async fn run_s3(pool: &PgPool, f: &FakeBroker, secs: u64, live: &trading::LivenessMap) {
+    let (conn, _log) = f.clone().spawn();
+    let session = loader::authorise(pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let mut ends = conn.session_ends();
+    let (trigger, mut stop) = shutdown::channel();
+    let list = allowlist();
+    tokio::select! {
+        r = strategy3::run_session(pool, &list, Environment::Demo, &session, live, &mut ends, &mut stop) => {
+            r.unwrap();
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => trigger.fire(),
+    }
+}
+
+/// As #16 for Strategy 1: Strategy 3's reconcile decision is recorded only
+/// when it changes, so a quiet loop's reconcile runs keep its liveness
+/// advancing, with the recorded decision kept once.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_quiet_strategy_3_loop_keeps_its_reconcile_runs_advancing(pool: PgPool) {
+    loaded(&pool).await;
+    settings::change(
+        &pool,
+        "trading.reconcile_secs",
+        Some(DEMO),
+        Some(json!(30)),
+        "test",
+        "a short interval",
+    )
+    .await
+    .unwrap();
+    let live = trading::LivenessMap::default();
+    run_s3(&pool, &fake((60_455.0, 60_462.0)), 40, &live).await;
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    let (start, ran) = (l.started_at.unwrap(), l.last_reconcile_run_at.unwrap());
+    assert!(
+        ran - start >= Duration::seconds(25),
+        "a second reconcile ran: {l:?}"
+    );
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM trading_decisions WHERE account_id = $1 AND kind = 's3_reconcile'",
+    )
+    .bind(DEMO)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 1, "the unchanged reason is recorded once");
+    let loops = live.lock().unwrap().clone();
+    let h = strategy3::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert_eq!(h[0]["liveness"]["stalled_after_secs"], 60, "{h}");
+    let recorded: DateTime<Utc> =
+        serde_json::from_value(h[0]["last_reconcile_at"].clone()).unwrap();
+    assert!(ran - recorded >= Duration::seconds(25), "{h}");
+}
+
+/// A Strategy 3 loop stopped for more than twice its reconcile interval
+/// reads stalled; its last quote is shown; an account with no loop reads
+/// not running.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_stopped_strategy_3_loop_reads_stalled_after_twice_its_reconcile_interval(pool: PgPool) {
+    loaded(&pool).await;
+    // At the session's open: inside the band, no entry.
+    let f = FakeBroker {
+        quote_sequence: vec![(
+            0,
+            BTC,
+            (
+                Some((OPEN * 100_000.0) as u64),
+                Some(((OPEN + 1.0) * 100_000.0) as u64),
+            ),
+        )],
+        ..fake((60_455.0, 60_462.0))
+    };
+    let live = trading::LivenessMap::default();
+    run_s3(&pool, &f, 2, &live).await;
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    assert!(l.last_quote_at.is_some(), "{l:?}");
+    let loops = live.lock().unwrap().clone();
+    let h = strategy3::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert!(h[0]["liveness"]["last_quote_at"].is_string(), "{h}");
+    let aged = |age: i64| {
+        let mut m = loops.clone();
+        let e = m.get_mut(&DEMO).unwrap();
+        let at = Utc::now() - Duration::seconds(age);
+        e.started_at = Some(at - Duration::seconds(5));
+        e.last_reconcile_run_at = Some(at);
+        m
+    };
+    let h = strategy3::health(&pool, &aged(590)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    let h = strategy3::health(&pool, &aged(610)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "stalled", "{h}");
+    let h = strategy3::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "not running", "{h}");
+}
+
+/// The TP1 closes the fake received.
+fn closes(log: &Arc<Mutex<FakeLog>>) -> Vec<i64> {
+    log.lock()
+        .unwrap()
+        .closes
+        .iter()
+        .map(|c| c.volume)
+        .collect()
+}
+
+/// Enter at 45 minutes on `f`, then quote at TP1 (fill 60,462.00 +
+/// 1,651.21): the TP1 closes sent.
+async fn tp1_after(pool: &PgPool, f: FakeBroker) -> Vec<i64> {
+    let out;
+    with_trader!(pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        assert_eq!(orders(&log)[0].volume, 13);
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+            .await
+            .unwrap();
+        out = closes(&log);
+    });
+    out
+}
+
+/// Codex round-4 P2 on #15: a partial fill too small to split (1 of 13
+/// cents; the plan's close was 5) takes TP1 as a whole-position close, not
+/// none.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_unsplittable_partial_fill_closes_whole_at_tp1(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 1, 60_462.0)],
+        cancel_remainder: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    assert_eq!(tp1_after(&pool, f).await, vec![1]);
+}
+
+/// Codex round-4 P2 on #15: a partial fill of 4 of 13 cents re-plans its TP1
+/// close for 4: ceil(4 × (R + C) / (TP1 + R)) = ceil(4 × 751.208 / 2,101.21)
+/// = 2, a runner of 2 (self-derived from the planner's own formula).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partial_fill_re_plans_its_tp1_close(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 4, 60_462.0)],
+        cancel_remainder: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    assert_eq!(tp1_after(&pool, f).await, vec![2]);
+}
+
+/// A full fill keeps the planned close of 5 of 13 (a guard: main already
+/// does this).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_full_fill_keeps_its_planned_tp1_close(pool: PgPool) {
+    loaded(&pool).await;
+    assert_eq!(tp1_after(&pool, fake((60_455.0, 60_462.0))).await, vec![5]);
 }
