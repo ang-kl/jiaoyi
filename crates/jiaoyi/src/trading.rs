@@ -85,6 +85,10 @@ pub struct Liveness {
     pub started_at: Option<DateTime<Utc>>,
     pub last_reconcile_run_at: Option<DateTime<Utc>>,
     pub last_quote_at: Option<DateTime<Utc>>,
+    /// Each symbol's distance to its entry trigger at its last quote, so "no
+    /// trade" can be told from "cannot trade" (owner-approved plan, 25-10).
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    pub triggers: std::collections::BTreeMap<String, Value>,
 }
 
 /// The accounts' loops, shared by the loops and `/health`.
@@ -136,6 +140,9 @@ pub struct Rules {
     pub trail_amend_secs: u64,
     pub order_wait_secs: u64,
     pub retry_secs: u64,
+    /// The owner's pause of Strategy 1 on this account (`trading.s1_paused`):
+    /// no new entry; open positions keep their exits. Only the owner sets it.
+    pub paused: bool,
 }
 
 pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::Result<Rules> {
@@ -158,6 +165,48 @@ pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::
         trail_amend_secs: i("trading.trail_amend_secs")?.max(1) as u64,
         order_wait_secs: i("trading.order_wait_secs")?.max(1) as u64,
         retry_secs: i("trading.retry_secs")?.max(1) as u64,
+        paused: i(crate::limits::S1.pause_key)? == 1,
+    })
+}
+
+/// A symbol's distance to its Strategy 1 trigger at a quote: the 50-day
+/// level on the side the EMA filter allows, and how far the ask (a long) or
+/// the bid (a short) is from it in ATR, negative once through it. `None`
+/// distance, with the reason, when there are no levels or no quote.
+// Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+pub fn trigger_distance(
+    levels: &Result<Levels, String>,
+    bid: Option<f64>,
+    ask: Option<f64>,
+    at: DateTime<Utc>,
+) -> Value {
+    let l = match levels {
+        Ok(l) => l,
+        Err(why) => {
+            return json!({"at": at, "distance_atr": null, "reason": format!("no levels: {why}")})
+        }
+    };
+    let (price, distance) = match l.side {
+        Some(Side::Buy) => (ask, ask.map(|a| (l.level - a) / l.atr)),
+        Some(Side::Sell) => (bid, bid.map(|b| (b - l.level) / l.atr)),
+        None => (None, None),
+    };
+    json!({
+        "at": at,
+        "filter": l.side.map(|s| s.as_str()),
+        "level": (l.side.is_some()).then_some(l.level),
+        "atr": l.atr,
+        "ema_fast": l.ema_fast,
+        "ema_slow": l.ema_slow,
+        "bid": bid,
+        "ask": ask,
+        "quote": price,
+        "distance_atr": distance.filter(|d| d.is_finite()),
+        "reason": match (l.side, price) {
+            (None, _) => Some("the EMAs are equal: no side allowed"),
+            (_, None) => Some("no quote on the side that triggers"),
+            _ => None,
+        },
     })
 }
 
@@ -700,6 +749,14 @@ pub async fn apply_seed(pool: &PgPool, text: &str) -> anyhow::Result<Vec<String>
         if ts::seed_applied(pool, &c.id).await? {
             continue;
         }
+        // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
+        // "only human can pause trade": a pause entry is applied only as the
+        // owner's word.
+        if crate::limits::PAUSE_KEYS.contains(&c.key.as_str()) && c.changed_by != "owner" {
+            tracing::error!(seed = %c.id, key = %c.key, changed_by = %c.changed_by,
+                "a pause is the owner's alone; refused, not applied");
+            continue;
+        }
         match jiaoyi_store::settings::change(
             pool,
             &c.key,
@@ -776,6 +833,7 @@ pub async fn health(pool: &PgPool, live: &HashMap<i64, Liveness>) -> jiaoyi_stor
             "environment": env,
             "strategy": STRATEGY,
             "trades": match &r {
+                Some(r) if r.paused => "paused by the owner: no new entry".to_string(),
                 Some(r) if r.edge_required && gate != "met" => {
                     "armed: waits for the edge gate".to_string()
                 }
@@ -795,6 +853,10 @@ pub async fn health(pool: &PgPool, live: &HashMap<i64, Liveness>) -> jiaoyi_stor
             "liveness": liveness,
             // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
             "trades_today": ts::s1_trades_today(pool, id).await?,
+            // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+            "performance": crate::limits::health(pool, id, &crate::limits::S1).await.unwrap_or_else(|e| json!({"error": e.to_string()})),
+            "owner_pause": crate::limits::owner_pause(pool, id, &crate::limits::S1).await.unwrap_or_else(|e| json!({"error": e.to_string()})),
+            "trigger_distance": l.map(|l| json!(l.triggers)).unwrap_or(json!({})),
         }));
     }
     Ok(json!(out))
@@ -1436,6 +1498,16 @@ pub async fn run_session(
     beat(live, account_id, |l| {
         l.last_reconcile_run_at = Some(Utc::now())
     });
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
+    // the limits alert; they never pause.
+    crate::limits::check(
+        pool,
+        account_id,
+        &crate::limits::S1,
+        limit_detail(),
+        d.version,
+    )
+    .await?;
     let mut spots = conn.spot_events();
     session.subscribe_spots(&ids).await?;
     let mut reconcile_tick = tokio::time::interval(Duration::from_secs(r0.reconcile_secs));
@@ -1467,6 +1539,7 @@ pub async fn run_session(
                 let rec = reconcile(pool, session, &mut book).await?;
                 note_reconcile(d, rec).await;
                 beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
+                crate::limits::check(pool, account_id, &crate::limits::S1, limit_detail(), d.version).await?;
             }
             _ = levels_tick.tick() => {
                 for id in &ids {
@@ -1505,13 +1578,23 @@ pub async fn run_session(
                     if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0); }
                     let sym = sym.clone();
                     on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut book, &mut tried, trail_amend_secs).await?;
-                    beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
+                    let now = Utc::now();
+                    let distance = trigger_distance(&sym.levels, sym.bid, sym.ask, now);
+                    beat(live, account_id, |l| {
+                        l.last_quote_at = Some(now);
+                        l.triggers.insert(sym.name.clone(), distance);
+                    });
                 }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
             },
         }
     }
+}
+
+/// What Strategy 1's limit decisions carry beside the numbers.
+fn limit_detail() -> Value {
+    json!({"strategy": STRATEGY, "label": LABEL})
 }
 
 struct Ctx<'a, 'c> {
@@ -1723,6 +1806,20 @@ async fn on_quote(
     let detail = json!({"strategy": STRATEGY, "level": l.level, "atr": l.atr,
         "ema_fast": l.ema_fast, "ema_slow": l.ema_slow, "bid": sym.bid, "ask": sym.ask,
         "side": side.as_str(), "after": l.last_completed});
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
+    // the owner's pause ("only human can pause trade"): no new entry, the
+    // signal kept for when the owner lifts it. Exits above are untouched.
+    if r.paused {
+        d.note(
+            Some(name),
+            "paused",
+            "Strategy 1 is paused by the owner on this account (trading.s1_paused): no new entry; open positions keep their exits",
+            detail,
+        )
+        .await;
+        tried.remove(&key);
+        return Ok(());
+    }
     let edge = edge_gate(pool, &r).await?;
     if let Err(why) = &edge {
         d.note(
@@ -1963,6 +2060,7 @@ mod tests {
             trail_amend_secs: 60,
             order_wait_secs: 20,
             retry_secs: 60,
+            paused: false,
         }
     }
 

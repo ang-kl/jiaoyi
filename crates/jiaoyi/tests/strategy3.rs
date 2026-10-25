@@ -1485,3 +1485,248 @@ async fn a_strategy_3_stop_the_broker_executes_is_listed(pool: PgPool) {
     );
     assert!(near(exit.slippage, 3.0), "{exit:?}");
 }
+
+// ---------------------------------------------------------------- limits and the owner's pause
+// Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+
+/// The owner's word on Strategy 3's pause on this account (1 paused, 0 not).
+async fn owner_sets_pause(pool: &PgPool, value: i64) {
+    settings::change(
+        pool,
+        "trading.s3_paused",
+        Some(DEMO),
+        Some(json!(value)),
+        "owner",
+        "owner, in writing (test)",
+    )
+    .await
+    .unwrap();
+}
+
+/// `n` closed Strategy 3 trades of −1R on this account (the gate's $6.00,
+/// the broker's net −$6.00), two days ago.
+async fn closed_losses(pool: &PgPool, code: &str, n: i32) {
+    sqlx::query(
+        "INSERT INTO trading_intents (account_id, entry_key, client_msg_id, kind, symbol_id,
+            side, volume, risk, max_risk)
+         SELECT $1, $2 || ':' || n, 'c-' || $2 || n, 'open', 99, 'buy', 10, 6.0, 100
+         FROM generate_series(1, $3) n",
+    )
+    .bind(DEMO)
+    .bind(code)
+    .bind(n)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO trading_events (account_id, entry_key, client_msg_id, payload_type, kind,
+            position_id, raw, received_at)
+         SELECT $1, $2 || ':' || n, 'c-' || $2 || n, 2126, 'ORDER_FILLED', 900000 + n, '\\x',
+                now() - interval '2 days'
+         FROM generate_series(1, $3) n",
+    )
+    .bind(DEMO)
+    .bind(code)
+    .bind(n)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO deals (account_id, deal_id, order_id, position_id, broker_symbol_id, volume,
+            filled_volume, trade_side, deal_status, created_at, executed_at, money_digits,
+            is_closing, close_gross_profit, close_swap, close_commission, close_money_digits,
+            raw, fetched_at)
+         SELECT $1, 9000000 + 2 * n + c, 9000000 + 2 * n + c, 900000 + n, 99, 10, 10,
+                'BUY', 'FILLED', t, t, 2, c = 1,
+                CASE WHEN c = 1 THEN -560 END, CASE WHEN c = 1 THEN 0 END,
+                CASE WHEN c = 1 THEN -40 END, CASE WHEN c = 1 THEN 2 END, '\\x', now()
+         FROM generate_series(1, $2) n, generate_series(0, 1) c,
+              LATERAL (SELECT now() - interval '2 days' + n * interval '1 minute' + c * interval '10 seconds' AS t) x",
+    )
+    .bind(DEMO)
+    .bind(n)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// Every write of a pause key not made by a migration: (key, by).
+async fn pause_writes(pool: &PgPool) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT key, changed_by FROM settings_changes
+         WHERE key IN ('trading.s1_paused', 'trading.s3_paused') AND changed_by <> 'migration'
+         ORDER BY version",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+/// "only human can pause trade" (owner, 25-10): paused by the owner, a band
+/// break sends nothing and is recorded once; lifted, the next break enters;
+/// paused again, the open position still takes its TP1 and its session-end
+/// close.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_owners_pause_stops_new_entries_and_the_exits_still_run(pool: PgPool) {
+    loaded(&pool).await;
+    owner_sets_pause(&pool, 1).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        // σ(43) = 0.0071667, σ(44) = 0.0073333: the band tops at 60,430.00 and
+        // 60,440.00, so an ask of 60,460.00 breaks it both times.
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(43))
+            .await
+            .unwrap();
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(44))
+            .await
+            .unwrap();
+        assert!(orders(&log).is_empty(), "paused: nothing sent");
+        let d = decisions(&pool).await;
+        let paused: Vec<&(String, String)> = d.iter().filter(|(k, _)| k == "s3_paused").collect();
+        assert_eq!(paused.len(), 1, "recorded once: {d:?}");
+        assert!(paused[0].1.contains("paused by the owner"), "{d:?}");
+        // Lifted by the owner: the next break (a minute on) enters.
+        owner_sets_pause(&pool, 0).await;
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1, "{:?}", decisions(&pool).await);
+        assert_eq!(orders(&log)[0].volume, 13);
+        // Paused again: the position keeps its exits.
+        owner_sets_pause(&pool, 1).await;
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+            .await
+            .unwrap();
+        assert_eq!(closes(&log), vec![5], "TP1 while paused");
+        t.reconcile(Utc::now()).await.unwrap();
+        t.session_end(at(24 * 60)).await.unwrap();
+        assert_eq!(closes(&log), vec![5, 8], "the session end while paused");
+        assert_eq!(orders(&log).len(), 1, "no new entry");
+    });
+    // Only the owner wrote the pause.
+    let w = pause_writes(&pool).await;
+    assert_eq!(w.len(), 3);
+    assert!(
+        w.iter()
+            .all(|(k, by)| k == "trading.s3_paused" && by == "owner"),
+        "{w:?}"
+    );
+    let h = strategy3::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["trades"], "paused by the owner: no new entry");
+    assert_eq!(h[0]["owner_pause"]["paused"], true);
+    assert_eq!(h[0]["owner_pause"]["changed_by"], "owner");
+}
+
+/// A limit reached is an alert: recorded, on /health, and Strategy 3 keeps
+/// trading. Nothing pauses it.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_limit_reached_is_flagged_and_strategy_3_keeps_trading(pool: PgPool) {
+    loaded(&pool).await;
+    closed_losses(&pool, "s3:old", 10).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        // The reconcile above checked the limits.
+        let d = decisions(&pool).await;
+        let reached: Vec<&(String, String)> =
+            d.iter().filter(|(k, _)| k == "s3_limit_reached").collect();
+        assert_eq!(reached.len(), 1, "{d:?}");
+        assert!(reached[0].1.contains("owner's decision needed"));
+        t.reconcile(Utc::now()).await.unwrap();
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(
+            orders(&log).len(),
+            1,
+            "still trading: {:?}",
+            decisions(&pool).await
+        );
+    });
+    let d = decisions(&pool).await;
+    assert_eq!(
+        d.iter().filter(|(k, _)| k == "s3_limit_reached").count(),
+        1,
+        "once"
+    );
+    assert!(pause_writes(&pool).await.is_empty(), "nothing paused");
+    let h = strategy3::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["trades"], "yes");
+    assert_eq!(h[0]["performance"]["owner_decision_needed"], true);
+    assert_eq!(
+        h[0]["performance"]["limit_reached"][0]["limit"],
+        "drawdown_r"
+    );
+    assert_eq!(h[0]["performance"]["closed_trades"], 10);
+}
+
+/// How near each symbol is to its trigger: the band now, the quote, and the
+/// nearer side's distance to its edge in half-widths (negative once
+/// through it); none, with the reason, outside the entry window.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_distance_to_the_trigger_is_shown_inside_outside_and_out_of_the_window(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        let read = |t: &strategy3::Trader| t.live.lock().unwrap()[&DEMO].triggers["BTCUSD"].clone();
+        // At 45 minutes the band is 59,550.00 – 60,450.00 (half-width 450.00).
+        t.on_quote(BTC, Some(60_435.0), Some(60_440.0), at(45))
+            .await
+            .unwrap();
+        let x = read(&t);
+        assert!(
+            (x["upper"].as_f64().unwrap() - 60_450.0).abs() < 1e-6,
+            "{x}"
+        );
+        assert!(
+            (x["lower"].as_f64().unwrap() - 59_550.0).abs() < 1e-6,
+            "{x}"
+        );
+        assert!((x["sigma"].as_f64().unwrap() - 0.0075).abs() < 1e-12, "{x}");
+        assert_eq!(x["nearer_edge"], "upper");
+        // (60,450 − 60,440) / 450 = 0.0222: inside, no order.
+        let d = x["distance_half_widths"].as_f64().unwrap();
+        assert!((d - 10.0 / 450.0).abs() < 1e-9, "{x}");
+        assert!(orders(&log).is_empty());
+        // Through the upper edge: negative, and the order is sent.
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let x = read(&t);
+        let d = x["distance_half_widths"].as_f64().unwrap();
+        assert!((d + 10.0 / 450.0).abs() < 1e-9, "{x}");
+        assert_eq!(orders(&log).len(), 1);
+        // Near the lower edge: the bid's distance, the lower edge.
+        t.on_quote(BTC, Some(59_640.0), Some(59_645.0), at(45))
+            .await
+            .unwrap();
+        let x = read(&t);
+        assert_eq!(x["nearer_edge"], "lower");
+        assert!(
+            (x["distance_half_widths"].as_f64().unwrap() - 0.2).abs() < 1e-9,
+            "{x}"
+        );
+        // Out of the window: none, with the reason.
+        t.on_quote(BTC, Some(70_000.0), Some(70_005.0), at(29))
+            .await
+            .unwrap();
+        let x = read(&t);
+        assert_eq!(x["distance_half_widths"], serde_json::Value::Null);
+        assert!(
+            x["reason"].as_str().unwrap().contains("first 30 minutes"),
+            "{x}"
+        );
+        t.on_quote(BTC, Some(70_000.0), Some(70_005.0), at(24 * 60 - 30))
+            .await
+            .unwrap();
+        let x = read(&t);
+        assert_eq!(x["distance_half_widths"], serde_json::Value::Null);
+        assert!(
+            x["reason"].as_str().unwrap().contains("last 30 minutes"),
+            "{x}"
+        );
+        // /health carries it from the loops' map.
+        let live = t.live.lock().unwrap().clone();
+        let h = strategy3::health(&pool, &live).await.unwrap();
+        assert_eq!(h[0]["trigger_distance"]["BTCUSD"], x);
+    });
+}

@@ -871,3 +871,235 @@ pub async fn orders(pool: &PgPool, q: &OrdersQuery) -> Result<Vec<OrderView>, sq
     out.truncate(q.limit.max(0) as usize);
     Ok(out)
 }
+
+// ---------------------------------------------------------------- performance
+
+// Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+
+/// One closed position of a strategy, in R: the broker's net money for it
+/// over the risk the gate recorded for its open.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ClosedTrade {
+    pub entry_key: String,
+    pub position_id: i64,
+    pub closed_at: DateTime<Utc>,
+    pub r: f64,
+}
+
+/// A position's deal, as the history sync stores it (table `deals`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DealMoney {
+    pub is_closing: bool,
+    pub filled_volume: i64,
+    pub executed_at: DateTime<Utc>,
+    pub money_digits: Option<i32>,
+    pub close_gross_profit: Option<i64>,
+    pub close_swap: Option<i64>,
+    pub close_commission: Option<i64>,
+    pub close_pnl_conversion_fee: Option<i64>,
+    pub close_money_digits: Option<i32>,
+}
+
+/// A position's net money in the deposit currency from its deals, when it
+/// is closed (the closing deals' volume reaches the opening deals'): each
+/// closing deal's gross profit + swap − |commission| − |P&L conversion fee|,
+/// at its close money digits.
+///
+/// The closing deal's commission is both sides of the closed volume: on the
+/// owner's broker the balance moves by the closing deal's net and not at the
+/// open (measured on 47790949, bot-trade `commission-terms.js`
+/// `CLOSING_DEAL_SIDES`), so the opening deal's commission is not taken
+/// again. Commissions and fees are costs whatever their sign in the feed (as
+/// `research::commission_per_unit` reads them). Returns (opened volume,
+/// closed at, net money), or `Err(why)` when it is open or a money field is
+/// missing.
+pub fn position_money(deals: &[DealMoney]) -> Result<(i64, DateTime<Utc>, f64), String> {
+    let opened: i64 = deals
+        .iter()
+        .filter(|d| !d.is_closing)
+        .map(|d| d.filled_volume)
+        .sum();
+    let closed: i64 = deals
+        .iter()
+        .filter(|d| d.is_closing)
+        .map(|d| d.filled_volume)
+        .sum();
+    if opened <= 0 {
+        return Err("no opening deal stored yet".into());
+    }
+    if closed < opened {
+        return Err("still open".into());
+    }
+    let mut net = 0.0;
+    let mut closed_at = None;
+    for d in deals {
+        if d.is_closing {
+            let digits = d
+                .close_money_digits
+                .or(d.money_digits)
+                .ok_or("a closing deal has no money digits")?;
+            let unit = 10f64.powi(digits);
+            let gross = d
+                .close_gross_profit
+                .ok_or("a closing deal has no gross profit")?;
+            net += (gross + d.close_swap.unwrap_or(0)) as f64 / unit;
+            net -= d.close_commission.unwrap_or(0).abs() as f64 / unit;
+            net -= d.close_pnl_conversion_fee.unwrap_or(0).abs() as f64 / unit;
+            closed_at = closed_at.max(Some(d.executed_at));
+        }
+    }
+    Ok((opened, closed_at.ok_or("no closing deal")?, net))
+}
+
+/// A strategy's closed positions on an account, oldest close first, in net
+/// R, and how many closed positions could not be measured (no recorded risk,
+/// or a money field missing). `prefix`: the strategy's open entry keys
+/// (`s1:` or `s3:`). A position belongs to the open whose fill events name
+/// it; its risk is the gate's for the whole requested volume, scaled by the
+/// filled share.
+pub async fn closed_trades(
+    pool: &PgPool,
+    account_id: i64,
+    prefix: &str,
+) -> Result<(Vec<ClosedTrade>, usize), sqlx::Error> {
+    let opens = sqlx::query(
+        "SELECT DISTINCT ON (e.position_id) i.entry_key, e.position_id, i.volume, i.risk
+         FROM trading_intents i
+         JOIN trading_events e ON e.entry_key = i.entry_key
+         WHERE i.account_id = $1 AND i.kind = 'open' AND i.entry_key LIKE $2 || '%'
+           AND e.account_id = $1 AND e.position_id IS NOT NULL AND e.kind = ANY($3)
+         ORDER BY e.position_id, i.id",
+    )
+    .bind(account_id)
+    .bind(prefix)
+    .bind(FILL_KINDS)
+    .fetch_all(pool)
+    .await?;
+    let mut out = Vec::new();
+    let mut unmeasured = 0;
+    for o in opens {
+        let position_id: i64 = o.get("position_id");
+        let deals: Vec<DealMoney> = sqlx::query(
+            "SELECT is_closing, filled_volume, executed_at, money_digits,
+                    close_gross_profit, close_swap, close_commission, close_pnl_conversion_fee,
+                    close_money_digits
+             FROM deals WHERE account_id = $1 AND position_id = $2 AND filled_volume > 0
+             ORDER BY executed_at, deal_id",
+        )
+        .bind(account_id)
+        .bind(position_id)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|d| DealMoney {
+            is_closing: d.get("is_closing"),
+            filled_volume: d.get("filled_volume"),
+            executed_at: d.get("executed_at"),
+            money_digits: d.get("money_digits"),
+            close_gross_profit: d.get("close_gross_profit"),
+            close_swap: d.get("close_swap"),
+            close_commission: d.get("close_commission"),
+            close_pnl_conversion_fee: d.get("close_pnl_conversion_fee"),
+            close_money_digits: d.get("close_money_digits"),
+        })
+        .collect();
+        let (opened, closed_at, net) = match position_money(&deals) {
+            Ok(x) => x,
+            Err(why) if why == "still open" || why == "no opening deal stored yet" => continue,
+            Err(_) => {
+                unmeasured += 1;
+                continue;
+            }
+        };
+        let requested: Option<i64> = o.get("volume");
+        let risk: Option<f64> = o.get("risk");
+        let share = match requested {
+            Some(v) if v > 0 => (opened as f64 / v as f64).min(1.0),
+            _ => 1.0,
+        };
+        match risk.map(|r| r * share) {
+            Some(r) if r.is_finite() && r > 0.0 => out.push(ClosedTrade {
+                entry_key: o.get("entry_key"),
+                position_id,
+                closed_at,
+                r: net / r,
+            }),
+            _ => unmeasured += 1,
+        }
+    }
+    out.sort_by(|a, b| {
+        a.closed_at
+            .cmp(&b.closed_at)
+            .then(a.position_id.cmp(&b.position_id))
+    });
+    Ok((out, unmeasured))
+}
+
+/// A strategy's results on an account, in R only (no money).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Performance {
+    pub trades: usize,
+    /// Closed positions that could not be measured (not counted above).
+    pub unmeasured: usize,
+    pub net_r: f64,
+    /// Σ winning R ÷ |Σ losing R|; `None` with no losing trade.
+    pub profit_factor: Option<f64>,
+    /// The largest peak-to-trough fall of cumulative R (the peak starts at 0).
+    pub max_drawdown_r: f64,
+    /// The fall from the highest cumulative R so far to the last.
+    pub current_drawdown_r: f64,
+    pub last_closed_at: Option<DateTime<Utc>>,
+}
+
+/// The results of closed trades, oldest first.
+pub fn summarize(trades: &[ClosedTrade], unmeasured: usize) -> Performance {
+    let (mut cum, mut peak, mut max_dd) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut win, mut loss) = (0.0f64, 0.0f64);
+    for t in trades {
+        cum += t.r;
+        peak = peak.max(cum);
+        max_dd = max_dd.max(peak - cum);
+        if t.r > 0.0 {
+            win += t.r;
+        } else {
+            loss += -t.r;
+        }
+    }
+    Performance {
+        trades: trades.len(),
+        unmeasured,
+        net_r: cum,
+        profit_factor: (loss > 0.0).then(|| win / loss),
+        max_drawdown_r: max_dd,
+        current_drawdown_r: peak - cum,
+        last_closed_at: trades.last().map(|t| t.closed_at),
+    }
+}
+
+/// A strategy's results on an account (`strategy`: `s1` or `s3`).
+pub async fn performance(
+    pool: &PgPool,
+    account_id: i64,
+    strategy: &str,
+) -> Result<Performance, sqlx::Error> {
+    let (trades, unmeasured) = closed_trades(pool, account_id, &format!("{strategy}:")).await?;
+    Ok(summarize(&trades, unmeasured))
+}
+
+/// The latest limit decision of a strategy on an account (`kinds`: its
+/// reached and cleared kinds): its kind and detail.
+pub async fn latest_limit_decision(
+    pool: &PgPool,
+    account_id: i64,
+    kinds: &[&str],
+) -> Result<Option<(String, Value)>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT kind, detail FROM trading_decisions
+         WHERE account_id = $1 AND kind = ANY($2) ORDER BY id DESC LIMIT 1",
+    )
+    .bind(account_id)
+    .bind(kinds)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| (r.get("kind"), r.get("detail"))))
+}

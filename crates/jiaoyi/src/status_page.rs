@@ -124,6 +124,11 @@ fn pill(state: &str) -> String {
         "ok" | "listed" | "done" | "measured" | "trading" | "alive" => "good",
         // A live account trading with its edge gate lifted, and by whom.
         s if s.starts_with("trading (") => "good",
+        // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+        "within limits" => "good",
+        s if s.starts_with("paused by the owner") => "warn",
+        "PAUSED by the owner" => "warn",
+        "LIMIT REACHED: owner's decision needed" => "bad",
         "partial" | "pending" | "running" | "unread" | "starting" => "warn",
         "failed" | "refused" | "not_listed" | "environment_mismatch" | "stalled" => "bad",
         _ => "neutral",
@@ -147,6 +152,158 @@ fn loop_cell(live: &Value) -> String {
 
 fn rows(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
+}
+
+/// Each account's results in R, its limit alert and the owner's pause, for
+/// a strategy's section (Strategy 1's and Strategy 3's alike). The limits
+/// alert; only the owner pauses. R only, no money.
+// Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+fn performance_table(accounts: &[Value]) -> String {
+    let mut h = String::from(
+        r#"<h3>Performance and limits</h3><div class="scroll"><table><thead><tr><th>Account</th><th class="num">Closed trades</th><th class="num">Net R</th><th class="num">Profit factor</th><th class="num">Drawdown R (largest · now)</th><th>Limits</th><th>Owner's pause</th></tr></thead><tbody>"#,
+    );
+    if accounts.is_empty() {
+        h.push_str(r#"<tr><td colspan="7" class="empty">No account recorded yet.</td></tr>"#);
+    }
+    for a in accounts {
+        let p = &a["performance"];
+        let limits = if let Some(e) = p["error"].as_str() {
+            format!(
+                r#"{}<div class="note">{}</div>"#,
+                pill("unread"),
+                esc(&short(e, 160))
+            )
+        } else if p["owner_decision_needed"].as_bool() == Some(true) {
+            let what = rows(&p["limit_reached"])
+                .iter()
+                .map(|x| {
+                    format!(
+                        "{} {} (limit {})",
+                        txt(&x["limit"]),
+                        num(&x["value"], 2),
+                        txt(&x["threshold"])
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            format!(
+                r#"{}<div class="note">{what}. Trading continues; only the owner pauses.</div>"#,
+                pill("LIMIT REACHED: owner's decision needed")
+            )
+        } else if p.is_object() {
+            let pf = match p["to_limits"]["pf_margin"].as_f64() {
+                Some(m) => format!("profit factor {m:.2} above its floor"),
+                None => format!(
+                    "profit factor judged after {} more closed trade(s)",
+                    txt(&p["to_limits"]["pf_trades_to_judge"])
+                ),
+            };
+            format!(
+                r#"{}<div class="note">{} R of drawdown room; {pf}</div>"#,
+                pill("within limits"),
+                num(&p["to_limits"]["drawdown_room_r"], 2),
+            )
+        } else {
+            "—".into()
+        };
+        let o = &a["owner_pause"];
+        let pause = match o["paused"].as_bool() {
+            Some(true) => format!(
+                r#"{}<div class="note">by {} at {}: {}</div>"#,
+                pill("PAUSED by the owner"),
+                txt(&o["changed_by"]),
+                txt(&o["changed_at"]),
+                esc(&short(o["reason"].as_str().unwrap_or("—"), 160)),
+            ),
+            Some(false) => "not paused".into(),
+            None => "—".into(),
+        };
+        let unmeasured = match p["unmeasured"].as_u64() {
+            Some(n) if n > 0 => format!(r#"<div class="note">{n} not measured</div>"#),
+            _ => String::new(),
+        };
+        h.push_str(&format!(
+            "<tr><td class=\"mono\">{}</td><td class=\"num\">{}{unmeasured}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{} · {}</td><td>{limits}</td><td>{pause}</td></tr>",
+            txt(&a["account_id"]),
+            txt(&p["closed_trades"]),
+            num(&p["net_r"], 2),
+            num(&p["profit_factor"], 2),
+            num(&p["max_drawdown_r"], 2),
+            num(&p["current_drawdown_r"], 2),
+        ));
+    }
+    h.push_str("</tbody></table></div>");
+    h
+}
+
+/// A distance to a trigger, or why there is none.
+fn distance_cell(d: &Value, reason: &Value) -> String {
+    match d.as_f64() {
+        Some(_) => num(d, 2),
+        None => format!(r#"—<div class="note">{}</div>"#, txt(reason)),
+    }
+}
+
+/// Strategy 1's distance to each symbol's trigger at its last quote: the
+/// 50-day level on the side the EMA filter allows, and the quote's distance
+/// to it in ATR (negative once through it).
+fn s1_trigger_table(accounts: &[Value]) -> String {
+    let mut h = String::from(
+        r#"<h3>Distance to trigger</h3><p class="note">At each symbol's last quote: the 50-day level on the side the EMA filter allows, and how far the ask (long) or bid (short) is from it in ATR. Negative means through it.</p><div class="scroll"><table><thead><tr><th>Account</th><th>Symbol</th><th>Filter</th><th class="num">50-day level</th><th class="num">ATR</th><th class="num">Quote</th><th class="num">Distance (ATR)</th><th>At</th></tr></thead><tbody>"#,
+    );
+    let mut any = false;
+    for a in accounts {
+        for (symbol, t) in a["trigger_distance"].as_object().into_iter().flatten() {
+            any = true;
+            h.push_str(&format!(
+                "<tr><td class=\"mono\">{}</td><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"mono\">{}</td></tr>",
+                txt(&a["account_id"]),
+                esc(symbol),
+                txt(&t["filter"]),
+                txt(&t["level"]),
+                num(&t["atr"], 5),
+                txt(&t["quote"]),
+                distance_cell(&t["distance_atr"], &t["reason"]),
+                txt(&t["at"]),
+            ));
+        }
+    }
+    if !any {
+        h.push_str(r#"<tr><td colspan="8" class="empty">No quote processed yet.</td></tr>"#);
+    }
+    h.push_str("</tbody></table></div>");
+    h
+}
+
+/// Strategy 3's distance to each symbol's trigger at its last quote: the
+/// noise band then, the bid and ask, and the nearer side's distance to its
+/// edge in half-widths (open × σ), negative once through it; or why there
+/// is none (outside the entry window, no band).
+fn s3_trigger_table(a: &Value) -> String {
+    let mut h = String::from(
+        r#"<div class="scroll"><table><thead><tr><th>Symbol</th><th class="num">Band lower</th><th class="num">Band upper</th><th class="num">σ</th><th class="num">Bid</th><th class="num">Ask</th><th>Nearer edge</th><th class="num">Distance (half-widths)</th><th>At</th></tr></thead><tbody>"#,
+    );
+    let mut any = false;
+    for (symbol, t) in a["trigger_distance"].as_object().into_iter().flatten() {
+        any = true;
+        h.push_str(&format!(
+            "<tr><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"mono\">{}</td></tr>",
+            esc(symbol),
+            num(&t["lower"], 5),
+            num(&t["upper"], 5),
+            num(&t["sigma"], 5),
+            txt(&t["bid"]),
+            txt(&t["ask"]),
+            txt(&t["nearer_edge"]),
+            distance_cell(&t["distance_half_widths"], &t["reason"]),
+            txt(&t["at"]),
+        ));
+    }
+    if !any {
+        h.push_str(r#"<tr><td colspan="9" class="empty">No quote processed yet.</td></tr>"#);
+    }
+    h.push_str("</tbody></table></div>");
+    h
 }
 
 /// The page, from the `/health`, `/research/jobs` and `/research/trials`
@@ -326,6 +483,9 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
         ));
     }
     h.push_str("</tbody></table></div>");
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    h.push_str(&performance_table(trading));
+    h.push_str(&s1_trigger_table(trading));
     // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
     // Strategy 1's trades today, the same columns as Strategy 3's, and every order.
     h.push_str(r#"<h3>Trades today</h3><div class="scroll"><table><thead><tr><th>Account</th><th>Time</th><th>Symbol</th><th>Order</th><th>Side</th><th>Outcome</th><th class="num">Price</th><th class="num">Volume</th><th class="num">Order to fill (ms)</th><th class="num">Slippage</th></tr></thead><tbody>"#);
@@ -358,6 +518,10 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             esc(&short(first["prereg_hash"].as_str().unwrap_or("—"), 12)),
             txt(&first["label"]),
         ));
+    }
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    if !s3.is_empty() {
+        h.push_str(&performance_table(s3));
     }
     for a in s3 {
         let positions = rows(&a["open_positions"]);
@@ -395,6 +559,9 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             loop_cell(&a["liveness"]),
             if counts.is_empty() { "none".to_string() } else { counts },
         ));
+        // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+        h.push_str(r#"<p class="note">Distance to trigger, at each symbol's last quote (negative means through the band's edge):</p>"#);
+        h.push_str(&s3_trigger_table(a));
         h.push_str(r#"<div class="scroll"><table><thead><tr><th>Time</th><th>Symbol</th><th>Order</th><th>Side</th><th>Outcome</th><th class="num">Price</th><th class="num">Volume</th><th class="num">Order to fill (ms)</th><th class="num">Slippage</th></tr></thead><tbody>"#);
         let trades = rows(&a["today"]["trades_today"]);
         if trades.is_empty() {
@@ -719,6 +886,82 @@ mod tests {
             ),
             "{p}"
         );
+    }
+
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    #[test]
+    fn both_strategies_show_results_limit_alerts_the_owners_pause_and_trigger_distance() {
+        let now = "2026-10-25T08:00:00Z".parse().unwrap();
+        let hit = json!({"closed_trades": 50, "unmeasured": 1, "net_r": -12.5, "profit_factor": 0.7,
+            "max_drawdown_r": 11.5, "current_drawdown_r": 11.0,
+            "to_limits": {"drawdown_room_r": -1.5, "pf_trades_to_judge": 0, "pf_margin": -0.1},
+            "limit_reached": [{"limit": "drawdown_r", "value": 11.5, "threshold": 10.0},
+                              {"limit": "profit_factor", "value": 0.7, "threshold": 0.8}],
+            "owner_decision_needed": true});
+        let ok = json!({"closed_trades": 3, "unmeasured": 0, "net_r": 1.2, "profit_factor": 2.0,
+            "max_drawdown_r": 1.0, "current_drawdown_r": 0.0,
+            "to_limits": {"drawdown_room_r": 9.0, "pf_trades_to_judge": 47, "pf_margin": null},
+            "limit_reached": null, "owner_decision_needed": false});
+        let h = json!({
+            "trading": [{"account_id": 46130058, "environment": "demo",
+                "trades": "paused by the owner: no new entry", "performance": hit,
+                "owner_pause": {"paused": true, "changed_by": "owner",
+                    "changed_at": "2026-10-25T07:00:00Z", "reason": "owner: pause <b>S1</b>"},
+                "trigger_distance": {
+                    "BTCUSD": {"at": "2026-10-25T07:59:00Z", "filter": "buy", "level": 68000.0,
+                        "atr": 1500.0, "quote": 67250.0, "distance_atr": 0.5, "reason": null},
+                    "XAUUSD": {"at": "2026-10-25T07:59:30Z", "distance_atr": null,
+                        "reason": "no levels: fewer than 120 completed days"}}}],
+            "strategy3": [{"account_id": 49236051, "environment": "demo", "performance": ok,
+                "owner_pause": {"paused": false},
+                "trigger_distance": {
+                    "BTCUSD": {"at": "2026-10-25T07:58:00Z", "lower": 59550.0, "upper": 60450.0,
+                        "sigma": 0.0075, "bid": 60435.0, "ask": 60440.0, "nearer_edge": "upper",
+                        "distance_half_widths": 0.0222, "reason": null},
+                    "ETHUSD": {"at": "2026-10-25T07:58:00Z", "distance_half_widths": null,
+                        "reason": "the lunch break"}},
+                "today": {"trades_today": []}}],
+        });
+        let p = page(&h, &json!({}), &json!({}), now);
+        assert!(p.contains("<h3>Performance and limits</h3>"), "{p}");
+        // The alert, its numbers, and that only the owner pauses.
+        assert!(
+            p.contains(
+                r#"<span class="pill bad">LIMIT REACHED: owner&#39;s decision needed</span>"#
+            ),
+            "{p}"
+        );
+        assert!(p.contains("drawdown_r 11.50 (limit 10.0); profit_factor 0.70 (limit 0.8). Trading continues; only the owner pauses."), "{p}");
+        assert!(
+            p.contains(">50<div class=\"note\">1 not measured</div>"),
+            "{p}"
+        );
+        assert!(
+            p.contains(">-12.50<") && p.contains(">11.50 · 11.00<"),
+            "{p}"
+        );
+        // The owner's pause, by whom and why, escaped.
+        assert!(p.contains(r#"<span class="pill warn">PAUSED by the owner</span><div class="note">by owner at 2026-10-25T07:00:00Z: owner: pause &lt;b&gt;S1&lt;/b&gt;</div>"#), "{p}");
+        assert!(
+            p.contains(r#"<span class="pill warn">paused by the owner: no new entry</span>"#),
+            "{p}"
+        );
+        // Within the limits: the room left and when the profit factor is judged.
+        assert!(p.contains(r#"<span class="pill good">within limits</span><div class="note">9.00 R of drawdown room; profit factor judged after 47 more closed trade(s)</div>"#), "{p}");
+        assert!(p.contains("not paused"));
+        // The distance to each trigger, or why there is none.
+        assert!(p.contains("<h3>Distance to trigger</h3>"));
+        assert!(p.contains(r#"<td>BTCUSD</td><td>buy</td><td class="num">68000.0</td><td class="num">1500.00000</td><td class="num">67250.0</td><td class="num">0.50</td>"#), "{p}");
+        assert!(
+            p.contains("no levels: fewer than 120 completed days"),
+            "{p}"
+        );
+        assert!(p.contains(r#"<td>BTCUSD</td><td class="num">59550.00000</td><td class="num">60450.00000</td><td class="num">0.00750</td><td class="num">60435.0</td><td class="num">60440.0</td><td>upper</td><td class="num">0.02</td>"#), "{p}");
+        assert!(
+            p.contains(r#"—<div class="note">the lunch break</div>"#),
+            "{p}"
+        );
+        assert!(!p.to_lowercase().contains("balance"));
     }
 
     #[test]

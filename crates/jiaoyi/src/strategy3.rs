@@ -108,6 +108,10 @@ pub struct Rules {
     pub reconcile_secs: u64,
     pub order_wait_secs: u64,
     pub retry_secs: u64,
+    /// The owner's pause of Strategy 3 on this account (`trading.s3_paused`):
+    /// no new entry; open positions keep their exits. Only the owner sets it.
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    pub paused: bool,
 }
 
 pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::Result<Rules> {
@@ -124,6 +128,60 @@ pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::
         reconcile_secs: i("trading.reconcile_secs")?.max(1) as u64,
         order_wait_secs: i("trading.order_wait_secs")?.max(1) as u64,
         retry_secs: i("trading.retry_secs")?.max(1) as u64,
+        paused: i(crate::limits::S3.pause_key)? == 1,
+    })
+}
+
+/// A symbol's distance to its Strategy 3 trigger at `now`: the band at that
+/// instant, the last bid and ask, and the distance from the nearer side's
+/// quote to its edge (the ask to the upper, the bid to the lower) in
+/// half-widths (open × σ), negative once through it. `null`, with the
+/// reason, outside the entry window or without a prepared session.
+// Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
+    let none = |why: &str| json!({"at": now, "bid": sym.bid, "ask": sym.ask, "distance_half_widths": null, "reason": why});
+    let Some(rule) = sym.rule else {
+        return none("no session rule for this symbol");
+    };
+    let Some(s) = sessions::session_at(&rule, now) else {
+        return none("outside the symbol's session");
+    };
+    if let Err(why) = band::entry_window(&s, now) {
+        return none(&why);
+    }
+    let day = match &sym.day {
+        Some(Ok(d)) if d.session.date == s.date => d,
+        _ => return none("today's session is not prepared yet"),
+    };
+    let open = match &day.open {
+        Ok(o) => *o,
+        Err(why) => return none(why),
+    };
+    let b = match band::band_at(&day.table, &s, open, now) {
+        Ok(b) => b,
+        Err(why) => return none(&why),
+    };
+    let up = sym.ask.map(|a| (b.upper - a) / b.half_width);
+    let down = sym.bid.map(|x| (x - b.lower) / b.half_width);
+    let (edge, distance) = match (up, down) {
+        (Some(u), Some(d)) if u <= d => ("upper", Some(u)),
+        (Some(_), Some(d)) => ("lower", Some(d)),
+        (Some(u), None) => ("upper", Some(u)),
+        (None, Some(d)) => ("lower", Some(d)),
+        (None, None) => ("none", None),
+    };
+    json!({
+        "at": now,
+        "session_date": s.date,
+        "open": open,
+        "sigma": b.sigma,
+        "upper": b.upper,
+        "lower": b.lower,
+        "bid": sym.bid,
+        "ask": sym.ask,
+        "nearer_edge": edge,
+        "distance_half_widths": distance.filter(|d| d.is_finite()),
+        "reason": if distance.is_none() { Some("no quote yet") } else { None },
     })
 }
 
@@ -873,6 +931,16 @@ impl<'a, 'c> Trader<'a, 'c> {
         crate::trading::beat(&self.live, account_id, |l| {
             l.last_reconcile_run_at = Some(Utc::now())
         });
+        // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
+        // the limits alert; they never pause.
+        crate::limits::check(
+            self.pool,
+            account_id,
+            &crate::limits::S3,
+            json!({"strategy": STRATEGY, "label": LABEL, "prereg_hash": self.hash}),
+            self.d.version,
+        )
+        .await?;
         Ok(())
     }
 
@@ -1088,6 +1156,27 @@ impl<'a, 'c> Trader<'a, 'c> {
             sym.ask = ask;
         }
         let (bid, ask) = (sym.bid, sym.ask);
+        let reacted = self.react(symbol_id, bid, ask, now).await;
+        // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
+        // the distance to the trigger, after the quote is acted on (so a
+        // session this quote prepared is shown).
+        if let Some(sym) = self.syms.get(&symbol_id) {
+            let (distance, name) = (trigger_distance(sym, now), sym.name.clone());
+            crate::trading::beat(&self.live, self.account_id(), |l| {
+                l.triggers.insert(name, distance);
+            });
+        }
+        reacted
+    }
+
+    /// A quote's action: TP1 for this symbol's positions, or an entry.
+    async fn react(
+        &mut self,
+        symbol_id: i64,
+        bid: Option<f64>,
+        ask: Option<f64>,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
         let positions: Vec<i64> = self
             .own
             .values()
@@ -1528,6 +1617,23 @@ impl<'a, 'c> Trader<'a, 'c> {
         detail["quote_to_deposit"] = json!(rate);
         let r = rules(self.pool, self.account_id(), self.env).await?;
         self.d.version = Some(r.version);
+        // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
+        // the owner's pause ("only human can pause trade"): no new entry. TP1,
+        // the session end and the broker's stop and take-profit are untouched.
+        if r.paused {
+            if let Some(s) = self.syms.get_mut(&symbol_id) {
+                s.last_try = Some(now);
+            }
+            self.d
+                .note(
+                    Some(&name),
+                    "paused",
+                    "Strategy 3 is paused by the owner on this account (trading.s3_paused): no new entry; open positions keep their exits",
+                    detail,
+                )
+                .await;
+            return Ok(());
+        }
         // Claude · № 17,020 25-Oct (Codex P1 on #15): a live entry is one
         // broker minimum, admitted account-wide (both strategies' loops) from
         // fresh broker state; the account's lock is held through the send.
@@ -1988,10 +2094,8 @@ pub async fn health(
         };
         // In memory: every reconcile run and the last quote, recorded or not
         // (as Strategy 1's).
-        let reconcile_secs = rules(pool, id, environment)
-            .await
-            .ok()
-            .map(|r| r.reconcile_secs);
+        let r = rules(pool, id, environment).await.ok();
+        let reconcile_secs = r.as_ref().map(|r| r.reconcile_secs);
         let l = live.get(&id);
         let liveness = json!({
             "state": reconcile_secs.map(|s| crate::trading::liveness_state(l, s, Utc::now())),
@@ -2007,7 +2111,7 @@ pub async fn health(
             "environment": env,
             "strategy": STRATEGY,
             "label": LABEL,
-            "trades": "yes",
+            "trades": if r.as_ref().is_some_and(|r| r.paused) { "paused by the owner: no new entry" } else { "yes" },
             "sizing": if env == "live" { "one broker-minimum trade at a time" } else { "risk_pct of fresh equity" },
             "prereg_file": PREREG_FILE,
             "prereg_hash": prereg_hash(),
@@ -2015,6 +2119,10 @@ pub async fn health(
             "last_reconcile_at": rec.map(|(at, _)| at),
             "today": today,
             "liveness": liveness,
+            // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+            "performance": crate::limits::health(pool, id, &crate::limits::S3).await.unwrap_or_else(|e| json!({"error": e.to_string()})),
+            "owner_pause": crate::limits::owner_pause(pool, id, &crate::limits::S3).await.unwrap_or_else(|e| json!({"error": e.to_string()})),
+            "trigger_distance": l.map(|l| json!(l.triggers)).unwrap_or(json!({})),
         }));
     }
     Ok(json!(out))
@@ -2035,6 +2143,7 @@ mod tests {
             reconcile_secs: 300,
             order_wait_secs: 20,
             retry_secs: 60,
+            paused: false,
         }
     }
 

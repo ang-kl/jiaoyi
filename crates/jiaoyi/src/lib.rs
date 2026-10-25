@@ -8,6 +8,7 @@ pub mod edge;
 pub mod fills;
 pub mod history;
 pub mod http;
+pub mod limits;
 pub mod loader;
 pub mod recorder;
 pub mod report;
