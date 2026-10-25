@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 /// The JSON routes, linked from the page.
-pub const ROUTES: [(&str, &str); 7] = [
+pub const ROUTES: [(&str, &str); 8] = [
     (
         "/health",
         "service health, token grants, last loads, tick recorders",
@@ -34,13 +34,47 @@ pub const ROUTES: [(&str, &str); 7] = [
     ),
     (
         "/trading/costs",
-        "Strategy 3's actual costs and order-to-fill times from its fills (no money)",
+        "each strategy's actual costs and order-to-fill times from its fills (no money)",
+    ),
+    (
+        "/trading/orders?account=…&strategy=s1|s3&since=…&limit=…",
+        "every Strategy 1 and Strategy 3 order: outcome, fill, position, costs and its decision (no money)",
     ),
     (
         "/research/bars?account=…&symbol=…&from=…&to=…",
         "development-period daily bars (parameters required)",
     ),
 ];
+
+// Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+/// One trade row of a strategy's trades table: the time, symbol, order,
+/// side, outcome, price, volume, order-to-fill ms and slippage, after the
+/// account where the table spans accounts.
+fn trade_row(account: Option<&Value>, t: &Value) -> String {
+    let account = account
+        .map(|a| format!(r#"<td class="mono">{}</td>"#, txt(a)))
+        .unwrap_or_default();
+    format!(
+        "<tr>{account}<td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td></tr>",
+        txt(&t["at"]),
+        txt(&t["symbol"]),
+        txt(&t["kind"]),
+        txt(&t["side"]),
+        txt(&t["outcome"]),
+        txt(&t["price"]),
+        txt(&t["volume"]),
+        txt(&t["order_to_fill_ms"]),
+        num(&t["slippage"], 2),
+    )
+}
+
+/// The link from a strategy's section to every order it placed.
+fn orders_link(strategy: &str) -> String {
+    format!(
+        r#"<p class="note">Every order, with its outcome, fill, position and the decision it was placed under: <a class="mono" href="/trading/orders?strategy={s}">/trading/orders?strategy={s}</a></p>"#,
+        s = esc(strategy)
+    )
+}
 
 /// HTML-escape a text.
 pub fn esc(s: &str) -> String {
@@ -291,7 +325,23 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             },
         ));
     }
-    h.push_str("</tbody></table></div></section>");
+    h.push_str("</tbody></table></div>");
+    // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+    // Strategy 1's trades today, the same columns as Strategy 3's, and every order.
+    h.push_str(r#"<h3>Trades today</h3><div class="scroll"><table><thead><tr><th>Account</th><th>Time</th><th>Symbol</th><th>Order</th><th>Side</th><th>Outcome</th><th class="num">Price</th><th class="num">Volume</th><th class="num">Order to fill (ms)</th><th class="num">Slippage</th></tr></thead><tbody>"#);
+    let mut any = false;
+    for t in rows(&health["trading"]) {
+        for x in rows(&t["trades_today"]) {
+            any = true;
+            h.push_str(&trade_row(Some(&t["account_id"]), x));
+        }
+    }
+    if !any {
+        h.push_str(r#"<tr><td colspan="10" class="empty">No trade today.</td></tr>"#);
+    }
+    h.push_str("</tbody></table></div>");
+    h.push_str(&orders_link("s1"));
+    h.push_str("</section>");
 
     // Claude · № 17,020 25-Oct (owner's Strategy 3 v2: a section per account)
     // Strategy 3 per account: its open positions, today's decisions and
@@ -351,21 +401,11 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             h.push_str(r#"<tr><td colspan="9" class="empty">No trade today.</td></tr>"#);
         }
         for t in trades {
-            h.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td></tr>",
-                txt(&t["at"]),
-                txt(&t["symbol"]),
-                txt(&t["kind"]),
-                txt(&t["side"]),
-                txt(&t["outcome"]),
-                txt(&t["price"]),
-                txt(&t["volume"]),
-                txt(&t["order_to_fill_ms"]),
-                num(&t["slippage"], 2),
-            ));
+            h.push_str(&trade_row(None, t));
         }
         h.push_str("</tbody></table></div>");
     }
+    h.push_str(&orders_link("s3"));
     h.push_str("</section>");
 
     // Research jobs, with their trial's verdict.
@@ -598,6 +638,43 @@ mod tests {
         assert!(p.contains(">182<") && p.contains(">2.00<"));
         assert!(p.contains("jiaoyi-s3"));
         assert!(!p.to_lowercase().contains("balance") && !p.to_lowercase().contains("equity "));
+    }
+
+    // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+    #[test]
+    fn strategy_1_shows_its_trades_today_and_both_strategies_link_their_orders() {
+        let now = "2026-10-25T05:00:00Z".parse().unwrap();
+        let h = json!({
+            "trading": [{"account_id": 46130058, "environment": "demo", "trades": "yes",
+                "trades_today": [{"at": "2026-10-25T04:10:00Z", "symbol": "ETHUSD", "kind": "broker_exit",
+                                   "side": "buy", "outcome": "filled", "price": 3489.0, "volume": 5,
+                                   "order_to_fill_ms": null, "slippage": 2.0},
+                                  {"at": "2026-10-25T04:00:00Z", "symbol": "ETHUSD", "kind": "open",
+                                   "side": "buy", "outcome": "filled", "price": 3611.0, "volume": 5,
+                                   "order_to_fill_ms": 141, "slippage": 0.0}]}],
+            "strategy3": [{"account_id": 46130058, "environment": "demo",
+                "today": {"trades_today": []}}],
+        });
+        let p = page(&h, &json!({}), &json!({}), now);
+        assert!(p.contains("<h3>Trades today</h3>"), "{p}");
+        assert!(
+            p.contains(r#"<td class="mono">46130058</td><td>2026-10-25T04:10:00Z</td><td>ETHUSD</td><td>broker_exit</td>"#),
+            "{p}"
+        );
+        assert!(p.contains(">141<") && p.contains(">2.00<"), "{p}");
+        assert!(p.contains(r#"href="/trading/orders?strategy=s1""#), "{p}");
+        assert!(p.contains(r#"href="/trading/orders?strategy=s3""#), "{p}");
+        assert!(
+            p.contains(r#"<a class="mono" href="/trading/orders">"#),
+            "{p}"
+        );
+        let none = page(
+            &json!({"trading": [{"account_id": 1, "trades_today": []}]}),
+            &json!({}),
+            &json!({}),
+            now,
+        );
+        assert!(none.contains(r#"<td colspan="10" class="empty">No trade today.</td>"#));
     }
 
     #[test]

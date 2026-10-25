@@ -180,11 +180,40 @@ The rules are `docs/preregistration-2026-10-25-strategy3.md`, embedded and hashe
 - **Decisions** are in `trading_decisions` under kinds `s3_*`, each with the hash and the label in its detail. Strategy 1's last decision on `/health` leaves them out.
 - **Liveness.** `/health` → `strategy3[].liveness` and the status page's Loop line show each Strategy 3 loop the same way as Strategy 1's: kept in memory, never recorded, with each reconcile run (the first, each periodic one, and the one after a fill) and each processed quote.
 - **Commission** comes from the broker's deals of the position (table `deals`, from history sync).
-- `GET /trading/costs` summarises, per account and symbol: the entries and exits filled (the broker's own exits included, and counted apart as `broker_exits_filled`), the median entry and exit slippage, the spread at entry and exit, the order-to-fill time, and the commission per unit in price units. No money.
+- `GET /trading/costs`: see the instrument section below; it covers both strategies.
 - `/health` → `strategy3` and the status page show, per account:
   - the open Strategy 3 positions at the last reconcile (symbol, side, volume, entry, stop, take-profit);
   - today's decisions by kind;
   - today's trades.
+
+## The instrument: orders, fills and costs read back (migration 0014; owner, 25-10-2026)
+
+The owner approved the instrument plan after "show your instrument design". Nothing below decides a trade; it records and reads back what the strategies did. No route shows money.
+
+| Table | Kind | Content |
+|---|---|---|
+| `strategy1_fills` | event, append-only | Each Strategy 1 order's answer, once per entry key (unique). It has the same columns as `strategy3_fills` (outcome, sent and answered times, order-to-answer ms, the fill against the quote at the decision, the spread, the volume), with the label `jiaoyi-s1` and the 24-10 pre-registration hash. Three kinds: `open` (the decision price is the ask for a buy, the bid for a sell; the detail holds the quote → deposit rate for the commission per unit); `trail` (a trailing-stop amend, whose decision price is the new stop; it fills nothing); `broker_exit` (the trailed stop or a stop-out the broker executed, one per closing deal, `s1-broker:<account>:<position>:<deal>`, measured against the stop). |
+
+- **One rule for both strategies.** `crate::fills` sums an order's answers for both strategies' fill records. A fill in several deals is their sum at their volume-weighted price, into the deals' position, and a rejection or no answer after part of an order filled is `partly_filled`. The same module picks the level a broker exit executed and signs the slippage (positive is adverse).
+- **A lost record ends the session**, for Strategy 1 as for Strategy 3: the session reconnects and reconciles.
+- **Decisions carry their order's entry key.** Strategy 1's `sent` decision holds the signal and the quote it was taken at (level, ATR, EMAs, bid, ask) with the sizing mode. Its `trail` and `refused` decisions hold the entry key too. A gate refusal writes no intent, so it is no order; its decision holds the key it would have had.
+- `GET /trading/orders?account=&strategy=s1|s3&since=&limit=` lists the newest orders of both strategies, newest first.
+  - The limit defaults to 100 and is at most 500. A parameter outside these is refused with 400.
+  - Each intent is one row: its strategy and label, symbol, kind (`open`, `amend_stop`, `close`), what the order was for (`open`, `trail`, `tp1`, `session_end`) and side, plus:
+    - the requested volume;
+    - the last execution message's kind;
+    - the filled volume: the deals, each once, or the position reconcile adopted, whichever is larger; the requested volume when the open was found filled in full;
+    - the deals' VWAP (or the adopted position's price);
+    - the position;
+    - from the fills table, the order-to-fill ms, slippage and spread;
+    - the newest decision recorded with its entry key (kind, reason, time, and the signal's inputs from an allowlist of keys).
+  - Each exit the broker executed (`broker_exit`) is a row too, with why it closed.
+- `GET /trading/costs` summarises per strategy (`s1`, `s3`), account and symbol:
+  - the entries and exits filled (the broker's own exits included, and counted apart as `broker_exits_filled`);
+  - the median entry and exit slippage, the spread at entry and exit, and the order-to-fill time;
+  - Strategy 1's trailing-stop amends, counted apart with their answer time;
+  - the commission per unit, in price units.
+- **The status page** shows Strategy 1's trades today in the same columns as Strategy 3's, and each strategy's section links to its orders.
 
 ## Volume and retention
 

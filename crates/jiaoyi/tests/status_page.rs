@@ -138,3 +138,60 @@ async fn the_root_shows_the_status_page(pool: PgPool) {
     let (st, _, _) = call(app(&pool, recorders), Method::POST, "/").await;
     assert_eq!(st, StatusCode::METHOD_NOT_ALLOWED);
 }
+
+// Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+/// `/trading/orders` through the real router: a parameter outside its
+/// bounds is refused (400) with the reason; the list answers JSON with no
+/// money; `/trading/costs` names both strategies.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_order_list_refuses_bad_parameters_and_answers_without_money(pool: PgPool) {
+    for uri in [
+        "/trading/orders?limit=0",
+        "/trading/orders?limit=501",
+        "/trading/orders?strategy=s2",
+        "/trading/orders?account=abc",
+        "/trading/orders?since=yesterday",
+    ] {
+        let (status, _, body) = call(app(&pool, Default::default()), Method::GET, uri).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}: {body}");
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["status"], "refused", "{uri}");
+        assert!(v["reason"].is_string(), "{uri}");
+    }
+    let (status, ctype, body) = call(
+        app(&pool, Default::default()),
+        Method::GET,
+        "/trading/orders?strategy=s1&limit=500",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(ctype.starts_with("application/json"), "{ctype}");
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["count"], 0);
+    assert_eq!(v["rows"], json!([]));
+    assert_eq!(v["strategies"]["s1"], "Strategy 1: tick-triggered trend");
+    let lower = body.to_lowercase();
+    for word in [
+        "balance",
+        "equity",
+        "pnl",
+        "profit",
+        "commission",
+        "\"risk\"",
+        "max_risk",
+    ] {
+        assert!(!lower.contains(word), "{word}: {body}");
+    }
+    let (status, _, body) = call(
+        app(&pool, Default::default()),
+        Method::GET,
+        "/trading/costs",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(
+        v["strategies"]["s1"].is_string() && v["strategies"]["s3"].is_string(),
+        "{v}"
+    );
+}
