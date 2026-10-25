@@ -120,6 +120,11 @@ pub struct FakeBroker {
     pub fill_parts: Vec<(u64, i64, f64)>,
     /// After `fill_parts`, cancel what is left of the order (ORDER_CANCELLED).
     pub cancel_remainder: bool,
+    /// The broker's own execution messages (a stop hit, say: see
+    /// [`server_fill`]), each this many milliseconds after the spot
+    /// subscription: (ms, payload type, payload).
+    // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+    pub execution_sequence: Vec<(u64, u32, Vec<u8>)>,
 }
 
 /// One account in a token's grant.
@@ -503,6 +508,20 @@ impl FakeBroker {
                                         }
                                         .encode_to_vec(),
                                     );
+                                    if write_frame(&mut *wr.lock().await, &m).await.is_err() {
+                                        return;
+                                    }
+                                }
+                            });
+                        }
+                        if !self.execution_sequence.is_empty() {
+                            let (wr, seq) = (wr.clone(), self.execution_sequence.clone());
+                            tokio::spawn(async move {
+                                let start = tokio::time::Instant::now();
+                                for (ms, pt, payload) in seq {
+                                    tokio::time::sleep_until(start + Duration::from_millis(ms))
+                                        .await;
+                                    let m = reply(None, pt as i32, payload);
                                     if write_frame(&mut *wr.lock().await, &m).await.is_err() {
                                         return;
                                     }

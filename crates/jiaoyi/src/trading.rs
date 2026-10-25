@@ -482,6 +482,188 @@ impl Ledger for PgLedger<'_> {
     }
 }
 
+// ---------------------------------------------------------------- fills
+// Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+
+/// Strategy 1's gate ledger: `PgLedger`, and when the intent was recorded,
+/// just before the frame, so the order-to-answer time is measured from it
+/// as Strategy 3's is.
+pub struct TimedLedger<'a> {
+    pub inner: PgLedger<'a>,
+    pub recorded_at: Mutex<Option<DateTime<Utc>>>,
+}
+
+impl<'a> TimedLedger<'a> {
+    pub fn new(pool: &'a PgPool, settings_version: Option<i64>) -> Self {
+        TimedLedger {
+            inner: PgLedger {
+                pool,
+                settings_version,
+            },
+            recorded_at: Mutex::new(None),
+        }
+    }
+
+    fn sent_at(&self) -> DateTime<Utc> {
+        self.recorded_at.lock().unwrap().unwrap_or_else(Utc::now)
+    }
+}
+
+impl Ledger for TimedLedger<'_> {
+    async fn record_intent(&self, i: &Intent) -> Result<IntentWrite, String> {
+        let w = self.inner.record_intent(i).await?;
+        if w == IntentWrite::Recorded {
+            *self.recorded_at.lock().unwrap() = Some(Utc::now());
+        }
+        Ok(w)
+    }
+    async fn record_event(&self, e: &EventRecord) -> Result<(), String> {
+        self.inner.record_event(e).await
+    }
+    async fn owns_position(&self, account_id: i64, position_id: i64) -> Result<bool, String> {
+        self.inner.owns_position(account_id, position_id).await
+    }
+}
+
+/// What a Strategy 1 order was, for its fill record.
+struct FillOf<'s> {
+    account_id: i64,
+    key: &'s str,
+    /// `open` or `trail`.
+    kind: &'s str,
+    symbol: &'s str,
+    /// The order's side; an amend's, its position's.
+    side: Side,
+    position_id: Option<i64>,
+    /// The price the order was meant at: an open's quote at the decision
+    /// (the ask for a buy, the bid for a sell), an amend's new stop.
+    decision_price: Option<f64>,
+    bid: Option<f64>,
+    ask: Option<f64>,
+    volume: i64,
+    detail: Value,
+}
+
+/// Record a Strategy 1 order's answer in `strategy1_fills`, by the rule
+/// Strategy 3's fills follow (`crate::fills`): its outcome, its fill (the
+/// deals' sum at their volume-weighted price, into the deals' position), the
+/// order-to-answer time and the slippage against the quote at the decision.
+/// Recorded once per entry key.
+async fn record_fill(
+    pool: &PgPool,
+    f: FillOf<'_>,
+    sent_at: DateTime<Utc>,
+    sent: &gate::Sent,
+) -> Result<bool, jiaoyi_store::sqlx::Error> {
+    let s = crate::fills::summarize(sent, f.position_id, f.volume);
+    // An open's latency runs to its fill; an amend's to its answer.
+    let answered_at = if f.kind == "open" {
+        s.filled_at
+    } else {
+        s.answered_at
+    };
+    let mut detail = f.detail;
+    detail["outcome"] = serde_json::to_value(&sent.outcome).unwrap_or_default();
+    detail["client_msg_id"] = json!(sent.client_msg_id);
+    ts::record_s1_fill(
+        pool,
+        &ts::FillRow {
+            account_id: f.account_id,
+            entry_key: f.key.to_string(),
+            label: LABEL.into(),
+            prereg_hash: prereg::hash(),
+            kind: f.kind.into(),
+            symbol: f.symbol.into(),
+            position_id: s.position_id,
+            side: Some(f.side.as_str().into()),
+            outcome: s.outcome.into(),
+            sent_at,
+            answered_at,
+            latency_ms: answered_at.map(|a| (a - sent_at).num_milliseconds()),
+            decision_price: f.decision_price,
+            fill_price: s.price,
+            slippage: crate::fills::slippage(f.side, s.price, f.decision_price),
+            spread: match (f.bid, f.ask) {
+                (Some(b), Some(a)) => Some(a - b),
+                _ => None,
+            },
+            volume: s.volume.filter(|_| f.kind == "open"),
+            detail,
+        },
+    )
+    .await
+}
+
+/// A closing deal the broker executed itself on a Strategy 1 position (the
+/// trailed stop, a stop-out, or a close made outside this program), recorded
+/// once per deal in `strategy1_fills` as a `broker_exit`, with its fill
+/// against the stop it executed and the spread of the last quote. Anything
+/// else (an answer to a request, another label, an opening deal) is not one.
+async fn broker_exit(
+    pool: &PgPool,
+    account_id: i64,
+    m: &ReceivedExecution,
+    book: &Book,
+    syms: &HashMap<i64, Sym>,
+) -> Result<bool, jiaoyi_store::sqlx::Error> {
+    if m.client_msg_id.is_some() {
+        return Ok(false);
+    }
+    let Some(e) = gate::decode_execution(account_id, m) else {
+        return Ok(false);
+    };
+    if e.label.as_deref() != Some(LABEL) {
+        return Ok(false);
+    }
+    let Some(deal) = gate::closing_deal(account_id, m) else {
+        return Ok(false);
+    };
+    let own = book.own.get(&deal.position_id);
+    let side = deal
+        .position_side
+        .or(own.map(|o| o.side))
+        .or(deal.deal_side.map(crate::fills::exit_side));
+    let Some(side) = side else {
+        return Ok(false);
+    };
+    let stop = deal.stop_loss.or(own.and_then(|o| o.stop));
+    let (reason, level) = crate::fills::exit_level(&deal, stop, deal.take_profit);
+    let sym = syms.get(&deal.symbol_id);
+    let (bid, ask) = (sym.and_then(|s| s.bid), sym.and_then(|s| s.ask));
+    let key = format!(
+        "s1-broker:{account_id}:{}:{}",
+        deal.position_id, deal.deal_id
+    );
+    ts::record_s1_fill(
+        pool,
+        &ts::FillRow {
+            account_id,
+            entry_key: key,
+            label: LABEL.into(),
+            prereg_hash: prereg::hash(),
+            kind: "broker_exit".into(),
+            symbol: sym.map(|s| s.name.clone()).unwrap_or_default(),
+            position_id: Some(deal.position_id),
+            side: Some(side.as_str().into()),
+            outcome: "filled".into(),
+            sent_at: m.received_at,
+            answered_at: Some(m.received_at),
+            latency_ms: None,
+            decision_price: level,
+            fill_price: deal.price,
+            slippage: crate::fills::slippage(crate::fills::exit_side(side), deal.price, level),
+            spread: match (bid, ask) {
+                (Some(b), Some(a)) => Some(a - b),
+                _ => None,
+            },
+            volume: Some(deal.volume),
+            detail: json!({"strategy": STRATEGY, "reason": reason, "deal_id": deal.deal_id,
+                "order_id": deal.order_id, "level": level}),
+        },
+    )
+    .await
+}
+
 // ---------------------------------------------------------------- seed file
 
 /// The reviewed settings changes, compiled in. Each entry is applied once,
@@ -611,6 +793,8 @@ pub async fn health(pool: &PgPool, live: &HashMap<i64, Liveness>) -> jiaoyi_stor
                 "at": at, "own": detail["own"], "external_positions": detail["external"],
             })),
             "liveness": liveness,
+            // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+            "trades_today": ts::s1_trades_today(pool, id).await?,
         }));
     }
     Ok(json!(out))
@@ -1292,6 +1476,10 @@ pub async fn run_session(
             }
             m = execs.recv() => match m {
                 Ok(m) => {
+                    // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
+                    // a stop the broker executed is recorded with its fill, before
+                    // reconcile drops the position. A lost record ends the session.
+                    broker_exit(pool, account_id, &m, &book, &syms).await?;
                     // A late answer (the gate had stopped listening): a fill
                     // of any size is read from the broker at once, adopted and
                     // trailed; an end of an unresolved open frees its risk
@@ -1438,10 +1626,8 @@ async fn on_quote(
             max_risk: f64::INFINITY,
         };
         let key = format!("s1-trail:{account_id}:{}:{new_stop}", o.position_id);
-        let ledger = PgLedger {
-            pool,
-            settings_version: Some(r.version),
-        };
+        let ledger = TimedLedger::new(pool, Some(r.version));
+        let from_stop = o.stop;
         let cmd = Command::AmendStop {
             position_id: o.position_id,
             side: o.side,
@@ -1460,7 +1646,7 @@ async fn on_quote(
         .await
         {
             Ok(sent) => {
-                book.sent.insert(sent.client_msg_id.clone(), key);
+                book.sent.insert(sent.client_msg_id.clone(), key.clone());
                 if matches!(sent.outcome, Outcome::Amended { .. }) {
                     o.stop = Some(new_stop);
                 }
@@ -1468,9 +1654,27 @@ async fn on_quote(
                     Some(name),
                     "trail",
                     &format!("stop to {new_stop}: {:?}", sent.outcome),
-                    json!({"position_id": o.position_id}),
+                    json!({"position_id": o.position_id, "entry_key": key}),
                 )
                 .await;
+                // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
+                // the amend's answer and its time, recorded; nothing it decides reads them.
+                // A lost record ends the session (it reconnects and reconciles), as
+                // Strategy 3's does.
+                let fill = FillOf {
+                    account_id,
+                    key: &key,
+                    kind: "trail",
+                    symbol: name,
+                    side: o.side,
+                    position_id: Some(o.position_id),
+                    decision_price: Some(new_stop),
+                    bid: sym.bid,
+                    ask: sym.ask,
+                    volume: o.volume,
+                    detail: json!({"strategy": STRATEGY, "from_stop": from_stop, "best": best}),
+                };
+                record_fill(pool, fill, ledger.sent_at(), &sent).await?;
             }
             Err(e) => {
                 d.note(
@@ -1611,10 +1815,7 @@ async fn on_quote(
         edge,
         max_risk: sized.max_risk,
     };
-    let ledger = PgLedger {
-        pool,
-        settings_version: Some(r.version),
-    };
+    let ledger = TimedLedger::new(pool, Some(r.version));
     let cmd = Command::Open {
         symbol_id: sym.id,
         side,
@@ -1663,6 +1864,12 @@ async fn on_quote(
                     },
                 );
             }
+            // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
+            // the decision carries the signal and the quote it was taken at.
+            let mut sent_detail = detail.clone();
+            sent_detail["entry_key"] = json!(key);
+            sent_detail["relative_stop"] = json!(rel);
+            sent_detail["sizing"] = json!(sized.mode);
             d.note(
                 Some(name),
                 "sent",
@@ -1673,11 +1880,34 @@ async fn on_quote(
                     sized.mode,
                     sent.outcome
                 ),
-                json!({"entry_key": key, "relative_stop": rel, "sizing": sized.mode}),
+                sent_detail,
             )
             .await;
+            // The answer and its time, recorded after everything the trader
+            // decides from it; nothing reads it back to trade. A lost record
+            // ends the session (it reconnects and reconciles), as Strategy 3's does.
+            let fill = FillOf {
+                account_id,
+                key: &key,
+                kind: "open",
+                symbol: name,
+                side,
+                position_id: None,
+                decision_price: match side {
+                    Side::Buy => sym.ask,
+                    Side::Sell => sym.bid,
+                },
+                bid: sym.bid,
+                ask: sym.ask,
+                volume: sized.volume,
+                detail: json!({"strategy": STRATEGY, "quote_to_deposit": rate,
+                    "sizing": sized.mode}),
+            };
+            record_fill(pool, fill, ledger.sent_at(), &sent).await?;
         }
         Err(SendError::Refused(x)) => {
+            let mut detail = detail;
+            detail["entry_key"] = json!(key);
             d.note(Some(name), "refused", &x.reason, detail).await;
         }
         Err(e) => return Err(e.into()),

@@ -1204,3 +1204,444 @@ async fn a_stopped_loop_reads_stalled_after_twice_its_reconcile_interval(pool: P
     let h = trading::health(&pool, &aged(610)).await.unwrap();
     assert_eq!(h[0]["liveness"]["state"], "stalled", "{h}");
 }
+
+// ------------------------------------------------------------- the instrument
+// Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+
+/// Strategy 1's orders on the demo account, newest first.
+async fn s1_orders(pool: &PgPool) -> Vec<store::trading::OrderView> {
+    store::trading::orders(
+        pool,
+        &store::trading::OrdersQuery {
+            account_id: Some(DEMO),
+            strategy: Some("s1".into()),
+            since: None,
+            limit: 100,
+        },
+    )
+    .await
+    .unwrap()
+}
+
+/// One Strategy 1 fill row: kind, outcome, volume, fill and decision price,
+/// slippage, position, latency.
+type S1Fill = (
+    String,
+    String,
+    Option<i64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<i64>,
+    Option<i64>,
+);
+
+async fn s1_fills(pool: &PgPool) -> Vec<S1Fill> {
+    sqlx::query_as(
+        "SELECT kind, outcome, volume, fill_price, decision_price, slippage, position_id, latency_ms
+         FROM strategy1_fills ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+fn close(a: Option<f64>, b: f64) -> bool {
+    a.is_some_and(|a| (a - b).abs() < 1e-9)
+}
+
+/// An open filled in two deals (90 at 3611.00, 10 at 3621.00) is listed at
+/// their sum and their VWAP 3612.00, 1.00 above the ask it was decided at,
+/// with the decision that placed it; `/trading/costs` reports it.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy_1_open_in_two_deals_is_listed_at_their_vwap(pool: PgPool) {
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    two_symbols_filled_in(
+        &pool,
+        vec![(0, 90, 3611.0), (0, 10, 3621.0)],
+        false,
+        vec![(0, ETH, q(3608.0, 3611.0))],
+        2,
+    )
+    .await;
+    let o = s1_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    let r = &o[0];
+    assert_eq!(
+        (r.strategy.as_str(), r.label.as_str(), r.kind.as_str()),
+        ("s1", "jiaoyi-s1", "open")
+    );
+    assert_eq!(r.order.as_deref(), Some("open"));
+    assert_eq!(r.symbol.as_deref(), Some("ETHUSD"));
+    assert_eq!(r.side.as_deref(), Some("buy"));
+    assert_eq!(
+        (r.requested_volume, r.filled_volume),
+        (Some(100), Some(100))
+    );
+    assert_eq!(r.outcome.as_deref(), Some("ORDER_FILLED"));
+    assert!(close(r.fill_price, 3612.0), "{r:?}");
+    assert_eq!(r.position_id, Some(1001));
+    assert!(r.latency_ms.is_some(), "{r:?}");
+    assert!(
+        close(r.slippage, 1.0),
+        "3612.00 against the ask 3611.00: {r:?}"
+    );
+    assert!(close(r.spread, 3.0), "{r:?}");
+    let d = r
+        .decision
+        .as_ref()
+        .expect("the decision it was placed under");
+    assert_eq!(d.kind, "sent");
+    assert!(
+        d.reason
+            .starts_with("Strategy 1: tick-triggered trend buy 100 cents"),
+        "{d:?}"
+    );
+    assert_eq!(d.signal["bid"], json!(3608.0), "{d:?}");
+    assert_eq!(d.signal["ask"], json!(3611.0), "{d:?}");
+    assert_eq!(d.signal["level"], json!(3610.0), "{d:?}");
+    let f = s1_fills(&pool).await;
+    assert_eq!(f.len(), 1, "{f:?}");
+    assert_eq!((f[0].0.as_str(), f[0].1.as_str()), ("open", "filled"));
+    assert_eq!(f[0].2, Some(100));
+    assert!(
+        close(f[0].3, 3612.0) && close(f[0].4, 3611.0) && close(f[0].5, 1.0),
+        "{f:?}"
+    );
+    let hash: String = sqlx::query_scalar("SELECT prereg_hash FROM strategy1_fills")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(hash, HASH);
+    let c = store::trading::costs(&pool).await.unwrap();
+    let rows = c["rows"].as_array().unwrap();
+    let row = rows
+        .iter()
+        .find(|r| r["strategy"] == "s1")
+        .expect("an s1 row");
+    assert_eq!(row["label"], "jiaoyi-s1");
+    assert_eq!(row["symbol"], "ETHUSD");
+    assert_eq!(row["entries_filled"], 1);
+    assert!(close(row["entry_slippage_median"].as_f64(), 1.0), "{row}");
+    assert!(row["entry_order_to_fill_ms_median"].is_number(), "{row}");
+    assert_eq!(row["stop_amends"], 0);
+}
+
+/// 60 of 100 cents filled, the remainder cancelled: the order is listed
+/// cancelled with its 60 cents filled into its position.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy_1_partial_fill_then_cancel_is_listed_with_its_part(pool: PgPool) {
+    set(&pool, "trading.trend_open_risk_pct", json!(0.9)).await;
+    two_symbols_filled_in(
+        &pool,
+        vec![(0, 60, 3611.0)],
+        true,
+        vec![(0, ETH, q(3608.0, 3611.0))],
+        2,
+    )
+    .await;
+    let o = s1_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    assert_eq!(o[0].outcome.as_deref(), Some("ORDER_CANCELLED"), "{o:?}");
+    assert_eq!(
+        (o[0].requested_volume, o[0].filled_volume),
+        (Some(100), Some(60))
+    );
+    assert!(close(o[0].fill_price, 3611.0), "{o:?}");
+    assert_eq!(o[0].position_id, Some(1001));
+    let f = s1_fills(&pool).await;
+    assert_eq!(
+        (f[0].1.as_str(), f[0].2, f[0].6),
+        ("partly_filled", Some(60), Some(1001)),
+        "{f:?}"
+    );
+}
+
+/// Codex P2 on #18: an open part-filled (60 of 100) whose remainder reconcile
+/// later finds filled is listed at the full 100, not at the 60 its recorded
+/// deal carries.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partial_open_reconciled_in_full_is_listed_at_its_full_volume(pool: PgPool) {
+    loaded_with(&pool, &[(ETH, "ETHUSD", AssetClass::Crypto, 1)]).await;
+    set(&pool, "trading.trend_open_risk_pct", json!(1.0)).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake_on(&[ETH], 2_000);
+    f.trader.as_mut().unwrap().balance = 2_000_100;
+    f.fill_parts = vec![(0, 60, 3611.0)];
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    trade(&pool, &f, 3, Environment::Demo).await;
+    let o = s1_orders(&pool).await;
+    assert_eq!((o.len(), o[0].filled_volume), (1, Some(60)), "{o:?}");
+    // The remainder fills: the broker holds all 100 cents.
+    f.positions.lock().unwrap()[0].trade_data.volume = 100;
+    f.fill_parts = vec![];
+    f.quote_sequence = vec![];
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let o = s1_orders(&pool).await;
+    assert_eq!(o[0].outcome.as_deref(), Some("RECONCILED_FILL"), "{o:?}");
+    assert_eq!(
+        (o[0].requested_volume, o[0].filled_volume),
+        (Some(100), Some(100)),
+        "{o:?}"
+    );
+}
+
+/// An open with no answer in the wait, found filled at the next session's
+/// reconcile: listed as RECONCILED_FILL at the broker's 5 cents and price.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_unconfirmed_strategy_1_open_adopted_at_reconcile_is_listed(pool: PgPool) {
+    loaded(&pool).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake(vec![(3608.0, 3611.0)]);
+    f.fill_delay = Some(Duration::from_secs(600));
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let fl = s1_fills(&pool).await;
+    assert_eq!(
+        (fl[0].1.as_str(), fl[0].2, fl[0].7),
+        ("unconfirmed", None, None),
+        "{fl:?}"
+    );
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 1001,
+        trade_data: ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 5,
+            trade_side: 1,
+            label: Some("jiaoyi-s1".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        price: Some(3611.0),
+        stop_loss: Some(3491.0),
+        ..Default::default()
+    });
+    f.fill_delay = None;
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let o = s1_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    assert_eq!(o[0].outcome.as_deref(), Some("RECONCILED_FILL"), "{o:?}");
+    assert_eq!(o[0].filled_volume, Some(5));
+    assert!(close(o[0].fill_price, 3611.0), "{o:?}");
+    assert_eq!(o[0].position_id, Some(1001));
+}
+
+/// A broker rejection is listed with nothing filled. A gate refusal sends no
+/// frame and writes no intent, so it is no order; its decision carries the
+/// entry key it would have had.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_rejected_strategy_1_open_is_listed_and_a_refused_one_is_found_by_its_key(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake(vec![(3608.0, 3611.0)]);
+    f.reject_orders = Some("MARKET_CLOSED".into());
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let o = s1_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    assert_eq!(o[0].outcome.as_deref(), Some("ORDER_REJECTED"), "{o:?}");
+    assert_eq!(
+        (o[0].filled_volume, o[0].fill_price, o[0].position_id),
+        (Some(0), None, None)
+    );
+    assert_eq!(s1_fills(&pool).await[0].1, "rejected");
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy_1_open_the_gate_refuses_is_no_order_but_its_decision_has_the_key(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake(vec![(3608.0, 3611.0)]);
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 77,
+        trade_data: ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 300,
+            trade_side: 2,
+            label: Some("bot-trade".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        swap: 0,
+        stop_loss: Some(4000.0),
+        ..Default::default()
+    });
+    trade(&pool, &f, 2, Environment::Demo).await;
+    assert!(s1_orders(&pool).await.is_empty());
+    let key = trading::entry_key(DEMO, ETH, Utc::now().date_naive() - Days::days(1));
+    let refused: Vec<String> = sqlx::query_scalar(
+        "SELECT detail->>'entry_key' FROM trading_decisions WHERE kind = 'refused'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(refused, vec![key]);
+}
+
+/// ETHUSD's position 1001 as the fake fills a 5-cent buy at 3611.00 (stop
+/// 3491.00), and the broker's own stop-loss fill of it at `price`.
+fn stop_hit(price: f64) -> jiaoyi_ctrader::ReceivedExecution {
+    jiaoyi_ctrader::testkit::server_fill(
+        DEMO,
+        ProtoOaPosition {
+            position_id: 1001,
+            trade_data: ProtoOaTradeData {
+                symbol_id: ETH,
+                volume: 5,
+                trade_side: 1,
+                label: Some("jiaoyi-s1".into()),
+                ..Default::default()
+            },
+            position_status: 1,
+            swap: 0,
+            price: Some(3611.0),
+            stop_loss: Some(3491.0),
+            ..Default::default()
+        },
+        901,
+        price,
+        5,
+        true,
+        false,
+    )
+}
+
+/// The broker's own stop of a Strategy 1 position, received by the running
+/// loop: recorded once as a broker exit at 3489.00 against its stop 3491.00
+/// (2.00 adverse), listed with the open, counted in `/trading/costs`, and in
+/// today's trades.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy_1_stop_the_broker_executes_is_recorded_listed_and_costed(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake(vec![(3608.0, 3611.0)]);
+    let m = stop_hit(3489.0);
+    // The same deal twice: recorded once.
+    f.execution_sequence = vec![
+        (800, m.payload_type, m.payload.clone()),
+        (900, m.payload_type, m.payload.clone()),
+    ];
+    trade(&pool, &f, 2, Environment::Demo).await;
+    let fl = s1_fills(&pool).await;
+    assert_eq!(fl.len(), 2, "{fl:?}");
+    assert_eq!(
+        (fl[1].0.as_str(), fl[1].1.as_str()),
+        ("broker_exit", "filled")
+    );
+    assert_eq!((fl[1].2, fl[1].6), (Some(5), Some(1001)));
+    assert!(
+        close(fl[1].3, 3489.0) && close(fl[1].4, 3491.0) && close(fl[1].5, 2.0),
+        "{fl:?}"
+    );
+    let o = s1_orders(&pool).await;
+    assert_eq!(o.len(), 2, "{o:?}");
+    let exit = o
+        .iter()
+        .find(|r| r.kind == "broker_exit")
+        .expect("the exit");
+    assert_eq!(exit.decision.as_ref().unwrap().reason, "stop_loss");
+    // The body `/trading/orders` answers: no money in it.
+    let text = jiaoyi::http::orders_body(&o).to_string().to_lowercase();
+    for word in [
+        "balance",
+        "equity",
+        "pnl",
+        "profit",
+        "commission",
+        "\"risk\"",
+        "max_risk",
+    ] {
+        assert!(!text.contains(word), "{word}: {text}");
+    }
+    assert_eq!(
+        (exit.filled_volume, exit.position_id),
+        (Some(5), Some(1001))
+    );
+    assert!(close(exit.slippage, 2.0), "{exit:?}");
+    let c = store::trading::costs(&pool).await.unwrap();
+    let row = &c["rows"][0];
+    assert_eq!(row["strategy"], "s1");
+    assert_eq!(
+        (row["entries_filled"].clone(), row["exits_filled"].clone()),
+        (json!(1), json!(1))
+    );
+    assert_eq!(row["broker_exits_filled"], 1);
+    assert!(close(row["exit_slippage_median"].as_f64(), 2.0), "{row}");
+    assert!(close(row["entry_slippage_median"].as_f64(), 0.0), "{row}");
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
+    let trades = h[0]["trades_today"].as_array().unwrap();
+    assert_eq!(trades.len(), 2, "{h}");
+    assert_eq!(trades[0]["kind"], "broker_exit");
+}
+
+/// Run the Strategy 1 loop on `f` for at most `secs`: its result if it ended
+/// by itself, `None` if it was still running.
+async fn session_result(pool: &PgPool, f: &FakeBroker, secs: u64) -> Option<anyhow::Result<()>> {
+    let (conn, _log) = f.clone().spawn();
+    let session = loader::authorise(pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let mut ends = conn.session_ends();
+    let (trigger, mut stop) = shutdown::channel();
+    let mut d = trading::decisions(pool, DEMO);
+    let list = allowlist();
+    let live = trading::LivenessMap::default();
+    tokio::select! {
+        r = trading::run_session(pool, &list, Environment::Demo, &session, &mut d, &live, &mut ends, &mut stop) => Some(r),
+        _ = tokio::time::sleep(Duration::from_secs(secs)) => {
+            trigger.fire();
+            None
+        }
+    }
+}
+
+/// `strategy1_fills` refuses rows of `kind`.
+async fn refuse_s1_fills(pool: &PgPool, kind: &str) {
+    sqlx::query(&format!(
+        "CREATE FUNCTION refuse_s1_fill() RETURNS trigger LANGUAGE plpgsql AS $f$
+         BEGIN
+           IF NEW.kind = '{kind}' THEN RAISE EXCEPTION 'no {kind} record'; END IF;
+           RETURN NEW;
+         END $f$"
+    ))
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER refuse_s1_fill BEFORE INSERT ON strategy1_fills
+         FOR EACH ROW EXECUTE FUNCTION refuse_s1_fill()",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// A Strategy 1 record that cannot be written ends the session with the
+/// error (it then reconnects and reconciles), as Strategy 3's does: never
+/// a silent loss. The open's, the trailing amend's and a broker exit's.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_lost_strategy_1_open_record_ends_the_session(pool: PgPool) {
+    loaded(&pool).await;
+    refuse_s1_fills(&pool, "open").await;
+    let r = session_result(&pool, &fake(vec![(3608.0, 3611.0)]), 3).await;
+    let e = r.expect("the session ended").expect_err("with the error");
+    assert!(format!("{e:#}").contains("no open record"), "{e:#}");
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_lost_strategy_1_amend_record_ends_the_session(pool: PgPool) {
+    loaded(&pool).await;
+    refuse_s1_fills(&pool, "trail").await;
+    let f = fake(vec![(3608.0, 3611.0), (3700.0, 3701.0)]);
+    let r = session_result(&pool, &f, 3).await;
+    let e = r.expect("the session ended").expect_err("with the error");
+    assert!(format!("{e:#}").contains("no trail record"), "{e:#}");
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_lost_strategy_1_broker_exit_record_ends_the_session(pool: PgPool) {
+    loaded(&pool).await;
+    refuse_s1_fills(&pool, "broker_exit").await;
+    let mut f = fake(vec![(3608.0, 3611.0)]);
+    let m = stop_hit(3489.0);
+    f.execution_sequence = vec![(800, m.payload_type, m.payload.clone())];
+    let r = session_result(&pool, &f, 3).await;
+    let e = r.expect("the session ended").expect_err("with the error");
+    assert!(format!("{e:#}").contains("no broker_exit record"), "{e:#}");
+}

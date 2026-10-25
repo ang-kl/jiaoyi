@@ -383,7 +383,7 @@ async fn a_quote_beyond_the_band_between_marks_enters_at_that_quote(pool: PgPool
         assert_eq!(log.lock().unwrap().closes.len(), 2, "sent once");
     });
     // /trading/costs: the entry's actual slippage and order-to-fill time.
-    let c = store::strategy3::costs(&pool).await.unwrap();
+    let c = store::trading::costs(&pool).await.unwrap();
     let row = &c["rows"][0];
     assert_eq!(row["symbol"], "BTCUSD");
     assert_eq!(row["entries_filled"], 1);
@@ -972,7 +972,7 @@ async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
     assert_eq!(rows[1].0, "take_profit");
     assert!((rows[1].2 - (60_000.0 + 2_101.21)).abs() < 1e-6, "{rows:?}");
     assert!((rows[1].3 + 0.5).abs() < 1e-6, "favourable 0.50: {rows:?}");
-    let c = store::strategy3::costs(&pool).await.unwrap();
+    let c = store::trading::costs(&pool).await.unwrap();
     let row = &c["rows"][0];
     assert_eq!(row["entries_filled"], 1);
     assert_eq!(row["exits_filled"], 2, "{row}");
@@ -1109,6 +1109,20 @@ async fn an_unconfirmed_open_found_partly_filled_keeps_its_remainder_reserved(po
         .unwrap();
     assert_eq!(u.len(), 1, "the remainder stays reserved: {u:?}");
     assert_eq!((u[0].filled, u[0].position_id), (6, Some(5001)), "{u:?}");
+    // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
+    // the order list shows the adopted part, at the broker's position.
+    let o = s3_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    assert_eq!(
+        o[0].outcome.as_deref(),
+        Some("RECONCILED_PARTIAL_FILL"),
+        "{o:?}"
+    );
+    assert_eq!(
+        (o[0].requested_volume, o[0].filled_volume),
+        (Some(13), Some(6))
+    );
+    assert_eq!(o[0].position_id, Some(5001));
     // The remainder fills: the broker holds all 13.
     silent.positions.lock().unwrap()[0].trade_data.volume = 13;
     with_trader!(&pool, silent, Environment::Demo, |t, _log| {
@@ -1287,4 +1301,187 @@ async fn a_partial_fill_re_plans_its_tp1_close(pool: PgPool) {
 async fn a_full_fill_keeps_its_planned_tp1_close(pool: PgPool) {
     loaded(&pool).await;
     assert_eq!(tp1_after(&pool, fake((60_455.0, 60_462.0))).await, vec![5]);
+}
+
+// ------------------------------------------------------------- the instrument
+// Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+
+/// Strategy 3's orders on the demo account, newest first.
+async fn s3_orders(pool: &PgPool) -> Vec<store::trading::OrderView> {
+    store::trading::orders(
+        pool,
+        &store::trading::OrdersQuery {
+            account_id: Some(DEMO),
+            strategy: Some("s3".into()),
+            since: None,
+            limit: 100,
+        },
+    )
+    .await
+    .unwrap()
+}
+
+fn near(a: Option<f64>, b: f64) -> bool {
+    a.is_some_and(|a| (a - b).abs() < 1e-6)
+}
+
+/// An open filled in two deals (6 at 60,462.00, 7 at 60,470.00) is listed
+/// at 13 cents and their VWAP, against the ask 60,460.00 it was decided at
+/// (expected values from the fixture: self-derived), with its decision;
+/// `/trading/costs` reports it under s3.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy_3_open_in_two_deals_is_listed_at_their_vwap(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 6, 60_462.0), (20, 7, 60_470.0)],
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+    });
+    let vwap = (6.0 * 60_462.0 + 7.0 * 60_470.0) / 13.0;
+    let o = s3_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    let r = &o[0];
+    assert_eq!(
+        (r.strategy.as_str(), r.label.as_str(), r.kind.as_str()),
+        ("s3", "jiaoyi-s3", "open")
+    );
+    assert_eq!(r.order.as_deref(), Some("open"));
+    assert_eq!(r.symbol.as_deref(), Some("BTCUSD"));
+    assert_eq!((r.requested_volume, r.filled_volume), (Some(13), Some(13)));
+    assert_eq!(r.outcome.as_deref(), Some("ORDER_FILLED"));
+    assert!(near(r.fill_price, vwap), "{r:?}");
+    assert_eq!(r.position_id, Some(1001));
+    assert!(r.latency_ms.is_some(), "{r:?}");
+    assert!(near(r.slippage, vwap - 60_460.0), "{r:?}");
+    let d = r.decision.as_ref().expect("its decision");
+    assert_eq!(d.kind, "s3_sent");
+    assert!(d.reason.contains("buy 13 cents"), "{d:?}");
+    let c = store::trading::costs(&pool).await.unwrap();
+    let row = &c["rows"][0];
+    assert_eq!(
+        (row["strategy"].clone(), row["label"].clone()),
+        (json!("s3"), json!("jiaoyi-s3"))
+    );
+    assert_eq!(row["entries_filled"], 1);
+}
+
+/// 6 of 13 cents, the remainder cancelled: listed cancelled, 6 filled into
+/// its position.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy_3_partial_fill_then_cancel_is_listed_with_its_part(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 6, 60_462.0)],
+        cancel_remainder: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+    });
+    let o = s3_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    assert_eq!(o[0].outcome.as_deref(), Some("ORDER_CANCELLED"), "{o:?}");
+    assert_eq!(
+        (o[0].requested_volume, o[0].filled_volume),
+        (Some(13), Some(6))
+    );
+    assert!(near(o[0].fill_price, 60_462.0), "{o:?}");
+    assert_eq!(o[0].position_id, Some(1001));
+}
+
+/// An Unconfirmed open found filled at a reconcile after a restart: listed
+/// as RECONCILED_FILL at the broker's 13 cents, price and position.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_unconfirmed_strategy_3_open_adopted_at_reconcile_is_listed(pool: PgPool) {
+    loaded(&pool).await;
+    settings::change(
+        &pool,
+        "trading.order_wait_secs",
+        Some(DEMO),
+        Some(json!(1)),
+        "test",
+        "short wait",
+    )
+    .await
+    .unwrap();
+    let silent = FakeBroker {
+        silent_orders: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, silent, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+    });
+    silent
+        .positions
+        .lock()
+        .unwrap()
+        .push(s3_position(5001, 13, 60_462.0));
+    with_trader!(&pool, silent, Environment::Demo, |_t, _log| {});
+    let o = s3_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    assert_eq!(o[0].outcome.as_deref(), Some("RECONCILED_FILL"), "{o:?}");
+    assert_eq!(o[0].filled_volume, Some(13));
+    assert!(near(o[0].fill_price, 60_462.0), "{o:?}");
+    assert_eq!(o[0].position_id, Some(5001));
+}
+
+/// A broker rejection is listed with nothing filled.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_rejected_strategy_3_open_is_listed_with_nothing_filled(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_orders: Some("MARKET_CLOSED".into()),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+    });
+    let o = s3_orders(&pool).await;
+    assert_eq!(o.len(), 1, "{o:?}");
+    assert_eq!(o[0].outcome.as_deref(), Some("ORDER_REJECTED"), "{o:?}");
+    assert_eq!(
+        (o[0].filled_volume, o[0].fill_price, o[0].position_id),
+        (Some(0), None, None)
+    );
+}
+
+/// The broker's own stop of a Strategy 3 position is listed as a broker
+/// exit, with why it closed and its fill against the stop.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy_3_stop_the_broker_executes_is_listed(pool: PgPool) {
+    use jiaoyi_ctrader::testkit::server_fill;
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        let stop = p.stop_loss.unwrap();
+        t.server_event(&server_fill(DEMO, p, 901, stop - 3.0, 13, true, false))
+            .await;
+    });
+    let o = s3_orders(&pool).await;
+    assert_eq!(o.len(), 2, "{o:?}");
+    let exit = &o
+        .iter()
+        .find(|r| r.kind == "broker_exit")
+        .expect("the exit");
+    assert_eq!(exit.strategy, "s3");
+    assert_eq!(exit.decision.as_ref().unwrap().reason, "stop_loss");
+    assert_eq!(
+        (exit.filled_volume, exit.position_id),
+        (Some(13), Some(1001))
+    );
+    assert!(near(exit.slippage, 3.0), "{exit:?}");
 }

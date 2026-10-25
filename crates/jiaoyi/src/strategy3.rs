@@ -466,10 +466,9 @@ pub struct Own {
 /// the next try waits this long (self-derived).
 pub const END_RETRY: Duration = Duration::from_secs(10);
 
-/// Whether part of a sent order filled before its terminal answer.
-fn partly_filled(sent: &gate::Sent) -> bool {
-    sent.events.iter().any(|e| e.kind == "ORDER_PARTIAL_FILL")
-}
+// Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
+// one rule for both strategies' fills.
+use crate::fills::partly_filled;
 
 /// An open sent but not answered (Unconfirmed): its risk is held in the
 /// budget, and on a live account it counts as an open position, until a
@@ -1343,72 +1342,21 @@ impl<'a, 'c> Trader<'a, 'c> {
         sent: &gate::Sent,
     ) -> anyhow::Result<()> {
         let sent_at = ledger.recorded_at.lock().unwrap().unwrap_or_else(Utc::now);
-        let filled = sent.events.iter().rev().find(|e| e.kind == "ORDER_FILLED");
-        // The order's deals. Each carries the broker's position id, whatever
-        // the last answer, and an order filled in several deals is their sum
-        // at their volume-weighted price: an event carries one deal, not the
-        // position (Codex P1s on #15).
-        // Claude · № 17,060 25-Oct (ordered: owner "merge when green and
-        // deploy"; Codex round 3 on #15)
-        let deals: Vec<_> = sent
-            .events
-            .iter()
-            .filter(|e| e.kind == "ORDER_FILLED" || e.kind == "ORDER_PARTIAL_FILL")
-            .collect();
-        let deal_pid = deals.iter().find_map(|e| e.position_id);
-        let deal_volume: i64 = deals.iter().filter_map(|e| e.volume).sum();
-        let deal_price = deals
-            .iter()
-            .map(|e| Some(e.price? * e.volume? as f64))
-            .sum::<Option<f64>>()
-            .filter(|_| deal_volume > 0)
-            .map(|n| n / deal_volume as f64);
-        let (outcome, price, pid, vol) = match &sent.outcome {
-            Outcome::Filled {
-                position_id: p,
-                price,
-                volume: v,
-            } if deal_volume > 0 => (
-                "filled",
-                deal_price.or(*price),
-                deal_pid.or(*p).or(position_id),
-                Some(deal_volume.max(v.unwrap_or(0))),
-            ),
-            Outcome::Filled {
-                position_id: p,
-                price,
-                volume: v,
-            } => ("filled", *price, p.or(position_id), v.or(Some(volume))),
-            // A rejection, or no last answer, after part of the order filled
-            // is a partial fill, into the deals' position.
-            Outcome::Rejected { .. } | Outcome::Unconfirmed if partly_filled(sent) => (
-                "partly_filled",
-                deal_price,
-                deal_pid.or(position_id),
-                Some(deal_volume),
-            ),
-            Outcome::Rejected { .. } => ("rejected", None, position_id, None),
-            Outcome::Amended { .. } => ("amended", None, position_id, None),
-            Outcome::Unconfirmed => ("unconfirmed", None, position_id, None),
-        };
-        let answered_at = filled.map(|e| e.received_at);
+        // The order's deals, summed up by the rule both strategies share: the
+        // deals' position, their sum at their volume-weighted price (Codex
+        // P1s on #15).
+        // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+        let s = crate::fills::summarize(sent, position_id, volume);
+        let (outcome, price, pid, vol) = (s.outcome, s.price, s.position_id, s.volume);
+        let answered_at = s.filled_at;
         // A buy pays the ask and a sell gets the bid: positive is adverse.
         // An exit of a long is a sell, of a short a buy.
         let trade_side = if kind == "open" {
             side
         } else {
-            match side {
-                Side::Buy => Side::Sell,
-                Side::Sell => Side::Buy,
-            }
+            crate::fills::exit_side(side)
         };
-        let slippage = match (price, decision_price) {
-            (Some(f), Some(q)) => Some(match trade_side {
-                Side::Buy => f - q,
-                Side::Sell => q - f,
-            }),
-            _ => None,
-        };
+        let slippage = crate::fills::slippage(trade_side, price, decision_price);
         s3s::record_fill(
             self.pool,
             &s3s::FillRow {
@@ -1792,30 +1740,12 @@ impl<'a, 'c> Trader<'a, 'c> {
         let fill = deal.price;
         let stop = deal.stop_loss.or(own.and_then(|o| o.stop));
         let target = deal.take_profit.or(own.and_then(|o| o.take_profit));
-        // The level it executed: the nearer of the stop and the take-profit.
-        let level: Option<(&str, f64)> =
-            match (deal.sl_tp_order && !deal.stop_out, fill, stop, target) {
-                (true, Some(f), Some(s), Some(t)) if (f - s).abs() <= (f - t).abs() => {
-                    Some(("stop_loss", s))
-                }
-                (true, Some(_), _, Some(t)) => Some(("take_profit", t)),
-                (true, Some(_), Some(s), None) => Some(("stop_loss", s)),
-                _ => None,
-            };
-        let reason = match level {
-            Some((l, _)) => l,
-            None if deal.stop_out => "stop_out",
-            None => "other",
-        };
-        let decision_price = level.map(|(_, p)| p);
-        // An exit of a long is a sell, of a short a buy: positive is adverse.
-        let slippage = match (fill, decision_price) {
-            (Some(f), Some(q)) => Some(match side {
-                Side::Buy => q - f,
-                Side::Sell => f - q,
-            }),
-            _ => None,
-        };
+        // The level it executed (the nearer of the stop and the
+        // take-profit) and the slippage against it, by the rule both
+        // strategies share. Positive is adverse.
+        // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
+        let (reason, decision_price) = crate::fills::exit_level(&deal, stop, target);
+        let slippage = crate::fills::slippage(crate::fills::exit_side(side), fill, decision_price);
         let sym = self.syms.get(&deal.symbol_id);
         let (bid, ask) = (sym.and_then(|s| s.bid), sym.and_then(|s| s.ask));
         let name = sym.map(|s| s.name.clone()).unwrap_or_default();
