@@ -35,6 +35,8 @@ pub async fn jobs(pool: &PgPool) -> jiaoyi_store::Result<Value> {
     Ok(json!({
         "prereg_file": prereg::PREREG_FILE,
         "prereg_hash_running": prereg::hash(),
+        "engine_version_running": super::ENGINE_VERSION,
+        "held_out_min_engine": super::HELD_OUT_MIN_ENGINE,
         "spread_sampling": rs::sampling_summary(pool).await?,
         "jobs": out,
     }))

@@ -93,18 +93,18 @@ async fn the_migration_registers_the_ten_h1_jobs_under_the_frozen_hash(pool: PgP
 async fn a_job_moves_forward_only_and_records_every_attempt(pool: PgPool) {
     let job = rs::next_pending_job(&pool).await.unwrap().unwrap();
     assert_eq!(
-        rs::claim_job(&pool, job.id, "commit-a").await.unwrap(),
+        rs::claim_job(&pool, job.id, "commit-a", 2).await.unwrap(),
         Some(1)
     );
     assert_eq!(
-        rs::claim_job(&pool, job.id, "commit-a").await.unwrap(),
+        rs::claim_job(&pool, job.id, "commit-a", 2).await.unwrap(),
         None,
         "taken once"
     );
     // A stop interrupts it: nothing was written; it is attempted again.
     assert_eq!(rs::release_interrupted_jobs(&pool).await.unwrap(), 1);
     assert_eq!(
-        rs::claim_job(&pool, job.id, "commit-b").await.unwrap(),
+        rs::claim_job(&pool, job.id, "commit-b", 2).await.unwrap(),
         Some(2)
     );
     let a = rs::job_attempts(&pool, job.id).await.unwrap();
@@ -118,7 +118,7 @@ async fn a_job_moves_forward_only_and_records_every_attempt(pool: PgPool) {
         .await
         .unwrap();
     // A finished job never runs again, and is never deleted.
-    assert_eq!(rs::claim_job(&pool, job.id, "c").await.unwrap(), None);
+    assert_eq!(rs::claim_job(&pool, job.id, "c", 2).await.unwrap(), None);
     for q in [
         "UPDATE research_jobs SET status = 'pending', started_at = NULL WHERE run_order = 1",
         "UPDATE research_jobs SET status = 'running' WHERE run_order = 1",
@@ -306,7 +306,10 @@ async fn dev_trial(pool: &PgPool, run_order: i32, rules: Value, pf: f64) {
         .into_iter()
         .find(|j| j.run_order == run_order)
         .unwrap();
-    rs::claim_job(pool, job.id, "test").await.unwrap().unwrap();
+    rs::claim_job(pool, job.id, "test", 2)
+        .await
+        .unwrap()
+        .unwrap();
     let default = job.setting["default"].as_bool().unwrap();
     rs::finish_job_with_trial(
         pool,
@@ -411,6 +414,54 @@ async fn the_held_out_job_goes_ahead_when_the_gate_is_met(pool: PgPool) {
     assert!(matches!(&step, runner::Step::Waiting(_)), "{step:?}");
     let job = rs::jobs(&pool).await.unwrap().pop().unwrap();
     assert_eq!(job.status, "pending");
+}
+
+/// R1b (owner, "Merge now, fix in next PR"): the held-out job runs only on
+/// engine HELD_OUT_MIN_ENGINE or later. An older engine leaves it pending
+/// and unattempted, with the reason; this release's engine goes ahead.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_held_out_job_waits_for_the_minimum_engine(pool: PgPool) {
+    use jiaoyi::edge::{ENGINE_VERSION, HELD_OUT_MIN_ENGINE};
+    const { assert!(ENGINE_VERSION >= HELD_OUT_MIN_ENGINE) };
+    dev_trial(&pool, 1, rules(true), 1.5).await;
+    for (k, pf) in (2..=9).zip([1.1, 1.1, 1.1, 1.1, 1.1, 0.9, 0.8, 0.7]) {
+        dev_trial(&pool, k, rules(true), pf).await;
+    }
+    let (_t, stop) = shutdown::channel();
+    let no_broker = |_| async {
+        Err::<jiaoyi_ctrader::Connection, _>(anyhow::anyhow!("no broker in this test"))
+    };
+    let older = HELD_OUT_MIN_ENGINE - 1;
+    let step = runner::step_as(
+        &pool,
+        &broker(),
+        &[(permitted(), Environment::Live)],
+        &no_broker,
+        &stop,
+        older,
+    )
+    .await
+    .unwrap();
+    let why = format!(
+        "the held-out job runs only on engine {HELD_OUT_MIN_ENGINE} or later; this service runs engine {older}; it stays pending, not attempted"
+    );
+    assert_eq!(step, runner::Step::Waiting(why));
+    let job = rs::jobs(&pool).await.unwrap().pop().unwrap();
+    assert_eq!(
+        (job.stage.as_str(), job.status.as_str()),
+        ("held_out", "pending")
+    );
+    assert!(rs::job_attempts(&pool, job.id).await.unwrap().is_empty());
+    // This release's engine passes the check (here it then waits for the
+    // deposit currency).
+    let step = run_held_out_step(&pool).await;
+    assert!(
+        matches!(&step, runner::Step::Waiting(w) if !w.contains("engine")),
+        "{step:?}"
+    );
+    let jv = jiaoyi::edge::routes::jobs(&pool).await.unwrap();
+    assert_eq!(jv["engine_version_running"], ENGINE_VERSION);
+    assert_eq!(jv["held_out_min_engine"], HELD_OUT_MIN_ENGINE);
 }
 
 // ---------------------------------------------------------------- end to end
@@ -804,6 +855,11 @@ async fn the_default_development_job_runs_to_a_trial(pool: PgPool) {
         .as_u64()
         .is_some());
     assert_eq!(r["attempts"][0]["commit"], "unknown");
+    assert_eq!(
+        r["attempts"][0]["engine_version"],
+        jiaoyi::edge::ENGINE_VERSION
+    );
+    assert_eq!(t.params["engine_version"], jiaoyi::edge::ENGINE_VERSION);
     assert!(r["per_year"]
         .as_object()
         .unwrap()
@@ -1734,6 +1790,60 @@ async fn a_short_stop_trails_on_the_ask_and_never_loosens(pool: PgPool) {
     );
     assert!((t.exit_ref - 153.6).abs() < 1e-9, "{t:?}");
     assert!((t.exit_fill - 155.6).abs() < 1e-9, "{t:?}");
+}
+
+/// Codex P2 on #9, round 4 (recheck.rs:245): the exit-side quote standing
+/// at the fill is checked before any later update. Bid bars, spread 1
+/// (slippage 1× = 1), d = 6. The ask 150.7 fills at 151.7, so the stop is the
+/// bid 145.7, and the bid standing at the fill is 145.0: the trade exits at
+/// once, at 145.0 − 1 = 144.0, although the next bid, 146.0, is above the
+/// stop (Codex's ask 110, stop 105, bid 100, next bid 106).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_long_exits_on_the_bid_standing_at_its_fill(pool: PgPool) {
+    use jiaoyi_core::research::h1::ExitReason;
+    let x = prepared(basis(uptrend(112), 1.0, 0.0));
+    let (bids, asks) = quotes(
+        x.opens[100].timestamp_millis(),
+        &[(1, 145.0, 150.0), (2, 146.0, 150.7), (3, 147.0, 151.0)],
+    );
+    let (trades, _, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert!((t.entry_fill - 151.7).abs() < 1e-9, "{t:?}");
+    assert!((t.initial_stop - 145.7).abs() < 1e-9, "{t:?}");
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (100, ExitReason::Stop),
+        "{t:?}"
+    );
+    assert!((t.exit_ref - 145.0).abs() < 1e-9, "{t:?}");
+    assert!((t.exit_fill - 144.0).abs() < 1e-9, "{t:?}");
+}
+
+/// The short mirror: the bid 149.3 fills at 148.3, so the stop is the ask
+/// 154.3, and the ask standing at the fill is 155.0: the trade exits at
+/// once, at 155.0 + 1 = 156.0, although the next ask, 154.0, is below it.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_short_exits_on_the_ask_standing_at_its_fill(pool: PgPool) {
+    use jiaoyi_core::research::h1::{ExitReason, Side};
+    let x = prepared(basis(downtrend(112), 1.0, 0.0));
+    let (bids, asks) = quotes(
+        x.opens[100].timestamp_millis(),
+        &[(1, 150.0, 155.0), (2, 149.3, 154.0), (3, 149.0, 153.0)],
+    );
+    let (trades, _, _) = recheck_on(&pool, &x, bids, asks).await;
+    assert_eq!(trades.len(), 1);
+    let t = &trades[0];
+    assert_eq!(t.side, Side::Short);
+    assert!((t.entry_fill - 148.3).abs() < 1e-9, "{t:?}");
+    assert!((t.initial_stop - 154.3).abs() < 1e-9, "{t:?}");
+    assert_eq!(
+        (t.exit_index, t.exit_reason),
+        (100, ExitReason::Stop),
+        "{t:?}"
+    );
+    assert!((t.exit_ref - 155.0).abs() < 1e-9, "{t:?}");
+    assert!((t.exit_fill - 156.0).abs() < 1e-9, "{t:?}");
 }
 
 /// Codex P2 on #9 (h1job.rs:460): on held-out data, rule 2 holds only when
