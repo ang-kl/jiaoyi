@@ -1,10 +1,12 @@
--- The gated order path and the H1 trader (owner, 25-10-2026: "I want live to
--- execute trading by 1 PM today"; edge gate kept, demo trades first; live
--- may take the broker minimum volume).
+-- The gated order path and Strategy 1, the tick-triggered trend (owner's
+-- naming, № 16,806; H1 is its pre-registration label). Owner, 25-10-2026:
+-- "I want live to execute trading by 1 PM today", "Keep the gate; demo
+-- trades at 1 PM", and for live "Allow the minimum volume".
 --
--- Every account's trading switch is OFF here. It is turned on per account
--- only by a logged settings change (config/settings-changes.json, applied
--- once at start-up, or settings::change), never by this migration.
+-- There is no on/off switch (owner, 24-10-2026: "why do i need
+-- JIAOYI_TRADING_ENABLED, removed it. it should not be doing so"). Every
+-- permitted demo account trades Strategy 1 as soon as the service runs; a
+-- live account sends nothing until the edge gate passes.
 
 -- 1. What the gate wrote before each frame. Append-only. The unique entry
 --    key is what stops an intent being sent twice, after a restart included.
@@ -73,38 +75,39 @@ CREATE TRIGGER trading_decisions_append_only BEFORE UPDATE OR DELETE ON trading_
     FOR EACH ROW EXECUTE FUNCTION jiaoyi_refuse_change();
 CREATE INDEX trading_decisions_account ON trading_decisions (account_id, id DESC);
 
--- 4. Settings changes from config/settings-changes.json, each applied once.
+-- 4. Reviewed settings changes from config/settings-changes.json, each
+--    applied once through settings::change (bounds-checked, logged).
 CREATE TABLE settings_seed_applied (
     seed_id     TEXT PRIMARY KEY,
     version     BIGINT NOT NULL,
     applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 5. Settings. Global defaults; the per-account values come later, logged.
+-- 5. Settings.
 CREATE TEMP TABLE seed12 (
     ord int, key text, kind text, min_value double precision, max_value double precision,
     value jsonb, description text, source text
 ) ON COMMIT DROP;
 
 INSERT INTO seed12 VALUES
- (1, 'trading.enabled', 'integer', 0, 1, '0',
-  '1: this account''s trader may send orders through the gate; 0: nothing is sent. Off for every account by default',
-  'owner 25-10-2026 ("I want live to execute trading by 1 PM today"); switched on per account only by a logged change'),
- (2, 'trading.require_edge_pass', 'integer', 0, 1, '1',
-  '1: an account sends only once the H1 held-out trial under the running pre-registration hash has verdict PASS',
+ (1, 'trading.live_requires_edge_pass', 'integer', 0, 1, '1',
+  '1: a live account sends nothing until the Strategy 1 (H1) held-out trial under the running pre-registration hash has verdict PASS. Demo accounts do not wait',
   'owner 24-10-2026 ("live trading waits for a demonstrated edge"), kept 25-10 ("Keep the gate; demo trades at 1 PM")'),
- (3, 'trading.risk_pct', 'number', 0, 5, '0.6',
+ (2, 'trading.risk_pct', 'number', 0, 5, '0.6',
   'Percent of fresh equity (balance + unrealized P&L, broker-stated) risked per trade at the initial stop',
   'rulebook §5; pre-registration 24-10-2026 (H1 size)'),
- (4, 'trading.cap_factor', 'number', 1, 2, '1.1',
+ (3, 'trading.cap_factor', 'number', 1, 2, '1.1',
   'The gate refuses an open whose recomputed risk exceeds cap_factor × risk_pct × equity',
-  'PR B plan (risk recomputed before send); value self-derived'),
- (5, 'trading.allow_min_volume', 'integer', 0, 1, '0',
-  '1: when risk_pct sizing is below the broker minimum, take exactly the minimum if its risk is within min_volume_max_risk_pct; 0: skip',
+  'rulebook §5 (hard size cap at send: 1.1)'),
+ (4, 'trading.live_allow_min_volume', 'integer', 0, 1, '1',
+  '1: on a live account, when risk_pct sizing is below the broker minimum, take exactly the minimum if its risk is within min_volume_max_risk_pct; demo accounts always skip',
   'owner 25-10-2026 ("Allow the minimum volume", live only)'),
- (6, 'trading.min_volume_max_risk_pct', 'number', 0, 100, '10',
-  'The most a minimum-volume trade may risk, percent of fresh equity, when allow_min_volume is 1',
+ (5, 'trading.min_volume_max_risk_pct', 'number', 0, 100, '10',
+  'The most a minimum-volume trade may risk, percent of fresh equity',
   'owner 25-10-2026: at $38.98 this admits ETHUSD''s $2.85 (7.3%) and nothing else'),
+ (6, 'trading.trend_open_risk_pct', 'number', 0, 100, '3.0',
+  'The most Strategy 1 may hold in open risk at its stops, percent of fresh equity: half of a 6% account limit; the other half is for Strategy 2 (stat arb, not built)',
+  'owner, № 16,806 (strategy 1 holds at most half of each account''s open-risk limit)'),
  (7, 'trading.reconcile_secs', 'integer', 30, 3600, '300',
   'Seconds between reconciles with the broker''s open positions (the broker wins)',
   'PR B plan (reconcile at start and periodically); value self-derived'),
@@ -114,8 +117,8 @@ INSERT INTO seed12 VALUES
  (9, 'trading.order_wait_secs', 'integer', 1, 120, '20',
   'Seconds the gate waits for the broker''s answer before an order is Unconfirmed (never resent)',
   'value self-derived'),
- (10, 'trading.switch_poll_secs', 'integer', 5, 600, '30',
-  'Seconds between reads of each account''s trading switch',
+ (10, 'trading.retry_secs', 'integer', 5, 3600, '60',
+  'Seconds before a trading session that stopped on an error connects again',
   'value self-derived');
 
 INSERT INTO setting_definitions (key, kind, min_value, max_value, description, source)

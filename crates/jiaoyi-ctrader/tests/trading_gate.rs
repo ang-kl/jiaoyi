@@ -195,7 +195,6 @@ fn allow() -> Allowlist {
 
 fn on() -> Policy {
     Policy {
-        enabled: true,
         edge: Ok(()),
         max_risk: 10.0,
     }
@@ -262,22 +261,6 @@ async fn an_account_off_the_allowlist_is_refused() {
         &on(),
         open(1, 28_457_000),
         "allowlist",
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn the_switch_off_sends_nothing() {
-    let p = Policy {
-        enabled: false,
-        ..on()
-    };
-    refused(
-        &allow(),
-        &MemLedger::default(),
-        &p,
-        open(1, 28_457_000),
-        "trading.enabled is off",
     )
     .await;
 }

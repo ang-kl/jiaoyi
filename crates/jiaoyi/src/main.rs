@@ -67,7 +67,8 @@ async fn main() -> anyhow::Result<()> {
         cfg.plan.permitted.clone(),
         stop.clone(),
     )));
-    // The H1 trader: one loop per account, idle while trading.enabled is 0.
+    // Strategy 1 (tick-triggered trend): one loop per account; demo trades at
+    // once, live sends nothing until the edge gate passes.
     tasks.push(tokio::spawn(jiaoyi::trading::run(
         pool.clone(),
         cfg.clone(),

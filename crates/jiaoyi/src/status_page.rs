@@ -83,7 +83,7 @@ fn short(s: &str, n: usize) -> String {
 
 fn pill(state: &str) -> String {
     let kind = match state {
-        "ok" | "listed" | "done" | "measured" | "on" => "good",
+        "ok" | "listed" | "done" | "measured" | "trading" => "good",
         "partial" | "pending" | "running" | "unread" => "warn",
         "failed" | "refused" | "not_listed" | "environment_mismatch" => "bad",
         _ => "neutral",
@@ -219,17 +219,19 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     }
     h.push_str("</tbody></table></div></section>");
 
-    // Trading: each account's switch, edge gate, last decision and the
-    // positions it found that it did not open (no money).
-    h.push_str(r#"<section><h2>Trading</h2><div class="scroll"><table><thead><tr><th>Account</th><th>Switch</th><th>Edge gate</th><th>Minimum volume</th><th>Last decision</th><th class="num">External positions</th></tr></thead><tbody>"#);
+    // Strategy 1 per account: whether it trades (demo at once, live once the
+    // edge gate passes), the gate, the minimum-volume rule, the open-risk
+    // budget, the last decision and the positions it found that it did not
+    // open. No money.
+    h.push_str(r#"<section><h2>Strategy 1: tick-triggered trend</h2><div class="scroll"><table><thead><tr><th>Account</th><th>Environment</th><th>Trades</th><th>Edge gate</th><th>Minimum volume</th><th class="num">Open-risk budget</th><th>Last decision</th><th class="num">External positions</th></tr></thead><tbody>"#);
     let trading = rows(&health["trading"]);
     if trading.is_empty() {
-        h.push_str(r#"<tr><td colspan="6" class="empty">No account recorded yet.</td></tr>"#);
+        h.push_str(r#"<tr><td colspan="8" class="empty">No account recorded yet.</td></tr>"#);
     }
     for t in trading {
-        let switch = match t["enabled"].as_bool() {
-            Some(true) => pill("on"),
-            Some(false) => pill("off"),
+        let trades = match t["trades"].as_str() {
+            Some("yes") => pill("trading"),
+            Some(other) => pill(other),
             None => "—".into(),
         };
         let decision = t["last_decision"]
@@ -250,9 +252,14 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             .as_array()
             .map(|a| a.len().to_string())
             .unwrap_or_else(|| "—".into());
+        let budget = t["trend_open_risk_pct"]
+            .as_f64()
+            .map(|p| format!("{p}%"))
+            .unwrap_or_else(|| "—".into());
         h.push_str(&format!(
-            "<tr><td class=\"mono\">{}</td><td>{switch}</td><td class=\"note\">{}</td><td>{}</td><td>{decision}</td><td class=\"num\">{external}</td></tr>",
+            "<tr><td class=\"mono\">{}</td><td>{}</td><td>{trades}</td><td class=\"note\">{}</td><td>{}</td><td class=\"num\">{budget}</td><td>{decision}</td><td class=\"num\">{external}</td></tr>",
             txt(&t["account_id"]),
+            txt(&t["environment"]),
             esc(&short(t["edge_gate"].as_str().unwrap_or("—"), 160)),
             match t["allow_min_volume"].as_bool() {
                 Some(true) => "allowed",
@@ -466,23 +473,25 @@ mod tests {
     }
 
     #[test]
-    fn the_trading_section_shows_switch_gate_and_external_positions() {
+    fn the_strategy_section_shows_trading_state_gate_and_external_positions() {
         let now = "2026-10-25T05:00:00Z".parse().unwrap();
         let h = json!({"trading": [
-            {"account_id": 43002148, "enabled": true, "allow_min_volume": true,
+            {"account_id": 43002148, "environment": "live", "trades": "armed: waits for the edge gate",
+             "allow_min_volume": true, "trend_open_risk_pct": 3.0,
              "edge_gate": "not met: no H1 held-out trial under 9105c5eb yet",
              "last_decision": {"kind": "signal_held", "reason": "edge gate <b>not</b> met", "at": "2026-10-25T04:59:00Z"},
              "last_reconcile": {"external_positions": []}},
-            {"account_id": 46130058, "enabled": false, "allow_min_volume": false, "edge_gate": "not required",
-             "last_decision": null,
+            {"account_id": 46130058, "environment": "demo", "trades": "yes", "allow_min_volume": false,
+             "trend_open_risk_pct": 3.0, "edge_gate": "not required (demo)", "last_decision": null,
              "last_reconcile": {"external_positions": [{"position_id": 77, "symbol_id": 22, "side": "sell", "volume": 300}]}}
         ]});
         let p = page(&h, &json!({}), &json!({}), now);
-        assert!(p.contains("<h2>Trading</h2>"));
-        assert!(p.contains(r#"<span class="pill good">on</span>"#));
-        assert!(p.contains(r#"<span class="pill neutral">off</span>"#));
+        assert!(p.contains("<h2>Strategy 1: tick-triggered trend</h2>"));
+        assert!(p.contains(r#"<span class="pill good">trading</span>"#));
+        assert!(p.contains("armed: waits for the edge gate"));
         assert!(p.contains("not met: no H1 held-out trial"));
         assert!(p.contains("edge gate &lt;b&gt;not&lt;/b&gt; met"));
+        assert!(p.contains("3%"));
         assert!(
             p.contains(r#"<td class="num">1</td>"#),
             "one external position on 46130058"

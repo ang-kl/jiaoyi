@@ -128,18 +128,35 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
 - **Readings** where the text leaves a choice are written into every trial's params, `readings`.
 - `GET /research/jobs` and `GET /research/trials` show counts and R only, plus the deflated Sharpe once all 9 development trials exist. Notional money and the trade list stay in the stored trial.
 
-## Order path (migration 0012; owner, 25-10-2026)
+## Order path and Strategy 1 (migration 0012; owner, 25-10-2026)
 
 | Table | Kind | Holds |
 |---|---|---|
 | `trading_intents` | event, append-only | What the order gate wrote before each frame: entry key (unique, so never sent twice), client message id, kind (open, amend_stop, close), symbol, position, side, volume in cents, relative stop, stop price, the risk the gate recomputed and its allowance (deposit currency), settings version. |
 | `trading_events` | event, append-only | Every execution message: the answers to our requests (by client message id and entry key) and the broker's own (a stop hit), with the raw bytes. `RECONCILED_FILL`: an unconfirmed open that reconcile found filled, adopted once. |
-| `trading_decisions` | event, append-only | The trader's decisions (switch, reconcile with the external positions it found, signal held by the edge gate, skip and why, refused and why, sent), recorded when they change, not on every tick. |
+| `trading_decisions` | event, append-only | Strategy 1's decisions (reconcile with the external positions it found, a signal held by the edge gate, a skip and why, a refusal and why, a send), recorded when they change, not on every tick. |
 | `settings_seed_applied` | state | Which entries of `config/settings-changes.json` were applied, and the settings version each became. |
 
-- **Settings** (global defaults, every account off): `trading.enabled` 0, `trading.require_edge_pass` 1, `trading.risk_pct` 0.6, `trading.cap_factor` 1.1, `trading.allow_min_volume` 0, `trading.min_volume_max_risk_pct` 10, `trading.reconcile_secs` 300, `trading.trail_amend_secs` 60, `trading.order_wait_secs` 20, `trading.switch_poll_secs` 30. Per-account values only by a logged change.
-- **Turning an account on** is a reviewed change to `config/settings-changes.json` (an `id`, `key`, `account_id`, `value`, `changed_by` and `reason` per entry), merged and deployed. Each entry is applied once through `settings::change`, so it is bounds-checked and logged. A refused entry is logged and not applied.
-- `/health` → `trading` and the status page show each account's switch, edge gate, minimum-volume setting, last decision and the external positions found at the last reconcile (symbol, side, volume). No money.
+- **Settings:**
+  - `trading.live_requires_edge_pass` 1
+  - `trading.risk_pct` 0.6
+  - `trading.cap_factor` 1.1
+  - `trading.live_allow_min_volume` 1
+  - `trading.min_volume_max_risk_pct` 10
+  - `trading.trend_open_risk_pct` 3.0 (half of a 6% account limit; № 16,806)
+  - `trading.reconcile_secs` 300
+  - `trading.trail_amend_secs` 60
+  - `trading.order_wait_secs` 20
+  - `trading.retry_secs` 60
+- **No on/off switch** (owner, 24-10). Demo accounts trade from start-up; a live account waits for the edge gate.
+- **A reviewed settings change** is an entry in `config/settings-changes.json` (`id`, `key`, `account_id`, `value`, `changed_by`, `reason`), merged and deployed. Each entry is applied once through `settings::change`, so it is bounds-checked and logged. A refused entry is logged and not applied.
+- `/health` → `trading` and the status page show, per account:
+  - the strategy, and whether it trades (`yes`, or `armed: waits for the edge gate`);
+  - the edge gate and the minimum-volume rule;
+  - the open-risk budget;
+  - the last decision;
+  - the external positions found at the last reconcile (symbol, side, volume).
+  No money.
 
 ## Volume and retention
 

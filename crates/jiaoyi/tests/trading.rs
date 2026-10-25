@@ -1,7 +1,8 @@
-//! The H1 trader and the order gate against a real PostgreSQL and the
-//! scripted broker (owner, 25-10-2026): every switch off by default, the edge
-//! gate, the reviewed settings seed, one entry per completed day, the trail,
-//! and positions this program did not open.
+//! Strategy 1 (the tick-triggered trend) and the order gate against a real
+//! PostgreSQL and the scripted broker (owner, 25-10-2026): demo trades at
+//! once, live waits for the edge gate, the open-risk budget, the reviewed
+//! settings seed, one entry per completed day, the trail, and positions this
+//! program did not open.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -19,6 +20,7 @@ use serde_json::json;
 use sqlx::PgPool;
 
 const DEMO: i64 = 49236051;
+const LIVE: i64 = 43002148;
 const ETH: i64 = 22;
 const HASH: &str = "9105c5eb812ff6b3d267627a53e64d924018c799753d70e598830381a909098f";
 
@@ -167,11 +169,12 @@ fn fake(quotes: Vec<(f64, f64)>) -> FakeBroker {
     }
 }
 
-/// Run the trading loop on `f` for `secs`, then stop it.
+/// Run the Strategy 1 loop on `f` for `secs` as an account on `env`, then stop it.
 async fn trade(
     pool: &PgPool,
     f: &FakeBroker,
     secs: u64,
+    env: Environment,
 ) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
     let (conn, log) = f.clone().spawn();
     let session = loader::authorise(pool, &conn, &broker(), &permitted())
@@ -182,7 +185,7 @@ async fn trade(
     let mut d = trading::decisions(pool, DEMO);
     let list = allowlist();
     tokio::select! {
-        r = trading::run_session(pool, &list, &session, &mut d, &mut ends, &mut stop) => {
+        r = trading::run_session(pool, &list, env, &session, &mut d, &mut ends, &mut stop) => {
             r.unwrap();
         }
         _ = tokio::time::sleep(Duration::from_secs(secs)) => trigger.fire(),
@@ -199,21 +202,35 @@ async fn decisions(pool: &PgPool) -> Vec<(String, String)> {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn every_accounts_switch_is_off_after_the_migration(pool: PgPool) {
-    for id in [43002148, 49236051, 46130058, 47790949] {
-        let sw = trading::switches(&pool, id).await.unwrap();
-        assert!(!sw.enabled, "{id}");
-        assert!(sw.require_edge_pass, "{id}");
-        assert!(!sw.allow_min_volume, "{id}");
-        assert_eq!(sw.risk_pct, 0.6);
-        assert_eq!(sw.min_volume_max_risk_pct, 10.0);
+async fn demo_trades_without_the_gate_and_live_waits_for_it(pool: PgPool) {
+    for id in [49236051, 46130058, 47790949] {
+        let r = trading::rules(&pool, id, Environment::Demo).await.unwrap();
+        assert!(!r.edge_required, "{id}");
+        assert!(!r.allow_min_volume, "demo skips below the minimum: {id}");
     }
+    let r = trading::rules(&pool, LIVE, Environment::Live)
+        .await
+        .unwrap();
+    assert!(r.edge_required);
+    assert!(r.allow_min_volume);
+    assert_eq!(r.risk_pct, 0.6);
+    assert_eq!(r.min_volume_max_risk_pct, 10.0);
+    assert_eq!(r.trend_open_risk_pct, 3.0);
+    // No on/off switch exists (owner, 24-10).
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM setting_definitions WHERE key LIKE '%enabled%'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 0);
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn the_edge_gate_opens_only_on_a_held_out_pass(pool: PgPool) {
-    let sw = trading::switches(&pool, DEMO).await.unwrap();
-    let g = trading::edge_gate(&pool, &sw).await.unwrap();
+async fn the_live_edge_gate_opens_only_on_a_held_out_pass(pool: PgPool) {
+    let r = trading::rules(&pool, LIVE, Environment::Live)
+        .await
+        .unwrap();
+    let g = trading::edge_gate(&pool, &r).await.unwrap();
     assert!(g.unwrap_err().contains("no H1 held-out trial"));
     let trial = |verdict: &'static str, sample: &'static str, hash: &'static str| {
         let pool = pool.clone();
@@ -238,63 +255,69 @@ async fn the_edge_gate_opens_only_on_a_held_out_pass(pool: PgPool) {
         "0000000000000000000000000000000000000000000000000000000000000000",
     )
     .await;
-    assert!(trading::edge_gate(&pool, &sw).await.unwrap().is_err());
+    assert!(trading::edge_gate(&pool, &r).await.unwrap().is_err());
     trial("FAIL", "held_out", HASH).await;
-    let g = trading::edge_gate(&pool, &sw).await.unwrap();
+    let g = trading::edge_gate(&pool, &r).await.unwrap();
     assert!(g.unwrap_err().contains("is FAIL"));
     trial("PASS", "held_out", HASH).await;
-    assert!(trading::edge_gate(&pool, &sw).await.unwrap().is_ok());
-    // Not required: open whatever the trials say.
-    set(&pool, "trading.require_edge_pass", json!(0)).await;
-    sqlx::query("DELETE FROM research_trials")
-        .execute(&pool)
+    assert!(trading::edge_gate(&pool, &r).await.unwrap().is_ok());
+    // A demo account never waits for it.
+    let demo = trading::rules(&pool, DEMO, Environment::Demo)
         .await
-        .ok();
-    let sw = trading::switches(&pool, DEMO).await.unwrap();
-    assert!(trading::edge_gate(&pool, &sw).await.unwrap().is_ok());
+        .unwrap();
+    assert!(trading::edge_gate(&pool, &demo).await.unwrap().is_ok());
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_reviewed_seed_change_is_applied_once_and_logged(pool: PgPool) {
     let text = r#"[
-      {"id": "2026-10-25-demo-on", "key": "trading.enabled", "account_id": 49236051, "value": 1,
-       "changed_by": "owner", "reason": "owner 25-10: demo trades at 1 PM"},
-      {"id": "2026-10-25-bad", "key": "trading.enabled", "account_id": 46130058, "value": 2,
+      {"id": "2026-10-25-live-min-off", "key": "trading.live_allow_min_volume", "account_id": 43002148, "value": 0,
+       "changed_by": "owner", "reason": "test: live skips below the minimum"},
+      {"id": "2026-10-25-bad", "key": "trading.trend_open_risk_pct", "account_id": 46130058, "value": 500,
        "changed_by": "owner", "reason": "out of bounds"}
     ]"#;
     let applied = trading::apply_seed(&pool, text).await.unwrap();
-    assert_eq!(applied, vec!["2026-10-25-demo-on".to_string()]);
-    assert!(trading::switches(&pool, DEMO).await.unwrap().enabled);
-    assert!(!trading::switches(&pool, 46130058).await.unwrap().enabled);
-    assert!(!trading::switches(&pool, 43002148).await.unwrap().enabled);
+    assert_eq!(applied, vec!["2026-10-25-live-min-off".to_string()]);
+    let r = trading::rules(&pool, LIVE, Environment::Live)
+        .await
+        .unwrap();
+    assert!(!r.allow_min_volume);
+    let other = trading::rules(&pool, 46130058, Environment::Demo)
+        .await
+        .unwrap();
+    assert_eq!(
+        other.trend_open_risk_pct, 3.0,
+        "the refused entry changed nothing"
+    );
     let log: Vec<(String, String)> = sqlx::query_as(
-        "SELECT changed_by, reason FROM settings_changes WHERE key = 'trading.enabled' AND account_id = $1",
+        "SELECT changed_by, reason FROM settings_changes WHERE key = 'trading.live_allow_min_volume' AND account_id = $1",
     )
-    .bind(DEMO)
+    .bind(LIVE)
     .fetch_all(&pool)
     .await
     .unwrap();
     assert_eq!(
         log,
-        vec![("owner".into(), "owner 25-10: demo trades at 1 PM".into())]
+        vec![("owner".into(), "test: live skips below the minimum".into())]
     );
     // Applied once: a restart changes nothing.
     assert!(trading::apply_seed(&pool, text).await.unwrap().is_empty());
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM settings_changes WHERE key = 'trading.enabled' AND account_id IS NOT NULL")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM settings_changes WHERE key LIKE 'trading.%' AND account_id IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(n, 1);
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn the_trader_sends_one_h1_entry_and_trails_it(pool: PgPool) {
+async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
     loaded(&pool).await;
-    set(&pool, "trading.enabled", json!(1)).await;
-    set(&pool, "trading.require_edge_pass", json!(0)).await;
+    // No setting is changed: a demo account trades as soon as it runs.
     // The ask reaches the level (3610.00); then the bid rises to 3700.00.
     let f = fake(vec![(3608.0, 3611.0), (3700.0, 3701.0)]);
-    let log = trade(&pool, &f, 3).await;
+    let log = trade(&pool, &f, 3, Environment::Demo).await;
     let orders = log.lock().unwrap().orders.clone();
     assert_eq!(orders.len(), 1, "{:?}", decisions(&pool).await);
     let o = &orders[0];
@@ -304,7 +327,7 @@ async fn the_trader_sends_one_h1_entry_and_trails_it(pool: PgPool) {
     assert_eq!(o.relative_stop_loss, Some(12_000_000));
     // 0.6% of $1,002.44 = $6.0146; one cent risks 0.01 × 120 = $1.20 → 5 cents.
     assert_eq!(o.volume, 5);
-    assert_eq!(o.label.as_deref(), Some("jiaoyi-h1"));
+    assert_eq!(o.label.as_deref(), Some("jiaoyi-s1"));
     assert_eq!(o.take_profit, None);
     // The trail: best bid 3700.00 − 120.00 = 3580.00, above the fill's 3491.00.
     let amends = log.lock().unwrap().amends.clone();
@@ -326,32 +349,20 @@ async fn the_trader_sends_one_h1_entry_and_trails_it(pool: PgPool) {
     // A restart after the position was stopped out: the same completed day's
     // entry key is recorded, so nothing is sent again.
     f.positions.lock().unwrap().clear();
-    let log2 = trade(&pool, &f, 2).await;
+    let log2 = trade(&pool, &f, 2, Environment::Demo).await;
     assert!(log2.lock().unwrap().orders.is_empty());
-    // /health shows the switch and the decision, and no money.
+    // /health shows the strategy and the decision, and no money.
     let h = trading::health(&pool).await.unwrap();
-    assert_eq!(h[0]["enabled"], true);
-    assert_eq!(h[0]["edge_gate"], "not required");
+    assert_eq!(h[0]["strategy"], "Strategy 1: tick-triggered trend");
+    assert_eq!(h[0]["trades"], "yes");
+    assert_eq!(h[0]["edge_gate"], "not required (demo)");
     assert!(!h.to_string().contains("balance"));
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn the_switch_off_sends_nothing(pool: PgPool) {
+async fn a_live_account_is_armed_and_holds_the_signal_until_the_edge_passes(pool: PgPool) {
     loaded(&pool).await;
-    set(&pool, "trading.require_edge_pass", json!(0)).await;
-    let log = trade(&pool, &fake(vec![(3608.0, 3611.0)]), 2).await;
-    assert!(log.lock().unwrap().orders.is_empty());
-    assert!(decisions(&pool)
-        .await
-        .iter()
-        .any(|(k, r)| k == "refused" && r.contains("trading.enabled is off")));
-}
-
-#[sqlx::test(migrator = "store::MIGRATOR")]
-async fn an_unmet_edge_gate_holds_the_signal(pool: PgPool) {
-    loaded(&pool).await;
-    set(&pool, "trading.enabled", json!(1)).await;
-    let log = trade(&pool, &fake(vec![(3608.0, 3611.0)]), 2).await;
+    let log = trade(&pool, &fake(vec![(3608.0, 3611.0)]), 2, Environment::Live).await;
     assert!(log.lock().unwrap().orders.is_empty());
     let d = decisions(&pool).await;
     assert!(
@@ -368,10 +379,23 @@ async fn an_unmet_edge_gate_holds_the_signal(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_entry_beyond_the_open_risk_budget_is_skipped(pool: PgPool) {
+    loaded(&pool).await;
+    // 0.5% of $1,002.44 = $5.01, below this entry's $6.00.
+    set(&pool, "trading.trend_open_risk_pct", json!(0.5)).await;
+    let log = trade(&pool, &fake(vec![(3608.0, 3611.0)]), 2, Environment::Demo).await;
+    assert!(log.lock().unwrap().orders.is_empty());
+    let d = decisions(&pool).await;
+    assert!(
+        d.iter()
+            .any(|(k, r)| k == "skip" && r.contains("exceed its budget")),
+        "{d:?}"
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_position_this_program_did_not_open_blocks_the_entry_and_is_reported(pool: PgPool) {
     loaded(&pool).await;
-    set(&pool, "trading.enabled", json!(1)).await;
-    set(&pool, "trading.require_edge_pass", json!(0)).await;
     let f = fake(vec![(3608.0, 3611.0)]);
     f.positions.lock().unwrap().push(ProtoOaPosition {
         position_id: 77,
@@ -387,7 +411,7 @@ async fn a_position_this_program_did_not_open_blocks_the_entry_and_is_reported(p
         stop_loss: Some(4000.0),
         ..Default::default()
     });
-    let log = trade(&pool, &f, 2).await;
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
     let l = log.lock().unwrap().clone();
     assert!(l.orders.is_empty());
     assert!(l.amends.is_empty() && l.closes.is_empty(), "never touched");

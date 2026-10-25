@@ -1,30 +1,39 @@
-//! The H1 trader (owner, 25-10-2026: "I want live to execute trading by 1 PM
-//! today"; "Keep the gate; demo trades at 1 PM"; "Allow the minimum volume"
-//! for live).
+//! Strategy 1: the tick-triggered trend (the owner's naming, № 16,806; H1
+//! is its pre-registration label). Owner, 25-10-2026: "I want live to
+//! execute trading by 1 PM today"; "Keep the gate; demo trades at 1 PM";
+//! "Allow the minimum volume" for live.
 //!
-//! One loop per permitted account. It reads that account's
-//! `trading.enabled`; while it is 0 (every account's default) nothing
-//! connects and nothing is sent. While it is 1:
-//! - the pre-registered H1 default runs on the broker's own completed daily
-//!   bars, re-read every `LEVELS_REFRESH`: EMA(50) of the closes above
-//!   EMA(100) → longs only, below → shorts only; long on the first ask at or
-//!   above the highest high of the previous 50 completed days, short on the
-//!   first bid at or below the lowest low; one position per symbol, at most
-//!   one entry per symbol after each completed day;
-//! - the stop is 3 × ATR(20) (Wilder, completed days) from the fill, sent as
-//!   the order's relative stop; it trails 3 × ATR behind the best bid (ask for
-//!   shorts) since the fill and only ever moves in the trade's favour, at most
-//!   one amend per `trading.trail_amend_secs`; no take-profit;
-//! - size: `trading.risk_pct` of fresh equity (the broker's balance plus its
-//!   unrealized P&L), floored to the step; below the broker minimum it is
-//!   skipped, unless `trading.allow_min_volume` is 1 and the minimum's risk is
-//!   within `trading.min_volume_max_risk_pct` of equity (then exactly the
-//!   minimum);
-//! - `trading.require_edge_pass` 1: nothing is sent until the H1 held-out
-//!   trial under the running pre-registration hash has verdict PASS;
-//! - the broker wins: positions are reconciled at start and every
-//!   `trading.reconcile_secs`; positions without this program's label are
-//!   external and never touched.
+//! There is no on/off switch (owner, 24-10-2026: "why do i need
+//! JIAOYI_TRADING_ENABLED, removed it. it should not be doing so"). One loop
+//! per permitted account runs from start-up:
+//! - a **demo** account trades Strategy 1 at once;
+//! - a **live** account runs the same loop armed, and sends nothing until
+//!   the H1 held-out trial under the running pre-registration hash has
+//!   verdict PASS (`trading.live_requires_edge_pass`).
+//!
+//! The strategy, as pre-registered (default setting): on the broker's own
+//! completed daily bars, re-read every `LEVELS_REFRESH`, EMA(50) of the
+//! closes above EMA(100) → longs only, below → shorts only; long on the
+//! first ask at or above the highest high of the previous 50 completed
+//! days, short on the first bid at or below the lowest low; one position
+//! per symbol, at most one entry per symbol after each completed day. The
+//! stop is 3 × ATR(20) (Wilder, completed days) from the fill, sent as the
+//! order's relative stop; it trails 3 × ATR behind the best bid (ask for
+//! shorts) since the fill and only ever moves in the trade's favour, at
+//! most one amend per `trading.trail_amend_secs`; no take-profit.
+//!
+//! Size: `trading.risk_pct` of fresh equity (the broker's balance plus its
+//! unrealized P&L), floored to the step; below the broker minimum it is
+//! skipped. On a live account with `trading.live_allow_min_volume`, the
+//! minimum is taken instead when its risk is within
+//! `trading.min_volume_max_risk_pct` of equity. Strategy 1 holds at most
+//! `trading.trend_open_risk_pct` of equity in open risk at its stops (half
+//! of a 6% account limit; the other half is for Strategy 2); an entry that
+//! would exceed it is skipped with the reason.
+//!
+//! The broker wins: positions are reconciled at start and every
+//! `trading.reconcile_secs`; positions without this program's label are
+//! external, reported (symbol, side, volume) and never touched.
 //!
 //! Every order goes through `jiaoyi_ctrader::trading::send`, the one gate.
 
@@ -53,8 +62,10 @@ use crate::edge::prereg;
 use crate::loader;
 use crate::shutdown::Shutdown;
 
-/// The label on every position this program opens.
-pub const LABEL: &str = "jiaoyi-h1";
+/// The strategy's name on every route and record (owner, № 16,806).
+pub const STRATEGY: &str = "Strategy 1: tick-triggered trend";
+/// The label on every position this program opens for Strategy 1.
+pub const LABEL: &str = "jiaoyi-s1";
 /// The pre-registered H1 default (breakout 50, stop 3 × ATR).
 pub const BREAKOUT: usize = 50;
 pub const STOP_ATR: f64 = 3.0;
@@ -62,50 +73,56 @@ pub const STOP_ATR: f64 = 3.0;
 pub const BAR_DAYS: i64 = 250;
 /// How often the levels are recomputed from the broker's bars.
 pub const LEVELS_REFRESH: Duration = Duration::from_secs(30 * 60);
-/// The hypothesis whose held-out PASS opens the edge gate.
+/// The pre-registered hypothesis whose held-out PASS opens the live gate.
 pub const EDGE_HYPOTHESIS: &str = "H1";
 
 // ---------------------------------------------------------------- settings
 
-/// One account's trading settings, read fresh.
+/// The rules for one account, read fresh: the settings, with what depends
+/// on the account's environment (only live waits for the edge gate and may
+/// take the broker minimum).
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Switches {
+pub struct Rules {
     pub version: i64,
-    pub enabled: bool,
-    pub require_edge_pass: bool,
+    pub live: bool,
+    pub edge_required: bool,
     pub risk_pct: f64,
     pub cap_factor: f64,
     pub allow_min_volume: bool,
     pub min_volume_max_risk_pct: f64,
+    pub trend_open_risk_pct: f64,
     pub reconcile_secs: u64,
     pub trail_amend_secs: u64,
     pub order_wait_secs: u64,
-    pub switch_poll_secs: u64,
+    pub retry_secs: u64,
 }
 
-pub async fn switches(pool: &PgPool, account_id: i64) -> anyhow::Result<Switches> {
+pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::Result<Rules> {
     let s = jiaoyi_store::settings::snapshot(pool, Some(account_id)).await?;
     let i = |k: &str| s.integer(k).map_err(anyhow::Error::msg);
     let n = |k: &str| s.number(k).map_err(anyhow::Error::msg);
-    Ok(Switches {
+    let live = env == Environment::Live;
+    Ok(Rules {
         version: s.version,
-        enabled: i("trading.enabled")? == 1,
-        require_edge_pass: i("trading.require_edge_pass")? == 1,
+        live,
+        edge_required: live && i("trading.live_requires_edge_pass")? == 1,
         risk_pct: n("trading.risk_pct")?,
         cap_factor: n("trading.cap_factor")?,
-        allow_min_volume: i("trading.allow_min_volume")? == 1,
+        allow_min_volume: live && i("trading.live_allow_min_volume")? == 1,
         min_volume_max_risk_pct: n("trading.min_volume_max_risk_pct")?,
+        trend_open_risk_pct: n("trading.trend_open_risk_pct")?,
         reconcile_secs: i("trading.reconcile_secs")?.max(1) as u64,
         trail_amend_secs: i("trading.trail_amend_secs")?.max(1) as u64,
         order_wait_secs: i("trading.order_wait_secs")?.max(1) as u64,
-        switch_poll_secs: i("trading.switch_poll_secs")?.max(1) as u64,
+        retry_secs: i("trading.retry_secs")?.max(1) as u64,
     })
 }
 
-/// The edge gate for an account: met when not required, or when the newest
-/// H1 held-out trial under the running pre-registration hash says PASS.
-pub async fn edge_gate(pool: &PgPool, sw: &Switches) -> anyhow::Result<Result<(), String>> {
-    if !sw.require_edge_pass {
+/// The edge gate for an account: met when not required (demo), or when the
+/// newest H1 held-out trial under the running pre-registration hash says
+/// PASS.
+pub async fn edge_gate(pool: &PgPool, r: &Rules) -> anyhow::Result<Result<(), String>> {
+    if !r.edge_required {
         return Ok(Ok(()));
     }
     let hash = prereg::hash();
@@ -128,6 +145,30 @@ pub async fn edge_gate(pool: &PgPool, sw: &Switches) -> anyhow::Result<Result<()
     )
 }
 
+/// The open-risk budget: Strategy 1's open risk at its stops plus a new
+/// entry's must stay within `trend_open_risk_pct` of equity.
+pub fn within_budget(open_risk: f64, new_risk: f64, equity: f64, pct: f64) -> Result<(), String> {
+    let budget = equity * pct / 100.0;
+    if open_risk + new_risk > budget * (1.0 + 1e-9) {
+        Err(format!(
+            "Strategy 1's open risk {open_risk:.2} plus this entry's {new_risk:.2} would exceed its budget {budget:.2} ({pct}% of equity): skipped"
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// The risk still at stake at a position's stop, in the deposit currency:
+/// the distance from the entry to the stop on the losing side, or 0 once
+/// the stop has passed the entry.
+pub fn risk_at_stop(side: Side, entry: f64, stop: f64, volume: i64, quote_to_deposit: f64) -> f64 {
+    let d = match side {
+        Side::Buy => entry - stop,
+        Side::Sell => stop - entry,
+    };
+    d.max(0.0) * volume as f64 / 100.0 * quote_to_deposit
+}
+
 // ---------------------------------------------------------------- sizing
 
 /// How the volume was chosen.
@@ -144,7 +185,7 @@ pub struct Sized {
 /// Size an open. `equity` and the result are in the deposit currency;
 /// `relative_stop` in 1/100000 of a price.
 pub fn size(
-    sw: &Switches,
+    sw: &Rules,
     equity: f64,
     relative_stop: i64,
     quote_to_deposit: f64,
@@ -297,7 +338,7 @@ pub fn trail(side: Side, best: f64, atr: f64, current: Option<f64>, digits: i32)
 
 /// The entry key: at most one entry per symbol after each completed day.
 pub fn entry_key(account_id: i64, symbol_id: i64, after: NaiveDate) -> String {
-    format!("h1:{account_id}:{symbol_id}:{after}")
+    format!("s1:{account_id}:{symbol_id}:{after}")
 }
 
 // ---------------------------------------------------------------- ledger
@@ -432,8 +473,9 @@ pub async fn apply_seed(pool: &PgPool, text: &str) -> anyhow::Result<Vec<String>
 
 // ---------------------------------------------------------------- health
 
-/// `/health` → `trading`: each account's switch, edge gate and last decision.
-/// No money.
+/// `/health` → `trading`: per account, the strategy, whether it waits for
+/// the edge gate, the minimum-volume rule, the open-risk budget, the last
+/// decision and the external positions found at the last reconcile. No money.
 pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
     let accounts = jiaoyi_store::sqlx::query(
         "SELECT account_id, environment FROM accounts WHERE enabled ORDER BY account_id",
@@ -445,15 +487,20 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
     for a in accounts {
         let id: i64 = a.get("account_id");
         let env: String = a.get("environment");
-        let (sw, gate) = match switches(pool, id).await {
-            Ok(sw) => {
-                let g = match edge_gate(pool, &sw).await {
-                    Ok(Ok(())) if sw.require_edge_pass => "met".to_string(),
-                    Ok(Ok(())) => "not required".to_string(),
+        let environment = if env == "live" {
+            Environment::Live
+        } else {
+            Environment::Demo
+        };
+        let (r, gate) = match rules(pool, id, environment).await {
+            Ok(r) => {
+                let g = match edge_gate(pool, &r).await {
+                    Ok(Ok(())) if r.edge_required => "met".to_string(),
+                    Ok(Ok(())) => "not required (demo)".to_string(),
                     Ok(Err(why)) => format!("not met: {why}"),
                     Err(e) => format!("unreadable: {e}"),
                 };
-                (Some(sw), g)
+                (Some(r), g)
             }
             Err(e) => (None, format!("settings unreadable: {e}")),
         };
@@ -462,10 +509,15 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
         out.push(json!({
             "account_id": id,
             "environment": env,
-            "enabled": sw.as_ref().map(|s| s.enabled),
-            "require_edge_pass": sw.as_ref().map(|s| s.require_edge_pass),
-            "allow_min_volume": sw.as_ref().map(|s| s.allow_min_volume),
+            "strategy": STRATEGY,
+            "trades": match &r {
+                Some(r) if r.edge_required && gate != "met" => "armed: waits for the edge gate",
+                Some(_) => "yes",
+                None => "unknown",
+            },
             "edge_gate": gate,
+            "allow_min_volume": r.as_ref().map(|r| r.allow_min_volume),
+            "trend_open_risk_pct": r.as_ref().map(|r| r.trend_open_risk_pct),
             "last_decision": d.map(|d| json!({
                 "at": d.at, "symbol": d.symbol, "kind": d.kind, "reason": d.reason,
             })),
@@ -496,6 +548,8 @@ struct Own {
     symbol_id: i64,
     side: Side,
     volume: i64,
+    /// The broker's VWAP entry price.
+    entry: Option<f64>,
     stop: Option<f64>,
     best: Option<f64>,
     last_amend: Option<tokio::time::Instant>,
@@ -516,7 +570,7 @@ impl Decisions<'_> {
             return;
         }
         self.last.insert(k, reason.to_string());
-        tracing::info!(account = self.account_id, symbol = ?symbol, kind, reason, "trading decision");
+        tracing::info!(account = self.account_id, symbol = ?symbol, kind, reason, "strategy 1 decision");
         if let Err(e) = ts::record_decision(
             self.pool,
             self.account_id,
@@ -528,12 +582,12 @@ impl Decisions<'_> {
         )
         .await
         {
-            tracing::error!(error = %e, "trading decision not recorded");
+            tracing::error!(error = %e, "strategy 1 decision not recorded");
         }
     }
 }
 
-/// Run every account's trading loop until shutdown.
+/// Run every permitted account's Strategy 1 loop until shutdown.
 pub async fn run(pool: PgPool, cfg: Arc<Config>, shutdown: Shutdown) {
     let mut tasks = Vec::new();
     for (account, env) in cfg.plan.permitted.clone() {
@@ -564,55 +618,25 @@ async fn account_loop(
         if shutdown.is_set() {
             return;
         }
-        let poll = match switches(pool, account.id()).await {
-            Ok(sw) => {
-                d.version = Some(sw.version);
-                let poll = Duration::from_secs(sw.switch_poll_secs);
-                if sw.enabled {
-                    d.note(
-                        None,
-                        "switch",
-                        "trading.enabled is on: the trader starts",
-                        json!({}),
-                    )
-                    .await;
-                    let r = session(pool, cfg, account, env, &mut d, shutdown.clone()).await;
-                    if let Err(e) = r {
-                        d.note(
-                            None,
-                            "error",
-                            &format!("the trading session stopped: {e:#}"),
-                            json!({}),
-                        )
-                        .await;
-                    }
-                    if shutdown.is_set() {
-                        return;
-                    }
-                } else {
-                    d.note(
-                        None,
-                        "switch",
-                        "trading.enabled is off: nothing is sent",
-                        json!({}),
-                    )
-                    .await;
-                }
-                poll
-            }
-            Err(e) => {
-                d.note(
-                    None,
-                    "error",
-                    &format!("trading settings unreadable: {e:#}"),
-                    json!({}),
-                )
-                .await;
-                Duration::from_secs(60)
-            }
+        let r = session(pool, cfg, account, env, &mut d, shutdown.clone()).await;
+        if shutdown.is_set() {
+            return;
+        }
+        if let Err(e) = r {
+            d.note(
+                None,
+                "error",
+                &format!("the trading session stopped: {e:#}"),
+                json!({}),
+            )
+            .await;
+        }
+        let wait = match rules(pool, account.id(), env).await {
+            Ok(r) => r.retry_secs,
+            Err(_) => 60,
         };
         tokio::select! {
-            _ = tokio::time::sleep(poll) => {}
+            _ = tokio::time::sleep(Duration::from_secs(wait)) => {}
             _ = shutdown.wait() => return,
         }
     }
@@ -631,6 +655,36 @@ fn quote_to_deposit(quote: &str, deposit: &str, syms: &HashMap<i64, Sym>) -> Opt
             .filter(|m| m.is_finite() && *m > 0.0)
     };
     mid(&format!("{quote}{deposit}")).or_else(|| mid(&format!("{deposit}{quote}")).map(|m| 1.0 / m))
+}
+
+fn rate_of(sym_id: i64, syms: &HashMap<i64, Sym>, deposit: Option<&str>) -> Option<f64> {
+    let s = syms.get(&sym_id)?;
+    quote_to_deposit(s.quote.as_deref()?, deposit?, syms)
+}
+
+/// Strategy 1's open risk at its stops, or why it cannot be told.
+fn open_risk(
+    own: &HashMap<i64, Own>,
+    syms: &HashMap<i64, Sym>,
+    deposit: Option<&str>,
+) -> Result<f64, String> {
+    let mut total = 0.0;
+    for o in own.values() {
+        let (Some(entry), Some(stop)) = (o.entry, o.stop) else {
+            return Err(format!(
+                "position {} has no known entry or stop: its open risk is unknown",
+                o.position_id
+            ));
+        };
+        let Some(rate) = rate_of(o.symbol_id, syms, deposit) else {
+            return Err(format!(
+                "position {} has no quote→deposit rate: its open risk is unknown",
+                o.position_id
+            ));
+        };
+        total += risk_at_stop(o.side, entry, stop, o.volume, rate);
+    }
+    Ok(total)
 }
 
 async fn read_levels(session: &AccountSession<'_>, symbol_id: i64) -> Result<Levels, String> {
@@ -674,6 +728,7 @@ async fn reconcile(
     own: &mut HashMap<i64, Own>,
 ) -> anyhow::Result<(usize, Vec<Value>)> {
     let res = session.reconcile().await?;
+    let account_id = session.account().id();
     let mut seen = HashSet::new();
     let mut external: Vec<Value> = Vec::new();
     let ext = |p: &jiaoyi_ctrader::messages::ProtoOaPosition| {
@@ -685,16 +740,15 @@ async fn reconcile(
             "label": p.trade_data.label,
         })
     };
-    let unconfirmed = ts::open_intents_without_fill(pool, session.account().id()).await?;
+    let unconfirmed = ts::open_intents_without_fill(pool, account_id).await?;
     for p in &res.position {
-        let ours_label = p.trade_data.label.as_deref() == Some(LABEL);
-        if !ours_label {
+        if p.trade_data.label.as_deref() != Some(LABEL) {
             external.push(ext(p));
             continue;
         }
-        let mut owned = ts::owns_position(pool, session.account().id(), p.position_id).await?;
+        let mut owned = ts::owns_position(pool, account_id, p.position_id).await?;
         if !owned {
-            // An Unconfirmed open that did fill: adopt it once, recorded.
+            // An Unconfirmed open that did fill: adopted once, recorded.
             if let Some((key, _)) = unconfirmed
                 .iter()
                 .find(|(_, s)| *s == Some(p.trade_data.symbol_id))
@@ -702,7 +756,7 @@ async fn reconcile(
                 ts::record_event(
                     pool,
                     &ts::EventRow {
-                        account_id: session.account().id(),
+                        account_id,
                         entry_key: Some(key.clone()),
                         client_msg_id: None,
                         payload_type: 0,
@@ -741,6 +795,7 @@ async fn reconcile(
             symbol_id: p.trade_data.symbol_id,
             side,
             volume: p.trade_data.volume,
+            entry: p.price,
             stop: p.stop_loss,
             best: None,
             last_amend: None,
@@ -748,6 +803,9 @@ async fn reconcile(
         // The broker wins.
         e.stop = p.stop_loss;
         e.volume = p.trade_data.volume;
+        if p.price.is_some() {
+            e.entry = p.price;
+        }
     }
     own.retain(|id, _| seen.contains(id));
     Ok((own.len(), external))
@@ -780,8 +838,7 @@ async fn note_reconcile(d: &mut Decisions<'_>, n_own: usize, external: Vec<Value
     .await;
 }
 
-/// One connected trading session. Returns when the switch goes off, on
-/// shutdown, or with the error that ended it.
+/// One connected session. Returns on shutdown, or with the error that ended it.
 async fn session(
     pool: &PgPool,
     cfg: &Config,
@@ -793,14 +850,24 @@ async fn session(
     let conn: Connection = loader::connect(&cfg.broker, env).await?;
     let session = loader::authorise(pool, &conn, &cfg.broker, account).await?;
     let mut ends = conn.session_ends();
-    run_session(pool, &cfg.allowlist, &session, d, &mut ends, &mut shutdown).await
+    run_session(
+        pool,
+        &cfg.allowlist,
+        env,
+        &session,
+        d,
+        &mut ends,
+        &mut shutdown,
+    )
+    .await
 }
 
-/// The trading loop on an authorised session (also driven by the tests on
+/// The Strategy 1 loop on an authorised session (also driven by the tests on
 /// the scripted broker).
 pub async fn run_session(
     pool: &PgPool,
     allowlist: &Allowlist,
+    env: Environment,
     session: &AccountSession<'_>,
     d: &mut Decisions<'_>,
     ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
@@ -808,7 +875,6 @@ pub async fn run_session(
 ) -> anyhow::Result<()> {
     let account_id = session.account().id();
     let conn = session.connection();
-    // The symbols: the universe's resolved names on this account.
     let mut syms: HashMap<i64, Sym> = HashMap::new();
     let quotes = jiaoyi_store::latest_assets(pool, account_id)
         .await?
@@ -871,15 +937,20 @@ pub async fn run_session(
     let mut spots = conn.spot_events();
     let mut execs = conn.executions();
     session.subscribe_spots(&ids).await?;
-    let sw0 = switches(pool, account_id).await?;
-    let mut trail_amend_secs = sw0.trail_amend_secs;
-    let mut reconcile_tick = tokio::time::interval(Duration::from_secs(sw0.reconcile_secs));
+    let r0 = rules(pool, account_id, env).await?;
+    d.version = Some(r0.version);
+    let mut trail_amend_secs = r0.trail_amend_secs;
+    let mut reconcile_tick = tokio::time::interval(Duration::from_secs(r0.reconcile_secs));
     reconcile_tick.tick().await;
-    let mut switch_tick = tokio::time::interval(Duration::from_secs(sw0.switch_poll_secs));
-    switch_tick.tick().await;
     let mut levels_tick = tokio::time::interval(LEVELS_REFRESH);
     levels_tick.tick().await;
     let mut tried: HashSet<String> = HashSet::new();
+    let ctx = Ctx {
+        pool,
+        allowlist,
+        session,
+        env,
+    };
     loop {
         tokio::select! {
             _ = shutdown.wait() => return Ok(()),
@@ -890,18 +961,12 @@ pub async fn run_session(
                     }
                 }
             }
-            _ = switch_tick.tick() => {
-                let sw = switches(pool, account_id).await?;
-                d.version = Some(sw.version);
-                trail_amend_secs = sw.trail_amend_secs;
-                if !sw.enabled {
-                    d.note(None, "switch", "trading.enabled went off: the trader stops", json!({})).await;
-                    return Ok(());
-                }
-            }
             _ = reconcile_tick.tick() => {
                 let (n_own, ext) = reconcile(pool, session, &mut own).await?;
                 note_reconcile(d, n_own, ext).await;
+                let r = rules(pool, account_id, env).await?;
+                d.version = Some(r.version);
+                trail_amend_secs = r.trail_amend_secs;
             }
             _ = levels_tick.tick() => {
                 for id in &ids {
@@ -921,13 +986,20 @@ pub async fn run_session(
                     if let Some(b) = ev.bid { sym.bid = Some(b as f64 / 100_000.0); }
                     if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0); }
                     let sym = sym.clone();
-                    on_quote(pool, allowlist, session, d, &syms, &sym, deposit.as_deref(), &mut own, &mut tried, trail_amend_secs).await?;
+                    on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut own, &mut tried, trail_amend_secs).await?;
                 }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
             },
         }
     }
+}
+
+struct Ctx<'a, 'c> {
+    pool: &'a PgPool,
+    allowlist: &'a Allowlist,
+    session: &'a AccountSession<'c>,
+    env: Environment,
 }
 
 /// A broker-side execution message (no request of ours): recorded as it came.
@@ -945,9 +1017,7 @@ async fn server_event(pool: &PgPool, account_id: i64, m: &ReceivedExecution) {
 
 #[allow(clippy::too_many_arguments)]
 async fn on_quote(
-    pool: &PgPool,
-    allowlist: &Allowlist,
-    session: &AccountSession<'_>,
+    ctx: &Ctx<'_, '_>,
     d: &mut Decisions<'_>,
     syms: &HashMap<i64, Sym>,
     sym: &Sym,
@@ -956,9 +1026,10 @@ async fn on_quote(
     tried: &mut HashSet<String>,
     trail_amend_secs: u64,
 ) -> anyhow::Result<()> {
+    let (pool, allowlist, session) = (ctx.pool, ctx.allowlist, ctx.session);
     let account_id = session.account().id();
     let name = sym.name.as_str();
-    // Trail the own positions on this symbol.
+    // Trail Strategy 1's positions on this symbol.
     let lv = sym.levels.as_ref().ok();
     for o in own.values_mut().filter(|o| o.symbol_id == sym.id) {
         let price = match o.side {
@@ -991,17 +1062,16 @@ async fn on_quote(
         {
             continue;
         }
-        let sw = switches(pool, account_id).await?;
         o.last_amend = Some(tokio::time::Instant::now());
+        let r = rules(pool, account_id, ctx.env).await?;
         let policy = Policy {
-            enabled: sw.enabled,
-            edge: edge_gate(pool, &sw).await?,
+            edge: edge_gate(pool, &r).await?,
             max_risk: f64::INFINITY,
         };
-        let key = format!("trail:{account_id}:{}:{new_stop}", o.position_id);
+        let key = format!("s1-trail:{account_id}:{}:{new_stop}", o.position_id);
         let ledger = PgLedger {
             pool,
-            settings_version: Some(sw.version),
+            settings_version: Some(r.version),
         };
         let cmd = Command::AmendStop {
             position_id: o.position_id,
@@ -1016,7 +1086,7 @@ async fn on_quote(
             &policy,
             cmd,
             &key,
-            Duration::from_secs(sw.order_wait_secs),
+            Duration::from_secs(r.order_wait_secs),
         )
         .await
         {
@@ -1043,7 +1113,7 @@ async fn on_quote(
             }
         }
     }
-    // An entry, when the symbol has no own position.
+    // An entry, when the symbol has no Strategy 1 position.
     if own.values().any(|o| o.symbol_id == sym.id) {
         return Ok(());
     }
@@ -1064,15 +1134,19 @@ async fn on_quote(
         return Ok(());
     }
     tried.insert(key.clone());
-    let sw = switches(pool, account_id).await?;
-    let detail = json!({"level": l.level, "atr": l.atr, "ema_fast": l.ema_fast, "ema_slow": l.ema_slow,
-        "bid": sym.bid, "ask": sym.ask, "side": side.as_str(), "after": l.last_completed});
-    let edge = edge_gate(pool, &sw).await?;
+    let r = rules(pool, account_id, ctx.env).await?;
+    let detail = json!({"strategy": STRATEGY, "level": l.level, "atr": l.atr,
+        "ema_fast": l.ema_fast, "ema_slow": l.ema_slow, "bid": sym.bid, "ask": sym.ask,
+        "side": side.as_str(), "after": l.last_completed});
+    let edge = edge_gate(pool, &r).await?;
     if let Err(why) = &edge {
         d.note(
             Some(name),
             "signal_held",
-            &format!("H1 {} signal; edge gate not met: {why}", side.as_str()),
+            &format!(
+                "{STRATEGY} {} signal; edge gate not met: {why}",
+                side.as_str()
+            ),
             detail,
         )
         .await;
@@ -1091,11 +1165,7 @@ async fn on_quote(
         return Ok(());
     };
     let rel = relative_stop(STOP_ATR * l.atr, limits.digits);
-    let rate = match (sym.quote.as_deref(), deposit) {
-        (Some(q), Some(dep)) => quote_to_deposit(q, dep, syms),
-        _ => None,
-    };
-    let Some(rate) = rate else {
+    let Some(rate) = rate_of(sym.id, syms, deposit) else {
         d.note(
             Some(name),
             "skip",
@@ -1119,21 +1189,28 @@ async fn on_quote(
             return Ok(());
         }
     };
-    let sized = match size(&sw, equity, rel, rate, &limits) {
+    let sized = match size(&r, equity, rel, rate, &limits) {
         Ok(s) => s,
         Err(why) => {
             d.note(Some(name), "skip", &why, detail).await;
             return Ok(());
         }
     };
+    // Strategy 1's open-risk budget (owner, № 16,806).
+    let budget = open_risk(own, syms, deposit)
+        .and_then(|held| within_budget(held, sized.risk, equity, r.trend_open_risk_pct));
+    if let Err(why) = budget {
+        d.note(Some(name), "skip", &why, detail).await;
+        tried.remove(&key);
+        return Ok(());
+    }
     let policy = Policy {
-        enabled: sw.enabled,
         edge,
         max_risk: sized.max_risk,
     };
     let ledger = PgLedger {
         pool,
-        settings_version: Some(sw.version),
+        settings_version: Some(r.version),
     };
     let cmd = Command::Open {
         symbol_id: sym.id,
@@ -1151,7 +1228,7 @@ async fn on_quote(
         &policy,
         cmd,
         &key,
-        Duration::from_secs(sw.order_wait_secs),
+        Duration::from_secs(r.order_wait_secs),
     )
     .await
     {
@@ -1169,6 +1246,7 @@ async fn on_quote(
                         symbol_id: sym.id,
                         side,
                         volume: volume.unwrap_or(sized.volume),
+                        entry: *price,
                         stop: price.map(|p| match side {
                             Side::Buy => p - rel as f64 / 100_000.0,
                             Side::Sell => p + rel as f64 / 100_000.0,
@@ -1182,7 +1260,7 @@ async fn on_quote(
                 Some(name),
                 "sent",
                 &format!(
-                    "H1 {} {} cents ({}): {:?}",
+                    "{STRATEGY} {} {} cents ({}): {:?}",
                     side.as_str(),
                     sized.volume,
                     sized.mode,
@@ -1192,8 +1270,8 @@ async fn on_quote(
             )
             .await;
         }
-        Err(SendError::Refused(r)) => {
-            d.note(Some(name), "refused", &r.reason, detail).await;
+        Err(SendError::Refused(x)) => {
+            d.note(Some(name), "refused", &x.reason, detail).await;
         }
         Err(e) => return Err(e.into()),
     }
@@ -1214,19 +1292,20 @@ pub fn decisions(pool: &PgPool, account_id: i64) -> Decisions<'_> {
 mod tests {
     use super::*;
 
-    fn sw() -> Switches {
-        Switches {
+    fn sw() -> Rules {
+        Rules {
             version: 1,
-            enabled: true,
-            require_edge_pass: false,
+            live: false,
+            edge_required: false,
             risk_pct: 0.6,
             cap_factor: 1.1,
             allow_min_volume: false,
             min_volume_max_risk_pct: 10.0,
+            trend_open_risk_pct: 3.0,
             reconcile_secs: 300,
             trail_amend_secs: 60,
             order_wait_secs: 20,
-            switch_poll_secs: 30,
+            retry_secs: 60,
         }
     }
 
@@ -1258,7 +1337,7 @@ mod tests {
         // Live's $38.98: 0.6% = $0.23, below ETH's 1-cent minimum ($2.85).
         let e = size(&sw(), 38.98, 28_457_000, 1.0, &ETH).unwrap_err();
         assert!(e.contains("below the broker minimum"), "{e}");
-        let live = Switches {
+        let live = Rules {
             allow_min_volume: true,
             ..sw()
         };
@@ -1270,6 +1349,28 @@ mod tests {
         // SpotCrude's minimum (1 unit, 3 × ATR = 12.079) risks $12.08 = 31%: skipped.
         let e = size(&live, 38.98, 1_207_900, 1.0, &CRUDE).unwrap_err();
         assert!(e.contains("above 10% of equity"), "{e}");
+    }
+
+    #[test]
+    fn strategy_1_holds_at_most_its_open_risk_budget() {
+        // $1,002.44 × 3% = $30.07: five 0.6% trades of $6.01 fit (30.07),
+        // a sixth does not.
+        let eq = 1002.44;
+        assert!(within_budget(4.0 * 6.01, 6.01, eq, 3.0).is_ok());
+        let e = within_budget(5.0 * 6.01, 6.01, eq, 3.0).unwrap_err();
+        assert!(e.contains("exceed its budget"), "{e}");
+        // Live at $38.98: 3% is $1.17, below ETHUSD's minimum-volume $2.85.
+        assert!(within_budget(0.0, 2.85, 38.98, 3.0).is_err());
+    }
+
+    #[test]
+    fn the_risk_at_a_stop_is_zero_once_the_stop_passes_the_entry() {
+        // Long 5 cents (0.05 units) from 3611 with the stop 120 below: $6.00.
+        assert!((risk_at_stop(Side::Buy, 3611.0, 3491.0, 5, 1.0) - 6.0).abs() < 1e-9);
+        assert_eq!(risk_at_stop(Side::Buy, 3611.0, 3620.0, 5, 1.0), 0.0);
+        // Short: the stop above the entry is the risk.
+        assert!((risk_at_stop(Side::Sell, 100.0, 102.0, 100, 1.0) - 2.0).abs() < 1e-9);
+        assert_eq!(risk_at_stop(Side::Sell, 100.0, 99.0, 100, 1.0), 0.0);
     }
 
     #[test]
@@ -1335,8 +1436,8 @@ mod tests {
     #[test]
     fn the_seed_file_parses_and_refuses_duplicate_ids() {
         assert_eq!(parse_seed(SEED_FILE).unwrap(), vec![]);
-        let dup = r#"[{"id":"a","key":"trading.enabled","account_id":1,"value":1,"changed_by":"x","reason":"y"},
-                     {"id":"a","key":"trading.enabled","account_id":2,"value":1,"changed_by":"x","reason":"y"}]"#;
+        let dup = r#"[{"id":"a","key":"trading.risk_pct","account_id":1,"value":0.6,"changed_by":"x","reason":"y"},
+                     {"id":"a","key":"trading.risk_pct","account_id":2,"value":0.6,"changed_by":"x","reason":"y"}]"#;
         assert!(parse_seed(dup).unwrap_err().contains("twice"));
     }
 

@@ -1,12 +1,13 @@
 //! The order gate: the only way a trading request reaches the socket
 //! (owner, 25-10-2026: "I want live to execute trading by 1 PM today", with
-//! the edge gate kept and every account's switch off by default).
+//! the edge gate kept for live). There is no on/off switch (owner, 24-10:
+//! "why do i need JIAOYI_TRADING_ENABLED, removed it").
 //!
 //! [`send`] runs every check before anything is written, in this order:
 //! 1. the account is re-checked against the allowlist;
-//! 2. the account's trading switch is on;
-//! 3. the account's edge gate is met (live waits for a held-out PASS);
-//! 4. per command:
+//! 2. the account's edge gate is met (live waits for a held-out PASS; demo
+//!    does not);
+//! 3. per command:
 //!    - open: the broker's account type and open positions are read fresh
 //!      (`ProtoOATraderReq`, `ProtoOAReconcileReq`). On a NETTED account a
 //!      new order on a symbol with ANY open position would net against it,
@@ -24,10 +25,10 @@
 //!    - amend: the position is one this program opened; the new stop moves
 //!      only in the trade's favour;
 //!    - close: the position is one this program opened;
-//! 5. the intent is persisted (a unique entry key: an intent already recorded
+//! 4. the intent is persisted (a unique entry key: an intent already recorded
 //!    is never sent again, after a restart included). A failing ledger means
 //!    no frame;
-//! 6. the frame is written through the crate-private trading path, and every
+//! 5. the frame is written through the crate-private trading path, and every
 //!    execution message carrying its id is recorded until a terminal one or
 //!    the wait ends (then `Unconfirmed`: the trader's reconcile decides, the
 //!    order is never resent).
@@ -127,8 +128,6 @@ impl Command {
 /// the settings by the caller.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Policy {
-    /// `trading.enabled` for this account.
-    pub enabled: bool,
     /// The edge gate: `Ok` when met or not required, `Err(why)` otherwise.
     pub edge: Result<(), String>,
     /// The most an open may risk, in the deposit currency.
@@ -395,11 +394,6 @@ async fn check<L: Ledger>(
 ) -> Result<(Option<f64>, Option<f64>), Refused> {
     if let Err(r) = allowlist.permit(account_id) {
         return refuse(format!("allowlist: {}", r.reason));
-    }
-    if !policy.enabled {
-        return refuse(format!(
-            "trading.enabled is off for account {account_id}: nothing is sent"
-        ));
     }
     if let Err(why) = &policy.edge {
         return refuse(format!("edge gate not met: {why}"));
