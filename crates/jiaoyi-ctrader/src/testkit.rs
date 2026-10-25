@@ -107,6 +107,14 @@ pub struct FakeBroker {
     /// milliseconds after the spot subscription: (ms, symbol id, quote).
     /// Sent after `quotes`, for the subscribed symbols only.
     pub quote_sequence: Vec<(u64, i64, SidedQuote)>,
+    /// Fill a new order in these deals instead: (ms after the order, volume
+    /// in cents, price). Each deal before the order is complete is
+    /// ORDER_PARTIAL_FILL, the one completing it ORDER_FILLED; each event
+    /// carries its own deal and the aggregate position (volume, VWAP price;
+    /// the stop set from the first deal).
+    pub fill_parts: Vec<(u64, i64, f64)>,
+    /// After `fill_parts`, cancel what is left of the order (ORDER_CANCELLED).
+    pub cancel_remainder: bool,
 }
 
 /// One account in a token's grant.
@@ -654,7 +662,109 @@ impl FakeBroker {
                         let req =
                             pb::ProtoOaNewOrderReq::decode(body.as_slice()).unwrap_or_default();
                         log2.lock().unwrap().orders.push(req.clone());
-                        if let Some(code) = &self.reject_orders {
+                        if !self.fill_parts.is_empty() {
+                            out.push(execution(
+                                id.clone(),
+                                self.account_id,
+                                pb::ProtoOaExecutionType::OrderAccepted,
+                                None,
+                                None,
+                            ));
+                            let position_id =
+                                1000 + self.positions.lock().unwrap().len() as i64 + 1;
+                            let (wr, positions, parts, cancel, account) = (
+                                wr.clone(),
+                                self.positions.clone(),
+                                self.fill_parts.clone(),
+                                self.cancel_remainder,
+                                self.account_id,
+                            );
+                            tokio::spawn(async move {
+                                let start = tokio::time::Instant::now();
+                                let buy = req.trade_side == pb::ProtoOaTradeSide::Buy as i32;
+                                let rel = req.relative_stop_loss.unwrap_or(0) as f64 / 100_000.0;
+                                let (mut filled, mut notional) = (0i64, 0.0f64);
+                                for (n, (ms, volume, price)) in parts.into_iter().enumerate() {
+                                    tokio::time::sleep_until(start + Duration::from_millis(ms))
+                                        .await;
+                                    filled += volume;
+                                    notional += volume as f64 * price;
+                                    let vwap = notional / filled as f64;
+                                    let position = {
+                                        let mut ps = positions.lock().unwrap();
+                                        if n == 0 {
+                                            ps.push(pb::ProtoOaPosition {
+                                                position_id,
+                                                trade_data: pb::ProtoOaTradeData {
+                                                    symbol_id: req.symbol_id,
+                                                    volume: 0,
+                                                    trade_side: req.trade_side,
+                                                    open_timestamp: Some(0),
+                                                    label: req.label.clone(),
+                                                    ..Default::default()
+                                                },
+                                                position_status:
+                                                    pb::ProtoOaPositionStatus::PositionStatusOpen
+                                                        as i32,
+                                                swap: 0,
+                                                stop_loss: (rel > 0.0).then_some(if buy {
+                                                    price - rel
+                                                } else {
+                                                    price + rel
+                                                }),
+                                                ..Default::default()
+                                            });
+                                        }
+                                        let p = ps
+                                            .iter_mut()
+                                            .find(|p| p.position_id == position_id)
+                                            .unwrap();
+                                        p.trade_data.volume = filled;
+                                        p.price = Some(vwap);
+                                        p.clone()
+                                    };
+                                    let deal = pb::ProtoOaDeal {
+                                        deal_id: position_id * 10 + n as i64,
+                                        order_id: position_id * 10 + 9,
+                                        position_id,
+                                        volume: req.volume,
+                                        filled_volume: volume,
+                                        symbol_id: req.symbol_id,
+                                        create_timestamp: 0,
+                                        execution_timestamp: 0,
+                                        execution_price: Some(price),
+                                        trade_side: req.trade_side,
+                                        deal_status: pb::ProtoOaDealStatus::Filled as i32,
+                                        ..Default::default()
+                                    };
+                                    let kind = if filled >= req.volume {
+                                        pb::ProtoOaExecutionType::OrderFilled
+                                    } else {
+                                        pb::ProtoOaExecutionType::OrderPartialFill
+                                    };
+                                    let m = execution(
+                                        id.clone(),
+                                        account,
+                                        kind,
+                                        Some(position),
+                                        Some(deal),
+                                    );
+                                    if write_frame(&mut *wr.lock().await, &m).await.is_err() {
+                                        return;
+                                    }
+                                }
+                                if cancel && filled < req.volume {
+                                    let m = execution(
+                                        id,
+                                        account,
+                                        pb::ProtoOaExecutionType::OrderCancelled,
+                                        None,
+                                        None,
+                                    );
+                                    let _ = write_frame(&mut *wr.lock().await, &m).await;
+                                }
+                            });
+                        } else if let Some(code) = &self.reject_orders {
                             let mut m = execution(
                                 id,
                                 self.account_id,

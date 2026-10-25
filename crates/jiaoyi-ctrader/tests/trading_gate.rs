@@ -560,6 +560,20 @@ async fn an_amend_moves_an_owned_stop_only_in_the_trades_favour() {
         "{r:?}"
     );
     assert!(log.lock().unwrap().amends.is_empty());
+    // The trader's own stop is checked too, before any read: a stop below
+    // the one it holds is refused even where the broker's is lower.
+    let behind = Command::AmendStop {
+        position_id: 1001,
+        side: Side::Buy,
+        current_stop: Some(2850.0),
+        new_stop: 2800.0,
+    };
+    let r = send(&s, &allow(), &ledger, &on(), behind, "a0", wait).await;
+    assert!(
+        matches!(&r, Err(SendError::Refused(x)) if x.reason.contains("favour from 2850")),
+        "{r:?}"
+    );
+    assert!(log.lock().unwrap().amends.is_empty());
     let better = Command::AmendStop {
         position_id: 1001,
         side: Side::Buy,

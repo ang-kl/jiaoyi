@@ -88,9 +88,9 @@ pub struct EventRow {
 }
 
 /// Record an execution message. A message already recorded (the gate and the
-/// trader both receive each answer) is kept once.
-pub async fn record_event(pool: &PgPool, e: &EventRow) -> Result<(), sqlx::Error> {
-    sqlx::query(
+/// trader both receive each answer) is kept once: `false`.
+pub async fn record_event(pool: &PgPool, e: &EventRow) -> Result<bool, sqlx::Error> {
+    let r = sqlx::query(
         "INSERT INTO trading_events (account_id, entry_key, client_msg_id, payload_type, kind,
             position_id, order_id, deal_id, symbol_id, side, price, volume, stop_loss, label,
             error_code, description, is_server_event, raw, received_at)
@@ -118,7 +118,7 @@ pub async fn record_event(pool: &PgPool, e: &EventRow) -> Result<(), sqlx::Error
     .bind(e.received_at)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(r.rows_affected() == 1)
 }
 
 /// Whether this program opened the position: one of its own open intents
