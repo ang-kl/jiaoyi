@@ -19,6 +19,8 @@ pub struct AppState {
     pub loading: Arc<AtomicBool>,
     pub recorders: crate::recorder::StatusMap,
     pub history: crate::history::HistoryStatusMap,
+    /// Each account's Strategy 1 loop: its reconcile runs and last quote.
+    pub trading_loops: crate::trading::LivenessMap,
     /// The account allowlist (`JIAOYI_ALLOWED_ACCOUNTS`) as permitted at start-up.
     pub allowed_accounts: Arc<std::collections::BTreeSet<i64>>,
 }
@@ -47,7 +49,9 @@ fn unavailable(e: impl std::fmt::Display) -> Response {
 async fn health(State(s): State<AppState>) -> Response {
     let recorders = s.recorders.lock().unwrap().clone();
     let history = s.history.lock().unwrap().clone();
-    match crate::report::health(&s.pool, s.loading.load(Ordering::Relaxed), recorders).await {
+    let loops = s.trading_loops.lock().unwrap().clone();
+    match crate::report::health(&s.pool, s.loading.load(Ordering::Relaxed), recorders, loops).await
+    {
         Ok(mut v) => {
             v["history_sync"] = serde_json::to_value(history).unwrap_or_default();
             Json(v).into_response()
@@ -60,9 +64,11 @@ async fn health(State(s): State<AppState>) -> Response {
 /// `/research/jobs` and `/research/trials`.
 async fn status_page(State(s): State<AppState>) -> Response {
     let recorders = s.recorders.lock().unwrap().clone();
+    let loops = s.trading_loops.lock().unwrap().clone();
     let values = async {
         let health =
-            crate::report::health(&s.pool, s.loading.load(Ordering::Relaxed), recorders).await?;
+            crate::report::health(&s.pool, s.loading.load(Ordering::Relaxed), recorders, loops)
+                .await?;
         let jobs = crate::edge::routes::jobs(&s.pool).await?;
         let trials = crate::edge::routes::trials(&s.pool).await?;
         Ok::<_, jiaoyi_store::StoreError>((health, jobs, trials))

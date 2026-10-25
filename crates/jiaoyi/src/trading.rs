@@ -38,10 +38,10 @@
 //! Every order goes through `jiaoyi_ctrader::trading::send`, the one gate.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use chrono::{NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::research::h1::{atr, ema, ATR_LEN, EMA_FAST, EMA_SLOW};
 use jiaoyi_ctrader::trading::{
@@ -73,6 +73,44 @@ pub const STOP_ATR: f64 = 3.0;
 pub const BAR_DAYS: i64 = 250;
 /// How often the levels are recomputed from the broker's bars.
 pub const LEVELS_REFRESH: Duration = Duration::from_secs(30 * 60);
+
+/// Each account's Strategy 1 loop as it runs, in memory only: when it
+/// started, when a reconcile last ran and when it last processed a quote.
+/// Decisions are recorded only when their reason changes, so the last
+/// decision's time cannot tell a quiet loop from a stalled one; this can.
+// Claude · № 17,020 25-Oct (ordered: production read-back 04:26Z, /health
+// held at the 04:02:28 reconcile on all four accounts)
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct Liveness {
+    pub started_at: Option<DateTime<Utc>>,
+    pub last_reconcile_run_at: Option<DateTime<Utc>>,
+    pub last_quote_at: Option<DateTime<Utc>>,
+}
+
+/// The accounts' loops, shared by the loops and `/health`.
+pub type LivenessMap = Arc<Mutex<HashMap<i64, Liveness>>>;
+
+fn beat(live: &LivenessMap, account_id: i64, f: impl FnOnce(&mut Liveness)) {
+    f(live.lock().unwrap().entry(account_id).or_default());
+}
+
+/// A loop is stalled when no reconcile ran within twice its interval (from
+/// its start, before the first); `starting` until then.
+pub fn liveness_state(
+    l: Option<&Liveness>,
+    reconcile_secs: u64,
+    now: DateTime<Utc>,
+) -> &'static str {
+    let Some(l) = l else {
+        return "not running";
+    };
+    let limit = chrono::Duration::seconds(2 * reconcile_secs as i64);
+    match (l.last_reconcile_run_at, l.started_at) {
+        (Some(at), _) if now - at <= limit => "alive",
+        (None, Some(start)) if now - start <= limit => "starting",
+        _ => "stalled",
+    }
+}
 /// The pre-registered hypothesis whose held-out PASS opens the live gate.
 pub const EDGE_HYPOTHESIS: &str = "H1";
 
@@ -508,7 +546,7 @@ pub async fn apply_seed(pool: &PgPool, text: &str) -> anyhow::Result<Vec<String>
 /// `/health` → `trading`: per account, the strategy, whether it waits for
 /// the edge gate, the minimum-volume rule, the open-risk budget, the last
 /// decision and the external positions found at the last reconcile. No money.
-pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
+pub async fn health(pool: &PgPool, live: &HashMap<i64, Liveness>) -> jiaoyi_store::Result<Value> {
     let accounts = jiaoyi_store::sqlx::query(
         "SELECT account_id, environment FROM accounts WHERE enabled ORDER BY account_id",
     )
@@ -542,6 +580,15 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
         };
         let d = decisions.iter().find(|d| d.account_id == id);
         let rec = ts::latest_decision_detail(pool, id, "reconcile").await?;
+        // In memory: every reconcile run and the last quote, recorded or not.
+        let l = live.get(&id);
+        let liveness = json!({
+            "state": r.as_ref().map(|r| liveness_state(l, r.reconcile_secs, Utc::now())),
+            "stalled_after_secs": r.as_ref().map(|r| 2 * r.reconcile_secs),
+            "started_at": l.and_then(|l| l.started_at),
+            "last_reconcile_run_at": l.and_then(|l| l.last_reconcile_run_at),
+            "last_quote_at": l.and_then(|l| l.last_quote_at),
+        });
         out.push(json!({
             "account_id": id,
             "environment": env,
@@ -563,6 +610,7 @@ pub async fn health(pool: &PgPool) -> jiaoyi_store::Result<Value> {
             "last_reconcile": rec.map(|(at, detail)| json!({
                 "at": at, "own": detail["own"], "external_positions": detail["external"],
             })),
+            "liveness": liveness,
         }));
     }
     Ok(json!(out))
@@ -691,12 +739,13 @@ impl Decisions<'_> {
 }
 
 /// Run every permitted account's Strategy 1 loop until shutdown.
-pub async fn run(pool: PgPool, cfg: Arc<Config>, shutdown: Shutdown) {
+pub async fn run(pool: PgPool, cfg: Arc<Config>, live: LivenessMap, shutdown: Shutdown) {
     let mut tasks = Vec::new();
     for (account, env) in cfg.plan.permitted.clone() {
-        let (pool, cfg, shutdown) = (pool.clone(), cfg.clone(), shutdown.clone());
+        let (pool, cfg, live, shutdown) =
+            (pool.clone(), cfg.clone(), live.clone(), shutdown.clone());
         tasks.push(tokio::spawn(async move {
-            account_loop(&pool, &cfg, &account, env, shutdown).await
+            account_loop(&pool, &cfg, &account, env, &live, shutdown).await
         }));
     }
     for t in tasks {
@@ -709,6 +758,7 @@ async fn account_loop(
     cfg: &Config,
     account: &PermittedAccount,
     env: Environment,
+    live: &LivenessMap,
     mut shutdown: Shutdown,
 ) {
     let mut d = Decisions {
@@ -717,11 +767,12 @@ async fn account_loop(
         last: HashMap::new(),
         version: None,
     };
+    beat(live, account.id(), |l| l.started_at = Some(Utc::now()));
     loop {
         if shutdown.is_set() {
             return;
         }
-        let r = session(pool, cfg, account, env, &mut d, shutdown.clone()).await;
+        let r = session(pool, cfg, account, env, &mut d, live, shutdown.clone()).await;
         if shutdown.is_set() {
             return;
         }
@@ -828,8 +879,8 @@ pub async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
 }
 
 /// An event reconcile writes under an intent: a fill it found
-/// (`RECONCILED_FILL`), or an unresolved open it released
-/// (`RECONCILED_ABSENT`).
+/// (`RECONCILED_FILL`, or `RECONCILED_PARTIAL_FILL` for part of it), or an
+/// unresolved open it released (`RECONCILED_ABSENT`).
 pub fn reconciled_row(
     account_id: i64,
     entry_key: &str,
@@ -918,23 +969,38 @@ async fn reconcile(
         }
         let mut owned = ts::owns_position(pool, account_id, p.position_id).await?;
         if !owned {
-            // An unresolved open that did fill: adopted once, recorded.
-            if let Some(i) = unresolved
-                .iter()
-                .position(|u| u.symbol_id == Some(p.trade_data.symbol_id))
-            {
-                let u = unresolved.remove(i);
+            // An unresolved open that did fill: adopted once, recorded. In
+            // full only at the requested volume; a part keeps the intent
+            // unresolved, its remainder reserved below until it fills, ends
+            // or is absent after the grace (Codex round 4 on #14).
+            // Claude · № 17,020 25-Oct (ordered: owner "Merge now, fix next")
+            if let Some(i) = unresolved.iter().position(|u| {
+                u.symbol_id == Some(p.trade_data.symbol_id) && u.position_id.is_none()
+            }) {
+                let part = unresolved[i]
+                    .volume
+                    .is_some_and(|v| p.trade_data.volume < v);
+                let (kind, why) = if part {
+                    (
+                        "RECONCILED_PARTIAL_FILL",
+                        "an unresolved open found partly filled by reconcile: the position adopted, the remainder held",
+                    )
+                } else {
+                    (
+                        "RECONCILED_FILL",
+                        "an unresolved open found filled by reconcile",
+                    )
+                };
                 ts::record_event(
                     pool,
-                    &reconciled_row(
-                        account_id,
-                        &u.entry_key,
-                        "RECONCILED_FILL",
-                        Some(p),
-                        "an unresolved open found filled by reconcile",
-                    ),
+                    &reconciled_row(account_id, &unresolved[i].entry_key, kind, Some(p), why),
                 )
                 .await?;
+                if part {
+                    unresolved[i].position_id = Some(p.position_id);
+                } else {
+                    unresolved.remove(i);
+                }
                 owned = true;
             }
         }
@@ -1074,6 +1140,7 @@ async fn session(
     account: &PermittedAccount,
     env: Environment,
     d: &mut Decisions<'_>,
+    live: &LivenessMap,
     mut shutdown: Shutdown,
 ) -> anyhow::Result<()> {
     let conn: Connection = loader::connect(&cfg.broker, env).await?;
@@ -1085,6 +1152,7 @@ async fn session(
         env,
         &session,
         d,
+        live,
         &mut ends,
         &mut shutdown,
     )
@@ -1099,16 +1167,21 @@ fn grace_of(r: &Rules) -> chrono::Duration {
 
 /// The Strategy 1 loop on an authorised session (also driven by the tests on
 /// the scripted broker).
+#[allow(clippy::too_many_arguments)]
 pub async fn run_session(
     pool: &PgPool,
     allowlist: &Allowlist,
     env: Environment,
     session: &AccountSession<'_>,
     d: &mut Decisions<'_>,
+    live: &LivenessMap,
     ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let account_id = session.account().id();
+    beat(live, account_id, |l| {
+        l.started_at.get_or_insert_with(Utc::now);
+    });
     let conn = session.connection();
     let mut syms: HashMap<i64, Sym> = HashMap::new();
     let quotes = jiaoyi_store::latest_assets(pool, account_id)
@@ -1176,6 +1249,9 @@ pub async fn run_session(
     let mut execs = conn.executions();
     let rec = reconcile(pool, session, &mut book).await?;
     note_reconcile(d, rec).await;
+    beat(live, account_id, |l| {
+        l.last_reconcile_run_at = Some(Utc::now())
+    });
     let mut spots = conn.spot_events();
     session.subscribe_spots(&ids).await?;
     let mut reconcile_tick = tokio::time::interval(Duration::from_secs(r0.reconcile_secs));
@@ -1206,6 +1282,7 @@ pub async fn run_session(
                 book.grace = grace_of(&r);
                 let rec = reconcile(pool, session, &mut book).await?;
                 note_reconcile(d, rec).await;
+                beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
             }
             _ = levels_tick.tick() => {
                 for id in &ids {
@@ -1225,6 +1302,7 @@ pub async fn run_session(
                         if late.new && (fill || (end && book.pending.contains_key(&late.entry_key))) {
                             let rec = reconcile(pool, session, &mut book).await?;
                             note_reconcile(d, rec).await;
+                            beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
                         }
                     }
                 }
@@ -1239,6 +1317,7 @@ pub async fn run_session(
                     if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0); }
                     let sym = sym.clone();
                     on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut book, &mut tried, trail_amend_secs).await?;
+                    beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
                 }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
@@ -1618,6 +1697,25 @@ pub fn decisions(pool: &PgPool, account_id: i64) -> Decisions<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_loop_is_stalled_after_twice_its_reconcile_interval() {
+        let t0: chrono::DateTime<Utc> = "2026-10-25T04:02:28Z".parse().unwrap();
+        let s = |secs| t0 + chrono::Duration::seconds(secs);
+        assert_eq!(liveness_state(None, 300, t0), "not running");
+        let started = Liveness {
+            started_at: Some(t0),
+            ..Liveness::default()
+        };
+        assert_eq!(liveness_state(Some(&started), 300, s(600)), "starting");
+        assert_eq!(liveness_state(Some(&started), 300, s(601)), "stalled");
+        let ran = Liveness {
+            last_reconcile_run_at: Some(t0),
+            ..started
+        };
+        assert_eq!(liveness_state(Some(&ran), 300, s(600)), "alive");
+        assert_eq!(liveness_state(Some(&ran), 300, s(601)), "stalled");
+    }
+
     use super::*;
 
     fn sw() -> Rules {

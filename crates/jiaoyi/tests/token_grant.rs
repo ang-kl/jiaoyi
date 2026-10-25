@@ -188,7 +188,9 @@ async fn an_account_the_grant_omits_is_named_and_never_refreshed(pool: PgPool) {
 
     // /health names the state per account, with the reason and the
     // fingerprint of the token read; never the token.
-    let h = report::health(&pool, false, HashMap::new()).await.unwrap();
+    let h = report::health(&pool, false, HashMap::new(), HashMap::new())
+        .await
+        .unwrap();
     let grants = h["token_grants"].as_array().cloned().unwrap_or_default();
     let of = |id: i64| {
         grants

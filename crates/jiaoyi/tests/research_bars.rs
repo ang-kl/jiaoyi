@@ -129,6 +129,7 @@ async fn get(pool: &PgPool, uri: &str) -> (StatusCode, Value) {
         loading: Arc::new(AtomicBool::new(false)),
         recorders: Default::default(),
         history: Default::default(),
+        trading_loops: Default::default(),
         allowed_accounts: Arc::new(BTreeSet::from([DEMO, LIVE])),
     });
     let res = app

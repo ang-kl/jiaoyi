@@ -307,6 +307,7 @@ pub async fn health(
     pool: &PgPool,
     loading: bool,
     recorders: std::collections::HashMap<i64, crate::recorder::RecorderStatus>,
+    trading_loops: std::collections::HashMap<i64, crate::trading::Liveness>,
 ) -> store::Result<Value> {
     let runs = store::latest_runs(pool).await?;
     let ticks = store::ticks::stats(pool).await?;
@@ -322,7 +323,7 @@ pub async fn health(
     .fetch_all(pool)
     .await?;
     let grants = store::latest_grants(pool).await?;
-    let trading = crate::trading::health(pool).await?;
+    let trading = crate::trading::health(pool, &trading_loops).await?;
     let strategy3 = crate::strategy3::health(pool).await?;
     // Claude · № 16,973 25-Oct (ordered № 16,972·C; the broker's own leverage, no money)
     let traders = store::history::latest_trader_reads(pool).await?;
