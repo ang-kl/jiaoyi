@@ -194,6 +194,17 @@ async fn trade(
     secs: u64,
     env: Environment,
 ) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
+    trade_with(pool, f, secs, env, &trading::LivenessMap::default()).await
+}
+
+/// `trade`, with the loop's liveness kept in `live`.
+async fn trade_with(
+    pool: &PgPool,
+    f: &FakeBroker,
+    secs: u64,
+    env: Environment,
+    live: &trading::LivenessMap,
+) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
     let (conn, log) = f.clone().spawn();
     let session = loader::authorise(pool, &conn, &broker(), &permitted())
         .await
@@ -203,7 +214,7 @@ async fn trade(
     let mut d = trading::decisions(pool, DEMO);
     let list = allowlist();
     tokio::select! {
-        r = trading::run_session(pool, &list, env, &session, &mut d, &mut ends, &mut stop) => {
+        r = trading::run_session(pool, &list, env, &session, &mut d, live, &mut ends, &mut stop) => {
             r.unwrap();
         }
         _ = tokio::time::sleep(Duration::from_secs(secs)) => trigger.fire(),
@@ -370,7 +381,7 @@ async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
     let log2 = trade(&pool, &f, 2, Environment::Demo).await;
     assert!(log2.lock().unwrap().orders.is_empty());
     // /health shows the strategy and the decision, and no money.
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     assert_eq!(h[0]["strategy"], "Strategy 1: tick-triggered trend");
     assert_eq!(h[0]["trades"], "yes");
     assert_eq!(h[0]["edge_gate"], "not required (demo)");
@@ -439,7 +450,7 @@ async fn a_position_this_program_did_not_open_blocks_the_entry_and_is_reported(p
             .any(|(k, r)| k == "refused" && r.contains("external")),
         "{d:?}"
     );
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     let ext = &h[0]["last_reconcile"]["external_positions"];
     assert_eq!(ext[0]["position_id"], 77);
     assert_eq!(ext[0]["side"], "sell");
@@ -600,7 +611,7 @@ async fn an_accepted_only_open_is_adopted_after_a_restart(pool: PgPool) {
         ev.contains(&(Some(key), "RECONCILED_FILL".into())),
         "adopted, not external: {ev:?}"
     );
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
     assert_eq!(h[0]["last_reconcile"]["external_positions"], json!([]));
 }
@@ -699,7 +710,7 @@ async fn live_takes_one_minimum_trade_at_a_time_with_the_gate_lifted(pool: PgPoo
     store::upsert_account(&pool, LIVE, Environment::Live)
         .await
         .unwrap();
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     let live = h
         .as_array()
         .unwrap()
@@ -959,7 +970,7 @@ async fn a_partial_fill_recovered_at_startup_keeps_its_remainder_reserved(pool: 
     assert_eq!(u.len(), 1, "{u:?}");
     assert_eq!((u[0].filled, u[0].position_id), (60, Some(1001)), "{u:?}");
     // The adopted intent claims no second position.
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
     let ext = &h[0]["last_reconcile"]["external_positions"];
     assert_eq!(ext.as_array().map(Vec::len), Some(1), "{h}");
@@ -985,6 +996,73 @@ async fn a_partial_fill_recovered_at_startup_keeps_its_remainder_reserved(pool: 
         .await
         .unwrap();
     assert!(u.is_empty(), "{u:?}");
-    let h = trading::health(&pool).await.unwrap();
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
     assert_eq!(h[0]["last_reconcile"]["own"], 1, "{h}");
+}
+
+/// Production read-back 04:26Z: decisions are recorded only when their
+/// reason changes, so /health stayed at the first reconcile while the loops
+/// ran. A quiet loop's reconcile runs keep its liveness advancing, with the
+/// recorded reconcile decision kept once.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_quiet_loop_keeps_its_reconcile_runs_advancing(pool: PgPool) {
+    loaded(&pool).await;
+    set(&pool, "trading.reconcile_secs", json!(30)).await;
+    let f = fake_on(&[ETH], 2_000);
+    let live = trading::LivenessMap::default();
+    trade_with(&pool, &f, 40, Environment::Demo, &live).await;
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    let (start, ran) = (l.started_at.unwrap(), l.last_reconcile_run_at.unwrap());
+    assert!(
+        ran - start >= Days::seconds(25),
+        "a second reconcile ran: {l:?}"
+    );
+    // The unchanged reason is recorded once.
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM trading_decisions WHERE account_id = $1 AND kind = 'reconcile'",
+    )
+    .bind(DEMO)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 1);
+    let loops = live.lock().unwrap().clone();
+    let h = trading::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert_eq!(h[0]["liveness"]["stalled_after_secs"], 60, "{h}");
+    let recorded: chrono::DateTime<Utc> =
+        serde_json::from_value(h[0]["last_reconcile"]["at"].clone()).unwrap();
+    assert!(ran - recorded >= Days::seconds(25), "{h}");
+}
+
+/// A loop stopped for more than twice its reconcile interval reads stalled;
+/// its last quote is shown.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_stopped_loop_reads_stalled_after_twice_its_reconcile_interval(pool: PgPool) {
+    loaded(&pool).await;
+    // Below the level (3610.00): quotes, no entry.
+    let f = fake(vec![(3500.0, 3501.0)]);
+    let live = trading::LivenessMap::default();
+    let log = trade_with(&pool, &f, 2, Environment::Demo, &live).await;
+    assert!(log.lock().unwrap().orders.is_empty());
+    let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
+    assert!(l.last_quote_at.is_some(), "{l:?}");
+    let loops = live.lock().unwrap().clone();
+    let h = trading::health(&pool, &loops).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    assert!(h[0]["liveness"]["last_quote_at"].is_string(), "{h}");
+    // The loop is stopped. As if its last reconcile ran `age` ago: within
+    // 2 × 300 s it is alive, past it stalled.
+    let aged = |age: i64| {
+        let mut m = loops.clone();
+        let e = m.get_mut(&DEMO).unwrap();
+        let at = Utc::now() - Days::seconds(age);
+        e.started_at = Some(at - Days::seconds(5));
+        e.last_reconcile_run_at = Some(at);
+        m
+    };
+    let h = trading::health(&pool, &aged(590)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "alive", "{h}");
+    let h = trading::health(&pool, &aged(610)).await.unwrap();
+    assert_eq!(h[0]["liveness"]["state"], "stalled", "{h}");
 }

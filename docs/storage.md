@@ -162,7 +162,8 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
   - the strategy, and whether it trades (`yes`, `armed: waits for the edge gate`, or `trading (edge gate lifted by the owner DD-MM)`);
   - the edge gate and the minimum-volume rule;
   - the open-risk budget;
-  - the last decision;
+  - the last decision (recorded only when its reason changes, so its time can stand still while the loop runs);
+  - the loop's `liveness`, kept in memory and never recorded: when the loop started, when a reconcile last ran (every run, recorded or not), when it last processed a quote, and its state: `alive`, `starting` (no reconcile yet), `stalled` (no reconcile within 2 × `trading.reconcile_secs`, counted from the start before the first), or `not running` (no loop in this process). Strategy 3 has no such field yet (#15 is not merged);
   - the external positions found at the last reconcile (symbol, side, volume).
   No money.
 
