@@ -208,4 +208,5 @@ Owner, 25-10-2026: *"I want live to execute trading by 1 PM today"*, then *"Keep
   - Any fill is read from the broker at once: the aggregate volume, entry, stop and take-profit. An execution event carries one deal, not the position.
   - A partly filled open is linked to its plan through the deal's position, so its TP1 and session-end close are kept.
   - Reconcile adopts an unresolved open in full only at the requested volume. A smaller position is `RECONCILED_PARTIAL_FILL`, with the remainder's risk held in the budget until it fills, ends or is absent after the grace.
+  - TP1's close is planned again for the volume the broker holds, with the entry's own price, R and C, so TP1's level does not move. A volume that cannot be split closes whole at TP1 (Codex round-4 P2 on #15).
 - **Where this departs from the sections above.** Live trades Strategy 3 without a PASS, by the owner's order. The PASS rules of the pre-registration are judged on the forward demo results. Nothing above is edited.

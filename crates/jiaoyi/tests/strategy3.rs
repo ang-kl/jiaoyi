@@ -1224,3 +1224,67 @@ async fn a_stopped_strategy_3_loop_reads_stalled_after_twice_its_reconcile_inter
     let h = strategy3::health(&pool, &HashMap::new()).await.unwrap();
     assert_eq!(h[0]["liveness"]["state"], "not running", "{h}");
 }
+
+/// The TP1 closes the fake received.
+fn closes(log: &Arc<Mutex<FakeLog>>) -> Vec<i64> {
+    log.lock()
+        .unwrap()
+        .closes
+        .iter()
+        .map(|c| c.volume)
+        .collect()
+}
+
+/// Enter at 45 minutes on `f`, then quote at TP1 (fill 60,462.00 +
+/// 1,651.21): the TP1 closes sent.
+async fn tp1_after(pool: &PgPool, f: FakeBroker) -> Vec<i64> {
+    let out;
+    with_trader!(pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        assert_eq!(orders(&log)[0].volume, 13);
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+            .await
+            .unwrap();
+        out = closes(&log);
+    });
+    out
+}
+
+/// Codex round-4 P2 on #15: a partial fill too small to split (1 of 13
+/// cents; the plan's close was 5) takes TP1 as a whole-position close, not
+/// none.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_unsplittable_partial_fill_closes_whole_at_tp1(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 1, 60_462.0)],
+        cancel_remainder: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    assert_eq!(tp1_after(&pool, f).await, vec![1]);
+}
+
+/// Codex round-4 P2 on #15: a partial fill of 4 of 13 cents re-plans its TP1
+/// close for 4: ceil(4 × (R + C) / (TP1 + R)) = ceil(4 × 751.208 / 2,101.21)
+/// = 2, a runner of 2 (self-derived from the planner's own formula).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partial_fill_re_plans_its_tp1_close(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 4, 60_462.0)],
+        cancel_remainder: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    assert_eq!(tp1_after(&pool, f).await, vec![2]);
+}
+
+/// A full fill keeps the planned close of 5 of 13 (a guard: main already
+/// does this).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_full_fill_keeps_its_planned_tp1_close(pool: PgPool) {
+    loaded(&pool).await;
+    assert_eq!(tp1_after(&pool, fake((60_455.0, 60_462.0))).await, vec![5]);
+}
