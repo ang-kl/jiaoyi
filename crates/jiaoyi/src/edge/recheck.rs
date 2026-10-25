@@ -211,15 +211,17 @@ async fn tick_trade(
     };
     // Walk one day's updates from index `from`, trailing on `atr`. Every
     // exit-side update is checked against the stop before it counts as a
-    // new best; the first one checked on a day walked from its start is a
-    // gap when beyond the stop. Returns the exit quote and the reason.
+    // new best; with `opening` (a day walked from its start), the first one
+    // checked is a gap when beyond the stop. Returns the exit quote and the
+    // reason.
     let walk = |q: &[Quote],
                 from: usize,
+                opening: bool,
                 atr: f64,
                 stop: &mut f64,
                 best: &mut Option<f64>|
      -> Option<(f64, ExitReason)> {
-        let mut opening = from == 0;
+        let mut opening = opening;
         for (_, b, a) in q.iter().skip(from) {
             let Some(price) = side_px(b, a) else {
                 continue;
@@ -239,10 +241,12 @@ async fn tick_trade(
         }
         None
     };
-    // The best exit-side quote since the fill: the one standing at the fill.
-    let mut best: Option<f64> = side_px(&b0, &a0);
+    // The entry day is walked from the fill's own update (Codex P2 on #9,
+    // round 4): the exit-side quote standing at the fill is checked against
+    // the new stop before any later update, then counts as the first best.
+    let mut best: Option<f64> = None;
     let mut exit: Option<(usize, f64, f64, ExitReason)> = None;
-    if let Some((price, why)) = walk(&q, i0 + 1, atr_e, &mut stop, &mut best) {
+    if let Some((price, why)) = walk(&q, i0, false, atr_e, &mut stop, &mut best) {
         exit = Some((t_e, price, exit_fill(t_e, price), why));
     }
     let mut note = None;
@@ -294,7 +298,7 @@ async fn tick_trade(
                     break;
                 }
                 let atr_prev = ind.atr[u - 1].unwrap_or(atr_e);
-                if let Some((price, why)) = walk(&qu, 0, atr_prev, &mut stop, &mut best) {
+                if let Some((price, why)) = walk(&qu, 0, true, atr_prev, &mut stop, &mut best) {
                     exit = Some((u, price, exit_fill(u, price), why));
                     break;
                 }

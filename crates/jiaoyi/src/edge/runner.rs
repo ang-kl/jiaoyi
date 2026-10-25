@@ -27,6 +27,7 @@ use super::h1job::{self, Deposit, Setting};
 use super::prereg;
 use super::recheck;
 use super::sampler::{self, Sampled, FIRST_SAMPLE_YEAR, LAST_SAMPLE_YEAR};
+use super::{ENGINE_VERSION, HELD_OUT_MIN_ENGINE};
 use crate::config::BrokerConfig;
 use crate::loader;
 use crate::shutdown::Shutdown;
@@ -154,13 +155,32 @@ pub async fn run_with<C, F>(
     }
 }
 
-/// One step: look at the next pending job and take it as far as it goes.
+/// One step: look at the next pending job and take it as far as it goes,
+/// as this release's engine ([`ENGINE_VERSION`]).
 pub async fn step<C, F>(
     pool: &PgPool,
     broker: &BrokerConfig,
     permitted: &[(PermittedAccount, Environment)],
     connect: &C,
     shutdown: &Shutdown,
+) -> anyhow::Result<Step>
+where
+    C: Fn(i64) -> F,
+    F: std::future::Future<Output = anyhow::Result<Connection>>,
+{
+    step_as(pool, broker, permitted, connect, shutdown, ENGINE_VERSION).await
+}
+
+/// [`step`] as engine `engine`: recorded with the attempt and the trial,
+/// and the held-out job waits, not attempted, below
+/// [`HELD_OUT_MIN_ENGINE`].
+pub async fn step_as<C, F>(
+    pool: &PgPool,
+    broker: &BrokerConfig,
+    permitted: &[(PermittedAccount, Environment)],
+    connect: &C,
+    shutdown: &Shutdown,
+    engine: i32,
 ) -> anyhow::Result<Step>
 where
     C: Fn(i64) -> F,
@@ -173,6 +193,7 @@ where
     if job.prereg_hash != hash {
         return finish_without_trial(
             pool,
+            engine,
             &job,
             "refused",
             &format!(
@@ -183,7 +204,14 @@ where
         .await;
     }
     let Some(setting) = Setting::from_json(&job.setting) else {
-        return finish_without_trial(pool, &job, "failed", "the job's setting is unreadable").await;
+        return finish_without_trial(
+            pool,
+            engine,
+            &job,
+            "failed",
+            "the job's setting is unreadable",
+        )
+        .await;
     };
     let Some((account, _)) = permitted.iter().find(|(a, _)| a.id() == setting.account_id) else {
         return Ok(Step::Waiting(format!(
@@ -198,7 +226,7 @@ where
         )));
     }
     let Some(stage) = Stage::parse(&job.stage) else {
-        return finish_without_trial(pool, &job, "failed", "unknown stage").await;
+        return finish_without_trial(pool, engine, &job, "failed", "unknown stage").await;
     };
     match stage {
         Stage::Development => {
@@ -253,11 +281,13 @@ where
                 Deposit::Usd(v) => v,
                 Deposit::NotReady(why) => return Ok(Step::Waiting(why)),
                 Deposit::Failed(why) => {
-                    return attempt_and(pool, &job, |_| async move { Err(anyhow::anyhow!(why)) })
-                        .await;
+                    return attempt_and(pool, engine, &job, |_| async move {
+                        Err(anyhow::anyhow!(why))
+                    })
+                    .await;
                 }
             };
-            attempt_and(pool, &job, |attempt| {
+            attempt_and(pool, engine, &job, |_attempt| {
                 run_trial(
                     pool,
                     job.clone(),
@@ -265,28 +295,38 @@ where
                     Stage::Development,
                     deposit,
                     None::<&AccountSession<'_>>,
-                    attempt,
+                    engine,
                 )
             })
             .await
         }
         Stage::HeldOut => {
+            // The held-out stage never runs on an engine without the
+            // round-4 fix: it waits, pending and not attempted, so a
+            // release that has it can still run it.
+            if engine < HELD_OUT_MIN_ENGINE {
+                return Ok(Step::Waiting(format!(
+                    "the held-out job runs only on engine {HELD_OUT_MIN_ENGINE} or later; this service runs engine {engine}; it stays pending, not attempted"
+                )));
+            }
             let (met, why) = development_gate_under(pool, &hash).await?;
             if !met {
-                return attempt_and_refuse(pool, &job, &why).await;
+                return attempt_and_refuse(pool, engine, &job, &why).await;
             }
             let deposit = match h1job::deposit_currency(pool, setting.account_id).await? {
                 Deposit::Usd(v) => v,
                 Deposit::NotReady(why) => return Ok(Step::Waiting(why)),
                 Deposit::Failed(why) => {
-                    return attempt_and(pool, &job, |_| async move { Err(anyhow::anyhow!(why)) })
-                        .await;
+                    return attempt_and(pool, engine, &job, |_| async move {
+                        Err(anyhow::anyhow!(why))
+                    })
+                    .await;
                 }
             };
             let conn = connect(setting.account_id).await?;
             let session = loader::authorise(pool, &conn, broker, account).await?;
             let session = &session;
-            attempt_and(pool, &job, |attempt| {
+            attempt_and(pool, engine, &job, |_attempt| {
                 run_trial(
                     pool,
                     job.clone(),
@@ -294,7 +334,7 @@ where
                     Stage::HeldOut,
                     deposit,
                     Some(session),
-                    attempt,
+                    engine,
                 )
             })
             .await
@@ -305,11 +345,12 @@ where
 /// Claim the job (recording the attempt) and close it without a trial.
 async fn finish_without_trial(
     pool: &PgPool,
+    engine: i32,
     job: &JobRow,
     status: &str,
     reason: &str,
 ) -> anyhow::Result<Step> {
-    if rs::claim_job(pool, job.id, &deployed_commit())
+    if rs::claim_job(pool, job.id, &deployed_commit(), engine)
         .await?
         .is_none()
     {
@@ -319,18 +360,23 @@ async fn finish_without_trial(
     Ok(Step::Finished(format!("job {} {status}: {reason}", job.id)))
 }
 
-async fn attempt_and_refuse(pool: &PgPool, job: &JobRow, why: &str) -> anyhow::Result<Step> {
-    finish_without_trial(pool, job, "refused", why).await
+async fn attempt_and_refuse(
+    pool: &PgPool,
+    engine: i32,
+    job: &JobRow,
+    why: &str,
+) -> anyhow::Result<Step> {
+    finish_without_trial(pool, engine, job, "refused", why).await
 }
 
 /// Claim the job, run `f` with the attempt number; a trial is written by `f`
 /// (job done); an error fails the job with its reason.
-async fn attempt_and<G, Fut>(pool: &PgPool, job: &JobRow, f: G) -> anyhow::Result<Step>
+async fn attempt_and<G, Fut>(pool: &PgPool, engine: i32, job: &JobRow, f: G) -> anyhow::Result<Step>
 where
     G: FnOnce(i32) -> Fut,
     Fut: std::future::Future<Output = anyhow::Result<i64>>,
 {
-    let Some(attempt) = rs::claim_job(pool, job.id, &deployed_commit()).await? else {
+    let Some(attempt) = rs::claim_job(pool, job.id, &deployed_commit(), engine).await? else {
         return Ok(Step::Waiting("taken by another runner".into()));
     };
     match f(attempt).await {
@@ -426,7 +472,7 @@ async fn run_trial(
     stage: Stage,
     deposit: Value,
     session: Option<&AccountSession<'_>>,
-    _attempt: i32,
+    engine: i32,
 ) -> anyhow::Result<i64> {
     let data = Data::new(pool, stage);
     let u = h1job::prepare(&data, setting.account_id, deposit).await?;
@@ -502,7 +548,8 @@ async fn run_trial(
     }
     results["attempts"] = json!(attempts);
     let hash = prereg::hash();
-    let (params, range) = h1job::inputs(&u, &setting, stage, &hash);
+    let (mut params, range) = h1job::inputs(&u, &setting, stage, &hash);
+    params["engine_version"] = json!(engine);
     let verdict = eval.verdict.clone();
     let trial = rs::finish_job_with_trial(
         pool,
