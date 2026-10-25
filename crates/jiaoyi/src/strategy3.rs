@@ -637,12 +637,25 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
             let mut owned = ts::owns_position(self.pool, account_id, p.position_id).await?;
             if !owned {
-                if let Some(i) = unresolved
-                    .iter()
-                    .position(|u| u.symbol_id == Some(p.trade_data.symbol_id))
-                {
-                    let u = unresolved.remove(i);
-                    self.adopt(&u.entry_key, p).await?;
+                // In full only at the requested volume; a part keeps the
+                // intent unresolved, its remainder reserved below until it
+                // fills, ends or is absent after the grace (Codex P1 on #15,
+                // as #16 does for Strategy 1).
+                // Claude · № 17,060 25-Oct (ordered: owner "merge when green
+                // and deploy"; Codex round 3 on #15)
+                if let Some(i) = unresolved.iter().position(|u| {
+                    u.symbol_id == Some(p.trade_data.symbol_id) && u.position_id.is_none()
+                }) {
+                    let part = unresolved[i]
+                        .volume
+                        .is_some_and(|v| p.trade_data.volume < v);
+                    let key = unresolved[i].entry_key.clone();
+                    if part {
+                        unresolved[i].position_id = Some(p.position_id);
+                    } else {
+                        unresolved.remove(i);
+                    }
+                    self.adopt(&key, p, part).await?;
                     // Claude · № 17,020 25-Oct (Codex P1 on #15): the adopted
                     // position's plan is read after its fill row exists.
                     plans = s3s::open_plans(self.pool, account_id).await?;
@@ -721,15 +734,37 @@ impl<'a, 'c> Trader<'a, 'c> {
         let grace = chrono::Duration::seconds(r.reconcile_secs as i64);
         self.pending.clear();
         for u in unresolved {
+            // What of it is filled: the broker's position when it is held,
+            // else the deals recorded. The adopted part's risk is the
+            // position's; the remainder's is held here, never both.
+            let filled = u
+                .position_id
+                .and_then(|p| self.own.get(&p))
+                .map(|o| o.volume)
+                .unwrap_or(u.filled);
+            if u.volume.is_some_and(|v| filled >= v) {
+                ts::record_event(
+                    self.pool,
+                    &crate::trading::reconciled_row(
+                        account_id,
+                        &u.entry_key,
+                        "RECONCILED_FILL",
+                        None,
+                        "a Strategy 3 open found filled in full at the broker by reconcile",
+                    ),
+                )
+                .await?;
+                continue;
+            }
             let at_broker = res.order.iter().any(|o| {
                 o.trade_data.label.as_deref() == Some(LABEL)
                     && Some(o.trade_data.symbol_id) == u.symbol_id
             });
             if at_broker || now - u.created_at < grace {
                 self.pending.push(Pending {
+                    risk: crate::trading::outstanding_risk(u.risk, u.volume, filled).unwrap_or(0.0),
                     entry_key: u.entry_key,
                     symbol_id: u.symbol_id.unwrap_or_default(),
-                    risk: u.risk.unwrap_or(0.0),
                     at: u.created_at,
                 });
                 continue;
@@ -773,13 +808,28 @@ impl<'a, 'c> Trader<'a, 'c> {
         Ok(())
     }
 
-    /// An Unconfirmed open found filled: recorded once, with its fill.
+    /// An Unconfirmed open found filled, in full or in `part`: recorded once,
+    /// with its fill.
     async fn adopt(
         &mut self,
         key: &str,
         p: &jiaoyi_ctrader::messages::ProtoOaPosition,
+        part: bool,
     ) -> anyhow::Result<()> {
         let account_id = self.account_id();
+        let (kind, outcome, description) = if part {
+            (
+                "RECONCILED_PARTIAL_FILL",
+                "reconciled_partial_fill",
+                "an unconfirmed Strategy 3 open found partly filled by reconcile: the position adopted, the remainder held",
+            )
+        } else {
+            (
+                "RECONCILED_FILL",
+                "reconciled_fill",
+                "an unconfirmed Strategy 3 open found filled by reconcile",
+            )
+        };
         ts::record_event(
             self.pool,
             &ts::EventRow {
@@ -787,7 +837,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 entry_key: Some(key.to_string()),
                 client_msg_id: None,
                 payload_type: 0,
-                kind: "RECONCILED_FILL".into(),
+                kind: kind.into(),
                 position_id: Some(p.position_id),
                 order_id: None,
                 deal_id: None,
@@ -798,9 +848,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 stop_loss: p.stop_loss,
                 label: p.trade_data.label.clone(),
                 error_code: None,
-                description: Some(
-                    "an unconfirmed Strategy 3 open found filled by reconcile".into(),
-                ),
+                description: Some(description.into()),
                 is_server_event: None,
                 raw: vec![],
                 received_at: Utc::now(),
@@ -823,7 +871,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 symbol,
                 position_id: Some(p.position_id),
                 side: Side::from_proto(p.trade_data.trade_side).map(|s| s.as_str().to_string()),
-                outcome: "reconciled_fill".into(),
+                outcome: outcome.into(),
                 sent_at: Utc::now(),
                 answered_at: None,
                 latency_ms: None,
@@ -1221,24 +1269,48 @@ impl<'a, 'c> Trader<'a, 'c> {
     ) -> anyhow::Result<()> {
         let sent_at = ledger.recorded_at.lock().unwrap().unwrap_or_else(Utc::now);
         let filled = sent.events.iter().rev().find(|e| e.kind == "ORDER_FILLED");
+        // The order's deals. Each carries the broker's position id, whatever
+        // the last answer, and an order filled in several deals is their sum
+        // at their volume-weighted price: an event carries one deal, not the
+        // position (Codex P1s on #15).
+        // Claude · № 17,060 25-Oct (ordered: owner "merge when green and
+        // deploy"; Codex round 3 on #15)
+        let deals: Vec<_> = sent
+            .events
+            .iter()
+            .filter(|e| e.kind == "ORDER_FILLED" || e.kind == "ORDER_PARTIAL_FILL")
+            .collect();
+        let deal_pid = deals.iter().find_map(|e| e.position_id);
+        let deal_volume: i64 = deals.iter().filter_map(|e| e.volume).sum();
+        let deal_price = deals
+            .iter()
+            .map(|e| Some(e.price? * e.volume? as f64))
+            .sum::<Option<f64>>()
+            .filter(|_| deal_volume > 0)
+            .map(|n| n / deal_volume as f64);
         let (outcome, price, pid, vol) = match &sent.outcome {
             Outcome::Filled {
                 position_id: p,
                 price,
                 volume: v,
+            } if deal_volume > 0 => (
+                "filled",
+                deal_price.or(*price),
+                deal_pid.or(*p).or(position_id),
+                Some(deal_volume.max(v.unwrap_or(0))),
+            ),
+            Outcome::Filled {
+                position_id: p,
+                price,
+                volume: v,
             } => ("filled", *price, p.or(position_id), v.or(Some(volume))),
-            // A rejection after part of the order filled is a partial fill.
-            Outcome::Rejected { .. } if partly_filled(sent) => (
+            // A rejection, or no last answer, after part of the order filled
+            // is a partial fill, into the deals' position.
+            Outcome::Rejected { .. } | Outcome::Unconfirmed if partly_filled(sent) => (
                 "partly_filled",
-                None,
-                position_id,
-                Some(
-                    sent.events
-                        .iter()
-                        .filter(|e| e.kind == "ORDER_PARTIAL_FILL")
-                        .filter_map(|e| e.volume)
-                        .sum(),
-                ),
+                deal_price,
+                deal_pid.or(position_id),
+                Some(deal_volume),
             ),
             Outcome::Rejected { .. } => ("rejected", None, position_id, None),
             Outcome::Amended { .. } => ("amended", None, position_id, None),
@@ -1559,47 +1631,23 @@ impl<'a, 'c> Trader<'a, 'c> {
                     &sent,
                 )
                 .await?;
-                match &sent.outcome {
-                    Outcome::Filled {
-                        position_id: Some(pid),
-                        price,
-                        volume,
-                    } => {
-                        let fill = price.unwrap_or(entry_price);
-                        let sd = dir_side(side);
-                        self.own.insert(
-                            *pid,
-                            Own {
-                                position_id: *pid,
-                                symbol_id,
-                                side: sd,
-                                volume: volume.unwrap_or(sized.volume),
-                                entry: Some(fill),
-                                stop: Some(match sd {
-                                    Side::Buy => fill - e.r,
-                                    Side::Sell => fill + e.r,
-                                }),
-                                take_profit: None,
-                                tp1_distance: Some(order.tp1_distance),
-                                close_volume: Some(order.plan.close_volume),
-                                partial: order.plan.mode == targets::Mode::PartialRunner,
-                                session_date: Some(s.date),
-                                entry_key: Some(key.clone()),
-                                tp1_sent: false,
-                                tp1_next_try: None,
-                                end_attempts: 0,
-                                end_next_try: None,
-                            },
-                        );
-                        self.program_positions += 1;
-                    }
-                    Outcome::Unconfirmed => self.pending.push(Pending {
+                // Any fill, whatever the last answer (several deals, or part
+                // of the order before a rejection or no answer), is read from
+                // the broker at once: its aggregate volume, entry, stop and
+                // take-profit, with its recorded plan. An event carries one
+                // deal, not the position (Codex P1 on #15; Strategy 1 does
+                // the same).
+                // Claude · № 17,060 25-Oct (ordered: owner "merge when green
+                // and deploy"; Codex round 3 on #15)
+                if matches!(sent.outcome, Outcome::Filled { .. }) || partly_filled(&sent) {
+                    self.reconcile(Utc::now()).await?;
+                } else if matches!(sent.outcome, Outcome::Unconfirmed) {
+                    self.pending.push(Pending {
                         entry_key: key.clone(),
                         symbol_id,
                         risk: sized.risk,
                         at: now,
-                    }),
-                    _ => {}
+                    });
                 }
                 self.d
                     .note(

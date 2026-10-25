@@ -986,3 +986,140 @@ async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
         "{row}"
     );
 }
+
+/// One open's fill row: (outcome, position, volume, fill price).
+async fn open_fill(pool: &PgPool) -> (String, Option<i64>, Option<i64>, Option<f64>) {
+    sqlx::query_as(
+        "SELECT outcome, position_id, volume, fill_price FROM strategy3_fills WHERE kind = 'open'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// Codex round 3 on #15: an open filled in two deals is held at their sum
+/// and their volume-weighted price, read from the broker, not at the last
+/// deal's 7 cents and price.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_open_filled_in_two_deals_is_held_at_their_aggregate(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 6, 60_462.0), (20, 7, 60_470.0)],
+        ..fake((60_455.0, 60_462.0))
+    };
+    let vwap = (6.0 * 60_462.0 + 7.0 * 60_470.0) / 13.0;
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        assert_eq!(orders(&log)[0].volume, 13);
+        let o = t.own.get(&1001).cloned().expect("held");
+        assert_eq!(o.volume, 13, "{o:?}");
+        assert!((o.entry.unwrap() - vwap).abs() < 1e-6, "{o:?}");
+        assert_eq!((o.close_volume, o.partial), (Some(5), true), "{o:?}");
+        assert_eq!(o.session_date, Some(today().date), "{o:?}");
+    });
+    let (outcome, pid, vol, price) = open_fill(&pool).await;
+    assert_eq!(
+        (outcome.as_str(), pid, vol),
+        ("filled", Some(1001), Some(13))
+    );
+    assert!((price.unwrap() - vwap).abs() < 1e-6, "{price:?}");
+}
+
+/// Codex round 3 on #15: an open partly filled before its remainder is
+/// cancelled is linked to its plan through the deal's position, so its TP1
+/// and its session-end close are known, now and after a restart.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_partly_filled_open_keeps_its_plan(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 6, 60_462.0)],
+        cancel_remainder: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        let o = t.own.get(&1001).cloned().expect("held");
+        assert_eq!(o.volume, 6, "{o:?}");
+        assert_eq!(o.session_date, Some(today().date), "{o:?}");
+        assert!(o.tp1_distance.is_some(), "{o:?}");
+    });
+    let (outcome, pid, vol, _) = open_fill(&pool).await;
+    assert_eq!(
+        (outcome.as_str(), pid, vol),
+        ("partly_filled", Some(1001), Some(6))
+    );
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        let o = t.own.get(&1001).cloned().expect("held after a restart");
+        assert_eq!(o.session_date, Some(today().date), "{o:?}");
+        assert!(o.tp1_distance.is_some(), "{o:?}");
+    });
+}
+
+/// Codex round 3 on #15: an Unconfirmed open of 13 cents found at 6 by a
+/// reconcile is adopted at the broker's 6, and the open stays unresolved, its
+/// remainder reserved, until the broker holds all 13.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_unconfirmed_open_found_partly_filled_keeps_its_remainder_reserved(pool: PgPool) {
+    loaded(&pool).await;
+    settings::change(
+        &pool,
+        "trading.order_wait_secs",
+        Some(DEMO),
+        Some(json!(1)),
+        "test",
+        "short wait",
+    )
+    .await
+    .unwrap();
+    let silent = FakeBroker {
+        silent_orders: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, silent, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1, "sent, no answer");
+    });
+    silent
+        .positions
+        .lock()
+        .unwrap()
+        .push(s3_position(5001, 6, 60_462.0));
+    with_trader!(&pool, silent, Environment::Demo, |t, _log| {
+        assert_eq!(t.own.get(&5001).map(|o| o.volume), Some(6), "adopted");
+    });
+    let kinds = || async {
+        sqlx::query_scalar::<_, String>(
+            "SELECT kind FROM trading_events WHERE kind LIKE 'RECONCILED%' ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(kinds().await, vec!["RECONCILED_PARTIAL_FILL"]);
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert_eq!(u.len(), 1, "the remainder stays reserved: {u:?}");
+    assert_eq!((u[0].filled, u[0].position_id), (6, Some(5001)), "{u:?}");
+    // The remainder fills: the broker holds all 13.
+    silent.positions.lock().unwrap()[0].trade_data.volume = 13;
+    with_trader!(&pool, silent, Environment::Demo, |t, _log| {
+        assert_eq!(t.own.get(&5001).map(|o| o.volume), Some(13));
+    });
+    assert_eq!(
+        kinds().await,
+        vec!["RECONCILED_PARTIAL_FILL", "RECONCILED_FILL"]
+    );
+    let u = store::trading::open_intents_unresolved(&pool, DEMO)
+        .await
+        .unwrap();
+    assert!(u.is_empty(), "{u:?}");
+}

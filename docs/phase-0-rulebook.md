@@ -204,4 +204,8 @@ Owner, 25-10-2026: *"I want live to execute trading by 1 PM today"*, then *"Keep
   - Live takes one broker-minimum trade at a time, at most 10% of equity, with no other position of this program open.
 - **Open-risk budget.** Strategy 3 holds at most `trading.s3_open_risk_pct` (3%) of equity in open risk at its stops.
 - **Co-holding.** On a HEDGED account, Strategy 1 and Strategy 3 may each hold the same symbol, and each manages only its own label. External positions still block an entry. On a NETTED account, any position blocks.
+- **Fills** follow §11's rules for Strategy 1 (Codex round 3 on #15):
+  - Any fill is read from the broker at once: the aggregate volume, entry, stop and take-profit. An execution event carries one deal, not the position.
+  - A partly filled open is linked to its plan through the deal's position, so its TP1 and session-end close are kept.
+  - Reconcile adopts an unresolved open in full only at the requested volume. A smaller position is `RECONCILED_PARTIAL_FILL`, with the remainder's risk held in the budget until it fills, ends or is absent after the grace.
 - **Where this departs from the sections above.** Live trades Strategy 3 without a PASS, by the owner's order. The PASS rules of the pre-registration are judged on the forward demo results. Nothing above is edited.
