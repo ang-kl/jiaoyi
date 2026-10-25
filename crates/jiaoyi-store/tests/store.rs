@@ -255,9 +255,11 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     let s = settings::snapshot(&pool, None).await.unwrap();
     // 17 phase-1 seeds, 4 history seeds (0004), 4 load/spread seeds (0005),
     // the owner's universe change (0005), the session-retry seed (0007), the
-    // owner's SpotBrent change (0008), the 10 trading seeds (0012) and
-    // Strategy 3's open-risk budget (0013).
-    assert_eq!(s.version, 39);
+    // owner's SpotBrent change (0008), the 10 trading seeds (0012),
+    // Strategy 3's open-risk budget (0013) and the limits and the owner's
+    // pause (0015: 5).
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    assert_eq!(s.version, 44);
     assert_eq!(s.integer("history.session_retry_secs").unwrap(), 5);
     assert_eq!(s.integer("history.tick_days_back").unwrap(), 7);
     assert_eq!(s.integer("spread.min_samples").unwrap(), 30);
@@ -327,9 +329,11 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     assert_eq!(s.integer("ticks.retention_days").unwrap(), 30);
     assert_eq!(s.integer("spread.sample_secs").unwrap(), 60);
     // Every seed and the owner's change are logged (28, then the 10 trading
-    // seeds of 0012 and Strategy 3's budget of 0013).
+    // seeds of 0012, Strategy 3's budget of 0013 and the 5 limit and pause
+    // seeds of 0015).
+    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
     let h = settings::history(&pool, None).await.unwrap();
-    assert_eq!(h.len(), 39);
+    assert_eq!(h.len(), 44);
     assert!(h
         .iter()
         .filter(|c| c.version != 26 && c.version != 28)
@@ -369,7 +373,7 @@ async fn an_out_of_bounds_value_is_refused_and_nothing_changes(pool: PgPool) {
         30,
         "not clamped, not changed"
     );
-    assert_eq!(s.version, 39, "a refused change does not bump the version");
+    assert_eq!(s.version, 44, "a refused change does not bump the version");
     assert!(matches!(
         settings::change(
             &pool,
@@ -400,11 +404,11 @@ async fn a_change_is_logged_with_old_and_new_values_and_bumps_the_version(pool: 
     )
     .await
     .unwrap();
-    assert_eq!(v, 40);
+    assert_eq!(v, 45);
     let h = settings::history(&pool, Some("ticks.retention_days"))
         .await
         .unwrap();
-    assert_eq!(h[0].version, 40);
+    assert_eq!(h[0].version, 45);
     assert_eq!(h[0].old_value, Some(json!(30)));
     assert_eq!(h[0].new_value, Some(json!(14)));
     assert_eq!(h[0].changed_by, "owner");
