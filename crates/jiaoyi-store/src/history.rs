@@ -483,6 +483,101 @@ pub async fn record_account_snapshot(pool: &PgPool, s: &AccountSnapshot) -> crat
     Ok(())
 }
 
+/// One read of the broker's trader record (`ProtoOATrader`), as the broker
+/// gave it: `None` where the broker omitted the field (owner, 25-10-2026:
+/// the grounding check for the demo accounts' stated leverage).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TraderRead {
+    pub account_id: i64,
+    pub leverage_in_cents: Option<i64>,
+    pub max_leverage: Option<i64>,
+    pub balance: i64,
+    pub balance_version: Option<i64>,
+    pub money_digits: Option<i32>,
+    pub deposit_asset_id: i64,
+    pub account_type: Option<i32>,
+    pub is_limited_risk: Option<bool>,
+    pub limited_risk_margin_calculation_strategy: Option<i32>,
+    pub total_margin_calculation_type: Option<i32>,
+    pub access_rights: Option<i32>,
+    pub swap_free: Option<bool>,
+    pub fair_stop_out: Option<bool>,
+    pub stop_out_strategy: Option<i32>,
+    pub manager_bonus: Option<i64>,
+    pub ib_bonus: Option<i64>,
+    pub non_withdrawable_bonus: Option<i64>,
+    pub trader_login: Option<i64>,
+    pub broker_name: Option<String>,
+    pub registration_at: Option<DateTime<Utc>>,
+}
+
+pub async fn record_trader_read(pool: &PgPool, t: &TraderRead) -> crate::Result<()> {
+    sqlx::query(
+        "INSERT INTO trader_reads (account_id, leverage_in_cents, max_leverage, balance, balance_version,
+            money_digits, deposit_asset_id, account_type, is_limited_risk,
+            limited_risk_margin_calculation_strategy, total_margin_calculation_type, access_rights,
+            swap_free, fair_stop_out, stop_out_strategy, manager_bonus, ib_bonus,
+            non_withdrawable_bonus, trader_login, broker_name, registration_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)",
+    )
+    .bind(t.account_id)
+    .bind(t.leverage_in_cents)
+    .bind(t.max_leverage)
+    .bind(t.balance)
+    .bind(t.balance_version)
+    .bind(t.money_digits)
+    .bind(t.deposit_asset_id)
+    .bind(t.account_type)
+    .bind(t.is_limited_risk)
+    .bind(t.limited_risk_margin_calculation_strategy)
+    .bind(t.total_margin_calculation_type)
+    .bind(t.access_rights)
+    .bind(t.swap_free)
+    .bind(t.fair_stop_out)
+    .bind(t.stop_out_strategy)
+    .bind(t.manager_bonus)
+    .bind(t.ib_bonus)
+    .bind(t.non_withdrawable_bonus)
+    .bind(t.trader_login)
+    .bind(&t.broker_name)
+    .bind(t.registration_at)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Each account's latest trader read, without money: what `/health` shows.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LatestTraderRead {
+    pub account_id: i64,
+    pub read_at: DateTime<Utc>,
+    pub leverage_in_cents: Option<i64>,
+    pub max_leverage: Option<i64>,
+    pub account_type: Option<i32>,
+    pub is_limited_risk: Option<bool>,
+}
+
+pub async fn latest_trader_reads(pool: &PgPool) -> crate::Result<Vec<LatestTraderRead>> {
+    let rows = sqlx::query(
+        "SELECT DISTINCT ON (account_id) account_id, read_at, leverage_in_cents, max_leverage,
+                account_type, is_limited_risk
+         FROM trader_reads ORDER BY account_id, id DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|r| LatestTraderRead {
+            account_id: r.get("account_id"),
+            read_at: r.get("read_at"),
+            leverage_in_cents: r.get("leverage_in_cents"),
+            max_leverage: r.get("max_leverage"),
+            account_type: r.get("account_type"),
+            is_limited_risk: r.get("is_limited_risk"),
+        })
+        .collect())
+}
+
 // ------------------------------------------------------------------ trials
 
 /// One research trial, pass or fail.

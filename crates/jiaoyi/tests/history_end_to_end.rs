@@ -9,7 +9,9 @@ use chrono::{Duration, Utc};
 use jiaoyi::config::BrokerConfig;
 use jiaoyi::history::{self, GRID_ORIGIN_MS, WEEK_MS};
 use jiaoyi::{loader, research, shutdown};
-use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
+use jiaoyi_core::allowlist::{
+    demo_accounts, plan_accounts, Allowlist, Environment, PermittedAccount, TickHistory,
+};
 use jiaoyi_core::secret::Secret;
 use jiaoyi_ctrader::messages::{
     ProtoOaClosePositionDetail, ProtoOaDeal, ProtoOaLightSymbol, ProtoOaPayloadType, ProtoOaSymbol,
@@ -183,16 +185,247 @@ async fn sync(
     pool: &PgPool,
     f: FakeBroker,
 ) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
+    sync_as(pool, f, &permitted(), &TickHistory::On, &Default::default()).await
+}
+
+async fn sync_as(
+    pool: &PgPool,
+    f: FakeBroker,
+    account: &PermittedAccount,
+    ticks: &TickHistory,
+    status: &history::HistoryStatusMap,
+) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
     let (conn, log) = f.spawn();
-    let session = loader::authorise(pool, &conn, &broker(), &permitted())
+    let session = loader::authorise(pool, &conn, &broker(), account)
         .await
         .unwrap();
-    let status = history::HistoryStatusMap::default();
     let (_t, stop) = shutdown::channel();
-    history::sync_account(pool, &session, &permitted(), &status, &stop)
+    history::sync_account(pool, &session, account, ticks, status, &stop)
         .await
         .unwrap();
     log
+}
+
+/// The plan as deployed on 25-10-2026 with A named only by a demo variable:
+/// A's account and its tick-history setting, as the service would run them.
+fn named_by_a_demo_variable() -> (PermittedAccount, TickHistory) {
+    let list = Allowlist::parse(Some("43002148"))
+        .unwrap()
+        .with_demo_accounts(demo_accounts([("JIAOYI_DEMO_ACCOUNT_ID_2", "49236051")]));
+    let plan = plan_accounts(&list, Some("43002148:live"));
+    let (account, env) = plan
+        .permitted
+        .iter()
+        .find(|(a, _)| a.id() == A)
+        .cloned()
+        .unwrap();
+    assert_eq!(env, Environment::Demo);
+    let ticks = plan.tick_history(A);
+    (account, ticks)
+}
+
+async fn count(pool: &PgPool, sql: &str) -> i64 {
+    sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
+}
+
+// Claude · № 16,973 25-Oct (ordered № 16,972·C; owner: "Skip their tick history")
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn an_account_named_only_by_a_demo_variable_downloads_no_ticks_and_the_rest_runs(
+    pool: PgPool,
+) {
+    prepare(&pool).await;
+    let (account, ticks) = named_by_a_demo_variable();
+    assert!(
+        matches!(&ticks, TickHistory::Off { reason } if reason.contains("JIAOYI_DEMO_ACCOUNT_ID_2")),
+        "{ticks:?}"
+    );
+    let broker_data = fake();
+    let status = history::HistoryStatusMap::default();
+    let log = sync_as(&pool, broker_data.clone(), &account, &ticks, &status).await;
+
+    // Deals, the trader record and the probe: as for any account.
+    assert_eq!(count(&pool, "SELECT count(*) FROM deals").await, 3);
+    assert_eq!(
+        count(&pool, "SELECT count(*) FROM account_snapshots").await,
+        1
+    );
+    assert_eq!(count(&pool, "SELECT count(*) FROM trader_reads").await, 1);
+    assert!(!log.lock().unwrap().deal_requests.is_empty());
+    let probes = count(
+        &pool,
+        "SELECT count(*) FROM history_fetches WHERE kind = 'probe'",
+    )
+    .await;
+    assert!(probes > 0, "the availability probe still runs");
+    // No tick window downloaded or recorded, no tick stored, no ask asked.
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT count(*) FROM history_fetches WHERE kind = 'download'"
+        )
+        .await,
+        0
+    );
+    assert_eq!(count(&pool, "SELECT count(*) FROM ticks_history").await, 0);
+    let requests = log.lock().unwrap().tick_requests.clone();
+    assert_eq!(
+        requests.len() as i64,
+        probes,
+        "only probe requests: {requests:?}"
+    );
+    assert!(
+        requests.iter().all(|(_, side, _, _)| *side == 1),
+        "{requests:?}"
+    );
+    let s = status.lock().unwrap().get(&A).cloned().unwrap();
+    assert_eq!((s.tick_windows_fetched, s.ticks_stored), (0, 0));
+    assert!(s.deal_windows_fetched > 0 && s.probes > 0);
+
+    // The same account with tick history on (a regular account) downloads.
+    sync_as(&pool, broker_data, &permitted(), &TickHistory::On, &status).await;
+    assert!(
+        count(
+            &pool,
+            "SELECT count(*) FROM history_fetches WHERE kind = 'download'"
+        )
+        .await
+            > 0
+    );
+    assert!(count(&pool, "SELECT count(*) FROM ticks_history").await > 0);
+}
+
+type TraderCols = (
+    Option<i64>,
+    Option<i64>,
+    i64,
+    Option<i32>,
+    i64,
+    Option<i32>,
+    Option<bool>,
+    Option<i64>,
+    Option<String>,
+);
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn the_trader_record_is_stored_with_the_broker_leverage_and_nulls_where_absent(pool: PgPool) {
+    prepare(&pool).await;
+    let mut f = fake();
+    let t = f.trader.as_mut().unwrap();
+    t.leverage_in_cents = Some(20_000);
+    t.account_type = Some(1);
+    // max_leverage, is_limited_risk and broker_name are left out.
+    sync(&pool, f.clone()).await;
+    let row: TraderCols = sqlx::query_as(
+        "SELECT leverage_in_cents, max_leverage, balance, money_digits, deposit_asset_id,
+                account_type, is_limited_risk, trader_login, broker_name
+         FROM trader_reads WHERE account_id = $1",
+    )
+    .bind(A)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        row,
+        (
+            Some(20_000),
+            None,
+            1_001_000,
+            Some(2),
+            15,
+            Some(1),
+            None,
+            Some(5361573),
+            None
+        )
+    );
+    // Every read is kept: a second sync adds a row, nothing is rewritten.
+    sync(&pool, f).await;
+    assert_eq!(count(&pool, "SELECT count(*) FROM trader_reads").await, 2);
+    let up = sqlx::query("UPDATE trader_reads SET leverage_in_cents = 1")
+        .execute(&pool)
+        .await;
+    assert!(up.unwrap_err().to_string().contains("append-only"));
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn health_shows_the_broker_leverage_and_tick_history_and_no_money(pool: PgPool) {
+    use axum::body::Body;
+    use axum::http::Request;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    prepare(&pool).await;
+    let (account, ticks) = named_by_a_demo_variable();
+    let mut f = fake();
+    let t = f.trader.as_mut().unwrap();
+    t.leverage_in_cents = Some(20_000);
+    t.account_type = Some(0);
+    t.is_limited_risk = Some(false);
+    let status = history::HistoryStatusMap::default();
+    let (trigger, stop) = shutdown::channel();
+    let task = tokio::spawn(history::run_with(
+        pool.clone(),
+        broker(),
+        account,
+        ticks,
+        status.clone(),
+        move || {
+            let f = f.clone();
+            async move { Ok(f.spawn().0) }
+        },
+        stop,
+    ));
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    while status
+        .lock()
+        .unwrap()
+        .get(&A)
+        .and_then(|s| s.last_sync_finished_at)
+        .is_none()
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    trigger.fire();
+    let _ = task.await;
+
+    let app = jiaoyi::http::router(jiaoyi::http::AppState {
+        pool: pool.clone(),
+        loading: Default::default(),
+        recorders: Default::default(),
+        history: status,
+        allowed_accounts: Arc::new(std::collections::BTreeSet::from([A])),
+    });
+    let res = app
+        .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let b = &v["broker_accounts"][0];
+    assert_eq!(b["account_id"], A);
+    assert_eq!(b["leverage"], "1:200");
+    assert_eq!(b["leverage_in_cents"], 20_000);
+    assert_eq!(b["account_type"], "HEDGED");
+    assert_eq!(b["is_limited_risk"], false);
+    assert!(b["max_leverage"].is_null());
+    assert!(b["read_at"].is_string());
+    let th = &v["history_sync"][A.to_string()]["tick_history"];
+    assert_eq!(th["state"], "off", "{th}");
+    assert!(
+        th["reason"]
+            .as_str()
+            .unwrap()
+            .starts_with("named by JIAOYI_DEMO_ACCOUNT_ID_2 only"),
+        "{th}"
+    );
+    // No money: the balance (1001000, money digits 2) is nowhere on it.
+    assert!(
+        !text.contains("1001000") && !text.contains("10010.00") && !text.contains("balance"),
+        "{text}"
+    );
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
@@ -547,6 +780,7 @@ async fn a_session_end_mid_sync(pool: &PgPool, payload_type: i32, nth: usize) {
         pool.clone(),
         broker(),
         permitted(),
+        TickHistory::On,
         status.clone(),
         move || {
             let f = f2.clone();

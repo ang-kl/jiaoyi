@@ -104,6 +104,96 @@ async fn sigterm_stops_the_service_after_its_tasks_finish(pool: sqlx::PgPool) {
     assert!(text.contains("aborted=0"), "{text}");
 }
 
+/// Owner, 25-10-2026 ("Code reads the new variables"): the service reads
+/// `JIAOYI_DEMO_ACCOUNT_ID*` from its environment. A good one adds a demo
+/// account; a malformed one is recorded under its name and does not stop
+/// start-up; no other variable is read into the log.
+// Claude · № 16,973 25-Oct (ordered № 16,972·C; demo accounts by variable)
+#[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
+    let db: String = sqlx::query_scalar("SELECT current_database()")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let base = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+    let url = format!("{}/{db}", base.rsplit_once('/').unwrap().0);
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_jiaoyi"))
+        .env_clear()
+        .env("RUST_LOG", "info")
+        .env("JIAOYI_ALLOWED_ACCOUNTS", "49236051")
+        .env("JIAOYI_ACCOUNT_ENVIRONMENTS", "49236051:demo")
+        .env("JIAOYI_DEMO_ACCOUNT_ID_2", "46130058")
+        .env("JIAOYI_DEMO_ACCOUNT_ID_3", "4779094x")
+        .env("UNRELATED_SECRET", "do-not-read-me")
+        .env("DATABASE_URL", &url)
+        .env("PORT", port.to_string())
+        .env("CTRADER_DEMO_HOST", "127.0.0.1")
+        .env("CTRADER_PORT", "1")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut up = false;
+    for _ in 0..100 {
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            up = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(up, "service did not start");
+    // Accounts are registered before the HTTP server starts.
+    let accounts: Vec<(i64, String)> =
+        sqlx::query_as("SELECT account_id, environment FROM accounts ORDER BY account_id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        accounts,
+        vec![
+            (46130058, "demo".to_string()),
+            (49236051, "demo".to_string())
+        ]
+    );
+    let refusals: Vec<(String, String)> =
+        sqlx::query_as("SELECT account_ref, reason FROM account_refusals")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        refusals,
+        vec![(
+            "4779094x".to_string(),
+            "JIAOYI_DEMO_ACCOUNT_ID_3 is not a positive integer account id".to_string()
+        )]
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(std::process::Command::new("kill")
+        .args(["-TERM", &child.id().to_string()])
+        .status()
+        .unwrap()
+        .success());
+    let started = std::time::Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        assert!(started.elapsed() < std::time::Duration::from_secs(12));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let out = child.wait_with_output().unwrap();
+    let text = strip_ansi(
+        &(String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr)),
+    );
+    assert!(!text.contains("refusing to start"), "{text}");
+    assert!(text.contains("tick_history_off=[46130058]"), "{text}");
+    assert!(!text.contains("do-not-read-me"), "{text}");
+    // Two recorders, two history syncs, the loader and the research runner.
+    assert!(text.contains("finished=6"), "{text}");
+}
+
 /// Remove terminal colour codes (ESC [ ... m) from log text.
 fn strip_ansi(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
