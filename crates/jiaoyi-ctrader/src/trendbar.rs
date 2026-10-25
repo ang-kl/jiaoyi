@@ -48,8 +48,8 @@ pub enum TrendbarError {
     MissingLow,
     #[error("trendbar has no utcTimestampInMinutes")]
     MissingTimestamp,
-    #[error("trendbar period is {0}, expected D1 (12)")]
-    WrongPeriod(i32),
+    #[error("trendbar period is {0}, expected {1}")]
+    WrongPeriod(i32, i32),
     #[error("trendbar price overflows: low {low} + delta {delta}")]
     Overflow { low: i64, delta: u64 },
     #[error("trendbar timestamp {0} minutes is out of range")]
@@ -66,9 +66,18 @@ fn relative(low: i64, delta: Option<u64>) -> Result<i64, TrendbarError> {
 
 /// Decode one D1 trendbar.
 pub fn decode_trendbar(tb: &ProtoOaTrendbar) -> Result<DailyBar, TrendbarError> {
+    decode_bar(tb, ProtoOaTrendbarPeriod::D1)
+}
+
+/// Decode one trendbar of `period` (a bar that names another period is
+/// refused). `date` is the UTC date of its open.
+pub fn decode_bar(
+    tb: &ProtoOaTrendbar,
+    period: ProtoOaTrendbarPeriod,
+) -> Result<DailyBar, TrendbarError> {
     if let Some(p) = tb.period {
-        if p != ProtoOaTrendbarPeriod::D1 as i32 {
-            return Err(TrendbarError::WrongPeriod(p));
+        if p != period as i32 {
+            return Err(TrendbarError::WrongPeriod(p, period as i32));
         }
     }
     let low = tb.low.ok_or(TrendbarError::MissingLow)?;
@@ -219,7 +228,9 @@ mod tests {
             utc_timestamp_in_minutes: Some(1),
             ..Default::default()
         };
-        assert_eq!(decode_trendbar(&tb), Err(TrendbarError::WrongPeriod(9)));
+        assert_eq!(decode_trendbar(&tb), Err(TrendbarError::WrongPeriod(9, 12)));
+        // The same bar is an H1 bar to the period-aware decoder.
+        assert!(decode_bar(&tb, ProtoOaTrendbarPeriod::H1).is_ok());
     }
 
     fn bar_at(y: i32, m: u32, day: u32, h: u32) -> DailyBar {

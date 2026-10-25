@@ -72,4 +72,6 @@ The unit is R, the price move ÷ the initial stop distance, net of all costs. Th
 12. **Sizing.** A demo account sizes 0.6% (`trading.risk_pct`) of fresh equity at the stop, floored to the volume step. Below the broker minimum, the entry is skipped. A live account takes exactly the broker minimum, when that risks at most 10% of equity (`trading.min_volume_max_risk_pct`) and no position of this program is open on the account.
 13. **The session end.** At the session close, every Strategy 3 position on the symbol is closed with a ClosePositionReq. A Strategy 3 position found at start-up outside its symbol's session is closed at once. The positions are held through JPN225's lunch.
 14. **Entry keys.** One key per symbol, session and entry number, so a session can re-enter after an exit, and an entry is never sent twice.
-15. **No stop amends.** Strategy 3 has no trailing rule, so it sends no stop amend. No amend can therefore drop its broker take-profit.
+15. **The bars read.** The band reads 45 calendar days of M30 bars from the broker, in weekly requests, once per symbol per session, at the session's first quote after 30 minutes. A broker error is retried after 5 minutes.
+16. **A trigger that does not go.** A trigger that is skipped or refused (sizing, the budget, a missing input or the gate) is taken again on that symbol only after 60 seconds. The gate reads the broker twice per try.
+17. **No stop amends.** Strategy 3 has no trailing rule, so it sends no stop amend. No amend can therefore drop its broker take-profit.

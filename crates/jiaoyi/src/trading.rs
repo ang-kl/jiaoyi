@@ -706,7 +706,9 @@ async fn read_levels(session: &AccountSession<'_>, symbol_id: i64) -> Result<Lev
     levels(&bars)
 }
 
-async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
+/// Fresh equity: the broker's balance plus the open positions' unrealized
+/// P&L, in the deposit currency (also Strategy 3's).
+pub async fn fresh_equity(session: &AccountSession<'_>) -> Result<f64, String> {
     let t = session.trader().await.map_err(|e| e.to_string())?;
     let digits = t
         .money_digits
@@ -742,8 +744,16 @@ async fn reconcile(
     };
     let unconfirmed = ts::open_intents_without_fill(pool, account_id).await?;
     for p in &res.position {
+        // Claude · № 17,020 25-Oct (Strategy 3 v2: each strategy manages only its own label)
         if p.trade_data.label.as_deref() != Some(LABEL) {
-            external.push(ext(p));
+            if !p
+                .trade_data
+                .label
+                .as_deref()
+                .is_some_and(|l| gate::PROGRAM_LABELS.contains(&l))
+            {
+                external.push(ext(p));
+            }
             continue;
         }
         let mut owned = ts::owns_position(pool, account_id, p.position_id).await?;
@@ -751,6 +761,7 @@ async fn reconcile(
             // An Unconfirmed open that did fill: adopted once, recorded.
             if let Some((key, _)) = unconfirmed
                 .iter()
+                .filter(|(k, _)| k.starts_with("s1:"))
                 .find(|(_, s)| *s == Some(p.trade_data.symbol_id))
             {
                 ts::record_event(
@@ -1009,6 +1020,13 @@ async fn server_event(pool: &PgPool, account_id: i64, m: &ReceivedExecution) {
         return;
     }
     if let Some(e) = gate::decode_execution(account_id, m) {
+        // Another strategy's position: its own loop records it.
+        if e.label
+            .as_deref()
+            .is_some_and(|l| l != LABEL && gate::PROGRAM_LABELS.contains(&l))
+        {
+            return;
+        }
         if let Err(err) = ts::record_event(pool, &event_row(&e)).await {
             tracing::error!(error = %err, "server execution event not recorded");
         }
@@ -1217,6 +1235,7 @@ async fn on_quote(
         side,
         volume: sized.volume,
         relative_stop: rel,
+        relative_take_profit: None,
         limits,
         quote_to_deposit: Some(rate),
         label: LABEL.into(),

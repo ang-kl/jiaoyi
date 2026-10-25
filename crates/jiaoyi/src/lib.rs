@@ -13,4 +13,5 @@ pub mod research;
 pub mod service;
 pub mod shutdown;
 pub mod status_page;
+pub mod strategy3;
 pub mod trading;

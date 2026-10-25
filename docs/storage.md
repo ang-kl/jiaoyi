@@ -158,6 +158,24 @@ The rules are `docs/preregistration-2026-10-24.md` (sha256 `9105c5eb…`), embed
   - the external positions found at the last reconcile (symbol, side, volume).
   No money.
 
+## Strategy 3, intraday momentum (migration 0013; owner, 25-10-2026)
+
+The rules are `docs/preregistration-2026-10-25-strategy3.md`, embedded and hashed. Every row below records that SHA-256 and the label `jiaoyi-s3`.
+
+| Table | Kind | Holds |
+|---|---|---|
+| `strategy3_orders` | event, append-only | Each Strategy 3 order as decided (`open`, `tp1`, `session_end`). It is written with its intent, before the frame: the entry key, the quote at the decision, the session date, and the volume. The detail adds the band, σ and the 30-minute σ marks, R, the cost reserve C (spread, round-trip commission, slippage) and the plan (TP1, TP2, close volume, mode). |
+| `strategy3_fills` | event, append-only | Each order's answer. It holds when the frame was sent and the fill answered (order-to-fill ms), the fill price against the quote at the decision (slippage, positive = adverse), the spread then, and the volume. `reconciled_fill`: an Unconfirmed open that reconcile found filled. |
+
+- **Settings.** `trading.s3_open_risk_pct` is 3 (owner, 25-10-2026). Strategy 3 also reads `trading.risk_pct`, `trading.cap_factor`, `trading.min_volume_max_risk_pct`, `trading.reconcile_secs`, `trading.order_wait_secs` and `trading.retry_secs`.
+- **Decisions** are in `trading_decisions` under kinds `s3_*`, each with the hash and the label in its detail. Strategy 1's last decision on `/health` leaves them out.
+- **Commission** comes from the broker's deals of the position (table `deals`, from history sync).
+- `GET /trading/costs` summarises, per account and symbol: the entries and exits filled, the median entry and exit slippage, the spread at entry and exit, the order-to-fill time, and the commission per unit in price units. No money.
+- `/health` → `strategy3` and the status page show, per account:
+  - the open Strategy 3 positions at the last reconcile (symbol, side, volume, entry, stop, take-profit);
+  - today's decisions by kind;
+  - today's trades.
+
 ## Volume and retention
 
 - **Daily bars:** about 20 symbols × 20 years × 260 days ≈ 104,000 rows per account.

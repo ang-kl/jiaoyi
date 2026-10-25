@@ -158,3 +158,24 @@ Owner, 25-10-2026: *"I want live to execute trading by 1 PM today"*, then *"Keep
   - what an amend answers with;
   - the account type each account reports;
   - commission against the account's own deals.
+
+## 12. Strategy 3: intraday momentum (owner, 25-10-2026)
+
+- **Approval.** The owner approved Strategy 3 v2 at about 10:45 SGT, after *"Trade more often, More markets, Use the bot-trade program live trading Sl, tp1, tp2 methodology"*. The entry is *"Tick-triggered only"* (about 10:50 SGT). Live trades too: *"Live too, from now"*; *"Ignore read-only, do actual trading. That is mandate."*
+- **The rules** are `docs/preregistration-2026-10-25-strategy3.md`, frozen before any trade.
+- **What it trades.** All 20 symbols, each on its own session:
+  - the indices on their exchange cash sessions, in their own time zones;
+  - FX, metals and energy 07:00–20:00 UTC;
+  - crypto the UTC day.
+- **Entry.** The noise band is the session's open × (1 ± σ). The first ask above it buys; the first bid below it sells.
+- **Exits** are bot-trade's `risk_coverage_partial_v1`:
+  - the stop is R;
+  - the planned part closes at TP1 = 3R + C;
+  - the runner's broker take-profit is TP2 = TP1 + R;
+  - everything left closes at the session end.
+- **Size.**
+  - Demo takes 0.6% of fresh equity.
+  - Live takes one broker-minimum trade at a time, at most 10% of equity, with no other position of this program open.
+- **Open-risk budget.** Strategy 3 holds at most `trading.s3_open_risk_pct` (3%) of equity in open risk at its stops.
+- **Co-holding.** On a HEDGED account, Strategy 1 and Strategy 3 may each hold the same symbol, and each manages only its own label. External positions still block an entry. On a NETTED account, any position blocks.
+- **Where this departs from the sections above.** Live trades Strategy 3 without a PASS, by the owner's order. The PASS rules of the pre-registration are judged on the forward demo results. Nothing above is edited.

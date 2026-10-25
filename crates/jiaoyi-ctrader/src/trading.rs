@@ -17,7 +17,8 @@
 //!      unknown or spread-betting account type refuses every entry (PR #13
 //!      finding, 25-10-2026: 46130058 and 47790949 may still hold bot-trade's
 //!      positions);
-//!    - open: a stop is given (relative, > 0, on the symbol's digits); the
+//!    - open: a stop is given (relative, > 0, on the symbol's digits); a
+//!      take-profit, when given, is relative, > 0 and on the digits; the
 //!      volume is on the step, at or above the broker minimum and at or below
 //!      its maximum (never rounded up here or anywhere); the quote→deposit
 //!      rate is known; the risk recomputed from the exact volume, stop and
@@ -90,12 +91,14 @@ pub struct VolumeLimits {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     /// A MARKET order with a stop `relative_stop` (1/100000 of a price) from
-    /// the fill. No take-profit.
+    /// the fill, and a take-profit `relative_take_profit` from the fill when
+    /// given (Strategy 3's broker target; Strategy 1 has none).
     Open {
         symbol_id: i64,
         side: Side,
         volume: i64,
         relative_stop: i64,
+        relative_take_profit: Option<i64>,
         limits: VolumeLimits,
         /// Deposit currency per one unit of the symbol's quote currency, from
         /// the broker's own quotes; `None` refuses.
@@ -346,6 +349,12 @@ pub fn risk_of(volume: i64, relative_stop: i64, quote_to_deposit: f64) -> f64 {
 pub const HEDGED: i32 = 0;
 pub const NETTED: i32 = 1;
 
+/// The labels of this program's strategies: Strategy 1 and Strategy 3.
+/// Owner, 25-10-2026 (Strategy 3 v2): on a HEDGED account each strategy may
+/// hold the same symbol, managing only its own label; a position with any
+/// other label is external.
+pub const PROGRAM_LABELS: &[&str] = &["jiaoyi-s1", "jiaoyi-s3"];
+
 /// Whether an entry on `symbol_id` may be sent, given the broker's account
 /// type and the account's open positions as (symbol id, label).
 pub fn entry_allowed(
@@ -359,11 +368,18 @@ pub fn entry_allowed(
         .filter(|(s, _)| *s == symbol_id)
         .map(|(_, l)| l)
         .collect();
+    // Claude · № 17,020 25-Oct (ordered: owner's Strategy 3 v2 approval; co-holding)
     let external = on_symbol
         .iter()
-        .filter(|l| l.as_deref() != Some(label))
+        .filter(|l| {
+            !l.as_deref()
+                .is_some_and(|l| l == label || PROGRAM_LABELS.contains(&l))
+        })
         .count();
-    let ours = on_symbol.len() - external;
+    let ours = on_symbol
+        .iter()
+        .filter(|l| l.as_deref() == Some(label))
+        .count();
     match account_type {
         Some(NETTED) if !on_symbol.is_empty() => Err(format!(
             "NETTED account: symbol {symbol_id} has {} open position(s) ({external} external); a new order would net against them: refused",
@@ -374,7 +390,7 @@ pub fn entry_allowed(
             "symbol {symbol_id} has {external} external position(s): never interacted with, no entry"
         )),
         Some(HEDGED) if ours > 0 => Err(format!(
-            "symbol {symbol_id} already has {ours} position(s) of this program: one per symbol"
+            "symbol {symbol_id} already has {ours} position(s) of this strategy ({label}): one per symbol"
         )),
         Some(HEDGED) => Ok(()),
         Some(t) => Err(format!(
@@ -402,6 +418,7 @@ async fn check<L: Ledger>(
         Command::Open {
             volume,
             relative_stop,
+            relative_take_profit,
             limits,
             quote_to_deposit,
             ..
@@ -415,6 +432,14 @@ async fn check<L: Ledger>(
                     "the stop distance {relative_stop} is not on the symbol's {} digits",
                     limits.digits
                 ));
+            }
+            if let Some(tp) = relative_take_profit {
+                if *tp <= 0 || tp % tick != 0 {
+                    return refuse(format!(
+                        "the take-profit distance {tp} is not positive on the symbol's {} digits",
+                        limits.digits
+                    ));
+                }
             }
             if limits.step <= 0 || limits.min <= 0 {
                 return refuse("the symbol's volume rules are unknown");
@@ -511,6 +536,7 @@ fn frame(account_id: i64, cmd: &Command, entry_key: &str) -> (u32, Vec<u8>) {
             side,
             volume,
             relative_stop,
+            relative_take_profit,
             label,
             ..
         } => (
@@ -523,6 +549,7 @@ fn frame(account_id: i64, cmd: &Command, entry_key: &str) -> (u32, Vec<u8>) {
                 trade_side: side.proto(),
                 volume: *volume,
                 relative_stop_loss: Some(*relative_stop),
+                relative_take_profit: *relative_take_profit,
                 label: Some(label.clone()),
                 // The entry key, so a deal can be traced back to its intent.
                 client_order_id: Some(entry_key.chars().take(50).collect()),

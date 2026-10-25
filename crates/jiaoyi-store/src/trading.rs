@@ -192,7 +192,7 @@ pub struct DecisionRow {
 pub async fn latest_decisions(pool: &PgPool) -> Result<Vec<DecisionRow>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT DISTINCT ON (account_id) account_id, at, symbol, kind, reason
-         FROM trading_decisions ORDER BY account_id, id DESC",
+         FROM trading_decisions WHERE kind NOT LIKE 's3\\_%' ORDER BY account_id, id DESC",
     )
     .fetch_all(pool)
     .await?;

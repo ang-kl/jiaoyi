@@ -165,6 +165,127 @@ async fn hedged_refuses_a_second_position_of_ours_on_a_symbol() {
     refused_on(f, "one per symbol").await;
 }
 
+// Claude · № 17,020 25-Oct (ordered: owner's Strategy 3 v2 approval)
+/// Owner, 25-10-2026: on a HEDGED account Strategy 1 and Strategy 3 may each
+/// hold the same symbol; an external position still blocks; a second
+/// position of the same strategy does not go.
+#[tokio::test]
+async fn hedged_lets_strategy_1_and_strategy_3_hold_one_symbol() {
+    let f = fake();
+    f.positions
+        .lock()
+        .unwrap()
+        .push(position(9, ETH, Some("jiaoyi-s1")));
+    let (conn, log) = f.spawn();
+    let s = session_on(&conn).await;
+    send(
+        &s,
+        &allow(),
+        &MemLedger::default(),
+        &on(),
+        open_s3(Some(1_000_000)),
+        "s3",
+        Duration::from_secs(2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(orders(&log), 1);
+    // A second Strategy 3 position on the symbol is refused.
+    let f = fake();
+    f.positions
+        .lock()
+        .unwrap()
+        .push(position(9, ETH, Some("jiaoyi-s3")));
+    let (conn, log) = f.spawn();
+    let s = session_on(&conn).await;
+    let r = send(
+        &s,
+        &allow(),
+        &MemLedger::default(),
+        &on(),
+        open_s3(None),
+        "s3b",
+        Duration::from_secs(2),
+    )
+    .await;
+    assert!(
+        matches!(&r, Err(SendError::Refused(x)) if x.reason.contains("one per symbol")),
+        "{r:?}"
+    );
+    assert_eq!(orders(&log), 0);
+}
+
+#[tokio::test]
+async fn netted_refuses_strategy_3_beside_strategy_1() {
+    let f = FakeBroker {
+        trader: Some(trader(Some(NETTED))),
+        ..fake()
+    };
+    f.positions
+        .lock()
+        .unwrap()
+        .push(position(9, ETH, Some("jiaoyi-s1")));
+    let (conn, log) = f.spawn();
+    let s = session_on(&conn).await;
+    let r = send(
+        &s,
+        &allow(),
+        &MemLedger::default(),
+        &on(),
+        open_s3(None),
+        "s3",
+        Duration::from_secs(2),
+    )
+    .await;
+    assert!(
+        matches!(&r, Err(SendError::Refused(x)) if x.reason.contains("NETTED")),
+        "{r:?}"
+    );
+    assert_eq!(orders(&log), 0);
+}
+
+#[tokio::test]
+async fn the_broker_take_profit_is_sent_with_the_order_and_checked() {
+    let (conn, log) = fake().spawn();
+    let s = session_on(&conn).await;
+    send(
+        &s,
+        &allow(),
+        &MemLedger::default(),
+        &on(),
+        open_s3(Some(1_000_000)),
+        "tp",
+        Duration::from_secs(2),
+    )
+    .await
+    .unwrap();
+    let o = log.lock().unwrap().orders[0].clone();
+    assert_eq!(o.relative_take_profit, Some(1_000_000));
+    assert_eq!(o.relative_stop_loss, Some(28_457_000));
+    assert_eq!(o.label.as_deref(), Some("jiaoyi-s3"));
+    // Off the symbol's 2 digits (1/100000 units: a multiple of 1000), or
+    // not positive: refused, nothing written.
+    for bad in [Some(1_000_500), Some(0), Some(-1_000)] {
+        let (conn, log) = fake().spawn();
+        let s = session_on(&conn).await;
+        let r = send(
+            &s,
+            &allow(),
+            &MemLedger::default(),
+            &on(),
+            open_s3(bad),
+            "tp-bad",
+            Duration::from_secs(2),
+        )
+        .await;
+        assert!(
+            matches!(&r, Err(SendError::Refused(x)) if x.reason.contains("take-profit")),
+            "{bad:?}: {r:?}"
+        );
+        assert_eq!(orders(&log), 0);
+    }
+}
+
 #[tokio::test]
 async fn an_unknown_account_type_refuses_entries() {
     let f = FakeBroker {
@@ -214,9 +335,24 @@ fn open(volume: i64, relative_stop: i64) -> Command {
         side: Side::Buy,
         volume,
         relative_stop,
+        relative_take_profit: None,
         limits: LIMITS,
         quote_to_deposit: Some(1.0),
         label: "jiaoyi-h1".into(),
+    }
+}
+
+/// Strategy 3's open on ETH: a stop and a broker take-profit.
+fn open_s3(relative_take_profit: Option<i64>) -> Command {
+    Command::Open {
+        symbol_id: ETH,
+        side: Side::Buy,
+        volume: 1,
+        relative_stop: 28_457_000,
+        relative_take_profit,
+        limits: LIMITS,
+        quote_to_deposit: Some(1.0),
+        label: "jiaoyi-s3".into(),
     }
 }
 
@@ -325,6 +461,7 @@ async fn volume_below_the_minimum_is_refused_never_rounded_up() {
         side: Side::Buy,
         volume: 1,
         relative_stop: 28_457_000,
+        relative_take_profit: None,
         limits: VolumeLimits { min: 2, ..LIMITS },
         quote_to_deposit: Some(1.0),
         label: "jiaoyi-h1".into(),
@@ -346,6 +483,7 @@ async fn volume_off_the_step_is_refused() {
         side: Side::Buy,
         volume: 3,
         relative_stop: 28_457_000,
+        relative_take_profit: None,
         limits: VolumeLimits { step: 2, ..LIMITS },
         quote_to_deposit: Some(1.0),
         label: "jiaoyi-h1".into(),
@@ -367,6 +505,7 @@ async fn an_unknown_conversion_rate_is_refused() {
         side: Side::Buy,
         volume: 1,
         relative_stop: 28_457_000,
+        relative_take_profit: None,
         limits: LIMITS,
         quote_to_deposit: None,
         label: "jiaoyi-h1".into(),

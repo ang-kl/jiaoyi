@@ -11,6 +11,8 @@
 //! - [`research`]: the edge test's pure computations (H1 simulation, control,
 //!   bootstrap, deflated Sharpe, verdicts).
 //! - [`secret`]: a wrapper that never prints its contents.
+//! - [`strategy3`]: Strategy 3 (intraday momentum): sessions, the noise band
+//!   and the exit plan.
 
 pub mod allowlist;
 pub mod bars;
@@ -20,5 +22,6 @@ pub mod schedule;
 pub mod seal;
 pub mod secret;
 pub mod settings;
+pub mod strategy3;
 pub mod universe;
 pub mod verdict;

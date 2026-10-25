@@ -323,6 +323,7 @@ pub async fn health(
     .await?;
     let grants = store::latest_grants(pool).await?;
     let trading = crate::trading::health(pool).await?;
+    let strategy3 = crate::strategy3::health(pool).await?;
     let token_grants: Vec<Value> = accounts
         .iter()
         .map(|a| {
@@ -342,6 +343,7 @@ pub async fn health(
         "account_refusals_recorded": refusals,
         "token_grants": token_grants,
         "trading": trading,
+        "strategy3": strategy3,
         "last_loads": runs.iter().map(|r| serde_json::json!({
             "account_id": r.account_id,
             "run_id": r.id,

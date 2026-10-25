@@ -19,6 +19,7 @@ use sqlx::{Postgres, QueryBuilder, Row};
 pub mod history;
 pub mod research;
 pub mod settings;
+pub mod strategy3;
 pub mod ticks;
 pub mod trading;
 
