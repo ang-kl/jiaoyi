@@ -195,3 +195,144 @@ async fn the_order_list_refuses_bad_parameters_and_answers_without_money(pool: P
         "{v}"
     );
 }
+
+// Codex · № 17,210 26-Oct (ordered: O-1, bounded execution diagnostics).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn execution_view_scopes_owned_positions_and_keeps_payloads_private(pool: PgPool) {
+    use jiaoyi_ctrader::messages::{ProtoOaPosition, ProtoOaTradeData};
+    use jiaoyi_ctrader::testkit::server_fill;
+    for account in [LIVE, LIVE + 1] {
+        store::upsert_account(&pool, account, Environment::Live)
+            .await
+            .unwrap();
+        let key = format!("diagnostic:{account}");
+        sqlx::query("INSERT INTO strategy3_orders(account_id,entry_key,label,prereg_hash,kind,symbol,symbol_id,decided_at)
+            VALUES ($1,$2,'jiaoyi-s3','test','open','BTCUSD',22,now())")
+            .bind(account).bind(&key).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO strategy3_fills(account_id,entry_key,label,prereg_hash,kind,symbol,position_id,outcome,sent_at)
+            VALUES ($1,$2,'jiaoyi-s3','test','open','BTCUSD',1001,'filled',now())")
+            .bind(account).bind(&key).execute(&pool).await.unwrap();
+        for position_id in [1001, 1002] {
+            let p = ProtoOaPosition {
+                position_id,
+                trade_data: ProtoOaTradeData {
+                    symbol_id: 22,
+                    volume: 13,
+                    trade_side: 1,
+                    label: Some("hidden-label".into()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mut message =
+                server_fill(account, p, position_id + 10000, 60_000.0, 13, true, false);
+            message.client_msg_id = Some("hidden-correlation".into());
+            let event = jiaoyi_ctrader::trading::decode_execution(account, &message).unwrap();
+            store::trading::record_event(&pool, &jiaoyi::trading::event_row(&event))
+                .await
+                .unwrap();
+        }
+    }
+    let (status, _, body) = call(
+        app(&pool, Default::default()),
+        Method::GET,
+        "/trading/executions?limit=1",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["count"], 1);
+    let row = &v["rows"][0];
+    assert_eq!(row["account_id"], LIVE);
+    assert_eq!(row["position_id"], 1001);
+    assert_eq!(row["closing_deal_present"], true);
+    assert_eq!(row["execution_type"], "ORDER_FILLED");
+    assert_eq!(row["label_matches_strategy"], false);
+    assert_eq!(row["client_msg_id_present"], true);
+    for hidden in [
+        "hidden-label",
+        "hidden-correlation",
+        "60000",
+        "commission",
+        "balance",
+        "\"raw\"",
+        "\"price\"",
+    ] {
+        assert!(!body.contains(hidden), "leaked {hidden}: {body}");
+    }
+    let malformed = store::trading::EventRow {
+        account_id: LIVE,
+        entry_key: None,
+        client_msg_id: None,
+        payload_type: 2126,
+        kind: "ORDER_FILLED".into(),
+        position_id: Some(1001),
+        order_id: None,
+        deal_id: Some(99999),
+        symbol_id: Some(22),
+        side: None,
+        price: None,
+        volume: None,
+        stop_loss: None,
+        label: None,
+        error_code: None,
+        description: None,
+        is_server_event: None,
+        raw: vec![255],
+        received_at: chrono::Utc::now() + chrono::Duration::seconds(1),
+    };
+    store::trading::record_event(&pool, &malformed)
+        .await
+        .unwrap();
+    let (_, _, unknown) = call(
+        app(&pool, Default::default()),
+        Method::GET,
+        "/trading/executions?limit=1",
+    )
+    .await;
+    let unknown: serde_json::Value = serde_json::from_str(&unknown).unwrap();
+    assert_eq!(unknown["rows"][0]["decodable"], false);
+    assert!(unknown["rows"][0]["closing_deal_present"].is_null());
+    assert!(unknown["rows"][0]["label_matches_strategy"].is_null());
+    for uri in [
+        "/trading/executions?limit=0",
+        "/trading/executions?strategy=s1",
+    ] {
+        assert_eq!(
+            call(app(&pool, Default::default()), Method::GET, uri)
+                .await
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert_eq!(
+        call(
+            app(&pool, Default::default()),
+            Method::GET,
+            &format!("/trading/executions?account={}", LIVE + 1)
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (_, _, body) = call(
+        app(&pool, Default::default()),
+        Method::GET,
+        "/trading/executions?since=2099-01-01T00:00:00Z",
+    )
+    .await;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap()["count"],
+        0
+    );
+    assert_eq!(
+        call(
+            app(&pool, Default::default()),
+            Method::POST,
+            "/trading/executions"
+        )
+        .await
+        .0,
+        StatusCode::METHOD_NOT_ALLOWED
+    );
+}

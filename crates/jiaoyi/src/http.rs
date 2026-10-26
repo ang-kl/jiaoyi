@@ -1,6 +1,6 @@
 //! HTTP on $PORT: `/` (the status page), `/health`, `/phase1/report`,
 //! `/research/inventory`, `/research/bars`, `/research/jobs`,
-//! `/research/trials`, `/trading/costs` and `/trading/orders`. Read-only: no
+//! `/research/trials`, `/trading/costs`, `/trading/orders` and `/trading/executions`. Read-only: no
 //! route writes.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Json, Response};
 use axum::routing::get;
 use axum::Router;
-use jiaoyi_store::sqlx::PgPool;
+use jiaoyi_store::sqlx::{PgPool, Row};
 use serde_json::json;
 
 #[derive(Clone)]
@@ -39,6 +39,7 @@ pub fn router(state: AppState) -> Router {
         .route("/research/trials", get(trials))
         .route("/trading/costs", get(trading_costs))
         .route("/trading/orders", get(trading_orders))
+        .route("/trading/executions", get(trading_executions))
         .with_state(state)
 }
 
@@ -250,6 +251,83 @@ async fn trading_orders(State(s): State<AppState>, Query(p): Query<OrdersParams>
         Ok(rows) => Json(orders_body(&rows)).into_response(),
         Err(e) => unavailable(e),
     }
+}
+
+// Codex · № 17,210 26-Oct (ordered: O-1, read-only money-free execution evidence).
+/// Stored events for proven Strategy 3 opens; raw protobufs stay private.
+async fn trading_executions(State(s): State<AppState>, Query(p): Query<OrdersParams>) -> Response {
+    let q = match orders_query(&p) {
+        Ok(q) if q.strategy.as_deref().is_none_or(|v| v == "s3") => q,
+        Ok(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"reason": "executions supports strategy s3 only"})),
+            )
+                .into_response()
+        }
+        Err(reason) => {
+            return (StatusCode::BAD_REQUEST, Json(json!({"reason": reason}))).into_response()
+        }
+    };
+    if q.account_id
+        .is_some_and(|id| !s.allowed_accounts.contains(&id))
+    {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"reason": "account is not permitted"})),
+        )
+            .into_response();
+    }
+    let allowed: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    let result = sqlx_execution_rows(&s.pool, &allowed, &q).await;
+    match result {
+        Ok(rows) => Json(json!({"count": rows.len(), "rows": rows})).into_response(),
+        Err(e) => unavailable(e),
+    }
+}
+
+async fn sqlx_execution_rows(
+    pool: &PgPool,
+    allowed: &[i64],
+    q: &jiaoyi_store::trading::OrdersQuery,
+) -> Result<Vec<serde_json::Value>, jiaoyi_store::sqlx::Error> {
+    let records = jiaoyi_store::sqlx::query(
+        "SELECT e.id, e.account_id, e.position_id, e.deal_id, e.payload_type,
+                e.client_msg_id, e.received_at, e.raw
+         FROM trading_events e
+         WHERE e.account_id = ANY($1)
+           AND ($2::BIGINT IS NULL OR e.account_id = $2)
+           AND ($3::TIMESTAMPTZ IS NULL OR e.received_at >= $3)
+           AND EXISTS (SELECT 1 FROM strategy3_fills f
+                       WHERE f.account_id = e.account_id AND f.position_id = e.position_id
+                         AND f.kind = 'open')
+         ORDER BY e.received_at DESC, e.id DESC LIMIT $4",
+    )
+    .bind(allowed)
+    .bind(q.account_id)
+    .bind(q.since)
+    .bind(q.limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(records.into_iter().map(|r| {
+        let account: i64 = r.get("account_id");
+        let message = jiaoyi_ctrader::ReceivedExecution {
+            received_at: r.get("received_at"), client_msg_id: r.get("client_msg_id"),
+            payload_type: r.get::<i32, _>("payload_type") as u32, payload: r.get("raw"),
+        };
+        let event = jiaoyi_ctrader::trading::decode_execution(account, &message);
+        let closing = event.as_ref().map(|_| jiaoyi_ctrader::trading::closing_deal(account, &message).is_some());
+        json!({
+            "id": r.get::<i64,_>("id"), "account_id": account,
+            "position_id": r.get::<Option<i64>,_>("position_id"),
+            "deal_id": r.get::<Option<i64>,_>("deal_id"),
+            "received_at": message.received_at, "payload_type": message.payload_type,
+            "decodable": event.is_some(), "execution_type": event.as_ref().map(|e| &e.kind),
+            "label_matches_strategy": event.as_ref().map(|e| e.label.as_deref() == Some(crate::strategy3::LABEL)),
+            "label_present": event.as_ref().map(|e| e.label.is_some()),
+            "client_msg_id_present": message.client_msg_id.is_some(), "closing_deal_present": closing,
+        })
+    }).collect())
 }
 
 async fn trials(State(s): State<AppState>) -> Response {
