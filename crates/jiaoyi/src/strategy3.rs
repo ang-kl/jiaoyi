@@ -1818,11 +1818,40 @@ impl<'a, 'c> Trader<'a, 'c> {
                 tracing::error!(error = %err, "strategy 3 owned execution not recorded");
             }
         }
+        // Codex · № 17,217 26-Oct: observed broker closing deals retain a
+        // client id. Correlation alone does not make a fill our close request.
         if m.client_msg_id.is_some() {
-            if owned {
-                self.warn_execution_drop(&e, "client_msg_id_present");
+            let allowed_close = if let Some(deal) = gate::closing_deal(self.account_id(), m) {
+                async {
+                    let known = owned
+                        || s3s::has_open_fill(self.pool, self.account_id(), deal.position_id)
+                            .await?;
+                    let recorded_close = s3s::is_recorded_close_deal(
+                        self.pool,
+                        self.account_id(),
+                        deal.position_id,
+                        deal.deal_id,
+                    )
+                    .await?;
+                    Ok::<_, jiaoyi_store::sqlx::Error>(known && !recorded_close)
+                }
+                .await
+            } else {
+                Ok(false)
+            };
+            match allowed_close {
+                Ok(true) => {}
+                Ok(false) => {
+                    if owned {
+                        self.warn_execution_drop(&e, "client_msg_id_present");
+                    }
+                    return;
+                }
+                Err(error) => {
+                    tracing::error!(account = self.account_id(), error = %error, "strategy 3 close ownership lookup failed");
+                    return;
+                }
             }
-            return;
         }
         if e.label.as_deref() != Some(LABEL) {
             if owned {

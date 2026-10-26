@@ -323,3 +323,45 @@ pub async fn today(pool: &PgPool, account_id: i64) -> Result<Value, sqlx::Error>
         })).collect::<Vec<_>>(),
     }))
 }
+
+// Codex · № 17,217 26-Oct (ordered: O-1, account-owned correlated closes).
+/// Durable evidence of a Strategy 3 opening fill, including after reconcile.
+pub async fn has_open_fill(
+    pool: &PgPool,
+    account_id: i64,
+    position_id: i64,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM strategy3_fills
+        WHERE account_id = $1 AND position_id = $2 AND kind = 'open'
+          AND outcome IN ('filled', 'partly_filled', 'reconciled_fill', 'reconciled_partial_fill') AND volume > 0)",
+    )
+    .bind(account_id)
+    .bind(position_id)
+    .fetch_one(pool)
+    .await
+}
+
+/// An exact broker deal already accounted for by a local TP1/session-end fill.
+/// Client ids are connection-local and must not serve as durable identity.
+pub async fn is_recorded_close_deal(
+    pool: &PgPool,
+    account_id: i64,
+    position_id: i64,
+    deal_id: i64,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM trading_intents i
+         JOIN trading_events e ON e.entry_key=i.entry_key AND e.account_id=i.account_id
+         JOIN strategy3_fills f ON f.entry_key=i.entry_key AND f.account_id=i.account_id
+         WHERE i.account_id=$1 AND i.position_id=$2 AND i.kind='close'
+           AND e.deal_id=$3 AND e.position_id=$2
+           AND e.kind IN ('ORDER_FILLED','ORDER_PARTIAL_FILL')
+           AND f.kind IN ('tp1','session_end') AND f.outcome IN ('filled','partly_filled'))",
+    )
+    .bind(account_id)
+    .bind(position_id)
+    .bind(deal_id)
+    .fetch_one(pool)
+    .await
+}
