@@ -59,6 +59,12 @@ fn timestamp(value: &Value) -> Option<DateTime<Utc>> {
     value.as_str()?.parse().ok()
 }
 
+fn assessment_unavailable(assessment: &Value) -> bool {
+    assessment["missing_reasons"]
+        .as_array()
+        .is_some_and(|reasons| reasons.iter().any(|r| r == "assessment_unavailable"))
+}
+
 /// Persist a changed assessment or a bounded heartbeat. This is not a broker
 /// action; the same existing decision history survives process restarts.
 pub async fn record_report(
@@ -126,6 +132,20 @@ pub async fn record_report(
         tx.commit().await?;
         return Ok(false);
     }
+    // This records a completed computation, even if it found unknown broker
+    // evidence. Failure heartbeats must not masquerade as successful checks.
+    // Use only durable evidence, including during restart/rolling deployment;
+    // an old report without this field can prove its own successful check.
+    let previous_success = previous_detail.and_then(|d| match d.get("last_success_at") {
+        Some(at) => timestamp(at),
+        None if !assessment_unavailable(&d["assessment"]) => timestamp(&d["checked_at"]),
+        None => None,
+    });
+    let last_success_at = if !assessment_unavailable(&assessment) && checked_at <= wall_now {
+        Some(checked_at)
+    } else {
+        previous_success.filter(|at| *at <= wall_now && *at <= checked_at)
+    };
     let count = assessment["measured_closed_positions"]
         .as_u64()
         .unwrap_or(0);
@@ -161,6 +181,7 @@ pub async fn record_report(
         "supervisor": "railway_assessment_supervisor",
         "strategy": strategy,
         "checked_at": checked_at,
+        "last_success_at": last_success_at,
         "report_type": report_type,
         "milestones_newly_reached": milestones,
         "milestone_high_water": count.max(previous_count),
@@ -345,6 +366,7 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
         "heartbeat_interval_secs": HEARTBEAT_SECS,
         "stale_after_secs": STALE_AFTER_SECS,
         "checked_at_meaning": "last persisted assessment; unchanged reports are heartbeated every five minutes",
+        "last_success_at_meaning": "last persisted completed assessment computation, including unknown broker evidence; assessment_unavailable does not advance it; null means no known successful check",
         "monitor_state_meaning": "recency of persisted assessment, not broker-loop liveness or a goal-acceptance verdict",
         "report_delivery": "durable decision history and this read-only route; external push delivery is not configured",
         "authority": {
