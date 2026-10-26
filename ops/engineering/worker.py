@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import datetime as dt
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -37,6 +38,17 @@ DEFAULT_TASK = (
     "policy decision. Fix and verify it, or report no_change/owner_blocked with "
     "concrete evidence. Never tune a strategy to the latest 20 results."
 )
+ACCEPTANCE_TASK = (
+    "Perform the first READ-ONLY unattended acceptance check. Do not edit files, "
+    "trade, tune a rule, create a PR or deploy. Read the charter and latest SGT "
+    "journal, fetch the public trading health/operations reports, and check your "
+    "actual UID, no-new-privileges and local test-DB role with read-only commands. "
+    "If the bounded sub-agent tool is available, delegate one read-only charter "
+    "check and record whether it actually ran. Return no_change with the exact "
+    "commands/results, source cutoffs and any missing capability. Do not print "
+    "credentials or read authentication files. Acceptance is separate from "
+    "financial success and from a real engineering repair."
+)
 
 
 def now():
@@ -66,6 +78,9 @@ class Store:
         self.root.chmod(0o755)
         self.private = self.root / "private"
         self.private.mkdir(mode=0o700, exist_ok=True)
+        if self.private.is_symlink() or self.private.stat().st_uid != os.geteuid():
+            raise RuntimeError("private state must belong to the coordinator")
+        self.private.chmod(0o700)
         self.db = self.private / "queue.sqlite3"
         with self.connect() as c:
             c.executescript("""
@@ -128,7 +143,8 @@ class Store:
             if c.execute("SELECT COUNT(*) FROM sessions WHERE day=?", (day,)).fetchone()[0] >= limit:
                 return None
             row = c.execute("SELECT * FROM jobs WHERE state IN ('queued','repair_queued','verification_queued') "
-                            "ORDER BY CASE WHEN state='verification_queued' THEN 0 ELSE 1 END,id LIMIT 1").fetchone()
+                            "ORDER BY CASE WHEN task=? THEN 0 WHEN state='verification_queued' THEN 1 ELSE 2 END,id LIMIT 1",
+                            (ACCEPTANCE_TASK,)).fetchone()
             if row is None:
                 return None
             c.execute("UPDATE jobs SET state='running',attempts=attempts+1,updated=? WHERE id=?",
@@ -139,6 +155,11 @@ class Store:
     def used(self):
         with self.connect() as c:
             return c.execute("SELECT COUNT(*) FROM sessions WHERE day=?", (sgt_day(),)).fetchone()[0]
+
+    def acceptance(self):
+        with self.connect() as c:
+            row = c.execute("SELECT state FROM jobs WHERE task=? ORDER BY id DESC LIMIT 1", (ACCEPTANCE_TASK,)).fetchone()
+            return row[0] if row else None
 
     @contextlib.contextmanager
     def singleton(self):
@@ -156,6 +177,12 @@ class Config:
         self.root = Path(self.env.get("ENGINEERING_STATE_DIR", "/data"))
         self.enabled = self.env.get("ENGINEERING_ENABLED") == "1"
         self.model = self.env.get("ENGINEERING_MODEL", "")
+        self.auth_mode = self.env.get("ENGINEERING_AUTH_MODE", "api-key")
+        if self.auth_mode not in ("api-key", "chatgpt"):
+            raise ValueError("unsupported engineering authentication mode")
+        self.isolation = self.env.get("ENGINEERING_ISOLATION_MODE", "codex")
+        if self.isolation not in ("codex", "uid-container"):
+            raise ValueError("unsupported engineering isolation mode")
         self.limit = self.integer("ENGINEERING_DAILY_SESSION_LIMIT", 0, 0, 1000)
         self.timeout = self.integer("ENGINEERING_SESSION_TIMEOUT_SECONDS", 1800, 30, 7200)
         self.interval = self.integer("ENGINEERING_POLL_SECONDS", 1800, 60, 86400)
@@ -170,14 +197,21 @@ class Config:
     def blocked(self):
         if not self.enabled:
             return "disabled"
-        required = [k for k in ("OPENAI_API_KEY", "GH_TOKEN", "RAILWAY_TOKEN") if not self.env.get(k)]
-        if not self.model or not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", self.model):
+        missing = self.missing()
+        return "missing:" + ",".join(missing) if missing else None
+
+    def missing(self):
+        credentials = ("GH_TOKEN", "RAILWAY_TOKEN")
+        if self.auth_mode == "api-key":
+            credentials += ("OPENAI_API_KEY",)
+        required = [k for k in credentials if not self.env.get(k)]
+        if (not self.model and self.auth_mode == "api-key") or (self.model and not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", self.model)):
             required.append("ENGINEERING_MODEL")
         if not self.limit:
             required.append("ENGINEERING_DAILY_SESSION_LIMIT")
         if self.env.get("ENGINEERING_BUDGET_ACK") != "session-limits-are-not-a-dollar-cap":
             required.append("ENGINEERING_BUDGET_ACK")
-        return "missing:" + ",".join(required) if required else None
+        return required
 
 
 def clean_environment(config, workspace, auth, uid):
@@ -221,9 +255,11 @@ def bounded_process(args, *, env, cwd, logfile, timeout, stop, pulse=lambda: Non
     raw = logfile.with_suffix(".raw")
     started = time.monotonic()
     with raw.open("wb") as output:
-        p = subprocess.Popen(args, cwd=cwd, env=env, stdin=subprocess.PIPE if input_text else subprocess.DEVNULL,
+        command = ["/usr/bin/setpriv", "--no-new-privs", *args] if user is not None else args
+        p = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE if input_text else subprocess.DEVNULL,
                              stdout=output, stderr=subprocess.STDOUT, start_new_session=True,
-                             user=user, group=group, extra_groups=[] if user is not None else None)
+                             user=user, group=group, extra_groups=[] if user is not None else None,
+                             close_fds=True)
         if input_text:
             try:
                 p.stdin.write(input_text.encode())
@@ -267,6 +303,9 @@ class Coordinator:
         self.next_poll = 0
         self.uid = self.gid = None
         self.sandbox_ready = None
+        self.boundary_ready = None
+        self.source_digest = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        self.catalog_state = "not_requested"
 
     def stop(self):
         return self.shutdown.is_set() or (self.config.root / "STOP").exists()
@@ -281,6 +320,12 @@ class Coordinator:
                 "heartbeat_age_seconds": round(time.monotonic() - self.pulse_at, 1),
                 "sessions_today_sgt": self.store.used(), "daily_session_limit": self.config.limit,
                 "native_sandbox_verified": self.sandbox_ready,
+                "execution_boundary": {"mode": self.config.isolation, "verified": self.boundary_ready},
+                "worker_source_sha256": self.source_digest,
+                "model_auth_mode": self.config.auth_mode,
+                "missing_activation_inputs": self.config.missing(),
+                "acceptance": self.store.acceptance(),
+                "model_catalog": self.catalog_state,
                 "jobs": [{k: j[k] for k in ("id", "state", "attempts", "pr", "head", "merged", "updated")}
                          for j in self.store.jobs()]}
 
@@ -311,10 +356,10 @@ class Coordinator:
             raise RuntimeError("production coordinator requires root to isolate the model UID")
         account = pwd.getpwnam("engineering")
         self.uid, self.gid = account.pw_uid, account.pw_gid
-        if self.sandbox_ready is None:
-            self.probe_sandbox()
-        if not self.sandbox_ready:
-            raise RuntimeError("native sandbox unavailable; model execution blocked")
+        if self.boundary_ready is None:
+            self.probe_boundary()
+        if not self.boundary_ready:
+            raise RuntimeError("execution boundary unavailable; model execution blocked")
         postgres = pwd.getpwnam("postgres")
         for name in ("workspaces", "agent-state", "cargo", "target", "postgres"):
             folder = self.config.root / name
@@ -328,7 +373,7 @@ class Coordinator:
         pg = self.config.root / "postgres"
         env = {"PATH": self.config.env.get("PATH", "/usr/bin:/bin")}
         if not (pg / "PG_VERSION").exists():
-            subprocess.run(["initdb", "-D", str(pg), "-A", "trust", "-U", "engineering"],
+            subprocess.run(["initdb", "-D", str(pg), "-A", "trust", "-U", "postgres"],
                            env=env, user=postgres.pw_uid, group=postgres.pw_gid, check=True, stdout=subprocess.DEVNULL)
         probe = subprocess.run(["pg_ctl", "-D", str(pg), "status"], env=env, user=postgres.pw_uid,
                                group=postgres.pw_gid, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -336,6 +381,30 @@ class Coordinator:
             subprocess.run(["pg_ctl", "-D", str(pg), "-l", str(pg / "server.log"),
                             "-o", "-h 127.0.0.1 -p 15432 -k " + str(pg), "-w", "start"],
                            env=env, user=postgres.pw_uid, group=postgres.pw_gid, check=True, stdout=subprocess.DEVNULL)
+        # The model can run tests, but cannot use COPY PROGRAM to escape through
+        # the PostgreSQL OS user or change server settings. Administrators use
+        # the private Unix socket; TCP trust is restricted to the test role.
+        subprocess.run(["psql", "-h", str(pg), "-p", "15432", "-U", "postgres", "-d", "postgres",
+                        "-v", "ON_ERROR_STOP=1", "-c", "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='engineering') "
+                        "THEN CREATE ROLE engineering LOGIN CREATEDB; END IF; END $$; "
+                        "ALTER ROLE engineering NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS; "
+                        "GRANT CREATE ON DATABASE postgres TO engineering;"],
+                       env=env, user=postgres.pw_uid, group=postgres.pw_gid, check=True, stdout=subprocess.DEVNULL)
+        hba = pg / "pg_hba.conf"
+        hba.write_text("local all all trust\nhost all engineering 127.0.0.1/32 trust\nhost all all 0.0.0.0/0 reject\n"
+                       "host all all ::0/0 reject\n")
+        os.chown(hba, postgres.pw_uid, postgres.pw_gid)
+        subprocess.run(["pg_ctl", "-D", str(pg), "reload"], env=env, user=postgres.pw_uid,
+                       group=postgres.pw_gid, check=True, stdout=subprocess.DEVNULL)
+        for _ in range(20):
+            admin_tcp = subprocess.run(["psql", "-h", "127.0.0.1", "-p", "15432", "-U", "postgres",
+                                       "-d", "postgres", "-c", "SELECT 1"], env={**env, "PGCONNECT_TIMEOUT": "2"},
+                                      capture_output=True, timeout=5)
+            if admin_tcp.returncode and b"pg_hba.conf rejects connection" in admin_tcp.stderr:
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("test DB administrator is still reachable over TCP")
         repo = self.config.root / "repository"
         if not repo.exists():
             self.git("clone", "https://github.com/" + REPO + ".git", str(repo))
@@ -366,8 +435,63 @@ class Coordinator:
         self.sandbox_ready = bounded_process(args, env=env, cwd=workspace,
             logfile=self.store.private / "sandbox-preflight.log", timeout=30, stop=self.stop,
             pulse=self.pulse, user=self.uid, group=self.gid) == "ok"
+        self.boundary_ready = self.sandbox_ready
         self.store.event("sandbox_preflight", detail="passed" if self.sandbox_ready else "blocked")
         return self.sandbox_ready
+
+    def probe_boundary(self):
+        if self.config.isolation == "codex":
+            return self.probe_sandbox()
+        if os.geteuid() != 0:
+            raise RuntimeError("coordinator must be root; model must be nonroot")
+        account = pwd.getpwnam("engineering")
+        self.uid, self.gid = account.pw_uid, account.pw_gid
+        home = self.config.root / "uid-preflight"
+        home.mkdir(mode=0o755, exist_ok=True)
+        os.chown(home, self.uid, self.gid)
+        proof = self.store.private / "boundary-proof"
+        proof.write_text("coordinator-only")
+        proof.chmod(0o600)
+        check = ("import os,pathlib\n"
+                 f"assert os.getuid()==os.geteuid()=={self.uid} and os.getuid()!=0\n"
+                 "assert os.getgroups()==[]\n"
+                 "s=pathlib.Path('/proc/self/status').read_text()\n"
+                 "for k in ['CapEff','CapPrm']: assert int(next(x.split(':')[1].strip() for x in s.splitlines() if x.startswith(k+':')),16)==0\n"
+                 "assert next(x.split(':')[1].strip() for x in s.splitlines() if x.startswith('NoNewPrivs:'))=='1'\n"
+                 "try: os.setuid(0)\n"
+                 "except PermissionError: pass\n"
+                 "else: raise AssertionError('model could become root')\n"
+                 "pathlib.Path('allowed').write_text('ok')\n"
+                 f"for p,mode in {repr([(str(proof), os.O_RDONLY), (str(proof), os.O_WRONLY), (str(HERE / 'worker.py'), os.O_WRONLY), ('/proc/' + str(os.getpid()) + '/environ', os.O_RDONLY)])}:\n"
+                 " try: fd=os.open(p,mode)\n"
+                 " except PermissionError: continue\n"
+                 " else: os.close(fd); raise AssertionError('coordinator boundary failed')\n")
+        env = clean_environment(self.config, home, home, self.uid)
+        self.boundary_ready = bounded_process(["/usr/bin/python3", "-c", check], env=env, cwd=home,
+            logfile=self.store.private / "uid-preflight.log", timeout=15, stop=self.stop,
+            pulse=self.pulse, user=self.uid, group=self.gid) == "ok"
+        self.store.event("uid_boundary_preflight", detail="passed" if self.boundary_ready else "blocked")
+        return self.boundary_ready
+
+    def discover_models(self):
+        # Metadata GET only; never starts inference or discloses the credential.
+        if self.config.auth_mode == "chatgpt" or not self.config.env.get("OPENAI_API_KEY") or self.config.model:
+            return
+        try:
+            request = urllib.request.Request("https://api.openai.com/v1/models", headers={
+                "Authorization": "Bearer " + self.config.env["OPENAI_API_KEY"],
+                "User-Agent": "jiaoyi-engineering/0.1"})
+            with urllib.request.urlopen(request, timeout=15) as response:
+                data = response.read(2 * 1024 * 1024 + 1)
+            if len(data) > 2 * 1024 * 1024:
+                raise RuntimeError("model catalog too large")
+            ids = [x["id"] for x in json.loads(data)["data"] if isinstance(x.get("id"), str) and x["id"].startswith("gpt-")]
+            self.catalog_state = "available_in_private_logs"
+            print(json.dumps({"event": "engineering_model_catalog", "models": ids, "model_calls": 0}), flush=True)
+        except Exception as e:
+            self.catalog_state = "error:" + type(e).__name__
+            print(json.dumps({"event": "engineering_model_catalog_error", "error": type(e).__name__,
+                              "http_status": getattr(e, "code", None), "model_calls": 0}), flush=True)
 
     def existing_pr(self, branch):
         rows = json.loads(self.gh("pr", "list", "--repo", REPO, "--head", branch, "--state", "all",
@@ -397,12 +521,33 @@ class Coordinator:
             raise RuntimeError("changes must include an SGT journal entry")
         return paths
 
+    def login_model(self, jid, common):
+        logfile = self.store.private / f"{jid}-login.log"
+        args, input_text = ["codex", "login", "--with-api-key"], None
+        if self.config.auth_mode == "chatgpt":
+            # Reuse only this worker's official device login. Never write as
+            # root inside this persistent, model-owned authentication directory.
+            home = self.config.root / "codex-chatgpt"
+            info = home.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != self.uid or stat.S_IMODE(info.st_mode) != 0o700:
+                raise RuntimeError("worker ChatGPT login directory is not private")
+            common["env"]["CODEX_HOME"] = str(home)
+            args = ["codex", "login", "status"]
+        else:
+            input_text = self.config.env["OPENAI_API_KEY"] + "\n"
+        result = bounded_process(args, logfile=logfile, timeout=30, input_text=input_text, **common)
+        if self.config.auth_mode == "chatgpt" and result == "ok":
+            if "Logged in using ChatGPT" not in bounded_text(logfile, 65536):
+                return "wrong_auth_provider"
+        return result
+
     def run_job(self, job, repo):
         jid = job["id"]
         branch = "engineering/job-" + str(jid)
         remote = self.existing_pr(branch)
         repairing = job["state"] == "repair_queued"
         verifying = job["state"] == "verification_queued"
+        accepting = job["task"] == ACCEPTANCE_TASK
         if remote and not verifying and not (repairing and remote["state"] == "OPEN" and remote["headRefOid"] == job["head"]):
             if remote["state"] == "MERGED":
                 self.store.update(jid, "deployment_wait", pr=remote["number"],
@@ -427,6 +572,19 @@ class Coordinator:
         git_pointer = workspace / ".git"
         if bounded_text(git_pointer, len(expected_git.encode())) != expected_git:
             raise RuntimeError("worktree metadata changed")
+        if (verifying or accepting) and self.config.isolation == "uid-container":
+            # The verifier has a writable private auth directory, but its source
+            # tree is owned by the coordinator and cannot be edited by its UID.
+            for root, dirs, files in os.walk(workspace, followlinks=False):
+                if Path(root).is_symlink():
+                    raise RuntimeError("verification directory is a symlink")
+                os.chown(root, 0, 0, follow_symlinks=False)
+                os.chmod(root, 0o755)
+                for name in dirs + files:
+                    path = Path(root) / name
+                    os.chown(path, 0, 0, follow_symlinks=False)
+                    if not path.is_symlink():
+                        os.chmod(path, 0o755 if path.is_dir() or path.stat().st_mode & 0o111 else 0o644)
         # Never write as root through files from a prior model-owned auth dir.
         auth = self.config.root / "agent-state" / (str(jid) + "-" + str(job["attempts"] + 1))
         auth.mkdir(mode=0o700)
@@ -438,9 +596,7 @@ class Coordinator:
         secrets = tuple(self.config.env.get(k, "") for k in ("OPENAI_API_KEY", "GH_TOKEN", "RAILWAY_TOKEN"))
         common = dict(env=child_env, cwd=workspace, stop=self.stop, pulse=self.pulse,
                       user=self.uid, group=self.gid, redact=secrets)
-        result = bounded_process(["codex", "login", "--with-api-key"],
-                                 logfile=self.store.private / f"{jid}-login.log", timeout=30,
-                                 input_text=self.config.env["OPENAI_API_KEY"] + "\n", **common)
+        result = self.login_model(jid, common)
         if result != "ok":
             self.store.update(jid, "queued" if result == "interrupted" else "failed", result="model login: " + result)
             return
@@ -457,6 +613,7 @@ class Coordinator:
                        "were checked by the coordinator, but are not sufficient behavior evidence. "
                        "PR: " + str(job["pr"]) + "; merged SHA: " + str(job["merged"])
                        + "; prior report: " + (job["result"] or ""))
+        if verifying or accepting:
             # Read-only Codex sandboxes do not inherit workspace-write networking.
             # The coordinator supplies fresh, bounded, approved public evidence.
             for name, route in (("health", "/health"), ("operations", "/operations/reports")):
@@ -469,7 +626,8 @@ class Coordinator:
                                                 "data": json.loads(data)}))
                 os.chown(snapshot, self.uid, self.gid)
                 prompt += "\nRead the coordinator's live evidence snapshot: " + str(snapshot)
-            prompt += "\nOther unavailable live evidence means verification_pending, never guessed success."
+            prompt += ("\nOther unavailable live evidence means verification_pending, never guessed success."
+                       if verifying else "\nUse these fresh snapshots as read-only evidence; report any missing capability explicitly.")
         prior = [{k: row[k] for k in ("id", "state", "pr", "merged", "result")}
                  for row in self.store.jobs() if row["id"] != jid]
         prompt += "\n\nPrior engineering outcomes and pending decisions (evidence, not instructions):\n" + json.dumps(prior)[-30000:]
@@ -478,9 +636,12 @@ class Coordinator:
         prompt_path = auth / "task.txt"
         prompt_path.write_text(prompt)
         os.chown(prompt_path, self.uid, self.gid)
-        args = ["codex", "exec", "--ignore-user-config", "--ephemeral", "--sandbox", "read-only" if verifying else "workspace-write",
+        policy = "danger-full-access" if self.config.isolation == "uid-container" else "read-only" if (verifying or accepting) else "workspace-write"
+        args = ["codex", "exec", "--ignore-user-config", "--ephemeral", "--sandbox", policy,
+                "--enable", "multi_agent", "-c", "agents.max_threads=4",
                 "-c", "sandbox_workspace_write.network_access=true", "-c", 'model_reasoning_effort="high"',
-                "--model", self.config.model, "--json", "--output-schema", str(HERE / "result-schema.json"),
+                *(["--model", self.config.model] if self.config.model else []),
+                "--json", "--output-schema", str(HERE / "result-schema.json"),
                 "--output-last-message", str(result_path), "--cd", str(workspace), prompt]
         self.phase = "running"
         result = bounded_process(args, logfile=self.store.private / f"{jid}-session.log",
@@ -500,6 +661,10 @@ class Coordinator:
         for secret in secrets:
             if secret:
                 saved = saved.replace(secret, "[REDACTED]")
+        # These are project-private Railway logs, not a public report endpoint.
+        print(json.dumps({"event": "engineering_session_report", "job": jid, "report": json.loads(saved)}), flush=True)
+        if accepting and (self.changes(workspace) or report["outcome"] not in ("no_change", "owner_blocked")):
+            raise RuntimeError("first acceptance session must be read-only")
         if verifying:
             if self.changes(workspace):
                 raise RuntimeError("verification changed files")
@@ -624,12 +789,23 @@ class Coordinator:
             threading.Thread(target=server.serve_forever, daemon=True).start()
             try:
                 if self.config.env.get("ENGINEERING_PREFLIGHT_ON_START") == "1":
-                    self.probe_sandbox()
+                    self.probe_boundary()
+                    print(json.dumps({"event": "engineering_boundary", "mode": self.config.isolation,
+                                      "verified": self.boundary_ready, "model_calls": 0}), flush=True)
+                self.discover_models()
                 while not self.shutdown.is_set():
                     self.pulse()
                     if not self.config.blocked() and not self.stop():
-                        if self.sandbox_ready is False:
-                            self.phase = "blocked_native_sandbox"
+                        if self.boundary_ready is False:
+                            self.phase = "blocked_execution_boundary"
+                            self.shutdown.wait(5)
+                            continue
+                        acceptance = self.store.acceptance()
+                        if acceptance is None:
+                            self.store.enqueue(ACCEPTANCE_TASK)
+                            self.next_poll = time.monotonic() + self.config.interval
+                        elif acceptance not in ("completed", "queued", "running"):
+                            self.phase = "acceptance_blocked"
                             self.shutdown.wait(5)
                             continue
                         try:
@@ -639,7 +815,7 @@ class Coordinator:
                                 self.release(pending[0])
                             else:
                                 if not self.store.jobs(("queued", "repair_queued", "verification_queued")) and time.monotonic() >= self.next_poll:
-                                    self.store.enqueue(DEFAULT_TASK)
+                                    self.store.enqueue(DEFAULT_TASK if self.store.jobs() else ACCEPTANCE_TASK)
                                     self.next_poll = time.monotonic() + self.config.interval
                                 repo = self.prepare() if self.store.used() < self.config.limit else None
                                 job = self.store.reserve(self.config.limit)
@@ -693,8 +869,8 @@ def main():
     elif args.command == "report":
         print(json.dumps(coordinator.store.jobs(), indent=2))
     elif args.command == "preflight":
-        ok = coordinator.probe_sandbox()
-        print(json.dumps({"native_sandbox_verified": ok, "model_calls": 0}))
+        ok = coordinator.probe_boundary()
+        print(json.dumps({"execution_boundary": config.isolation, "verified": ok, "model_calls": 0}))
         sys.exit(0 if ok else 1)
     elif args.command == "stop":
         (config.root / "STOP").touch()

@@ -1,4 +1,6 @@
 import concurrent.futures
+import contextlib
+import io
 import importlib.util
 import json
 import os
@@ -44,6 +46,93 @@ class WorkerTests(Fixture, unittest.TestCase):
         self.assertIsNone(config.blocked())
         with self.assertRaises(ValueError):
             self.config(ENGINEERING_SESSION_TIMEOUT_SECONDS="99999")
+        with self.assertRaises(ValueError):
+            self.config(ENGINEERING_ISOLATION_MODE="unrestricted-root")
+        self.assertEqual(self.config().isolation, "codex")
+        self.assertEqual(self.config(ENGINEERING_ISOLATION_MODE="uid-container").isolation, "uid-container")
+
+    def test_disabled_status_exposes_missing_names_and_source_without_values(self):
+        c = w.Coordinator(self.config(OPENAI_API_KEY="private-key"))
+        s = c.status()
+        self.assertEqual(s["state"], "disabled")
+        self.assertNotIn("OPENAI_API_KEY", s["missing_activation_inputs"])
+        self.assertIn("GH_TOKEN", s["missing_activation_inputs"])
+        self.assertNotIn("private-key", json.dumps(s))
+        self.assertEqual(s["execution_boundary"], {"mode": "codex", "verified": None})
+        self.assertEqual(len(s["worker_source_sha256"]), 64)
+
+    def test_chatgpt_activation_uses_plan_default_without_api_key(self):
+        config = self.config(ENGINEERING_AUTH_MODE="chatgpt", ENGINEERING_ENABLED="1",
+            GH_TOKEN="gh", RAILWAY_TOKEN="rail", ENGINEERING_DAILY_SESSION_LIMIT="1",
+            ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap")
+        self.assertIsNone(config.blocked())
+        c = w.Coordinator(config)
+        with patch.object(w.urllib.request, "urlopen", side_effect=AssertionError("API discovery")):
+            c.discover_models()
+        self.assertEqual(c.status()["model_auth_mode"], "chatgpt")
+        self.assertIn("ENGINEERING_MODEL", self.config(ENGINEERING_AUTH_MODE="chatgpt", ENGINEERING_MODEL="bad model").missing())
+        with self.assertRaises(ValueError):
+            self.config(ENGINEERING_AUTH_MODE="automatic-fallback")
+
+    def test_chatgpt_login_reuses_only_worker_home_and_rejects_api_provider(self):
+        c = w.Coordinator(self.config(ENGINEERING_AUTH_MODE="chatgpt"))
+        c.uid = os.getuid()
+        home = self.root / "codex-chatgpt"
+        home.mkdir(mode=0o700)
+        attempt = self.root / "attempt"
+        attempt.mkdir()
+        env = w.clean_environment(c.config, self.root / "work", attempt, c.uid)
+        common = dict(env=env, cwd=self.root, stop=lambda: False)
+        def status(args, **kwargs):
+            self.assertEqual(args, ["codex", "login", "status"])
+            self.assertIsNone(kwargs["input_text"])
+            self.assertEqual(kwargs["env"]["HOME"], str(attempt))
+            self.assertEqual(kwargs["env"]["CODEX_HOME"], str(home))
+            self.assertNotIn("OPENAI_API_KEY", kwargs["env"])
+            kwargs["logfile"].write_text("Logged in using ChatGPT\n")
+            return "ok"
+        with patch.object(w, "bounded_process", side_effect=status):
+            self.assertEqual(c.login_model(1, common), "ok")
+        with patch.object(w, "bounded_process", return_value="exit_1"):
+            self.assertEqual(c.login_model(1, common), "exit_1")
+        (c.store.private / "1-login.log").write_text("Logged in using an API key\n")
+        with patch.object(w, "bounded_process", return_value="ok"):
+            self.assertEqual(c.login_model(1, common), "wrong_auth_provider")
+
+    def test_chatgpt_login_refuses_missing_public_or_symlink_directory(self):
+        c = w.Coordinator(self.config(ENGINEERING_AUTH_MODE="chatgpt"))
+        c.uid = os.getuid()
+        home = self.root / "codex-chatgpt"
+        with patch.object(w, "bounded_process") as launch:
+            with self.assertRaises(FileNotFoundError):
+                c.login_model(1, {"env": {}})
+            home.mkdir(mode=0o755)
+            home.chmod(0o755)
+            with self.assertRaises(RuntimeError):
+                c.login_model(1, {"env": {}})
+            home.rmdir()
+            home.symlink_to(self.store.private, target_is_directory=True)
+            with self.assertRaises(RuntimeError):
+                c.login_model(1, {"env": {}})
+            launch.assert_not_called()
+
+    def test_model_discovery_only_reads_metadata_and_keeps_key_out_of_logs(self):
+        c = w.Coordinator(self.config(OPENAI_API_KEY="private-model-key"))
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self, _): return b'{"data":[{"id":"gpt-coding-model"}]}'
+        def request(req, timeout):
+            self.assertEqual(req.full_url, "https://api.openai.com/v1/models")
+            self.assertEqual(req.get_method(), "GET")
+            self.assertEqual(req.get_header("Authorization"), "Bearer private-model-key")
+            return Response()
+        log = io.StringIO()
+        with patch.object(w.urllib.request, "urlopen", side_effect=request), contextlib.redirect_stdout(log):
+            c.discover_models()
+        self.assertIn("gpt-coding-model", log.getvalue())
+        self.assertNotIn("private-model-key", log.getvalue())
+        self.assertEqual(c.catalog_state, "available_in_private_logs")
 
     def test_recovery_preserves_quota_and_selects_ci_repair(self):
         first = self.store.enqueue("reproduce failure")
@@ -148,6 +237,38 @@ class WorkerTests(Fixture, unittest.TestCase):
             self.assertFalse(t.is_alive())
         self.assertEqual(self.store.used(), 0)
         self.assertEqual(self.store.jobs(), [])
+
+    def test_first_enabled_job_is_bounded_acceptance_and_consumes_one_reservation(self):
+        c = w.Coordinator(self.config(PORT="18948", ENGINEERING_ENABLED="1", OPENAI_API_KEY="fake",
+            GH_TOKEN="fake", RAILWAY_TOKEN="fake", ENGINEERING_MODEL="fake-model",
+            ENGINEERING_DAILY_SESSION_LIMIT="1", ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap"))
+        def model(job, _):
+            self.assertEqual(job["task"], w.ACCEPTANCE_TASK)
+            c.store.update(job["id"], "completed", result="simulated acceptance")
+            c.shutdown.set()
+        with patch.object(c, "prepare", return_value=self.root), patch.object(c, "run_job", side_effect=model) as launch:
+            c.serve()
+        self.assertEqual(launch.call_count, 1)
+        self.assertEqual(self.store.used(), 1)
+
+    def test_failed_acceptance_prevents_routine_model_work(self):
+        jid = self.store.enqueue(w.ACCEPTANCE_TASK)
+        self.store.update(jid, "failed", result="capability missing")
+        self.store.enqueue("later engineering task")
+        c = w.Coordinator(self.config(PORT="18949", ENGINEERING_ENABLED="1", OPENAI_API_KEY="fake",
+            GH_TOKEN="fake", RAILWAY_TOKEN="fake", ENGINEERING_MODEL="fake-model",
+            ENGINEERING_DAILY_SESSION_LIMIT="2", ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap"))
+        timer = threading.Timer(0.25, c.shutdown.set)
+        timer.start()
+        try:
+            with patch.object(c, "prepare") as prepare, patch.object(c, "run_job") as model:
+                c.serve()
+                prepare.assert_not_called()
+                model.assert_not_called()
+        finally:
+            timer.cancel()
+        self.assertEqual(c.phase, "acceptance_blocked")
+        self.assertEqual(self.store.used(), 0)
 
 
 class ReleaseTests(Fixture, unittest.TestCase):
