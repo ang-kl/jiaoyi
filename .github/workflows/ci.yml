@@ -56,6 +56,6 @@ jobs:
       - name: test the unattended coordinator
         run: python3 -m unittest discover -s ops/engineering/tests -v
       - name: build the separate engineering image
-        run: docker build -f ops/engineering/Dockerfile --tag jiaoyi-engineering:ci .
+        run: docker build --tag jiaoyi-engineering:ci ops/engineering
       - name: exercise worker identity and recovery mechanics in its image
         run: docker run --rm jiaoyi-engineering:ci python3 /app/smoke_image.py

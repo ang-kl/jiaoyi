@@ -19,7 +19,7 @@ RUN --mount=type=secret,id=proxy_ca \
     node /usr/local/lib/node_modules/npm/bin/npm-cli.js install --global @openai/codex@0.163.0 \
     && useradd --uid 10001 --create-home engineering
 WORKDIR /app
-COPY --chmod=755 ops/engineering/ /app/
+COPY --chmod=755 . /app/
 EXPOSE 8080
 ENTRYPOINT []
 CMD ["python3", "/app/worker.py", "serve"]

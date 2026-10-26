@@ -1,0 +1,14 @@
+{
+  "purpose": "Reference for the separate service's settings; not an auto-applied Railway config",
+  "uploadRoot": "ops/engineering",
+  "dockerfilePath": "Dockerfile",
+  "startCommand": "python3 /app/worker.py serve",
+  "healthcheckPath": "/health",
+  "healthcheckTimeout": 60,
+  "restartPolicyType": "ALWAYS",
+  "numReplicas": 1,
+  "drainingSeconds": 20,
+  "sleepApplication": false,
+  "volumeMount": "/data",
+  "ENGINEERING_ENABLED": "0"
+}
