@@ -15,6 +15,12 @@
 //! 4. an availability probe: how far back the broker's tick history goes,
 //!    searched over `history.probe_years`, without downloading it.
 //!
+//! The same authorised worker also refreshes an overlapping seven days of
+//! deals every minute. Its timer and the full pass remain polled concurrently,
+//! so tick history and its historical-request limiter cannot starve closes.
+//! Tick/probe passes retain `history.interval_hours`; no extra account session
+//! or trading executor is started.
+//!
 //! Windows sit on a fixed grid, so a sync resumes where the last one stopped
 //! and a window already fetched completely is not fetched again. Every window
 //! is recorded, whether it held ticks or not, and whether it failed.
@@ -56,6 +62,10 @@ pub const GRID_ORIGIN_MS: i64 = 4 * 86_400_000;
 pub const PROBE_EVERY_DAYS: i64 = 7;
 /// Pause before retrying after a failed sync.
 pub const RETRY_AFTER: Duration = Duration::from_secs(300);
+/// Read-only deal refresh cadence, independent of the tick/probe schedule.
+pub const DEAL_REFRESH_EVERY: Duration = Duration::from_secs(60);
+/// Overlap catches delayed broker deal/fee updates without replaying all history.
+pub const RECENT_DEAL_DAYS: i64 = 7;
 
 /// The grid windows `[start, end]` (inclusive, milliseconds) that intersect
 /// `[from_ms, to_ms]`, newest first. `width` is the window length.
@@ -86,6 +96,12 @@ pub struct HistoryStatus {
     pub tick_history: Option<TickHistory>,
     pub last_sync_started_at: Option<DateTime<Utc>>,
     pub last_sync_finished_at: Option<DateTime<Utc>>,
+    /// Recent deal polling has its own freshness: a long tick/probe pass must
+    /// not make current closes wait for `history.interval_hours`.
+    pub last_deal_sync_started_at: Option<DateTime<Utc>>,
+    pub last_deal_sync_finished_at: Option<DateTime<Utc>>,
+    pub deal_sync_through: Option<DateTime<Utc>>,
+    pub last_deal_sync_error: Option<String>,
     pub settings_version: Option<i64>,
     pub deal_windows_fetched: u64,
     pub deals_inserted: u64,
@@ -265,6 +281,19 @@ pub async fn sync_account(
     status: &HistoryStatusMap,
     shutdown: &Shutdown,
 ) -> anyhow::Result<()> {
+    let deal_lock = tokio::sync::Mutex::new(());
+    sync_account_with_deal_lock(pool, session, account, ticks, status, shutdown, &deal_lock).await
+}
+
+async fn sync_account_with_deal_lock(
+    pool: &PgPool,
+    session: &AccountSession<'_>,
+    account: &PermittedAccount,
+    ticks: &TickHistory,
+    status: &HistoryStatusMap,
+    shutdown: &Shutdown,
+    deal_lock: &tokio::sync::Mutex<()>,
+) -> anyhow::Result<()> {
     let id = account.id();
     let cfg = sync_settings(pool, id).await?;
     let now = Utc::now();
@@ -314,6 +343,10 @@ pub async fn sync_account(
         if done.covers(from, to) {
             continue;
         }
+        // Keep one broker deal-window read through its durable upsert. A
+        // delayed older full-pass response must not overwrite a newer poll.
+        // Release between windows, so backfill cannot starve recent deals.
+        let _deal_guard = deal_lock.lock().await;
         check_session(session)?;
         let to_req = to.min(ms(now));
         let complete = to < ms(now);
@@ -664,7 +697,8 @@ async fn probe_one(
     Ok(step)
 }
 
-/// Run until shutdown: connect, authorise, sync, wait `history.interval_hours`.
+/// Run until shutdown: authorise one session, maintain recent deals, and run
+/// full tick/probe passes at `history.interval_hours`.
 pub async fn run(
     pool: PgPool,
     broker: BrokerConfig,
@@ -721,7 +755,16 @@ pub async fn run_with<C, F>(
         let result = async {
             let conn = connect().await?;
             let session = loader::authorise(&pool, &conn, &broker, &account).await?;
-            sync_account(&pool, &session, &account, &ticks, &status, &watcher).await
+            maintain_account(
+                &pool,
+                &session,
+                &account,
+                &ticks,
+                &status,
+                &watcher,
+                DEAL_REFRESH_EVERY,
+            )
+            .await
         };
         let outcome = tokio::select! {
             r = result => r,
@@ -800,6 +843,157 @@ fn progress(status: &HistoryStatusMap, account: i64) -> u64 {
     status.lock().unwrap().get(&account).map_or(0, |s| {
         s.deal_windows_fetched + s.tick_windows_fetched + s.tick_windows_failed + s.probes
     })
+}
+
+/// Refresh the overlapping recent broker-deal range on an existing authorised
+/// session. Upserts keep one account/deal identity and accept later fee updates.
+/// Tick/probe freshness is deliberately untouched.
+pub async fn refresh_recent_deals(
+    pool: &PgPool,
+    session: &AccountSession<'_>,
+    account: &PermittedAccount,
+    status: &HistoryStatusMap,
+) -> anyhow::Result<()> {
+    let deal_lock = tokio::sync::Mutex::new(());
+    refresh_recent_deals_with_lock(pool, session, account, status, &deal_lock).await
+}
+
+async fn refresh_recent_deals_with_lock(
+    pool: &PgPool,
+    session: &AccountSession<'_>,
+    account: &PermittedAccount,
+    status: &HistoryStatusMap,
+    deal_lock: &tokio::sync::Mutex<()>,
+) -> anyhow::Result<()> {
+    let id = account.id();
+    if session.account().id() != id {
+        anyhow::bail!("the history session does not belong to account {id}");
+    }
+    let _deal_guard = deal_lock.lock().await;
+    let through = Utc::now();
+    let recent_from = through - chrono::Duration::days(RECENT_DEAL_DAYS);
+    with_status(status, id, |s| {
+        s.last_deal_sync_started_at = Some(through);
+    });
+    let result = async {
+        check_session(session)?;
+        let trader = session.trader().await.map_err(|e| {
+            ended_by(session, &e).map_or_else(|| anyhow::Error::from(e), anyhow::Error::from)
+        })?;
+        let from = trader
+            .registration_timestamp
+            .map(at)
+            .map_or(recent_from, |registration| registration.max(recent_from));
+        if from > through {
+            anyhow::bail!("account registration is after the deal refresh cutoff");
+        }
+        let (deals, error, ended) = match session.deal_history(ms(from), ms(through)).await {
+            Ok(deals) => (deals, None, None),
+            Err(e) => {
+                let ended = ended_by(session, &e);
+                (vec![], Some(e.to_string()), ended)
+            }
+        };
+        let rows: Vec<DealRow> = deals.iter().map(deal_row).collect();
+        let upsert = hist::upsert_deals(pool, id, &rows, Utc::now()).await?;
+        hist::record_deal_fetch(
+            pool,
+            &DealFetchRecord {
+                account_id: id,
+                window_from: from,
+                window_to: through,
+                complete: false,
+                deals: rows.len() as i32,
+                upsert,
+                error: error.clone(),
+                session_ended: ended.is_some(),
+            },
+        )
+        .await?;
+        if let Some(end) = ended {
+            with_status(status, id, |s| s.windows_cut_by_session_end += 1);
+            return Err(end.into());
+        }
+        if let Some(error) = error {
+            anyhow::bail!(error);
+        }
+        with_status(status, id, |s| {
+            s.deal_windows_fetched += 1;
+            s.deals_inserted += upsert.inserted as u64;
+            s.last_deal_sync_finished_at = Some(Utc::now());
+            s.deal_sync_through = Some(through);
+            s.last_deal_sync_error = None;
+        });
+        Ok(())
+    }
+    .await;
+    if let Err(e) = &result {
+        with_status(status, id, |s| {
+            s.last_deal_sync_error = Some(format!("{e:#}"))
+        });
+    }
+    result
+}
+
+/// Maintain one existing history session: full tick/probe work keeps its
+/// configured interval while recent deals continue on a bounded timer. The
+/// full pass remains pinned across timer branches rather than being restarted.
+pub async fn maintain_account(
+    pool: &PgPool,
+    session: &AccountSession<'_>,
+    account: &PermittedAccount,
+    ticks: &TickHistory,
+    status: &HistoryStatusMap,
+    shutdown: &Shutdown,
+    deal_interval: Duration,
+) -> anyhow::Result<()> {
+    if shutdown.is_set() {
+        return Ok(());
+    }
+    if deal_interval.is_zero() {
+        anyhow::bail!("the deal refresh interval must be positive");
+    }
+    let mut stop = shutdown.clone();
+    let deal_lock = tokio::sync::Mutex::new(());
+    refresh_recent_deals_with_lock(pool, session, account, status, &deal_lock).await?;
+    let full_passes = async {
+        loop {
+            if shutdown.is_set() {
+                return Ok::<(), anyhow::Error>(());
+            }
+            sync_account_with_deal_lock(
+                pool, session, account, ticks, status, shutdown, &deal_lock,
+            )
+            .await?;
+            let settings = jiaoyi_store::settings::snapshot(pool, Some(account.id())).await?;
+            let hours = settings
+                .integer("history.interval_hours")
+                .map_err(anyhow::Error::msg)?
+                .max(1);
+            tokio::time::sleep(Duration::from_secs(hours as u64 * 3600)).await;
+        }
+    };
+    let recent_deals = async {
+        let mut timer =
+            tokio::time::interval_at(tokio::time::Instant::now() + deal_interval, deal_interval);
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            if shutdown.is_set() {
+                return Ok::<(), anyhow::Error>(());
+            }
+            timer.tick().await;
+            refresh_recent_deals_with_lock(pool, session, account, status, &deal_lock).await?;
+        }
+    };
+    // Both futures remain polled: a full pass can hold the connection's
+    // historical-rate mutex across its sleep while the recent poll waits for
+    // that mutex. Awaiting one branch inline would stop the other releasing it.
+    tokio::pin!(full_passes, recent_deals);
+    tokio::select! {
+        _ = stop.wait() => Ok(()),
+        result = &mut full_passes => result,
+        result = &mut recent_deals => result,
+    }
 }
 
 #[cfg(test)]
