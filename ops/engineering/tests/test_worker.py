@@ -238,6 +238,36 @@ class WorkerTests(Fixture, unittest.TestCase):
         self.assertEqual(self.store.used(), 0)
         self.assertEqual(self.store.jobs(), [])
 
+    def test_incomplete_readonly_report_cannot_unlock_routine_engineering(self):
+        c = w.Coordinator(self.config())
+        c.uid, c.gid = os.getuid(), os.getgid()
+        repo = self.root / "repository"
+        (self.root / "agent-state").mkdir()
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self, _): return b'{}'
+        for passed in (None, False, True):
+            with self.subTest(acceptance_passed=passed):
+                jid = self.store.enqueue(w.ACCEPTANCE_TASK)
+                job = self.store.reserve(10)
+                workspace = self.root / "workspaces" / str(jid)
+                workspace.mkdir(parents=True)
+                (workspace / ".git").write_text("gitdir: " + str(repo / ".git" / "worktrees" / str(jid)) + "\n")
+                report = {"outcome": "no_change", "summary": "Read-only session; failed delegation unless explicitly passed",
+                          "tests": "Actual report regression: a successful main session alone is insufficient",
+                          "owner_decisions": "none"}
+                if passed is not None:
+                    report["acceptance_passed"] = passed
+                def session(*_, **kwargs):
+                    (Path(kwargs["env"]["HOME"]) / "result.json").write_text(json.dumps(report))
+                    return "ok"
+                with patch.object(c, "existing_pr", return_value=None), patch.object(c, "login_model", return_value="ok"), \
+                     patch.object(c, "changes", return_value=[]), patch.object(w.urllib.request, "urlopen", return_value=Response()), \
+                     patch.object(w, "bounded_process", side_effect=session), contextlib.redirect_stdout(io.StringIO()):
+                    c.run_job(job, repo)
+                self.assertEqual(self.store.jobs()[0]["state"], "completed" if passed is True else "owner_blocked")
+
     def test_first_enabled_job_is_bounded_acceptance_and_consumes_one_reservation(self):
         c = w.Coordinator(self.config(PORT="18948", ENGINEERING_ENABLED="1", OPENAI_API_KEY="fake",
             GH_TOKEN="fake", RAILWAY_TOKEN="fake", ENGINEERING_MODEL="fake-model",

@@ -439,3 +439,20 @@ release permissions, sub-agent execution, full coordinator acceptance or the
 financial goal. Routine operation stays disabled pending an agreed allowance
 and the remaining coordinator credentials. Hosting costs and subscription
 usage limits still apply; no additional paid API route was enabled.
+
+## Acceptance correction — 26 October 2026, 23:52 SGT
+
+The first coordinator-driven model run completed but explicitly reported a failed
+sub-agent (`no rollout found`) and missing direct HTTP evidence. Its no_change
+outcome was incorrectly treated as a completed acceptance. Job completion alone
+is therefore not the acceptance receipt for that run. The owner-approved daily
+limit is four top-level attempts, including repairs and verification.
+
+The corrected task supplies absolute public URLs and requires direct HTTP,
+identity/database checks and one successful delegated review. Its explicit
+acceptance_passed boolean must be true alongside no_change; missing/false evidence
+blocks routine engineering. The new task version requires a fresh check and does
+not reuse that incomplete report. Codex runs without ephemeral mode so a child
+can load its parent's persisted rollout. This is ordinary CLI state under the
+worker's private CODEX_HOME, never a copied chat login. Actual corrected runtime
+proof is required before declaring delegation or full acceptance successful.
