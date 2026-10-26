@@ -36,3 +36,8 @@ created; a session's claim is not evidence those checks passed. Return the
 structured result. If policy approval is required, return owner_blocked with the
 specific decision. If no authorized defect is reproducible, return no_change
 with what was checked. Do not manufacture work to keep yourself busy.
+
+Set acceptance_passed=false for ordinary engineering tasks. Only the initial
+read-only acceptance task can set it true, after every required check and the
+delegated review actually succeeds. Missing evidence or a failed sub-agent
+means acceptance_passed=false and owner_blocked for that acceptance task.

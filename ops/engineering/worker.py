@@ -41,11 +41,16 @@ DEFAULT_TASK = (
 ACCEPTANCE_TASK = (
     "Perform the first READ-ONLY unattended acceptance check. Do not edit files, "
     "trade, tune a rule, create a PR or deploy. Read the charter and latest SGT "
-    "journal, fetch the public trading health/operations reports, and check your "
+    "journal, GET https://jiaoyi.up.railway.app/health and "
+    "https://jiaoyi.up.railway.app/operations/reports, and check your "
     "actual UID, no-new-privileges and local test-DB role with read-only commands. "
-    "If the bounded sub-agent tool is available, delegate one read-only charter "
-    "check and record whether it actually ran. Return no_change with the exact "
-    "commands/results, source cutoffs and any missing capability. Do not print "
+    "Delegate one read-only charter check and wait for its actual successful result. "
+    "Set acceptance_passed=true and outcome=no_change only if identity, DB, "
+    "direct HTTP reads and that sub-agent all pass. Otherwise set "
+    "acceptance_passed=false and outcome=owner_blocked with the failed capability. "
+    "This is a standalone Railway container; managed-cloud plugins and "
+    "/etc/codex/network-policy.json are not required here. Record exact "
+    "commands/results and source cutoffs. Do not print "
     "credentials or read authentication files. Acceptance is separate from "
     "financial success and from a real engineering repair."
 )
@@ -622,7 +627,7 @@ class Coordinator:
                 if len(data) > 2 * 1024 * 1024:
                     raise RuntimeError("verification snapshot too large")
                 snapshot = auth / (name + "-snapshot.json")
-                snapshot.write_text(json.dumps({"fetched_at": now(), "source": route,
+                snapshot.write_text(json.dumps({"fetched_at": now(), "source": "https://jiaoyi.up.railway.app" + route,
                                                 "data": json.loads(data)}))
                 os.chown(snapshot, self.uid, self.gid)
                 prompt += "\nRead the coordinator's live evidence snapshot: " + str(snapshot)
@@ -637,7 +642,8 @@ class Coordinator:
         prompt_path.write_text(prompt)
         os.chown(prompt_path, self.uid, self.gid)
         policy = "danger-full-access" if self.config.isolation == "uid-container" else "read-only" if (verifying or accepting) else "workspace-write"
-        args = ["codex", "exec", "--ignore-user-config", "--ephemeral", "--sandbox", policy,
+        # Sub-agents need the parent's persisted rollout to load their context.
+        args = ["codex", "exec", "--ignore-user-config", "--sandbox", policy,
                 "--enable", "multi_agent", "-c", "agents.max_threads=4",
                 "-c", "sandbox_workspace_write.network_access=true", "-c", 'model_reasoning_effort="high"',
                 *(["--model", self.config.model] if self.config.model else []),
@@ -665,6 +671,9 @@ class Coordinator:
         print(json.dumps({"event": "engineering_session_report", "job": jid, "report": json.loads(saved)}), flush=True)
         if accepting and (self.changes(workspace) or report["outcome"] not in ("no_change", "owner_blocked")):
             raise RuntimeError("first acceptance session must be read-only")
+        if accepting and (report["outcome"] != "no_change" or report.get("acceptance_passed") is not True):
+            self.store.update(jid, "owner_blocked", result=saved)
+            return
         if verifying:
             if self.changes(workspace):
                 raise RuntimeError("verification changed files")

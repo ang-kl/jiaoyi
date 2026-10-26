@@ -4,8 +4,9 @@
     "outcome": {"type": "string", "enum": ["changes", "no_change", "owner_blocked", "verified", "verification_pending"]},
     "summary": {"type": "string"},
     "tests": {"type": "string"},
-    "owner_decisions": {"type": "string"}
+    "owner_decisions": {"type": "string"},
+    "acceptance_passed": {"type": "boolean"}
   },
-  "required": ["outcome", "summary", "tests", "owner_decisions"],
+  "required": ["outcome", "summary", "tests", "owner_decisions", "acceptance_passed"],
   "additionalProperties": false
 }
