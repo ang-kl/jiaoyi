@@ -20,10 +20,22 @@ async fn position(
     r: Option<f64>,
     opening_history: i64,
 ) {
+    position_with_requested_volume(pool, account, code, id, r, opening_history, Some(100)).await;
+}
+
+async fn position_with_requested_volume(
+    pool: &PgPool,
+    account: i64,
+    code: &str,
+    id: i64,
+    r: Option<f64>,
+    opening_history: i64,
+    requested_volume: Option<i64>,
+) {
     let key = format!("{code}:{account}:1:{id}");
     let at = t0() + Duration::minutes(id);
-    sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk) VALUES($1,$2,$2,'open',1,'buy',100,100000,1,1)")
-        .bind(account).bind(&key).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk) VALUES($1,$2,$2,'open',1,'buy',$3,100000,1,1)")
+        .bind(account).bind(&key).bind(requested_volume).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO trading_events(account_id,entry_key,client_msg_id,payload_type,kind,position_id,deal_id,symbol_id,volume,raw,received_at) VALUES($1,$2,$2,2126,'ORDER_FILLED',$3,$4,1,100,''::bytea,$5)")
         .bind(account).bind(&key).bind(id).bind(id*10).bind(at-Duration::hours(1)).execute(pool).await.unwrap();
     if opening_history > 0 {
@@ -128,6 +140,59 @@ async fn latest_window_and_account_strategy_scope_are_real_sources(pool: PgPool)
     let s1 = goals::assess(&pool, A, "s1").await.unwrap();
     assert_eq!(s1.window.wins, 0);
     assert_eq!(s1.window.position_ids, (100..120).collect::<Vec<_>>());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn original_requested_volume_must_prove_the_filled_share_of_risk(pool: PgPool) {
+    for (index, requested) in [None, Some(0), Some(-100), Some(50)]
+        .into_iter()
+        .enumerate()
+    {
+        let account = A + index as i64;
+        passing(&pool, account, "s3").await;
+        fetch(&pool, account, 0, true, false).await;
+        assert_eq!(
+            goals::assess(&pool, account, "s3").await.unwrap().state,
+            AssessmentState::WindowMeetsNumericReference
+        );
+        position_with_requested_volume(&pool, account, "s3", 21, Some(2.0), 100, requested).await;
+        let assessment = goals::assess(&pool, account, "s3").await.unwrap();
+        assert_eq!(
+            assessment.state,
+            AssessmentState::Unknown,
+            "requested volume {requested:?} cannot prove the risk share for 100 filled units"
+        );
+        assert_eq!(assessment.measured_closed_positions, 20);
+        assert_eq!(assessment.unmeasured_positions, 1);
+        assert!(!assessment.window.position_ids.contains(&21));
+        assert!(!assessment.history_complete);
+        assert!(assessment
+            .missing_reasons
+            .iter()
+            .any(|reason| reason.contains("original requested volume")));
+    }
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn valid_partial_fill_risk_and_unclosed_positions_keep_their_meaning(pool: PgPool) {
+    for (account, code) in [(A, "s1"), (B, "s3")] {
+        passing(&pool, account, code).await;
+        // Only half of the request filled: the recorded risk of 1 belongs to
+        // 200 requested units, so the 100-unit closed position's risk is 0.5.
+        position_with_requested_volume(&pool, account, code, 21, Some(2.0), 100, Some(200)).await;
+        // An incomplete open is outside the fully closed cohort.
+        position_with_requested_volume(&pool, account, code, 22, None, 100, None).await;
+        fetch(&pool, account, 0, true, false).await;
+        let assessment = goals::assess(&pool, account, code).await.unwrap();
+        assert_eq!(
+            assessment.state,
+            AssessmentState::WindowMeetsNumericReference
+        );
+        assert_eq!(assessment.measured_closed_positions, 21);
+        assert_eq!(assessment.unmeasured_positions, 0);
+        assert_eq!(assessment.window.position_ids, (2..=21).collect::<Vec<_>>());
+        assert_eq!(assessment.window.net_r, 27.0);
+    }
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]

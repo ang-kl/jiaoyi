@@ -233,7 +233,7 @@ fn summarize_at(
 // we do not infer a fill from absence or create/reconcile any trading record.
 const QUALITY_SQL: &str = r#"
 WITH owned AS (
- SELECT DISTINCT ON (e.position_id) e.position_id, i.entry_key
+ SELECT DISTINCT ON (e.position_id) e.position_id, i.entry_key, i.volume AS requested_volume
  FROM trading_intents i JOIN trading_events e
    ON e.entry_key = i.entry_key AND e.account_id = i.account_id
  WHERE i.account_id = $1 AND i.kind = 'open' AND i.entry_key LIKE $2 || ':%'
@@ -292,7 +292,7 @@ WITH owned AS (
 ), closing_receipts AS (
  SELECT position_id,SUM(quantity)::bigint AS quantity,MAX(at) AS at FROM grouped_receipts GROUP BY position_id
 )
-SELECT o.position_id, GREATEST(COALESCE(e.quantity,0),h.opened) AS opened,
+SELECT o.position_id, o.requested_volume, GREATEST(COALESCE(e.quantity,0),h.opened) AS opened,
  h.opened AS history_opened,h.closed,COALESCE(h.missing_costs,false) AS missing_costs,
  COALESCE(h.invalid_status,false) AS invalid_status,
  COALESCE(c.quantity,0) AS observed_closed, c.at AS latest_exit,
@@ -428,6 +428,16 @@ pub async fn assess(
             ));
         }
         let was_measured = trades.iter().any(|t| t.position_id == position);
+        // The recorded risk belongs to the original requested quantity. A
+        // closed position cannot prove its filled-share risk from a missing,
+        // nonpositive or smaller request; never accept the legacy full-share
+        // fallback as goal evidence. Still-open positions are outside this cohort.
+        let requested: Option<i64> = row.get("requested_volume");
+        if was_measured && requested.is_none_or(|quantity| quantity <= 0 || quantity < opened) {
+            reasons.push(format!(
+                "position {position}: original requested volume missing or inconsistent with proven opening quantity"
+            ));
+        }
         let observed_closed: i64 = row.get("observed_closed");
         if history_opened < opened
             && (was_measured || closed > 0 || (observed_closed >= opened && observed_closed > 0))
