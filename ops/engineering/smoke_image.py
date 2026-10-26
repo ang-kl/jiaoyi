@@ -3,12 +3,15 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 from unittest.mock import patch
 
 import worker as w
 
 os.umask(0o022)
+assert shutil.which("kill"), "Rust startup tests require the procps kill executable"
+subprocess.run(["kill", "-0", str(os.getpid())], check=True)
 
 
 def run(*args, cwd=None):
