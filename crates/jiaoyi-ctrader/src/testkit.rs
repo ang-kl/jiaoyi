@@ -961,6 +961,13 @@ impl FakeBroker {
                                     filled_volume: req.volume,
                                     symbol_id: p.trade_data.symbol_id,
                                     deal_status: pb::ProtoOaDealStatus::Filled as i32,
+                                    // O-1: live closing fills include this detail;
+                                    // absence made duplicate-close controls unreachable.
+                                    close_position_detail: Some(pb::ProtoOaClosePositionDetail {
+                                        entry_price: p.price.unwrap_or_default(),
+                                        closed_volume: Some(req.volume),
+                                        ..Default::default()
+                                    }),
                                     ..Default::default()
                                 };
                                 out.push(execution(

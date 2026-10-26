@@ -1024,7 +1024,7 @@ async fn dropped_owned_execution_is_preserved_without_changing_exit_rules(pool: 
         );
         let mut labelled = p.clone();
         labelled.trade_data.label = Some(strategy3::LABEL.into());
-        let mut correlated = server_fill(DEMO, labelled.clone(), 99903, 60_000.0, 13, true, false);
+        let mut correlated = server_fill(DEMO, labelled.clone(), 99903, 60_000.0, 13, false, false);
         correlated.client_msg_id = Some("diagnostic-correlation".into());
         t.server_event(&correlated).await;
         let raw: Vec<u8> =
@@ -1517,6 +1517,25 @@ async fn an_unconfirmed_strategy_3_open_adopted_at_reconcile_is_listed(pool: PgP
     assert_eq!(o[0].filled_volume, Some(13));
     assert!(near(o[0].fill_price, 60_462.0), "{o:?}");
     assert_eq!(o[0].position_id, Some(5001));
+    with_trader!(&pool, silent, Environment::Demo, |t, _log| {
+        let p = silent.positions.lock().unwrap()[0].clone();
+        silent.positions.lock().unwrap().clear();
+        t.reconcile(at(50)).await.unwrap();
+        assert!(t.own.is_empty());
+        let mut close =
+            jiaoyi_ctrader::testkit::server_fill(DEMO, p, 99995, 60_000.0, 13, true, false);
+        close.client_msg_id = Some("observed-broker-correlation".into());
+        t.server_event(&close).await;
+        let exits: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind = 'broker_exit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            exits, 1,
+            "an adopted opening fill is durable ownership evidence too"
+        );
+    });
 }
 
 /// A broker rejection is listed with nothing filled.
@@ -1814,5 +1833,136 @@ async fn the_distance_to_the_trigger_is_shown_inside_outside_and_out_of_the_wind
         let live = t.live.lock().unwrap().clone();
         let h = strategy3::health(&pool, &live).await.unwrap();
         assert_eq!(h[0]["trigger_distance"]["BTCUSD"], x);
+    });
+}
+
+// Codex · № 17,217 26-Oct: observed 02:17Z broker closes carry correlation.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn correlated_broker_close_is_recorded_once_after_reconcile(pool: PgPool) {
+    use jiaoyi_ctrader::testkit::server_fill;
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        let client: String = sqlx::query_scalar(
+            "SELECT client_msg_id FROM trading_intents WHERE account_id = $1 AND kind = 'open'",
+        )
+        .bind(DEMO)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let mut message = server_fill(
+            DEMO,
+            p.clone(),
+            99991,
+            p.stop_loss.unwrap() - 3.0,
+            13,
+            true,
+            false,
+        );
+        message.client_msg_id = Some(client);
+        // The broker position is gone before the event reaches the trading loop.
+        f.positions.lock().unwrap().clear();
+        t.reconcile(at(50)).await.unwrap();
+        assert!(t.own.is_empty());
+        let requests_before = log.lock().unwrap().closes.len();
+        t.server_event(&message).await;
+        t.server_event(&message).await;
+        let foreign_id = p.position_id + 1000;
+        let foreign_key = "foreign-account-open";
+        sqlx::query("INSERT INTO strategy3_orders(account_id,entry_key,label,prereg_hash,kind,symbol,symbol_id,decided_at)
+            VALUES ($1,$2,'jiaoyi-s3','test','open','BTCUSD',22,now())")
+            .bind(DEMO+1).bind(foreign_key).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO strategy3_fills(account_id,entry_key,label,prereg_hash,kind,symbol,position_id,outcome,volume,sent_at)
+            VALUES ($1,$2,'jiaoyi-s3','test','open','BTCUSD',$3,'filled',13,now())")
+            .bind(DEMO+1).bind(foreign_key).bind(foreign_id).execute(&pool).await.unwrap();
+        let mut unrelated = p.clone();
+        unrelated.position_id = foreign_id;
+        let mut foreign_position = server_fill(DEMO, unrelated, 99993, 60_000.0, 13, true, false);
+        foreign_position.client_msg_id = message.client_msg_id.clone();
+        t.server_event(&foreign_position).await;
+        let mut foreign_account =
+            server_fill(DEMO + 1, p.clone(), 99994, 60_000.0, 13, true, false);
+        foreign_account.client_msg_id = message.client_msg_id.clone();
+        t.server_event(&foreign_account).await;
+        let rows: Vec<(i64, Option<f64>)> = sqlx::query_as(
+            "SELECT position_id, slippage FROM strategy3_fills WHERE kind = 'broker_exit'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows.len(),
+            1,
+            "one broker exit per deal despite repeated correlation"
+        );
+        assert_eq!(rows[0].0, p.position_id);
+        assert_eq!(rows[0].1, Some(3.0));
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            requests_before,
+            "recording sends no close"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn correlated_local_close_is_not_double_counted_as_broker_exit(pool: PgPool) {
+    use jiaoyi_ctrader::testkit::server_fill;
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+            .await
+            .unwrap();
+        let wire: (Option<String>, i32, Vec<u8>, DateTime<Utc>) = sqlx::query_as(
+            "SELECT e.client_msg_id,e.payload_type,e.raw,e.received_at FROM trading_events e
+             JOIN trading_intents i ON i.entry_key=e.entry_key
+             WHERE i.account_id=$1 AND i.kind='close' AND e.deal_id IS NOT NULL LIMIT 1",
+        )
+        .bind(DEMO)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let message = jiaoyi_ctrader::ReceivedExecution {
+            client_msg_id: wire.0,
+            payload_type: wire.1 as u32,
+            payload: wire.2,
+            received_at: wire.3,
+        };
+        t.server_event(&message).await;
+        t.server_event(&message).await;
+        let counts: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT kind,count(*) FROM strategy3_fills WHERE kind <> 'open' GROUP BY kind",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            counts,
+            vec![("tp1".into(), 1)],
+            "our existing close path stays authoritative"
+        );
+        // Connection-local tN ids can be reused after reconnect. A different
+        // broker deal must not disappear just because its client id collides.
+        let mut collision = server_fill(DEMO, p, 99996, 60_000.0, 8, true, false);
+        collision.client_msg_id = message.client_msg_id.clone();
+        t.server_event(&collision).await;
+        let exits: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            exits, 1,
+            "deal identity distinguishes a new exit from an old local close"
+        );
     });
 }
