@@ -13,10 +13,9 @@ COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 ENV PATH="/opt/cargo/bin:/usr/local/bin:/usr/lib/postgresql/16/bin:${PATH}" \
     RUSTUP_HOME=/opt/rustup CARGO_HOME=/data/cargo ENGINEERING_STATE_DIR=/data \
     ENGINEERING_PREFLIGHT_ON_START=1
-# The optional certificate is only for the managed build proxy, never baked in.
-RUN --mount=type=secret,id=proxy_ca \
-    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
-    node /usr/local/lib/node_modules/npm/bin/npm-cli.js install --global @openai/codex@0.163.0 \
+# Railway's builder does not support BuildKit secret mounts. This build uses
+# Railway's normal CA trust; no managed-session proxy certificate is included.
+RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js install --global @openai/codex@0.163.0 \
     && useradd --uid 10001 --create-home engineering
 WORKDIR /app
 COPY --chmod=755 . /app/
