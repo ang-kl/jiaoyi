@@ -46,6 +46,7 @@ class ReleaseFlowTests(unittest.TestCase):
             c.store.event("model_report", previous, json.dumps({
                 "outcome": "changes", "summary": "Retain the verified regression evidence; do not repeat the same fix",
                 "tests": "behavioral regression red then green", "owner_decisions": "none"}))
+            c.store.event("owner_policy_active", previous, "Approved owner policy: $40 ceiling; never manufacture work")
             created = []
             def gh(*args, **kwargs):
                 if args[:2] == ("pr", "list"):
@@ -63,6 +64,7 @@ class ReleaseFlowTests(unittest.TestCase):
                 if args[0] == "codex":
                     self.assertIn("Retain the verified regression evidence", args[-1])
                     self.assertIn("RuntimeError: publish blocked", args[-1])
+                    self.assertIn("Approved owner policy: $40 ceiling; never manufacture work", args[-1])
                     workspace = Path(kwargs["cwd"])
                     (workspace / "crates" / "example" / "src" / "lib.rs").write_text("pub fn value() -> u8 { 2 }\n")
                     (workspace / "journal" / "new.md").write_text("Meaningful repair with a regression receipt.\n")
