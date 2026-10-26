@@ -200,9 +200,89 @@ fn source_time(value: &Value) -> String {
         .unwrap_or_else(|| "unknown".into())
 }
 
+fn benchmark_gaps(report: &Value) -> (String, String) {
+    let a = &report["report"]["assessment"];
+    let w = &a["window"];
+    let unknown = "unknown (incomplete or stale evidence)".to_owned();
+    if report["monitor_state"] != "alive"
+        || a["history_complete"] != true
+        || !a["missing_reasons"].as_array().is_some_and(Vec::is_empty)
+        || !matches!(
+            a["state"].as_str(),
+            Some("insufficient_evidence" | "below_target" | "window_meets_numeric_reference")
+        )
+    {
+        return (unknown.clone(), unknown);
+    }
+    let (Some(count), Some(wins)) = (w["count"].as_u64(), w["wins"].as_u64()) else {
+        return (unknown.clone(), unknown);
+    };
+    let window = jiaoyi_store::goals::WINDOW as u64;
+    if count > window || wins > count {
+        return (unknown.clone(), unknown);
+    }
+    if count < window {
+        return (
+            format!(
+                "{} measured closes short of 20; win gap unknown",
+                window - count
+            ),
+            "unknown (insufficient evidence)".into(),
+        );
+    }
+    let win_gap = (wins as f64 / window as f64 - jiaoyi_store::goals::WIN_RATE_TARGET) * 100.0;
+    let win_gap = if win_gap < 0.0 {
+        format!(
+            "{:.2} pp below 73%; {} net wins below 15/20",
+            -win_gap,
+            15 - wins
+        )
+    } else {
+        format!("{win_gap:.2} pp above 73%; 15/20 minimum met")
+    };
+    let payoff_gap = match w["realized_payoff_state"].as_str() {
+        Some("defined") => w["realized_payoff"]
+            .as_f64()
+            .filter(|p| p.is_finite() && *p >= 0.0)
+            .map(|p| {
+                let gap = p - jiaoyi_store::goals::REALIZED_PAYOFF_REFERENCE;
+                format!(
+                    "{:.6} {} 1.38",
+                    gap.abs(),
+                    if gap < 0.0 {
+                        "below"
+                    } else {
+                        "above or equal to"
+                    }
+                )
+            })
+            .unwrap_or(unknown),
+        Some(state @ ("no_wins" | "no_losses" | "no_wins_or_losses")) => {
+            format!("unknown ({state})")
+        }
+        _ => unknown,
+    };
+    (win_gap, payoff_gap)
+}
+
+fn count_text(value: &Value) -> String {
+    value
+        .as_u64()
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "unknown".into())
+}
+
+fn array_count(value: &Value) -> String {
+    value
+        .as_array()
+        .map(|a| a.len().to_string())
+        .unwrap_or_else(|| "unknown".into())
+}
+
 pub fn render(period: &Period, daily: &[Value], books: &[Value], goals: &Value) -> String {
     let serial = format!("T-{}", period.ny_date.format("%Y%m%d"));
     let mut body=format!("<h1>Trading day ending {} · 17:00 New York</h1><p>SGT window [{} → {}). Generated {}. Delivery after 17:15 NY (05:15/06:15 SGT, DST-aware). This is an accounting cutoff, not a claim that every CFD or crypto venue is closed.</p><details><summary>Technical UTC window</summary><p>[{} → {})</p></details>",period.ny_date,sgt_time(period.from),sgt_time(period.to),sgt_time(Utc::now()),period.from,period.to);
+    let day_start = body.len();
     body.push_str("<h2>Day's executions</h2><table><tr><th>Account / strategy</th><th>Fully closed positions / known wins</th><th>Closing deals</th><th>Known cash net</th><th>Unpriced deals / positions</th><th>History coverage</th></tr>");
     for r in daily {
         let cash = if r["unpriced_deals"].as_i64().is_some_and(|n| n > 0)
@@ -215,23 +295,53 @@ pub fn render(period: &Period, daily: &[Value], books: &[Value], goals: &Value) 
         body.push_str(&format!("<tr><td>{} / {}</td><td>{} / {}</td><td>{}</td><td>{} {}</td><td>{} / {}</td><td>{}; through {}</td></tr>",
             esc(&r["account"].to_string()),esc(r["strategy"].as_str().unwrap_or("unknown")),r["positions"],r["wins"],r["closing_deals"],cash,esc(r["currency"].as_str().unwrap_or("deposit currency unknown")),r["unpriced_deals"],r["unpriced_positions"],if r["history_covers_period"]==true {"covers window"} else {"partial / unknown"},esc(&source_time(&r["history_through"]))));
     }
-    body.push_str("</table><p>Cash net sums only owned closing deals executed in this window, including partial closes: gross + swap − |closing commission| − |conversion fee|. Missing money fields are unpriced, never zero. Fully closed positions are assigned by final close time; known wins are not a complete win rate when any position is unpriced. Account currencies are never added together. Late history can revise these observations.</p><h2>Latest-20 reference · snapshot at generation</h2><table><tr><th>Account / strategy</th><th>State / monitor</th><th>Wins / closes</th><th>Win rate</th><th>Realized payoff</th><th>Net R</th><th>Persisted check SGT</th><th>Missing evidence</th></tr>");
+    body.push_str("</table><p>Cash net sums only owned closing deals executed in this window, including partial closes: gross + swap − |closing commission| − |conversion fee|. Missing money fields are unpriced, never zero. Fully closed positions are assigned by final close time; known wins are not a complete win rate when any position is unpriced. Account currencies are never added together. Late history can revise these observations.</p>");
+    let day_section = body.split_off(day_start);
+    body.push_str("<h2>Latest-20 benchmark gaps · snapshot at generation</h2><p>Prior comparable delta: unknown — no validated prior comparable cohort/report selected. Financial movement attributable to engineering: not measurable from this report. No overall percentage closer is calculated.</p><table><tr><th>Account / strategy</th><th>State / monitor</th><th>Wins / closes</th><th>Win rate / benchmark gap</th><th>Realized payoff / benchmark gap</th><th>Net R</th><th>Check / history through SGT</th><th>Missing evidence</th></tr>");
+    if goals["reports"].as_array().is_none_or(Vec::is_empty) {
+        body.push_str("<tr><td colspan=\"8\">Benchmark gaps unknown: no assessment reports supplied.</td></tr>");
+    }
     for r in goals["reports"].as_array().into_iter().flatten() {
         let a = &r["report"]["assessment"];
         let w = &a["window"];
-        body.push_str(&format!("<tr><td>{} / {}</td><td>{} / {}</td><td>{} / {}</td><td>{}%</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",esc(&r["account_id"].to_string()),esc(r["strategy"].as_str().unwrap_or("unknown")),esc(a["state"].as_str().unwrap_or("unknown")),esc(r["monitor_state"].as_str().unwrap_or("unknown")),w["wins"],w["count"],num(&w["win_rate"],100.0),num(&w["realized_payoff"],1.0),num(&w["net_r"],1.0),esc(&source_time(&r["checked_at"])),esc(&a["missing_reasons"].to_string())));
+        let (win_gap, payoff_gap) = benchmark_gaps(r);
+        let missing = a["missing_reasons"]
+            .as_array()
+            .map(|reasons| {
+                if reasons.is_empty() {
+                    "none reported".into()
+                } else {
+                    reasons
+                        .iter()
+                        .map(|v| v.as_str().unwrap_or("unknown reason"))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                }
+            })
+            .unwrap_or_else(|| "unknown".into());
+        body.push_str(&format!("<tr><td>{} / {}</td><td>{} / {}</td><td>{} / {}</td><td>{}%<br>{}</td><td>{}<br>{}</td><td>{}</td><td>{}<br>{}</td><td>{}</td></tr>",esc(&r["account_id"].to_string()),esc(r["strategy"].as_str().unwrap_or("unknown")),esc(a["state"].as_str().unwrap_or("unknown")),esc(r["monitor_state"].as_str().unwrap_or("unknown")),count_text(&w["wins"]),count_text(&w["count"]),num(&w["win_rate"],100.0),esc(&win_gap),num(&w["realized_payoff"],1.0),esc(&payoff_gap),num(&w["net_r"],1.0),esc(&source_time(&r["checked_at"])),esc(&source_time(&a["history_through"])),esc(&missing)));
     }
-    body.push_str("</table><p>Target is ≥73% net wins (15/20=75%) and realized payoff reference1.38, separately for each strategy/account. Registered stop/target geometry is unchanged. One passing overlapping window does not establish consistency. These latest-20 cohorts are separate from the daily cash window.</p><h2>Latest reconciled exposure</h2>");
+    body.push_str("</table><p>Target is ≥73% net wins (15/20=75%) and realized payoff reference1.38, separately for each strategy/account. Registered stop/target geometry is unchanged. One passing overlapping window does not establish consistency. These latest-20 cohorts are separate from the daily cash window. Payoff gaps are rounded to six decimals; other ratios to two. A win-count shortfall describes this fixed cohort, not a forecast of future rolling windows.</p>");
+    body.push_str(&day_section);
+    body.push_str("<h2>Latest reconciled exposure</h2><table><tr><th>Account / strategy</th><th>Owned positions</th><th>Unresolved opens</th><th>External positions</th><th>Receipt SGT</th></tr>");
     for b in books {
+        let detail = &b["detail"];
+        let own = match b["strategy"].as_str() {
+            Some("s1") => count_text(&detail["own"]),
+            Some("s3") => array_count(&detail["positions"]),
+            _ => "unknown".into(),
+        };
         body.push_str(&format!(
-            "<details><summary>{} / {} · receipt {}</summary><pre>{}</pre></details>",
+            "<tr><td>{} / {}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
             esc(&b["account"].to_string()),
             esc(b["strategy"].as_str().unwrap_or("unknown")),
+            own,
+            count_text(&detail["pending"]),
+            array_count(&detail["external"]),
             esc(&source_time(&b["at"])),
-            esc(&b["detail"].to_string())
         ));
     }
-    body.push_str("<p>Exposure receipts can be stale and are not a fresh broker snapshot. Current broker-side stop prices are not reconstructed from incomplete receipts. Existing pre-orders, stops/targets, sizing, account activation and owner-only pause decisions are untouched. The report is deterministic: no additional LLM call or model tokens. <a href=\"https://jiaoyi.up.railway.app/operations\">Current assessments</a> · <a href=\"https://jiaoyi.up.railway.app/\">Trading desk</a></p>");
+    body.push_str("</table><p>Counts are per-strategy receipts; missing fields are unknown, never zero, and counts are not added across strategies. Exposure receipts can be stale and are not a fresh broker snapshot. Current broker-side stop prices are not reconstructed from incomplete receipts. Existing pre-orders, stops/targets, sizing, account activation and owner-only pause decisions are untouched. The report is deterministic: no additional LLM call or model tokens. <a href=\"https://jiaoyi.up.railway.app/operations\">Current assessments</a> · <a href=\"https://jiaoyi.up.railway.app/\">Trading desk</a></p>");
     let mut numbered = String::new();
     let mut previous = 0;
     for (index, (at, _)) in body.match_indices("<p>").enumerate() {
@@ -446,6 +556,94 @@ mod tests {
         assert!(html.contains("no additional LLM call"));
         assert!(html.contains("№T-20261026"));
         assert!(html.contains("[§T-20261026.1]"));
+    }
+
+    #[test]
+    fn lean_html_shows_supported_gaps_and_withholds_unproven_comparisons() {
+        let p = period_due(at("2026-10-26T22:00:00Z"));
+        let report = json!({"account_id":1,"strategy":"s3","monitor_state":"alive",
+            "report":{"assessment":{"state":"below_target","history_complete":true,
+                "missing_reasons":[],"window":{"count":20,"wins":6,"win_rate":0.3,
+                    "realized_payoff":1.2,"realized_payoff_state":"defined"}}}});
+        let html = render(
+            &p,
+            &[],
+            &[
+                json!({"account":1,"strategy":"s1","detail":{"own":2,"pending":0,"external":[{"raw_telemetry":"omit me"}]}}),
+                json!({"account":1,"strategy":"s3","detail":{"positions":[],"program_positions":2}}),
+                json!({"account":2,"strategy":"s1","detail":null}),
+            ],
+            &json!({"reports":[report]}),
+        );
+        assert!(html.contains("43.00 pp below 73%; 9 net wins below 15/20"));
+        assert!(html.contains("0.180000 below 1.38"));
+        assert!(html.contains("Prior comparable delta: unknown"));
+        assert!(html.contains("Financial movement attributable to engineering: not measurable"));
+        assert!(html.find("Latest-20 benchmark gaps") < html.find("Day's executions"));
+        assert!(!html.contains("raw_telemetry"));
+        assert!(!html.contains("<pre>"));
+        assert!(html.contains("<td>2</td><td>0</td><td>1</td>"));
+        assert!(html.contains("<td>0</td><td>unknown</td><td>unknown</td>"));
+        assert!(html.contains("<td>unknown</td><td>unknown</td><td>unknown</td>"));
+
+        for (state, monitor, count, missing, payoff_state, expected) in [
+            (
+                "insufficient_evidence",
+                "alive",
+                12,
+                json!([]),
+                "defined",
+                "8 measured closes short of 20",
+            ),
+            (
+                "unknown",
+                "alive",
+                20,
+                json!(["missing_costs<script>"]),
+                "defined",
+                "unknown (incomplete or stale evidence)",
+            ),
+            (
+                "below_target",
+                "stalled",
+                20,
+                json!([]),
+                "defined",
+                "unknown (incomplete or stale evidence)",
+            ),
+            (
+                "window_meets_numeric_reference",
+                "alive",
+                20,
+                json!([]),
+                "no_losses",
+                "unknown (no_losses)",
+            ),
+        ] {
+            let mut r = report.clone();
+            r["monitor_state"] = json!(monitor);
+            let a = &mut r["report"]["assessment"];
+            a["state"] = json!(state);
+            a["missing_reasons"] = missing;
+            a["window"]["count"] = json!(count);
+            a["window"]["realized_payoff_state"] = json!(payoff_state);
+            let html = render(&p, &[], &[], &json!({"reports":[r]}));
+            assert!(html.contains(expected), "{state}/{monitor}: {expected}");
+            assert!(!html.contains("<script>"));
+            if state == "unknown" || monitor == "stalled" || count < 20 {
+                assert!(!html.contains("43.00 pp below"));
+            }
+        }
+        let mut above = report.clone();
+        above["report"]["assessment"]["window"]["wins"] = json!(15);
+        above["report"]["assessment"]["window"]["realized_payoff"] = json!(2.0);
+        let html = render(&p, &[], &[], &json!({"reports":[above.clone()]}));
+        assert!(html.contains("2.00 pp above 73%; 15/20 minimum met"));
+        assert!(html.contains("0.620000 above or equal to 1.38"));
+        above["report"]["assessment"]["history_complete"] = json!(false);
+        let html = render(&p, &[], &[], &json!({"reports":[above]}));
+        assert!(html.contains("unknown (incomplete or stale evidence)"));
+        assert!(!html.contains("2.00 pp above"));
     }
 
     async fn server(response: Option<&'static str>) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
