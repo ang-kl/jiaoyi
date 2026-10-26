@@ -342,9 +342,9 @@ pub async fn has_open_fill(
     .await
 }
 
-/// An exact broker deal already accounted for by a local TP1/session-end fill.
+/// An exact broker deal received for a local close, even before its summary.
 /// Client ids are connection-local and must not serve as durable identity.
-pub async fn is_recorded_close_deal(
+pub async fn is_local_close_deal(
     pool: &PgPool,
     account_id: i64,
     position_id: i64,
@@ -353,15 +353,136 @@ pub async fn is_recorded_close_deal(
     sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM trading_intents i
          JOIN trading_events e ON e.entry_key=i.entry_key AND e.account_id=i.account_id
-         JOIN strategy3_fills f ON f.entry_key=i.entry_key AND f.account_id=i.account_id
          WHERE i.account_id=$1 AND i.position_id=$2 AND i.kind='close'
            AND e.deal_id=$3 AND e.position_id=$2
-           AND e.kind IN ('ORDER_FILLED','ORDER_PARTIAL_FILL')
-           AND f.kind IN ('tp1','session_end') AND f.outcome IN ('filled','partly_filled'))",
+           AND e.kind IN ('ORDER_FILLED','ORDER_PARTIAL_FILL'))",
     )
     .bind(account_id)
     .bind(position_id)
     .bind(deal_id)
     .fetch_one(pool)
     .await
+}
+
+/// Exact local deal identity and unsettled close accounting in one snapshot.
+/// Missing summaries and receipt-volume gaps remain unknown; replaying a deal
+/// receipt must not make a partially persisted summary look fully covered.
+/// A concurrent receipt/summary commit cannot fall between these decisions.
+pub async fn close_accounting(
+    pool: &PgPool,
+    account_id: i64,
+    position_id: i64,
+    deal_id: i64,
+) -> Result<(bool, bool), sqlx::Error> {
+    sqlx::query_as(
+        "WITH local_closes AS (
+            SELECT entry_key FROM trading_intents
+            WHERE account_id=$1 AND position_id=$2 AND kind='close'
+            UNION
+            SELECT entry_key FROM strategy3_orders
+            WHERE account_id=$1 AND position_id=$2 AND kind IN ('tp1','session_end')
+            UNION
+            SELECT entry_key FROM strategy3_fills
+            WHERE account_id=$1 AND position_id=$2 AND kind IN ('tp1','session_end'))
+         SELECT EXISTS (
+            SELECT 1 FROM trading_intents i
+            JOIN trading_events e ON e.entry_key=i.entry_key AND e.account_id=i.account_id
+            WHERE i.account_id=$1 AND i.position_id=$2 AND i.kind='close'
+              AND e.deal_id=$3 AND e.position_id=$2
+              AND e.kind IN ('ORDER_FILLED','ORDER_PARTIAL_FILL')) AS local_deal,
+         EXISTS (
+            SELECT 1 FROM local_closes c
+            LEFT JOIN LATERAL (
+                SELECT f.outcome,f.volume FROM strategy3_fills f
+                WHERE f.account_id=$1 AND f.position_id=$2 AND f.entry_key=c.entry_key
+                  AND f.kind IN ('tp1','session_end')
+                ORDER BY f.id DESC LIMIT 1
+            ) summary ON true
+            WHERE summary.outcome IS NULL
+               OR summary.outcome NOT IN ('filled','partly_filled','rejected')
+               OR (summary.outcome IN ('partly_filled','rejected') AND NOT EXISTS (
+                    SELECT 1 FROM trading_events e
+                    WHERE e.account_id=$1 AND e.entry_key=c.entry_key
+                      AND e.kind IN ('ORDER_FILLED','ORDER_REJECTED','ORDER_CANCELLED',
+                                     'ORDER_EXPIRED','ORDER_ERROR','ERROR_RES')))
+               OR (summary.outcome IN ('filled','partly_filled') AND (
+                    COALESCE(summary.volume,0) <= 0
+                    OR summary.volume > COALESCE((
+                        SELECT SUM(receipt.volume) FROM (
+                            SELECT DISTINCT ON (e.deal_id) e.volume
+                            FROM trading_events e
+                            WHERE e.account_id=$1 AND e.position_id=$2
+                              AND e.entry_key=c.entry_key AND e.deal_id IS NOT NULL
+                              AND e.kind IN ('ORDER_FILLED','ORDER_PARTIAL_FILL')
+                            ORDER BY e.deal_id,e.received_at DESC,e.id DESC
+                        ) receipt WHERE receipt.volume > 0
+                    ),0))))",
+    )
+    .bind(account_id)
+    .bind(position_id)
+    .bind(deal_id)
+    .fetch_one(pool)
+    .await
+}
+
+// Codex · № 17,225 26-Oct (ordered: O-1, recover from broker history).
+pub struct HistoryExit {
+    pub deal_id: i64,
+    pub order_id: i64,
+    pub position_id: i64,
+    pub symbol_id: i64,
+    pub symbol: String,
+    pub side: Option<String>,
+    pub entry_key: String,
+    pub prereg_hash: String,
+    pub session_date: Option<NaiveDate>,
+    pub executed_at: DateTime<Utc>,
+    pub fill_price: Option<f64>,
+    pub closed_volume: Option<i64>,
+    pub filled_volume: i64,
+}
+
+/// Absence is necessary, but a confirmed account-owned closing deal is required.
+pub async fn history_exits(
+    pool: &PgPool,
+    account_id: i64,
+    broker_positions: &[i64],
+) -> Result<Vec<HistoryExit>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT d.deal_id,d.order_id,d.position_id,d.broker_symbol_id,
+                d.executed_at,d.execution_price,d.close_closed_volume,d.filled_volume,
+                opened.entry_key,opened.prereg_hash,opened.symbol,opened.side,opened.session_date
+         FROM deals d
+         JOIN LATERAL (SELECT f.entry_key,f.prereg_hash,f.symbol,f.side,o.session_date
+                       FROM strategy3_fills f JOIN strategy3_orders o ON o.entry_key=f.entry_key
+                       WHERE f.account_id=d.account_id AND o.account_id=d.account_id
+                         AND f.position_id=d.position_id AND o.symbol_id=d.broker_symbol_id
+                         AND f.kind='open' AND f.volume > 0
+                         AND f.outcome IN ('filled','partly_filled','reconciled_fill','reconciled_partial_fill')
+                       ORDER BY f.id LIMIT 1) opened ON true
+         WHERE d.account_id=$1 AND d.position_id <> ALL($2)
+           AND d.is_closing AND d.deal_status IN ('FILLED','PARTIALLY_FILLED') AND d.filled_volume > 0
+           AND NOT EXISTS (SELECT 1 FROM strategy3_orders recorded
+                           WHERE recorded.account_id=d.account_id
+                             AND recorded.entry_key='s3-broker:'||d.account_id||':'||d.position_id||':'||d.deal_id)
+         ORDER BY d.executed_at,d.deal_id"
+    ).bind(account_id).bind(broker_positions).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| HistoryExit {
+            deal_id: r.get("deal_id"),
+            order_id: r.get("order_id"),
+            position_id: r.get("position_id"),
+            symbol_id: r.get("broker_symbol_id"),
+            symbol: r.get("symbol"),
+            side: r.get("side"),
+            entry_key: r.get("entry_key"),
+            prereg_hash: r.get("prereg_hash"),
+            session_date: r.get("session_date"),
+            executed_at: r.get("executed_at"),
+            fill_price: r.get("execution_price"),
+            closed_volume: r.get("close_closed_volume"),
+            filled_volume: r.get("filled_volume"),
+        })
+        .collect())
 }
