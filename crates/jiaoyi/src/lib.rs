@@ -19,4 +19,5 @@ pub mod shutdown;
 pub mod status_page;
 pub mod strategy3;
 pub mod supervisor;
+pub mod telegram_report;
 pub mod trading;

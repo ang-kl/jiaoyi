@@ -17,6 +17,8 @@ jiaoyi-store.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
 prost.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true

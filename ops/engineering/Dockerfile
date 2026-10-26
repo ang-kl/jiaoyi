@@ -4,7 +4,7 @@ FROM rust:1.94.1-bookworm AS rust
 FROM node:22-bookworm-slim AS node
 FROM postgres:16-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 git gh build-essential pkg-config libssl-dev ca-certificates util-linux \
+    python3 git gh build-essential pkg-config libssl-dev ca-certificates util-linux procps \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=rust /usr/local/cargo /opt/cargo
 COPY --from=rust /usr/local/rustup /opt/rustup

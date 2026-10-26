@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from reporting import Reporter
 REPO = "ang-kl/jiaoyi"
 SERVICE = "0f67b4a0-629d-42f1-97f1-8910887896af"
 ENVIRONMENT = "f3b64526-67e3-4ea6-98af-274043a8b657"
@@ -311,6 +313,7 @@ class Coordinator:
         self.boundary_ready = None
         self.source_digest = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         self.catalog_state = "not_requested"
+        self.reporter = Reporter(self)
 
     def stop(self):
         return self.shutdown.is_set() or (self.config.root / "STOP").exists()
@@ -331,6 +334,7 @@ class Coordinator:
                 "missing_activation_inputs": self.config.missing(),
                 "acceptance": self.store.acceptance(),
                 "model_catalog": self.catalog_state,
+                "telegram_reporting": self.reporter.status(),
                 "jobs": [{k: j[k] for k in ("id", "state", "attempts", "pr", "head", "merged", "updated")}
                          for j in self.store.jobs()]}
 
@@ -355,6 +359,91 @@ class Coordinator:
 
     def gh(self, *args, write=False):
         return self.command(["gh", *args], write=write)
+
+    def safe_detail(self, value, limit=4000):
+        """Private diagnostics retain a reason, never configured credentials."""
+        detail = str(value)
+        secrets = [v for k, v in self.config.env.items()
+                   if v and re.search(r"TOKEN|SECRET|PASSWORD|API_KEY", k)]
+        for secret in sorted(secrets, key=len, reverse=True):
+            detail = detail.replace(secret, "[REDACTED]")
+        detail = re.sub(r"https?://api\.telegram\.org/bot[^\s<>\"']+", "[REDACTED_TELEGRAM_URL]", detail)
+        return detail[:limit]
+
+    def _dry_run_push(self, workspace, jid):
+        """Probe receive-pack authentication without changing any remote ref."""
+        args = ["git", "-c", "safe.directory=" + str(workspace), "-c", "credential.helper=",
+                "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "push", "--dry-run",
+                "origin", "HEAD:refs/heads/engineering/job-" + str(jid)]
+        env = dict(self.config.env)
+        env.update(GIT_ASKPASS=str(HERE / "askpass.py"), GIT_TERMINAL_PROMPT="0",
+                   GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+        try:
+            reply = subprocess.run(args, env=env, cwd=workspace, capture_output=True, text=True, timeout=20)
+        except subprocess.TimeoutExpired:
+            return {"result": "timeout", "mutated_remote": False}
+        except OSError:
+            return {"result": "probe_unavailable", "mutated_remote": False}
+        result = {"exit_code": reply.returncode, "mutated_remote": False}
+        if reply.returncode == 0:
+            # Branch rules and an actual push still need their own receipt.
+            return {**result, "result": "dry_run_handshake_ok"}
+        stderr = reply.stderr.lower()
+        labels = []
+        if re.search(r"(?:http(?:/\d(?:\.\d)?)?\s*|error:\s*)401\b", stderr):
+            labels.append("http_401")
+        if re.search(r"(?:http(?:/\d(?:\.\d)?)?\s*|error:\s*)403\b", stderr):
+            labels.append("http_403")
+        if any(s in stderr for s in ("authentication failed", "invalid username or password",
+                                     "could not read username", "could not read password")):
+            labels.append("authentication_failed")
+        if "write access" in stderr or ("permission to" in stderr and "denied" in stderr):
+            labels.append("write_access_denied")
+        if "repository not found" in stderr:
+            labels.append("repository_not_found")
+        return {**result, "result": "failed", "classifications": labels or ["unclassified_failure"]}
+
+    def diagnose_job(self, job):
+        """Read retained evidence; never rerun a model, commit or remote write."""
+        jid = int(job["id"])
+        workspace = self.config.root / "workspaces" / str(jid)
+        expected = "gitdir: " + str(self.config.root / "repository" / ".git" / "worktrees" / str(jid)) + "\n"
+        result = {"job": jid, "state": job["state"], "git_pointer_valid": False}
+        try:
+            if workspace.is_symlink() or bounded_text(workspace / ".git", len(expected.encode())) != expected:
+                return result
+            result["git_pointer_valid"] = True
+        except (OSError, RuntimeError):
+            return result
+        try:
+            result["changed_paths"] = [self.safe_detail(p, 500) for p in self.changes(workspace)][:100]
+            result["scope_guard"] = "passed"
+        except Exception as error:
+            result["scope_guard"] = "blocked"
+            result["scope_error"] = self.safe_detail(type(error).__name__ + ": " + str(error))
+        fmt = self.store.private / f"{jid}-fmt.log"
+        result["fmt_log_present"] = fmt.exists()
+        if result["fmt_log_present"]:
+            try:
+                result["fmt_tail"] = self.safe_detail(bounded_text(fmt, 10 * 1024 * 1024)[-4000:])
+            except (OSError, RuntimeError):
+                result["fmt_tail"] = "unavailable: not a bounded regular file"
+        try:
+            head = self.git("rev-parse", "HEAD", cwd=workspace)
+            base = self.git("rev-parse", "origin/main", cwd=workspace)
+            result.update(head=head, origin_main=base,
+                          commits_ahead=int(self.git("rev-list", "--count", "origin/main..HEAD", cwd=workspace)))
+        except Exception as error:
+            result["git_error"] = self.safe_detail(type(error).__name__ + ": " + str(error))
+        if job["state"] == "failed" and result.get("commits_ahead", 0) > 0:
+            # Reports inspect newest jobs first: at most one committed failure
+            # gets a remote handshake per coordinator startup. Reuse its result.
+            probe = getattr(self, "_failed_push_probe", None)
+            if probe is None:
+                probe = {"job": jid, **self._dry_run_push(workspace, jid)}
+                self._failed_push_probe = probe
+            result["write_probe"] = probe if probe["job"] == jid else {"result": "startup_probe_limit"}
+        return result
 
     def prepare(self):
         if os.geteuid() != 0:
@@ -598,7 +687,8 @@ class Coordinator:
         gitconfig = auth / ".gitconfig"
         gitconfig.write_text("[safe]\n\tdirectory = " + str(workspace) + "\n")
         os.chown(gitconfig, self.uid, self.gid)
-        secrets = tuple(self.config.env.get(k, "") for k in ("OPENAI_API_KEY", "GH_TOKEN", "RAILWAY_TOKEN"))
+        secrets = tuple(v for k, v in self.config.env.items()
+                        if v and re.search(r"TOKEN|SECRET|PASSWORD|API_KEY", k))
         common = dict(env=child_env, cwd=workspace, stop=self.stop, pulse=self.pulse,
                       user=self.uid, group=self.gid, redact=secrets)
         result = self.login_model(jid, common)
@@ -669,6 +759,7 @@ class Coordinator:
                 saved = saved.replace(secret, "[REDACTED]")
         # These are project-private Railway logs, not a public report endpoint.
         print(json.dumps({"event": "engineering_session_report", "job": jid, "report": json.loads(saved)}), flush=True)
+        self.store.event("model_report", jid, saved)
         if accepting and (self.changes(workspace) or report["outcome"] not in ("no_change", "owner_blocked")):
             raise RuntimeError("first acceptance session must be read-only")
         if accepting and (report["outcome"] != "no_change" or report.get("acceptance_passed") is not True):
@@ -796,6 +887,7 @@ class Coordinator:
                     pass
             server = ThreadingHTTPServer(("0.0.0.0", self.config.port), Handler)
             threading.Thread(target=server.serve_forever, daemon=True).start()
+            threading.Thread(target=self.reporter.run, daemon=True).start()
             try:
                 if self.config.env.get("ENGINEERING_PREFLIGHT_ON_START") == "1":
                     self.probe_boundary()
@@ -842,9 +934,10 @@ class Coordinator:
                         except Exception as e:
                             # Deliberately no traceback/remote body: these may include secrets.
                             self.phase = "error:" + type(e).__name__
-                            self.store.event("failure", detail=type(e).__name__)
+                            detail = self.safe_detail(type(e).__name__ + ": " + str(e), 1000)
+                            self.store.event("failure", detail=detail)
                             for job in self.store.jobs(("running",)):
-                                self.store.update(job["id"], "failed", result=type(e).__name__)
+                                self.store.update(job["id"], "failed", result=detail)
                     self.shutdown.wait(5)
             finally:
                 server.shutdown()
