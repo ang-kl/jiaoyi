@@ -88,6 +88,65 @@ async fn supervisor_reports_survive_restart_and_heartbeat_without_poll_spam(pool
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
+async fn unchanged_fractional_metrics_do_not_flood_recent_events(pool: PgPool) {
+    let now = Utc::now() - Duration::minutes(10);
+    let mut original = assessment(A, "s3", 20);
+    // Values observed in public reports: decoding the stored JSON can change
+    // their final binary digit even though the computed assessment is unchanged.
+    original["window"]["profit_factor"] = json!(1.1034585194393083);
+    original["window"]["realized_payoff"] = json!(9.361774283725401);
+    original["sample_identity"] = json!("same-window");
+    original["assessed_at"] = json!(now);
+    assert!(
+        supervisor::record_report(&pool, A, "s3", original.clone(), now)
+            .await
+            .unwrap()
+    );
+    let mut next_poll = original.clone();
+    next_poll["assessed_at"] = json!(now + Duration::seconds(60));
+    assert!(
+        !supervisor::record_report(&pool, A, "s3", next_poll, now + Duration::seconds(60))
+            .await
+            .unwrap(),
+        "identical fractional metrics must not create another assessment-change event"
+    );
+    // The unchanged window still receives its durable heartbeat.
+    assert!(supervisor::record_report(
+        &pool,
+        A,
+        "s3",
+        original.clone(),
+        now + Duration::seconds(supervisor::HEARTBEAT_SECS)
+    )
+    .await
+    .unwrap());
+    let view = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(view["reports"][1]["report"]["report_type"], "heartbeat");
+    assert_eq!(view["recent_events"].as_array().unwrap().len(), 1);
+
+    // Keep detecting real metric changes, even with the same cohort identity.
+    // A one-bit change is not discarded by rounding or a numeric tolerance.
+    let previous = original["window"]["profit_factor"].as_f64().unwrap();
+    original["window"]["profit_factor"] = json!(f64::from_bits(previous.to_bits() + 1));
+    original["assessed_at"] = json!(now + Duration::seconds(301));
+    assert!(
+        supervisor::record_report(&pool, A, "s3", original, now + Duration::seconds(301))
+            .await
+            .unwrap()
+    );
+    let view = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(view["recent_events"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        view["recent_events"][0]["report"]["report_type"],
+        "assessment_changed"
+    );
+    assert_eq!(
+        view["recent_events"][0]["report"]["milestones_newly_reached"],
+        json!([])
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
 async fn unavailable_evidence_and_recovery_do_not_reannounce_old_milestones(pool: PgPool) {
     let now = Utc::now();
     supervisor::record_report(&pool, A, "s3", assessment(A, "s3", 20), now)

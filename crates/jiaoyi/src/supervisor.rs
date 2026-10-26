@@ -38,23 +38,6 @@ fn valid_strategy(strategy: &str) -> Result<(), sqlx::Error> {
     }
 }
 
-fn basis(mut assessment: Value) -> Value {
-    if let Some(a) = assessment.as_object_mut() {
-        // A successful history refresh can advance its receipt clock without
-        // changing the cohort or evidence verdict. Keep semantic freshness
-        // (history_complete/state/missing_reasons), not those moving clocks.
-        for key in [
-            "assessed_at",
-            "history_fetched_at",
-            "history_through",
-            "history_window_from",
-        ] {
-            a.remove(key);
-        }
-    }
-    assessment
-}
-
 fn timestamp(value: &Value) -> Option<DateTime<Utc>> {
     value.as_str()?.parse().ok()
 }
@@ -85,15 +68,28 @@ pub async fn record_report(
         .bind(format!("jiaoyi:supervisor-report:{account_id}:{strategy}"))
         .execute(&mut *tx)
         .await?;
-    let previous: Option<Value> = sqlx::query_scalar(
-        "SELECT detail FROM trading_decisions WHERE account_id = $1 AND kind = $2
+    // Compare the stored and incoming JSONB directly: decoding a stored JSON
+    // number to f64 can shift its last bit and falsely announce a changed
+    // assessment on every poll. JSONB compares exact numeric values without
+    // rounding away real metric changes. Only moving receipt clocks are
+    // excluded; freshness verdicts, cohort identity and missing evidence stay.
+    let previous = sqlx::query(
+        "SELECT detail,
+           ((detail->'assessment') - ARRAY['assessed_at', 'history_fetched_at',
+              'history_through', 'history_window_from'])
+           IS DISTINCT FROM
+           ($3::jsonb - ARRAY['assessed_at', 'history_fetched_at',
+              'history_through', 'history_window_from']) AS assessment_changed
+         FROM trading_decisions WHERE account_id = $1 AND kind = $2
          ORDER BY id DESC LIMIT 1",
     )
     .bind(account_id)
     .bind(report_kind)
+    .bind(&assessment)
     .fetch_optional(&mut *tx)
     .await?;
-    let previous_detail = previous.as_ref();
+    let previous_detail = previous.as_ref().map(|row| row.get::<Value, _>("detail"));
+    let previous_detail = previous_detail.as_ref();
     let previous_check = previous_detail.and_then(|d| timestamp(&d["checked_at"]));
     let wall_now = Utc::now();
     let previous_clock_is_future = previous_check.is_some_and(|last| last > wall_now);
@@ -114,10 +110,9 @@ pub async fn record_report(
             return Ok(false);
         }
     }
-    let current_basis = basis(assessment.clone());
-    let changed = previous_detail
-        .and_then(|d| d.get("assessment"))
-        .is_none_or(|a| basis(a.clone()) != current_basis);
+    let changed = previous
+        .as_ref()
+        .is_none_or(|row| row.get::<bool, _>("assessment_changed"));
     let heartbeat_due = previous_check.is_none_or(|last| {
         let age = checked_at.signed_duration_since(last).num_seconds();
         previous_clock_is_future || age >= HEARTBEAT_SECS
