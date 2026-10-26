@@ -1805,21 +1805,47 @@ impl<'a, 'c> Trader<'a, 'c> {
     /// A broker-side execution message on a Strategy 3 position (a stop or
     /// a take-profit hit): recorded as it came, and a closing deal also as a
     /// broker exit, so `/trading/costs` reports it.
+    // Codex · № 17,197 26-Oct (ordered: O-1, make skipped owned executions observable).
     pub async fn server_event(&self, m: &ReceivedExecution) {
+        let Some(e) = gate::decode_execution(self.account_id(), m) else {
+            return;
+        };
+        let owned = e.position_id.is_some_and(|id| self.own.contains_key(&id));
+        // Retain the original protobuf privately, before either silent filter.
+        // No payload, label text, prices or client request ids enter the log.
+        if owned {
+            if let Err(err) = ts::record_event(self.pool, &crate::trading::event_row(&e)).await {
+                tracing::error!(error = %err, "strategy 3 owned execution not recorded");
+            }
+        }
         if m.client_msg_id.is_some() {
+            if owned {
+                self.warn_execution_drop(&e, "client_msg_id_present");
+            }
             return;
         }
-        if let Some(e) = gate::decode_execution(self.account_id(), m) {
-            if e.label.as_deref() != Some(LABEL) {
-                return;
+        if e.label.as_deref() != Some(LABEL) {
+            if owned {
+                self.warn_execution_drop(&e, "label_mismatch");
             }
+            return;
+        }
+        if !owned {
             if let Err(err) = ts::record_event(self.pool, &crate::trading::event_row(&e)).await {
                 tracing::error!(error = %err, "strategy 3 server execution event not recorded");
             }
-            if let Err(err) = self.broker_exit(m).await {
-                tracing::error!(error = %err, "strategy 3 broker exit not recorded");
-            }
         }
+        if let Err(err) = self.broker_exit(m).await {
+            tracing::error!(error = %err, "strategy 3 broker exit not recorded");
+        }
+    }
+
+    fn warn_execution_drop(&self, event: &EventRecord, reason: &str) {
+        tracing::warn!(
+            account = self.account_id(), position = ?event.position_id,
+            deal = ?event.deal_id, payload_type = event.payload_type,
+            reason, "strategy 3 owned execution skipped"
+        );
     }
 
     /// A closing deal the broker executed itself (the stop, the take-profit
@@ -1831,6 +1857,11 @@ impl<'a, 'c> Trader<'a, 'c> {
         let account_id = self.account_id();
         // An opening deal (a late fill of an open) is not an exit.
         let Some(deal) = gate::closing_deal(account_id, m) else {
+            if let Some(e) = gate::decode_execution(account_id, m) {
+                if e.position_id.is_some_and(|id| self.own.contains_key(&id)) {
+                    self.warn_execution_drop(&e, "no_closing_fill_detail");
+                }
+            }
             return Ok(());
         };
         let own = self.own.get(&deal.position_id);
@@ -1841,6 +1872,11 @@ impl<'a, 'c> Trader<'a, 'c> {
             })
         });
         let Some(side) = side else {
+            if own.is_some() {
+                if let Some(e) = gate::decode_execution(account_id, m) {
+                    self.warn_execution_drop(&e, "no_side");
+                }
+            }
             return Ok(());
         };
         let fill = deal.price;
