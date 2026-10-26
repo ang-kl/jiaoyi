@@ -987,6 +987,92 @@ async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
     );
 }
 
+// Codex · № 17,197 26-Oct (ordered: resume O-1; preserve dropped owned events).
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn dropped_owned_execution_is_preserved_without_changing_exit_rules(pool: PgPool) {
+    use jiaoyi_ctrader::testkit::server_fill;
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let mut p = f.positions.lock().unwrap()[0].clone();
+        p.trade_data.label = None;
+        let message = server_fill(
+            DEMO,
+            p.clone(),
+            99901,
+            p.stop_loss.unwrap(),
+            13,
+            true,
+            false,
+        );
+        t.server_event(&message).await;
+        t.server_event(&message).await;
+        let raws: Vec<Vec<u8>> = sqlx::query_scalar(
+            "SELECT raw FROM trading_events WHERE account_id = $1 AND deal_id = 99901",
+        )
+        .bind(DEMO)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            raws,
+            vec![message.payload.clone(), message.payload.clone()],
+            "retain both received deliveries without modifying their payloads"
+        );
+        let mut labelled = p.clone();
+        labelled.trade_data.label = Some(strategy3::LABEL.into());
+        let mut correlated = server_fill(DEMO, labelled.clone(), 99903, 60_000.0, 13, true, false);
+        correlated.client_msg_id = Some("diagnostic-correlation".into());
+        t.server_event(&correlated).await;
+        let raw: Vec<u8> =
+            sqlx::query_scalar("SELECT raw FROM trading_events WHERE deal_id = 99903")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            raw, correlated.payload,
+            "preserve events skipped for correlation too"
+        );
+        t.server_event(&server_fill(
+            DEMO + 1,
+            labelled,
+            99904,
+            60_000.0,
+            13,
+            true,
+            false,
+        ))
+        .await;
+        let wrong_account: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM trading_events WHERE deal_id = 99904")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(wrong_account, 0, "account identity remains authoritative");
+        let exits: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind = 'broker_exit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(exits, 0, "diagnostics must not change exit attribution");
+        let mut foreign = p.clone();
+        foreign.position_id += 1000;
+        t.server_event(&server_fill(
+            DEMO, foreign, 99902, 60_000.0, 13, true, false,
+        ))
+        .await;
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM trading_events WHERE deal_id = 99902")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0, "do not collect unrelated positions");
+    });
+}
+
 /// One open's fill row: (outcome, position, volume, fill price).
 async fn open_fill(pool: &PgPool) -> (String, Option<i64>, Option<i64>, Option<f64>) {
     sqlx::query_as(
