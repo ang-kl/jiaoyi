@@ -48,3 +48,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: build the deploy image
         run: docker build --tag jiaoyi:ci .
+
+  engineering:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: test the unattended coordinator
+        run: python3 -m unittest discover -s ops/engineering/tests -v
+      - name: build the separate engineering image
+        run: docker build --tag jiaoyi-engineering:ci ops/engineering
+      - name: exercise worker identity and recovery mechanics in its image
+        run: docker run --rm jiaoyi-engineering:ci python3 /app/smoke_image.py
