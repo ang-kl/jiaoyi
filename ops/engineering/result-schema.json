@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "outcome": {"type": "string", "enum": ["changes", "no_change", "owner_blocked", "verified", "verification_pending"]},
+    "summary": {"type": "string"},
+    "tests": {"type": "string"},
+    "owner_decisions": {"type": "string"}
+  },
+  "required": ["outcome", "summary", "tests", "owner_decisions"],
+  "additionalProperties": false
+}
