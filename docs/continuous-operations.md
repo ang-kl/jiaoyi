@@ -87,7 +87,9 @@ incident merely because they have no quotes; use registered session context.
 
 Persist a report when the measured window/status changes and at meaningful
 sample milestones (5, 10 and 20 closed positions), rather than repeating the
-same alert each poll. Record new failures, missing/stale evidence and recovery
+same alert each poll. The operations page also shows the latest 100 non-heartbeat
+events, so an overnight milestone remains visible after subsequent heartbeats;
+the full record stays in the existing decision history. Record new failures, missing/stale evidence and recovery
 with their last-success time. Routine owner decisions remain queued until the
 owner's next session; independent engineering continues.
 

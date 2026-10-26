@@ -49,8 +49,22 @@ pub fn page(reports: &Value) -> String {
             number(&window["net_r"], 1.0), esc(&time(&row["checked_at"])), esc(&missing)
         ));
     }
-    format!(
+    let mut events = String::new();
+    for event in reports["recent_events"].as_array().into_iter().flatten() {
+        let report = &event["report"];
+        events.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            esc(&time(&report["checked_at"])),
+            esc(&event["account_id"].to_string()),
+            esc(event["strategy"].as_str().unwrap_or("unknown")),
+            esc(report["assessment"]["state"].as_str().unwrap_or("unknown")),
+            esc(&report["milestones_newly_reached"].to_string())
+        ));
+    }
+    let history = format!("<h2>Recent milestones and assessment changes</h2><p>Latest 100 events, excluding routine heartbeats. The full record remains in the decision history. Position-count milestones are not economic acceptance.</p><div class=\"table\"><table><thead><tr><th>Detected</th><th>Account</th><th>Strategy</th><th>Assessment</th><th>New closed-position milestones</th></tr></thead><tbody>{events}</tbody></table></div>");
+    let page = format!(
         "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"60\"><title>jiaoyi continuous assessment</title><style>body{{font:16px system-ui;margin:2rem;color:#17202a}}table{{border-collapse:collapse;width:100%;font-size:.9rem}}td,th{{padding:.65rem;text-align:left;border-bottom:1px solid #ccd1d1}}.table{{overflow:auto}}a{{color:#125ba0}}p{{max-width:70rem}}</style><body><h1>Continuous assessment</h1><p>Updated {}. Assessments run in the Railway service while it is running, including unattended SGT hours. The chat agents are separate from this service.</p><p>Reference: at least 15 net wins in the latest 20 fully closed positions (75%, meeting the 73% threshold). Realized net-R payoff is compared with 1.38; registered stop and target geometry stays unchanged. One passing window does not establish consistency. Unknown or stale evidence cannot establish success.</p><div class=\"table\"><table><thead><tr><th>Account</th><th>Strategy</th><th>Monitor</th><th>Assessment</th><th>Wins/closes</th><th>Win rate</th><th>Realized payoff</th><th>Window net R</th><th>Last persisted check</th><th>Missing evidence</th></tr></thead><tbody>{}</tbody></table></div><p>Checks run every 60 seconds; unchanged reports receive a durable heartbeat every five minutes. Monitor liveness and broker-evidence freshness are separate. Undefined values show as unknown.</p><p>Reports and milestones are saved in the existing decision history. External push delivery is not configured. The supervisor cannot place orders, pause trading, change stops or sizing, or tune strategies. Owner decisions remain queued for the owner's next session; existing exits continue.</p><p><a href=\"/operations/reports\">Report data</a> · <a href=\"/health\">Service health</a> · <a href=\"/\">Trading status</a> · <a href=\"https://github.com/ang-kl/jiaoyi/blob/main/docs/continuous-operations.md\">Milestones and owner decisions</a></p></body></html>",
         esc(&time(&reports["as_of"])), rows
-    )
+    );
+    page.replace("</body>", &format!("{history}</body>"))
 }

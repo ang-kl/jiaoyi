@@ -316,6 +316,28 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
             }
         }
     }
+    let recent_rows = sqlx::query(
+        "SELECT account_id, kind, at AS recorded_at, detail FROM trading_decisions
+         WHERE account_id = ANY($1) AND kind = ANY($2)
+           AND detail->>'report_type' IS DISTINCT FROM 'heartbeat'
+         ORDER BY id DESC LIMIT 100",
+    )
+    .bind(&allowed)
+    .bind(&kinds[..])
+    .fetch_all(pool)
+    .await?;
+    let recent_events: Vec<Value> = recent_rows
+        .into_iter()
+        .map(|row| {
+            let detail: Value = row.get("detail");
+            json!({
+                "account_id": row.get::<i64, _>("account_id"),
+                "strategy": detail["strategy"],
+                "recorded_at": row.get::<DateTime<Utc>, _>("recorded_at"),
+                "report": detail,
+            })
+        })
+        .collect();
     Ok(json!({
         "service": "railway_assessment_supervisor",
         "as_of": now,
@@ -333,5 +355,7 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
         },
         "consistency": "no single window establishes sustained goal achievement",
         "reports": reports,
+        "recent_events_limit": 100,
+        "recent_events": recent_events,
     }))
 }

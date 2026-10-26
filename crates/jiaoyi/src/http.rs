@@ -73,6 +73,7 @@ async fn health(State(s): State<AppState>) -> Response {
             let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
             v["supervision"] = match crate::supervisor::reports(&s.pool, &accounts).await {
                 Ok(mut report) => {
+                    report.as_object_mut().unwrap().remove("recent_events");
                     report["reports_url"] = json!("/operations/reports");
                     report
                 }

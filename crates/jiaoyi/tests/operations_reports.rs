@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use http_body_util::BodyExt;
 use jiaoyi::http::{router, AppState};
 use jiaoyi_core::allowlist::Environment;
@@ -16,9 +16,26 @@ use tower::ServiceExt;
 async fn operations_reports_are_read_only_and_account_scoped(pool: PgPool) {
     let account = 49236051;
     let foreign = 46130058;
+    store::upsert_account(&pool, account, Environment::Demo)
+        .await
+        .unwrap();
     store::upsert_account(&pool, foreign, Environment::Demo)
         .await
         .unwrap();
+    let assessment = json!({"account_id":account,"strategy":"s3","state":"below_target","measured_closed_positions":20,"sample_identity":"our-window"});
+    let first_check = Utc::now() - Duration::seconds(601);
+    jiaoyi::supervisor::record_report(&pool, account, "s3", assessment.clone(), first_check)
+        .await
+        .unwrap();
+    jiaoyi::supervisor::record_report(
+        &pool,
+        account,
+        "s3",
+        assessment,
+        first_check + Duration::seconds(301),
+    )
+    .await
+    .unwrap();
     jiaoyi::supervisor::record_report(
         &pool,
         foreign,
@@ -56,6 +73,17 @@ async fn operations_reports_are_read_only_and_account_scoped(pool: PgPool) {
     for row in reports {
         assert_eq!(row["account_id"], account);
     }
+    let events = value["recent_events"].as_array().unwrap();
+    assert_eq!(
+        events.len(),
+        1,
+        "the initial milestone remains visible after its heartbeat"
+    );
+    assert_eq!(events[0]["account_id"], account);
+    assert_eq!(
+        events[0]["report"]["milestones_newly_reached"],
+        json!([5, 10, 20])
+    );
     let response = app
         .clone()
         .oneshot(
@@ -71,6 +99,7 @@ async fn operations_reports_are_read_only_and_account_scoped(pool: PgPool) {
     let html = std::str::from_utf8(&body).unwrap();
     assert!(html.contains("Continuous assessment"));
     assert!(html.contains("External push delivery is not configured"));
+    assert!(html.contains("Recent milestones and assessment changes"));
     let response = app
         .oneshot(
             Request::builder()
