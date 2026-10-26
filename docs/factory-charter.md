@@ -33,6 +33,20 @@ Strategy 2 (stat arb on tick bars, C5) is not built. It goes live with demo, not
 
 ## Invariants
 
+### Learning from earlier work
+
+Owner, 26-10-2026: only good lessons and proven rules deserve adoption. For a
+lesson from bot-trade, a handover or a chat, record its source, the evidence
+supporting it, why it applies to the current jiaoyi task, and a check that can
+expose failure. Preserve owner decisions as decisions; distinguish them from
+protocol facts, observed incidents and untested hypotheses.
+
+Historical recommendations do not authorize importing architecture, trading
+thresholds, settings or review procedures. Current owner instructions and the
+registered trading rules remain authoritative. Keep unsupported claims as
+questions to investigate, rather than new operating rules. Record adopted
+lessons and their actual validation in `journal/YYYY-MM-DD.md` (SGT date).
+
 | # | Invariant | Check |
 |---|---|---|
 | I-1 | Every order goes through the one gate (`jiaoyi_ctrader::trading::send`): broker-side stop, hard size cap, never rounded up, never sent twice. | The gate's tests; no other path to the broker. |
