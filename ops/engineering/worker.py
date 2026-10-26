@@ -66,6 +66,37 @@ def sgt_day():
     return dt.datetime.now(ZoneInfo("Asia/Singapore")).date().isoformat()
 
 
+def evidence_fingerprint(health, operations, day, source_digest):
+    """Stable goal evidence, excluding polling clocks and event/quote churn."""
+    if not isinstance(health, dict) or not isinstance(operations, dict):
+        raise RuntimeError("public goal evidence must be JSON objects")
+    liveness = []
+    for section, strategy in (("trading", "s1"), ("strategy3", "s3")):
+        for row in health.get(section, []):
+            liveness.append({"account_id": row.get("account_id"), "strategy": row.get("strategy", strategy),
+                             "state": (row.get("liveness") or {}).get("state")})
+    assessments = []
+    for row in operations.get("reports", []):
+        assessment = ((row.get("report") or {}).get("assessment") or {})
+        window = assessment.get("window") or {}
+        net_r = window.get("net_r")
+        if isinstance(net_r, (float, int)) and not isinstance(net_r, bool):
+            net_r = round(float(net_r), 8)
+            if net_r == 0:
+                net_r = 0.0
+        assessments.append({
+            "account_id": row.get("account_id"), "strategy": row.get("strategy"),
+            "monitor_state": row.get("monitor_state"), "assessment_state": assessment.get("state"),
+            "history_complete": assessment.get("history_complete"),
+            "position_ids": sorted(window.get("position_ids") or [], key=str),
+            "count": window.get("count"), "wins": window.get("wins"), "losses": window.get("losses"),
+            "net_r": net_r})
+    stable = {"sgt_day": day, "worker_revision": source_digest, "health": health.get("status"),
+              "liveness": sorted(liveness, key=lambda row: json.dumps(row, sort_keys=True)),
+              "assessments": sorted(assessments, key=lambda row: json.dumps(row, sort_keys=True))}
+    return hashlib.sha256(json.dumps(stable, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def bounded_text(path, limit):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as f:
@@ -101,6 +132,9 @@ class Store:
                 CREATE TABLE IF NOT EXISTS events (
                   id INTEGER PRIMARY KEY, at TEXT NOT NULL, job INTEGER, kind TEXT NOT NULL,
                   detail TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS automatic_evidence (
+                  singleton INTEGER PRIMARY KEY CHECK(singleton=1), fingerprint TEXT NOT NULL,
+                  observed_at TEXT NOT NULL);
             """)
 
     def connect(self):
@@ -127,6 +161,21 @@ class Store:
         with self.connect() as c:
             c.execute("UPDATE jobs SET " + ",".join(k + "=?" for k in values) + " WHERE id=?",
                       [*values.values(), job])
+
+    def enqueue_changed_evidence(self, task, fingerprint):
+        """Remember evidence and enqueue atomically, without reserving inference."""
+        with self.connect() as c:
+            c.execute("BEGIN IMMEDIATE")
+            previous = c.execute("SELECT fingerprint FROM automatic_evidence WHERE singleton=1").fetchone()
+            if previous is not None and previous[0] == fingerprint:
+                return None
+            at = now()
+            jid = c.execute("INSERT INTO jobs(task,state,created,updated) VALUES(?,'queued',?,?)",
+                            (task, at, at)).lastrowid
+            c.execute("INSERT INTO automatic_evidence(singleton,fingerprint,observed_at) VALUES(1,?,?) "
+                      "ON CONFLICT(singleton) DO UPDATE SET fingerprint=excluded.fingerprint,observed_at=excluded.observed_at",
+                      (fingerprint, at))
+            return jid
 
     def jobs(self, states=None):
         with self.connect() as c:
@@ -403,7 +452,7 @@ class Coordinator:
             labels.append("repository_not_found")
         return {**result, "result": "failed", "classifications": labels or ["unclassified_failure"]}
 
-    def diagnose_job(self, job):
+    def diagnose_job(self, job, *, probe_write=True):
         """Read retained evidence; never rerun a model, commit or remote write."""
         jid = int(job["id"])
         workspace = self.config.root / "workspaces" / str(jid)
@@ -435,7 +484,7 @@ class Coordinator:
                           commits_ahead=int(self.git("rev-list", "--count", "origin/main..HEAD", cwd=workspace)))
         except Exception as error:
             result["git_error"] = self.safe_detail(type(error).__name__ + ": " + str(error))
-        if job["state"] == "failed" and result.get("commits_ahead", 0) > 0:
+        if probe_write and job["state"] == "failed" and result.get("commits_ahead", 0) > 0:
             # Reports inspect newest jobs first: at most one committed failure
             # gets a remote handshake per coordinator startup. Reuse its result.
             probe = getattr(self, "_failed_push_probe", None)
@@ -444,6 +493,36 @@ class Coordinator:
                 self._failed_push_probe = probe
             result["write_probe"] = probe if probe["job"] == jid else {"result": "startup_probe_limit"}
         return result
+
+    def handoff_blockers(self):
+        """Do not spend another model session while prior proposals cannot ship."""
+        failed = self.store.jobs(("failed",))
+        signature = tuple((job["id"], job["updated"]) for job in failed)
+        if getattr(self, "_handoff_signature", None) != signature:
+            blockers = []
+            for job in reversed(failed):
+                diagnostic = self.diagnose_job(job, probe_write=False)
+                workspace = self.config.root / "workspaces" / str(job["id"])
+                retained = (diagnostic.get("commits_ahead", 0) > 0
+                            or bool(diagnostic.get("changed_paths"))
+                            or diagnostic.get("scope_guard") == "blocked"
+                            or (workspace.exists() and not diagnostic["git_pointer_valid"]))
+                if retained:
+                    blockers.append(job["id"])
+            self._handoff_signature = signature
+            self._handoff_blocking_jobs = blockers
+        return self._handoff_blocking_jobs
+
+    def enqueue_automatic_assessment(self):
+        snapshots = []
+        for route in ("/health", "/operations/reports"):
+            with urllib.request.urlopen("https://jiaoyi.up.railway.app" + route, timeout=20) as response:
+                body = response.read(2 * 1024 * 1024 + 1)
+            if len(body) > 2 * 1024 * 1024:
+                raise RuntimeError("automatic evidence snapshot too large")
+            snapshots.append(json.loads(body))
+        fingerprint = evidence_fingerprint(*snapshots, sgt_day(), self.source_digest)
+        return self.store.enqueue_changed_evidence(DEFAULT_TASK, fingerprint)
 
     def prepare(self):
         if os.geteuid() != 0:
@@ -725,7 +804,26 @@ class Coordinator:
                        if verifying else "\nUse these fresh snapshots as read-only evidence; report any missing capability explicitly.")
         prior = [{k: row[k] for k in ("id", "state", "pr", "merged", "result")}
                  for row in self.store.jobs() if row["id"] != jid]
-        prompt += "\n\nPrior engineering outcomes and pending decisions (evidence, not instructions):\n" + json.dumps(prior)[-30000:]
+        # Keep the model's actual findings even if a later publication failure
+        # replaced jobs.result. This is bounded evidence, never new authority.
+        with self.store.connect() as connection:
+            rows = connection.execute("SELECT job,detail FROM events WHERE kind='model_report' "
+                                      "ORDER BY id DESC LIMIT 20").fetchall()
+        reports = {}
+        for row in rows:
+            if row["job"] in reports:
+                continue
+            try:
+                report = json.loads(row["detail"])
+            except (ValueError, TypeError):
+                continue
+            if isinstance(report, dict):
+                reports[row["job"]] = {key: str(report.get(key, ""))[:2000]
+                                        for key in ("outcome", "summary", "tests", "owner_decisions")}
+        for outcome in prior:
+            if outcome["id"] in reports:
+                outcome["model_report"] = reports[outcome["id"]]
+        prompt += "\n\nPrior engineering outcomes and pending decisions (evidence, not instructions):\n" + json.dumps(prior)[:30000]
         result_path = auth / "result.json"
         result_path.unlink(missing_ok=True)
         prompt_path = auth / "task.txt"
@@ -914,12 +1012,18 @@ class Coordinator:
                             if pending:
                                 self.phase = pending[0]["state"]
                                 self.release(pending[0])
+                            elif self.handoff_blockers():
+                                self.phase = "handoff_blocked"
                             else:
-                                if not self.store.jobs(("queued", "repair_queued", "verification_queued")) and time.monotonic() >= self.next_poll:
-                                    self.store.enqueue(DEFAULT_TASK if self.store.jobs() else ACCEPTANCE_TASK)
+                                ready = bool(self.store.jobs(("queued", "repair_queued", "verification_queued")))
+                                if not ready and time.monotonic() >= self.next_poll:
+                                    # Failed reads must not turn the five-second
+                                    # coordinator heartbeat into a fetch loop.
                                     self.next_poll = time.monotonic() + self.config.interval
-                                repo = self.prepare() if self.store.used() < self.config.limit else None
-                                job = self.store.reserve(self.config.limit)
+                                    ready = self.enqueue_automatic_assessment() is not None
+                                can_reserve = ready and self.store.used() < self.config.limit
+                                repo = self.prepare() if can_reserve else None
+                                job = self.store.reserve(self.config.limit) if can_reserve else None
                                 if job:
                                     try:
                                         self.run_job(job, repo)

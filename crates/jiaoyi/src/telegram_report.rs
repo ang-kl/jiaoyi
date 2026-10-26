@@ -201,6 +201,7 @@ fn source_time(value: &Value) -> String {
 }
 
 pub fn render(period: &Period, daily: &[Value], books: &[Value], goals: &Value) -> String {
+    let serial = format!("T-{}", period.ny_date.format("%Y%m%d"));
     let mut body=format!("<h1>Trading day ending {} · 17:00 New York</h1><p>SGT window [{} → {}). Generated {}. Delivery after 17:15 NY (05:15/06:15 SGT, DST-aware). This is an accounting cutoff, not a claim that every CFD or crypto venue is closed.</p><details><summary>Technical UTC window</summary><p>[{} → {})</p></details>",period.ny_date,sgt_time(period.from),sgt_time(period.to),sgt_time(Utc::now()),period.from,period.to);
     body.push_str("<h2>Day's executions</h2><table><tr><th>Account / strategy</th><th>Fully closed positions / known wins</th><th>Closing deals</th><th>Known cash net</th><th>Unpriced deals / positions</th><th>History coverage</th></tr>");
     for r in daily {
@@ -231,7 +232,15 @@ pub fn render(period: &Period, daily: &[Value], books: &[Value], goals: &Value) 
         ));
     }
     body.push_str("<p>Exposure receipts can be stale and are not a fresh broker snapshot. Current broker-side stop prices are not reconstructed from incomplete receipts. Existing pre-orders, stops/targets, sizing, account activation and owner-only pause decisions are untouched. The report is deterministic: no additional LLM call or model tokens. <a href=\"https://jiaoyi.up.railway.app/operations\">Current assessments</a> · <a href=\"https://jiaoyi.up.railway.app/\">Trading desk</a></p>");
-    format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>jiaoyi trading {}</title><style>body{{font:15px system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#17202a}}table{{border-collapse:collapse;width:100%;font-size:.85rem}}td,th{{padding:.5rem;border-bottom:1px solid #ccc;text-align:left}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}p{{line-height:1.5}}</style><body>{body}</body></html>",period.ny_date)
+    let mut numbered = String::new();
+    let mut previous = 0;
+    for (index, (at, _)) in body.match_indices("<p>").enumerate() {
+        numbered.push_str(&body[previous..at + 3]);
+        numbered.push_str(&format!("[§{serial}.{}] ", index + 1));
+        previous = at + 3;
+    }
+    numbered.push_str(&body[previous..]);
+    format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>jiaoyi trading {}</title><style>body{{font:15px system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#17202a}}table{{border-collapse:collapse;width:100%;font-size:.85rem}}td,th{{padding:.5rem;border-bottom:1px solid #ccc;text-align:left}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}p{{line-height:1.5}}</style><body><div>№{serial}</div>{numbered}</body></html>",period.ny_date)
 }
 
 #[derive(Debug)]
@@ -435,6 +444,8 @@ mod tests {
         assert!(html.contains("partial / unknown"));
         assert!(html.contains("27-10-2026 05:00:00 SGT"));
         assert!(html.contains("no additional LLM call"));
+        assert!(html.contains("№T-20261026"));
+        assert!(html.contains("[§T-20261026.1]"));
     }
 
     async fn server(response: Option<&'static str>) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
