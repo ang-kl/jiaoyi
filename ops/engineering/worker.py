@@ -177,6 +177,9 @@ class Config:
         self.root = Path(self.env.get("ENGINEERING_STATE_DIR", "/data"))
         self.enabled = self.env.get("ENGINEERING_ENABLED") == "1"
         self.model = self.env.get("ENGINEERING_MODEL", "")
+        self.auth_mode = self.env.get("ENGINEERING_AUTH_MODE", "api-key")
+        if self.auth_mode not in ("api-key", "chatgpt"):
+            raise ValueError("unsupported engineering authentication mode")
         self.isolation = self.env.get("ENGINEERING_ISOLATION_MODE", "codex")
         if self.isolation not in ("codex", "uid-container"):
             raise ValueError("unsupported engineering isolation mode")
@@ -198,8 +201,11 @@ class Config:
         return "missing:" + ",".join(missing) if missing else None
 
     def missing(self):
-        required = [k for k in ("OPENAI_API_KEY", "GH_TOKEN", "RAILWAY_TOKEN") if not self.env.get(k)]
-        if not self.model or not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", self.model):
+        credentials = ("GH_TOKEN", "RAILWAY_TOKEN")
+        if self.auth_mode == "api-key":
+            credentials += ("OPENAI_API_KEY",)
+        required = [k for k in credentials if not self.env.get(k)]
+        if (not self.model and self.auth_mode == "api-key") or (self.model and not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", self.model)):
             required.append("ENGINEERING_MODEL")
         if not self.limit:
             required.append("ENGINEERING_DAILY_SESSION_LIMIT")
@@ -316,6 +322,7 @@ class Coordinator:
                 "native_sandbox_verified": self.sandbox_ready,
                 "execution_boundary": {"mode": self.config.isolation, "verified": self.boundary_ready},
                 "worker_source_sha256": self.source_digest,
+                "model_auth_mode": self.config.auth_mode,
                 "missing_activation_inputs": self.config.missing(),
                 "acceptance": self.store.acceptance(),
                 "model_catalog": self.catalog_state,
@@ -468,7 +475,7 @@ class Coordinator:
 
     def discover_models(self):
         # Metadata GET only; never starts inference or discloses the credential.
-        if not self.config.env.get("OPENAI_API_KEY") or self.config.model:
+        if self.config.auth_mode == "chatgpt" or not self.config.env.get("OPENAI_API_KEY") or self.config.model:
             return
         try:
             request = urllib.request.Request("https://api.openai.com/v1/models", headers={
@@ -513,6 +520,26 @@ class Coordinator:
         if paths and not any(p.startswith("journal/") for p in paths):
             raise RuntimeError("changes must include an SGT journal entry")
         return paths
+
+    def login_model(self, jid, common):
+        logfile = self.store.private / f"{jid}-login.log"
+        args, input_text = ["codex", "login", "--with-api-key"], None
+        if self.config.auth_mode == "chatgpt":
+            # Reuse only this worker's official device login. Never write as
+            # root inside this persistent, model-owned authentication directory.
+            home = self.config.root / "codex-chatgpt"
+            info = home.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != self.uid or stat.S_IMODE(info.st_mode) != 0o700:
+                raise RuntimeError("worker ChatGPT login directory is not private")
+            common["env"]["CODEX_HOME"] = str(home)
+            args = ["codex", "login", "status"]
+        else:
+            input_text = self.config.env["OPENAI_API_KEY"] + "\n"
+        result = bounded_process(args, logfile=logfile, timeout=30, input_text=input_text, **common)
+        if self.config.auth_mode == "chatgpt" and result == "ok":
+            if "Logged in using ChatGPT" not in bounded_text(logfile, 65536):
+                return "wrong_auth_provider"
+        return result
 
     def run_job(self, job, repo):
         jid = job["id"]
@@ -569,9 +596,7 @@ class Coordinator:
         secrets = tuple(self.config.env.get(k, "") for k in ("OPENAI_API_KEY", "GH_TOKEN", "RAILWAY_TOKEN"))
         common = dict(env=child_env, cwd=workspace, stop=self.stop, pulse=self.pulse,
                       user=self.uid, group=self.gid, redact=secrets)
-        result = bounded_process(["codex", "login", "--with-api-key"],
-                                 logfile=self.store.private / f"{jid}-login.log", timeout=30,
-                                 input_text=self.config.env["OPENAI_API_KEY"] + "\n", **common)
+        result = self.login_model(jid, common)
         if result != "ok":
             self.store.update(jid, "queued" if result == "interrupted" else "failed", result="model login: " + result)
             return
@@ -615,7 +640,8 @@ class Coordinator:
         args = ["codex", "exec", "--ignore-user-config", "--ephemeral", "--sandbox", policy,
                 "--enable", "multi_agent", "-c", "agents.max_threads=4",
                 "-c", "sandbox_workspace_write.network_access=true", "-c", 'model_reasoning_effort="high"',
-                "--model", self.config.model, "--json", "--output-schema", str(HERE / "result-schema.json"),
+                *(["--model", self.config.model] if self.config.model else []),
+                "--json", "--output-schema", str(HERE / "result-schema.json"),
                 "--output-last-message", str(result_path), "--cd", str(workspace), prompt]
         self.phase = "running"
         result = bounded_process(args, logfile=self.store.private / f"{jid}-session.log",

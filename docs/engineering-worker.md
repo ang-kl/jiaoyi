@@ -47,10 +47,12 @@ check or configuration mechanism.
 The operator must provide all activation inputs before unattended model work:
 
 - An explicit enable switch; the default is disabled.
-- An explicit model available to the worker's account.
+- For API execution, an explicit available model. ChatGPT mode can use the plan's CLI default, as demonstrated by the bounded Railway trial.
 - Model authentication belonging to this worker. For API-backed execution, set
   `OPENAI_API_KEY` in the engineering service's Railway variables, never in Git,
-  the journal, an issue, logs or chat.
+  the journal, an issue, logs or chat. The owner selected ChatGPT mode instead:
+  set `ENGINEERING_AUTH_MODE=chatgpt` and sign in on this worker with the official
+  `codex login --device-auth` flow. No API key or API fallback is used in that mode.
 - A positive, explicit daily session allowance and a bounded session timeout.
 - A persistent state volume and the runner's scoped repository access.
 
@@ -269,10 +271,12 @@ The procedure is:
    the process is healthy. Correct the selected boundary's host/permission
    configuration and restart/retest before proceeding. Do not silently switch
    from native confinement to the broader UID/container mode. Set the explicit
-   model, owner-approved session allowance and required budget acknowledgement. Authenticate the model through `OPENAI_API_KEY`
-   configured on this worker; the coordinator supplies it to Codex login over
-   stdin, not as a command-line argument.
-6. Once activation inputs are supplied, the first paid task is the built-in
+   authentication mode, owner-approved session allowance and required usage acknowledgement.
+   In ChatGPT mode, complete device authorization on this worker first; its private
+   `/data/codex-chatgpt` login persists across restarts. Login status must confirm
+   ChatGPT before execution. In API mode only, the coordinator supplies the API
+   key to Codex login over stdin, not as a command-line argument.
+6. Once activation inputs are supplied, the first allowance-consuming task is the built-in
    read-only acceptance task. It takes priority over manually queued work and
    cannot edit files, create a PR, trade or deploy. Failed or owner-blocked
    acceptance blocks normal automatic engineering. Check its actual model call,
@@ -288,18 +292,20 @@ The implemented configuration is:
 | `ENGINEERING_ENABLED` | Only literal `1` enables work; otherwise disabled. |
 | `ENGINEERING_PREFLIGHT_ON_START` | Image default `1` runs the credential-free check for the explicitly selected execution boundary; keep it enabled. |
 | `ENGINEERING_ISOLATION_MODE` | Python default `codex`; dedicated Railway image explicitly sets `uid-container`. The latter is a broader external OS boundary, not native workspace confinement. No automatic fallback. |
-| `ENGINEERING_MODEL` | Explicit model identifier available to this worker; no default model is invented. |
+| `ENGINEERING_AUTH_MODE` | `chatgpt` reuses this worker's official device login; `api-key` is the compatibility default. No automatic fallback. The owner selected `chatgpt`. |
+| `ENGINEERING_MODEL` | Explicit available model required in API mode; optional in ChatGPT mode, which can use the CLI plan default proven by the trial. |
 | `ENGINEERING_DAILY_SESSION_LIMIT` | Explicit daily top-level reservation cap, 1–1000, using the SGT date; default `0` blocks activation. Does not count sub-agent API calls or impose a dollar cap. |
 | `ENGINEERING_SESSION_TIMEOUT_SECONDS` | Per-process session bound, default 1800, allowed 30–7200 seconds. |
 | `ENGINEERING_POLL_SECONDS` | Delay before generating another default assessment task when no queue is ready, default 1800, allowed 60–86400 seconds; this is not a trading poll interval. |
 | `ENGINEERING_BUDGET_ACK` | Must equal `session-limits-are-not-a-dollar-cap` before activation. This records acknowledgement; it is not a dollar limit. |
-| `OPENAI_API_KEY` | Model credential for this worker only. |
+| `OPENAI_API_KEY` | Required only in API mode. Do not configure for the selected ChatGPT route. |
 | `GH_TOKEN` | Worker repository credential, available to the root coordinator only. |
 | `RAILWAY_TOKEN` | Existing-project token for exact deployment inspection, available to the root coordinator only. |
 | `PORT` | Railway-provided HTTP port; default 8080. |
 
-All three credentials are mandatory for activation. Their presence is only a
-configuration check, not evidence that remote authentication works. The model
+GitHub and Railway coordinator credentials remain required for unattended releases.
+Model authentication is either the worker's ChatGPT login or an API key, according
+to the explicit mode. Presence is only a configuration check, not proof of remote authentication. The model
 runs as the dedicated `engineering` UID 10001; the supervisor runs as root and
 the isolated PostgreSQL 16 test server uses the `postgres` UID. The model's
 process environment excludes `GH_TOKEN`, `RAILWAY_TOKEN`, production database
@@ -322,8 +328,12 @@ OS-permission check, not a claim of native read-only sandboxing in UID mode.
 The durable queue is `/data/private/queue.sqlite3`, the singleton lock and private
 reports are under `/data/private`, and job worktrees are under
 `/data/workspaces`. Each attempt gets a fresh
-`/data/agent-state/JOB-ATTEMPT` authentication directory, cleaned after the job;
-it is not reused for later model attempts. Durable summaries remain in the
+`/data/agent-state/JOB-ATTEMPT` home/result directory, cleaned after the job;
+it is not reused for later model attempts. In ChatGPT mode only, CODEX_HOME
+points to `/data/codex-chatgpt`, owned by UID 10001 with mode 0700. The coordinator
+checks its directory metadata and CLI login status without reading login secrets
+or writing as root inside that persistent directory. API mode keeps its fresh
+per-attempt authentication directory. Durable summaries remain in the
 private queue rather than relying on that temporary model state. The shared
 Rust build target is `/data/target` and the Cargo registry is `/data/cargo`.
 The root-private queue and supervisor credentials are not model inputs. Filesystem/process isolation and the actual
@@ -408,3 +418,24 @@ to project-private Railway logs; the key and API response body are not logged.
 This starts no inference and consumes no session allowance. The coordinator can
 then select an available coding model without asking the owner to know API IDs.
 The explicit model and every other activation requirement still gate model work.
+
+
+## ChatGPT plan trial — 26 October 2026, 23:00 SGT
+
+The owner completed official device authorization on the existing Railway worker.
+A fresh deployment then reported `Logged in using ChatGPT`. Exactly one bounded
+read-only Codex execution ran using the CLI plan default and High effort, with
+no API key, GitHub/Railway/broker credentials or sub-agents. Deployment
+`649c8657-a0e5-4709-af37-e74e70b46dc1` exited with `TRIAL_EXIT_CODE=0` at
+23:00:03 SGT. It recovered from an initial `python` command missing by using
+`python3` within the same session. Actual commands confirmed UID/GID 10001, no
+supplementary groups, NoNewPrivs=1, zero effective capabilities, and denial of
+file creation in the root-owned trial directory. Public `/health` and
+`/operations/reports` returned HTTP 200, health `ok` and eight reports.
+
+This proves subscription authentication, persistence across a deployment and
+one real tool-using model execution. It does not prove continuous engineering,
+release permissions, sub-agent execution, full coordinator acceptance or the
+financial goal. Routine operation stays disabled pending an agreed allowance
+and the remaining coordinator credentials. Hosting costs and subscription
+usage limits still apply; no additional paid API route was enabled.

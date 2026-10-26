@@ -61,6 +61,61 @@ class WorkerTests(Fixture, unittest.TestCase):
         self.assertEqual(s["execution_boundary"], {"mode": "codex", "verified": None})
         self.assertEqual(len(s["worker_source_sha256"]), 64)
 
+    def test_chatgpt_activation_uses_plan_default_without_api_key(self):
+        config = self.config(ENGINEERING_AUTH_MODE="chatgpt", ENGINEERING_ENABLED="1",
+            GH_TOKEN="gh", RAILWAY_TOKEN="rail", ENGINEERING_DAILY_SESSION_LIMIT="1",
+            ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap")
+        self.assertIsNone(config.blocked())
+        c = w.Coordinator(config)
+        with patch.object(w.urllib.request, "urlopen", side_effect=AssertionError("API discovery")):
+            c.discover_models()
+        self.assertEqual(c.status()["model_auth_mode"], "chatgpt")
+        self.assertIn("ENGINEERING_MODEL", self.config(ENGINEERING_AUTH_MODE="chatgpt", ENGINEERING_MODEL="bad model").missing())
+        with self.assertRaises(ValueError):
+            self.config(ENGINEERING_AUTH_MODE="automatic-fallback")
+
+    def test_chatgpt_login_reuses_only_worker_home_and_rejects_api_provider(self):
+        c = w.Coordinator(self.config(ENGINEERING_AUTH_MODE="chatgpt"))
+        c.uid = os.getuid()
+        home = self.root / "codex-chatgpt"
+        home.mkdir(mode=0o700)
+        attempt = self.root / "attempt"
+        attempt.mkdir()
+        env = w.clean_environment(c.config, self.root / "work", attempt, c.uid)
+        common = dict(env=env, cwd=self.root, stop=lambda: False)
+        def status(args, **kwargs):
+            self.assertEqual(args, ["codex", "login", "status"])
+            self.assertIsNone(kwargs["input_text"])
+            self.assertEqual(kwargs["env"]["HOME"], str(attempt))
+            self.assertEqual(kwargs["env"]["CODEX_HOME"], str(home))
+            self.assertNotIn("OPENAI_API_KEY", kwargs["env"])
+            kwargs["logfile"].write_text("Logged in using ChatGPT\n")
+            return "ok"
+        with patch.object(w, "bounded_process", side_effect=status):
+            self.assertEqual(c.login_model(1, common), "ok")
+        with patch.object(w, "bounded_process", return_value="exit_1"):
+            self.assertEqual(c.login_model(1, common), "exit_1")
+        (c.store.private / "1-login.log").write_text("Logged in using an API key\n")
+        with patch.object(w, "bounded_process", return_value="ok"):
+            self.assertEqual(c.login_model(1, common), "wrong_auth_provider")
+
+    def test_chatgpt_login_refuses_missing_public_or_symlink_directory(self):
+        c = w.Coordinator(self.config(ENGINEERING_AUTH_MODE="chatgpt"))
+        c.uid = os.getuid()
+        home = self.root / "codex-chatgpt"
+        with patch.object(w, "bounded_process") as launch:
+            with self.assertRaises(FileNotFoundError):
+                c.login_model(1, {"env": {}})
+            home.mkdir(mode=0o755)
+            home.chmod(0o755)
+            with self.assertRaises(RuntimeError):
+                c.login_model(1, {"env": {}})
+            home.rmdir()
+            home.symlink_to(self.store.private, target_is_directory=True)
+            with self.assertRaises(RuntimeError):
+                c.login_model(1, {"env": {}})
+            launch.assert_not_called()
+
     def test_model_discovery_only_reads_metadata_and_keeps_key_out_of_logs(self):
         c = w.Coordinator(self.config(OPENAI_API_KEY="private-model-key"))
         class Response:
