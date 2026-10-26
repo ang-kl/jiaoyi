@@ -102,7 +102,8 @@ async fn operations_reports_are_read_only_and_account_scoped(pool: PgPool) {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let html = std::str::from_utf8(&body).unwrap();
     assert!(html.contains("Continuous assessment"));
-    assert!(html.contains("External push delivery is not configured"));
+    assert!(html.contains("Telegram HTML summaries use their separate schedules"));
+    assert!(html.contains("this page does not imply an immediate alert was delivered"));
     assert!(html.contains("Recent milestones and assessment changes"));
     let response = app
         .oneshot(
