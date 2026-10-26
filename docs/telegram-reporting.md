@@ -63,3 +63,19 @@ Read-only source: `ang-kl/bot-trade/agent/services/telegram.js` (`sendDocument`)
 and `agent/services/journal.js` (deterministic daily HTML). Its UTC-day journal
 is not a market-close schedule. Its stamp-before-send behavior was not copied:
 failed delivery must not be recorded as success. No bot-trade code was modified.
+
+## Traceability and allowance invariants
+
+Added by the owner27October2026, alongside all existing invariants: preserve the
+agreed goals, serial/paragraph numbering and SGT date/time. Chat keeps its current
+continuous sequence. Engineering HTMLs use a stable E-period reference; trading
+HTMLs use a stable T-NY-date reference, with numbered paragraphs and SGT generation
+and source cutoffs. Retry does not invent a different report period.
+
+The18 allowance is not a quota. Unresolved retained proposals hold fresh model
+calls; they do not pause trading or stop reporting/CI polling. Unchanged automatic
+assessment evidence spends no new reservation. Learning must cite an actual
+loss/benchmark gap and proven applicable source, rather than deploying every
+framework in a domain list. The owner-reported GitHub token expiry is25November
+2026 (exact instant unspecified); GH_TOKEN_EXPIRES_ON optionally carries that
+nonsecret date into future engineering digests.

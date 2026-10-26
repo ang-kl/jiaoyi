@@ -25,6 +25,8 @@ class ReportTests(Fixture, unittest.TestCase):
         self.assertIn("4.5×", body)
         self.assertIn("zero LLM calls", body)
         self.assertIn("27 Oct 2026 05:49 SGT", body)
+        self.assertIn("№E-20261027-054918", body)
+        self.assertIn("[§E-20261027-054918.1]", body)
 
     def test_real_multipart_format_and_positive_telegram_receipt(self):
         class Reply(io.BytesIO):

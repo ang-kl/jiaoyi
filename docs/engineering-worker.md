@@ -12,7 +12,7 @@ configured. Authorization to engineer does not select a new trading policy.
 |---|---|
 | Intent | Continue engineering without an active chat or the owner's MacBook, with a main coordinator, bounded work, milestones and owner decisions. |
 | Interpretation | One separate Railway engineering service starts bounded Codex CLI sessions from a durable queue. The existing `jiaoyi` service remains the only trading executor. |
-| Invariants | Preserve all six [factory invariants](factory-charter.md), pre-registrations, ownership, SL/TP, sizing, limits, account activation and existing exits. Engineering shutdown never means a trading pause. |
+| Invariants | Preserve all [factory invariants](factory-charter.md), including the owner's goals, serial/paragraph references and SGT date/time, pre-registrations, ownership, SL/TP, sizing, limits, account activation and existing exits. Engineering shutdown never means a trading pause. |
 | Assumptions | The worker needs its own model authentication, repository permissions, hosting, persistent volume and an explicit session allowance. This chat's authentication does not prove the new service is authenticated. |
 | Expected outcomes | Disabled-by-default startup; durable queue and reports; interrupted-work recovery; one coordinator per shared state volume; bounded sessions; an engineering-only stop control; existing release gates and exact-deployment verification. |
 | Execution | Root coordinates implementation and review. Codex is configured with `multi_agent` enabled and `agents.max_threads=4`; no real model or unattended sub-agent execution has yet been verified. Specialists do not become independent trading controllers or release competing changes. |

@@ -14,6 +14,7 @@ Owner, 25-10-2026: *"can i assign you as the quant trading factory, you are resp
 
 ## Goals
 
+- **Owner's primary outcome (26–27 October 2026):** risk:reward 1:1.38 and at least 73% net wins over the latest 20 fully closed owned positions, separately for each strategy/account. At least 15/20 = 75% meets 73%; fewer than 20 is insufficient evidence. Keep registered stop/target geometry separate from realized net payoff. One passing overlapping window is not proof of consistency; never tune the rules to fit the last20.
 - **Acceptance:** the PASS rules of each strategy's pre-registration (`docs/preregistration-2026-10-24.md` for Strategy 1, `docs/preregistration-2026-10-25-strategy3.md` for Strategy 3), judged on closed trades in R, net of costs.
 - **Volatility target: 35%** (owner, № 17,105: "35% volatility").
 - **Expected return: about 17–28% a year.** *Self-derived:* return ≈ Sharpe × volatility, with Sharpe 0.5–0.8 for trend systems ([R] in the rulebook §1) at 35%. It is an expectation, not a promise, and the measured results replace it.
@@ -55,6 +56,26 @@ lessons and their actual validation in `journal/YYYY-MM-DD.md` (SGT date).
 | I-4 | Every rule is pre-registered before it trades; a changed number is a new trial. | The pre-registration hash on every order and decision. |
 | I-5 | **Limits alert and recommend; the owner pauses** (amended 25-10, № 17,115). | Test: a limit reached is flagged and the strategy keeps trading. |
 | I-6 | A position this program did not open is reported, never managed. | Reconcile's external positions. |
+| I-7 | The agreed goals and measurement benchmark remain invariant until the owner explicitly changes them. A framework, a model run or a code change is not a substitute for measured trading evidence. | Per-strategy/account latest 20, authoritative broker net results, exact cohort/cost/freshness and unknowns; retain failed windows. |
+| I-8 | Owner-facing updates retain serial and paragraph numbering. Chat continues its existing serial sequence; generated reports carry stable document serials and numbered paragraphs/sections. | Check message/report references; retries and restarts do not silently change the evidence period or impersonate a new chat serial. |
+| I-9 | Owner-facing updates and reports include date and time in Asia/Singapore. Source/event cutoffs are distinguished from generation/delivery time. | Explicit SGT timestamp and dated report window; UTC may remain as separately labelled technical evidence. |
+
+I-7–I-9 were added by the owner on 27 October 2026; they supplement I-1–I-6.
+The 18-session daily allowance is a ceiling, never a consumption target. Do not
+invent fixes to spend it or rebuild an unreleased proposal repeatedly. Preserve
+proposal/test/release evidence and resolve its handoff blocker first. A normal
+registered loss is not automatically a software defect. Adopt bot-trade lessons
+only with source, observed evidence, applicability and a failure check.
+
+The owner's analytical domains (technical, fundamental, macro, news/sentiment,
+options/derivatives, crypto/alternatives, reflection/memory) and operational
+domains (alpha research, portfolio, risk, feature/non-execution processing) are
+a coverage map. Activate a capability only for a measured gap with available,
+fresh evidence and an explicit bounded outcome. Existing paused research and
+owner-only execution/risk decisions remain in force. MCP, analyst nodes, debate
+routing and LangGraph/CrewAI/AutoGen/TradingAgents/FinRL/QIB/RD-Agent/Pandas/Redis
+are optional implementation choices, not mandatory installations or evidence of
+progress. Preserve the deterministic Rust execution and risk boundary.
 
 I-2 and I-5 are recorded as the owner amended them. The wording of I-1, I-3, I-4 and I-6 is recorded from the rules already in force; the coordinator checks it against № 17,104.
 
@@ -85,7 +106,11 @@ They change only on the owner's word: the factory applies them with `changed_by`
 
 ## The daily report
 
-Every day at 07:35 SGT, the same shape each day:
+The owner amended Telegram delivery on 27 October 2026: NY 17:00 accounting cutoff,
+send 17:15 New York (05:15/06:15SGT with DST), as an HTML attachment. Include a
+stable serial, paragraph/section references and SGT generation/source times.
+The historical 07:35 SGT handover schedule does not create a second jiaoyi sender.
+The same factual shape remains:
 1. What needs the owner (limit alerts first, each with a recommendation).
 2. Each strategy and account: closed trades, net R, profit factor, drawdown, pause.
 3. Fills: slippage, spread and order-to-fill time against the plan.
@@ -100,7 +125,7 @@ Every task is agreed as a contract before it starts, so its exit is defined:
 |---|---|
 | Intent | What the owner wants, in the owner's words. |
 | Interpretation | What the factory takes that to mean. |
-| Invariants | Which of I-1 to I-6 the task touches, and how each is checked. |
+| Invariants | Which of I-1 to I-9 the task touches, and how each is checked. |
 | Assumptions | What is treated as given, to be confirmed. |
 | Outcomes expected | What will be true when it is done, each checkable. |
 | Execution | The steps, and who does each. |

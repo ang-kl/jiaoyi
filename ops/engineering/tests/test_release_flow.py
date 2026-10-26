@@ -41,6 +41,11 @@ class ReleaseFlowTests(unittest.TestCase):
             c.uid, c.gid = os.getuid(), os.getgid()
             jid = c.store.enqueue("repair one authorized defect")
             job = c.store.reserve(1)
+            previous = c.store.enqueue("prior completed investigation")
+            c.store.update(previous, "failed", result="RuntimeError: publish blocked")
+            c.store.event("model_report", previous, json.dumps({
+                "outcome": "changes", "summary": "Retain the verified regression evidence; do not repeat the same fix",
+                "tests": "behavioral regression red then green", "owner_decisions": "none"}))
             created = []
             def gh(*args, **kwargs):
                 if args[:2] == ("pr", "list"):
@@ -56,6 +61,8 @@ class ReleaseFlowTests(unittest.TestCase):
                 return "https://github.com/ang-kl/jiaoyi/pull/42"
             def model_or_format(args, **kwargs):
                 if args[0] == "codex":
+                    self.assertIn("Retain the verified regression evidence", args[-1])
+                    self.assertIn("RuntimeError: publish blocked", args[-1])
                     workspace = Path(kwargs["cwd"])
                     (workspace / "crates" / "example" / "src" / "lib.rs").write_text("pub fn value() -> u8 { 2 }\n")
                     (workspace / "journal" / "new.md").write_text("Meaningful repair with a regression receipt.\n")
@@ -69,7 +76,7 @@ class ReleaseFlowTests(unittest.TestCase):
             with patch.object(c, "gh", side_effect=gh), patch.object(c, "login_model", return_value="ok"), \
                  patch.object(w, "bounded_process", side_effect=model_or_format), contextlib.redirect_stdout(io.StringIO()):
                 c.run_job(job, repo)
-            saved = c.store.jobs()[0]
+            saved = next(row for row in c.store.jobs() if row["id"] == jid)
             self.assertEqual((saved["state"], saved["pr"]), ("ci_wait", 42))
             self.assertEqual(saved["head"], git("rev-parse", "refs/heads/engineering/job-1", cwd=remote))
             self.assertEqual(git("rev-list", "--count", "main..engineering/job-1", cwd=remote), "1")

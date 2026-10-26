@@ -3,6 +3,7 @@ import datetime as dt
 import hashlib
 import html
 import json
+import re
 from pathlib import Path
 import time
 import urllib.error
@@ -29,6 +30,8 @@ def stamp(value):
 
 def render(data):
     esc = lambda value: html.escape(str(value), quote=True)
+    cutoff = dt.datetime.fromisoformat(data["until"].replace("Z", "+00:00")).astimezone(SGT)
+    serial = esc(data.get("serial", "E-" + cutoff.strftime("%Y%m%d-%H%M%S")))
     jobs = "".join(
         "<tr><td>" + esc(j["id"]) + "</td><td>" + esc(j["state"]) + "</td><td>"
         + esc(j.get("summary", "No preserved model summary")) + "</td><td>"
@@ -39,14 +42,18 @@ def render(data):
     tests = "".join("<details><summary>Job " + esc(j["id"]) + " — reported validation</summary><p>"
                     + esc(j.get("tests", "No preserved test receipt")) + "</p></details>"
                     for j in data.get("jobs", []))
-    return ("<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+    document = ("<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
             "<title>Jiaoyi engineering report</title><style>body{font:15px/1.55 system-ui;margin:24px auto;max-width:960px;padding:0 16px;color:#15243a}"
             "h1{font-size:24px}h2{font-size:18px;margin-top:28px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:9px;border-bottom:1px solid #ccd5df;text-align:left;vertical-align:top}"
             ".flow{padding:16px;background:#edf4fc;border-radius:8px}code{overflow-wrap:anywhere}details{margin:12px 0}summary{cursor:pointer}p,li{overflow-wrap:anywhere}</style>"
-            "<h1>Jiaoyi · engineering change report</h1><p>" + esc(stamp(data["since"])) + " → "
+            "<h1>№" + serial + " · Jiaoyi engineering change report</h1><p>Generated "
+            + esc(stamp(dt.datetime.now(dt.timezone.utc))) + ". Evidence window: " + esc(stamp(data["since"])) + " → "
             + esc(stamp(data["until"])) + ". Evidence cutoffs are stated; attempts are not releases.</p>"
             "<p><b>Worker:</b> " + esc(data.get("state", "unknown")) + " · <b>SGT attempts:</b> "
             + esc(data.get("sessions", "unknown")) + "/" + esc(data.get("limit", "unknown")) + "</p>"
+            "<p><b>Invariant benchmark:</b> each strategy/account's latest20 fully closed owned positions; "
+            "≥73% net wins (15/20=75%) and the risk:reward objective1:1.38. Realized net payoff reference1.38 is measured separately from registered stop/target geometry. "
+            "Fewer than20 is insufficient evidence; one passing overlapping window is not consistency.</p>"
             "<h2>Delivered changes on main</h2><ul>" + commits + "</ul>"
             "<h2>Worker attempts and unreleased candidates</h2><table><tr><th>Job</th><th>State</th><th>Candidate/result</th><th>Release diagnostic</th></tr>"
             + jobs + "</table>" + tests + "<h2>Changes added in this request / pending facts</h2><ul>" + notes + "</ul>"
@@ -54,6 +61,8 @@ def render(data):
             "<p>The coordinator schedules work and holds release credentials. Model processes receive no GitHub, Railway, Telegram or broker credentials. "
             "Sub-agents need a persisted parent rollout; ephemeral execution broke that context. Explicit acceptance evidence now prevents a partial check from unlocking work. "
             "A proposed patch, a passing model-reported test, an accepted PR and a verified deployment are separate milestones.</p>"
+            "<p>The allowance is a ceiling, not a quota. Unchanged material evidence skips automatic model work; "
+            "new trade cohorts or material health/goal changes can trigger assessment. Unresolved retained proposals block fresh model attempts while reporting and CI polling continue.</p>"
             "<p>Reporting uses deterministic templates and a durable delivery outbox, independently of model work and trading exits. "
             "Only Telegram's positive message receipt marks a file delivered. A lost acknowledgement is held for review, rather than blindly resending a possible duplicate.</p>"
             "<h2>Token and hosting cost</h2><p>18 versus 4 allows 4.5× as many top-level attempts; it does not predict token usage. "
@@ -62,6 +71,12 @@ def render(data):
             "Railway compute/storage costs remain separate. Failed attempts still consume allowance.</p>"
             "<p><small>Unknown evidence is not zero. No report changes entries, existing pre-orders, protective stops, sizing, account activation or owner-only decisions. "
             "Financial success and consistent latest-20 targets remain unproved.</small></p></html>")
+    number = 0
+    def paragraph(match):
+        nonlocal number
+        number += 1
+        return match.group(0) + "[§" + serial + "." + str(number) + "] "
+    return re.sub(r"<p>", paragraph, document)
 
 
 def send_document(token, chat_id, filename, body, caption):
@@ -127,10 +142,14 @@ def collect(coordinator, hours=6, until=None):
             commits = [{"sha": line.split("\x1f", 1)[0], "subject": line.split("\x1f", 1)[1]} for line in lines if "\x1f" in line]
         except Exception:
             pass
+    notes = ["Model test summaries are claims until their CI/deployment receipts are verified.",
+             "Telegram files use deterministic templates and confirmed delivery receipts; no extra AI inference."]
+    if coordinator.config.env.get("GH_TOKEN_EXPIRES_ON"):
+        notes.append("Owner-reported worker GitHub token expiry date: " + coordinator.config.env["GH_TOKEN_EXPIRES_ON"]
+                     + "; exact expiry instant was not supplied. Rotate before this date.")
     return {"since": since.isoformat(), "until": until.isoformat(), "state": coordinator.status()["state"],
             "sessions": coordinator.store.used(), "limit": coordinator.config.limit, "jobs": jobs, "commits": commits,
-            "notes": ["Model test summaries are claims until their CI/deployment receipts are verified.",
-                      "Telegram files use deterministic templates and confirmed delivery receipts; no extra AI inference."]}
+            "notes": notes}
 
 
 class Reporter:
