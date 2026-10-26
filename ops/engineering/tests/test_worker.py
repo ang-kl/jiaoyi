@@ -44,6 +44,20 @@ class WorkerTests(Fixture, unittest.TestCase):
         self.assertIsNone(config.blocked())
         with self.assertRaises(ValueError):
             self.config(ENGINEERING_SESSION_TIMEOUT_SECONDS="99999")
+        with self.assertRaises(ValueError):
+            self.config(ENGINEERING_ISOLATION_MODE="unrestricted-root")
+        self.assertEqual(self.config().isolation, "codex")
+        self.assertEqual(self.config(ENGINEERING_ISOLATION_MODE="uid-container").isolation, "uid-container")
+
+    def test_disabled_status_exposes_missing_names_and_source_without_values(self):
+        c = w.Coordinator(self.config(OPENAI_API_KEY="private-key"))
+        s = c.status()
+        self.assertEqual(s["state"], "disabled")
+        self.assertNotIn("OPENAI_API_KEY", s["missing_activation_inputs"])
+        self.assertIn("GH_TOKEN", s["missing_activation_inputs"])
+        self.assertNotIn("private-key", json.dumps(s))
+        self.assertEqual(s["execution_boundary"], {"mode": "codex", "verified": None})
+        self.assertEqual(len(s["worker_source_sha256"]), 64)
 
     def test_recovery_preserves_quota_and_selects_ci_repair(self):
         first = self.store.enqueue("reproduce failure")

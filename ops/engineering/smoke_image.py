@@ -54,16 +54,20 @@ else:
     script.chmod(0o755)
     env = {**os.environ, "ENGINEERING_STATE_DIR": str(root), "PATH": str(fake) + ":" + os.environ["PATH"],
            "GH_TOKEN": "private-parent-token", "RAILWAY_TOKEN": "private-parent-railway",
-           "OPENAI_API_KEY": "fake-model-key-not-sent-anywhere"}
+           "OPENAI_API_KEY": "fake-model-key-not-sent-anywhere", "ENGINEERING_ISOLATION_MODE": "uid-container"}
     c = w.Coordinator(w.Config(env))
-    # This smoke exercises coordinator mechanics, not native sandbox acceptance.
-    c.sandbox_ready = True
+    assert c.probe_boundary(), "real external UID boundary failed"
     repo = c.prepare()
     probe_env = w.clean_environment(c.config, root, root, c.uid)
     probe = subprocess.run(["/usr/bin/python3", "-c", "import shutil,os;print(shutil.which('codex'));print(os.environ['PATH'])"],
                            env=probe_env, user=c.uid, group=c.gid, capture_output=True, text=True)
     assert probe.stdout.splitlines()[0] == str(script), "simulated CLI is not executable; refuse real model fallback"
     run("psql", "postgres://engineering@127.0.0.1:15432/postgres", "-c", "SELECT 1")
+    denied = subprocess.run(["psql", "postgres://engineering@127.0.0.1:15432/postgres", "-v", "ON_ERROR_STOP=1",
+                             "-c", "COPY (SELECT 1) TO PROGRAM 'true'"], capture_output=True)
+    assert denied.returncode != 0 and b"permission denied" in denied.stderr and b"pg_execute_server_program" in denied.stderr, denied.stderr
+    admin = subprocess.run(["psql", "postgres://postgres@127.0.0.1:15432/postgres", "-c", "SELECT 1"], capture_output=True)
+    assert admin.returncode != 0, "model could access DB admin over TCP"
     jid = c.store.enqueue("simulated acceptance")
     job = c.store.reserve(1)
     try:
@@ -82,7 +86,8 @@ else:
         process = Path("/proc") / str(pid) / "stat"
         assert not process.exists() or process.read_text().split()[2] == "Z", "escaped descendant still running"
         print("PASS: actual UID isolation, root Git ownership, PostgreSQL 16, queue completion and escaped-child cleanup")
-        print("SIMULATED model only: real authentication, sandbox and unattended repair acceptance remain open")
+        print("PASS: real UID boundary/no-new-privileges and test DB cannot execute OS commands")
+        print("SIMULATED model only: real authentication and unattended repair acceptance remain open")
     finally:
         postgres = w.pwd.getpwnam("postgres")
         subprocess.run(["pg_ctl", "-D", str(root / "postgres"), "-m", "fast", "-w", "stop"],

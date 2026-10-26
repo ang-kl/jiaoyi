@@ -79,26 +79,61 @@ owner-paused trading strategy.
 
 A process responding to a health check proves only the reported process state.
 Disabled, missing-authentication, quota-exhausted, owner-blocked and
-native-sandbox-blocked states must remain distinguishable from active successful
-engineering. A healthy coordinator is not necessarily capable of running a
-model session.
+execution-boundary-blocked states must remain distinguishable from active
+successful engineering. A healthy coordinator is not necessarily capable of
+running a model session.
 
-The worker image sets `ENGINEERING_PREFLIGHT_ON_START=1`. Startup runs a
-credential-free native Codex sandbox probe: writing inside the allowed workspace
-must succeed and writing to a separate location must be denied. It makes no
-model/API-key calls. `/status` reports `native_sandbox_verified` as `null`
-(not probed), `false` (failed) or `true` (passed). When it is false, enabled model
-work remains `blocked_native_sandbox` before reserving a session. Keep this
-preflight enabled; do not bypass or downgrade sandboxing to activate work.
+### Explicit execution boundary
 
-The actual native sandbox failed in the local Docker host because that host
-blocks the required user namespaces. No sandbox bypass or downgrade was added.
-This is a real execution blocker, not a passing model test. Railway host
-compatibility remains unverified. If Railway cannot supply the isolation that
-Codex requires, use a separate compatible VM/host for the engineering worker,
-while leaving the trading service on Railway. Correct the host capability,
-restart the service and rerun preflight; do not infer compatibility from a
-green image build or a responding health route.
+`ENGINEERING_ISOLATION_MODE` selects the boundary. The Python configuration
+otherwise defaults to `codex`; the dedicated Railway image explicitly sets
+`uid-container`. There is **no automatic fallback** after a native sandbox
+failure.
+
+- `codex` uses the native Codex per-workspace sandbox, with workspace-write for
+  repairs and read-only for verification. Its credential-free startup preflight
+  must prove permitted workspace writes and denied writes outside that scope.
+  Use a compatible host/VM when this mode requires capabilities unavailable in
+  Railway.
+- `uid-container` uses the dedicated container and Linux UID permissions as the
+  external execution boundary. The model runs as UID 10001, with no extra
+  groups, no effective/permitted capabilities and `setpriv --no-new-privs`.
+  The coordinator remains root, holding GitHub/Railway credentials, private
+  queue, worker code and parent Git metadata outside the model's access.
+  This boundary is **broader than a native per-workspace sandbox**: model code
+  can access other paths owned by that UID, including its working directories
+  and caches. It is not equivalent to native workspace confinement.
+
+In explicit `uid-container` mode, Codex is invoked with
+`--sandbox danger-full-access` inside that external unprivileged UID/container boundary.
+The protection is the tested OS boundary, not a claim that native Codex
+sandboxing passed. This describes the separate worker's configuration; it does
+not change this managed chat's tool permissions. Root does not run model code,
+and no automatic downgrade is used to get around a failed probe.
+
+The worker image keeps `ENGINEERING_PREFLIGHT_ON_START=1`. Startup probes the
+selected boundary without model calls or API-key calls. UID-mode checks include
+the nonroot identity, empty supplemental groups, zero effective/permitted
+capabilities, `NoNewPrivs`, failed elevation to root, denied private-file/worker
+code access and denied access to the coordinator's process environment. Enabled
+model execution stays `blocked_execution_boundary` when that proof fails,
+before a model session is reserved. Do not disable preflight to activate work.
+
+Public status distinguishes `execution_boundary: {mode, verified}` from
+`native_sandbox_verified`. Either proof field may be `null` until checked;
+`native_sandbox_verified: null` in UID mode does not mean native success. Status
+also reports `worker_source_sha256` and missing activation input **names**, not
+credential values. The source digest identifies the actual worker source;
+compare it with the release artifact rather than inferring a revision from a
+healthy response.
+
+The native sandbox failed on the local Docker host because required user
+namespaces were blocked. It also failed on the actual initial Railway worker;
+the mechanism on Railway is not established. The initial worker successfully
+booted but remained disabled with zero sessions and a zero daily allowance.
+The explicit external-boundary implementation is a subsequent change, pending
+its own image, CI and actual-host preflight evidence. Native sandbox failure is
+not relabelled as a pass. Real authenticated model execution remains open.
 
 ## Credentials and authority
 
@@ -148,8 +183,7 @@ credential scope and actual release checks are still necessary.
    merged SHA and retrieves service health. It then queues a read-only model
    verification of the specific affected behavior. The coordinator supplies
    bounded, freshly fetched `/health` and `/operations/reports` snapshots with
-   source and fetch times; the read-only model has no guaranteed direct network
-   access. Other unavailable evidence leaves the result
+   source and fetch times; direct network availability is not guaranteed. Other unavailable evidence leaves the result
    `verification_pending` rather than permitting a guessed success. The result
    remains pending unless the affected behavior is evidenced; successful
    deployment and reachable health alone do not complete the task. The model
@@ -180,8 +214,13 @@ PF as a percentage or missing broker costs as zero.
 
 The separate `jiaoyi-engineering` service has been created in the existing
 project (service `ef9f73f0-5b65-4aba-9ce9-2d1582cb487c`) with a `/data` volume
-and `ENGINEERING_ENABLED=0`. Its image upload is pending at this update: it is
-**not yet verified deployed or authenticated**.
+and `ENGINEERING_ENABLED=0`. Initial deployment
+`ab2cb805-ea71-4c0e-b165-f19603364a3b` successfully booted; live status showed
+`disabled`, zero sessions, daily cap zero and `native_sandbox_verified: false`.
+PR #28 was merged at a commit beginning `c54`; that deployed native-mode worker
+is not a model-capable acceptance result. The subsequent explicit UID/container
+boundary implementation is **not yet verified deployed**. No real model
+authentication, model session or unattended repair has been accepted.
 
 Railway rejected the proposed `railwayConfigFile` setting with “Config as Code
 deprecated; use IaC.” The existing trading service is not migrated. Instead,
@@ -209,12 +248,13 @@ The procedure is:
 4. Configure non-secret operating controls and worker-scoped credentials on
    this service only. Start with model execution disabled. Do not inherit the
    trading service's environment wholesale.
-5. Verify disabled startup, state persistence, an observable status report and
-   the credential-free native sandbox preflight. A false preflight blocks model
-   activation even if the process is healthy. Resolve the host capability and
-   restart/retest before proceeding. Set the explicit model, owner-approved
-   session allowance and the required
-   budget acknowledgement. Authenticate the model through `OPENAI_API_KEY`
+5. Verify disabled startup, source digest, state persistence, an observable
+   status report and the credential-free preflight for the explicitly selected
+   execution boundary. A false boundary result blocks model activation even if
+   the process is healthy. Correct the selected boundary's host/permission
+   configuration and restart/retest before proceeding. Do not silently switch
+   from native confinement to the broader UID/container mode. Set the explicit
+   model, owner-approved session allowance and required budget acknowledgement. Authenticate the model through `OPENAI_API_KEY`
    configured on this worker; the coordinator supplies it to Codex login over
    stdin, not as a command-line argument.
 6. Enable one bounded acceptance task. Check its real model call, durable
@@ -227,7 +267,8 @@ The implemented configuration is:
 |---|---|
 | `ENGINEERING_STATE_DIR` | Persistent root, default `/data`; mount the Railway volume here. |
 | `ENGINEERING_ENABLED` | Only literal `1` enables work; otherwise disabled. |
-| `ENGINEERING_PREFLIGHT_ON_START` | Image default `1` runs the credential-free native sandbox check; keep it enabled. |
+| `ENGINEERING_PREFLIGHT_ON_START` | Image default `1` runs the credential-free check for the explicitly selected execution boundary; keep it enabled. |
+| `ENGINEERING_ISOLATION_MODE` | Python default `codex`; dedicated Railway image explicitly sets `uid-container`. The latter is a broader external OS boundary, not native workspace confinement. No automatic fallback. |
 | `ENGINEERING_MODEL` | Explicit model identifier available to this worker; no default model is invented. |
 | `ENGINEERING_DAILY_SESSION_LIMIT` | Explicit daily reservation cap, 1–1000, using the SGT date; default `0` blocks activation. |
 | `ENGINEERING_SESSION_TIMEOUT_SECONDS` | Per-process session bound, default 1800, allowed 30–7200 seconds. |
@@ -244,6 +285,17 @@ runs as the dedicated `engineering` UID 10001; the supervisor runs as root and
 the isolated PostgreSQL 16 test server uses the `postgres` UID. The model's
 process environment excludes `GH_TOKEN`, `RAILWAY_TOKEN`, production database
 and broker variables. The test URL points to local PostgreSQL on port 15432.
+The `engineering` database role has `CREATEDB` for isolated tests but is
+`NOSUPERUSER`, with no role creation, replication or bypass-RLS privilege;
+it cannot use `COPY PROGRAM`. The administrator uses the PostgreSQL OS user's
+private Unix socket. TCP authentication permits only the test role, preventing
+the model from connecting as the database administrator.
+
+For read-only post-deployment verification, the worktree becomes root-owned
+with regular files mode 644 and directories mode 755, using no-follow traversal.
+The model therefore cannot edit that verification tree in UID mode; its own
+fresh authentication directory remains separately writable. This is a specific
+OS-permission check, not a claim of native read-only sandboxing in UID mode.
 
 The durable queue is `/data/private/queue.sqlite3`, the singleton lock and private
 reports are under `/data/private`, and job worktrees are under
@@ -273,15 +325,17 @@ owner decisions; treat that output as private operational material. The public
 `/health` and `/status` responses expose sanitized job identifiers, states and
 heartbeat age, not task text, raw model logs, credentials or report contents.
 A fresh disabled heartbeat is not a completed engineering task. `preflight`
-prints the native sandbox result and `model_calls: 0`; it exits 1 when isolation
-is unsupported. Inspect `native_sandbox_verified` from the live coordinator
-again after correcting host capability and restarting. The standalone command
-does not mutate an already-running coordinator's in-memory preflight result.
+prints the selected execution boundary, its verified result and `model_calls:
+0`; it exits 1 if the proof fails. Inspect `execution_boundary` from the live
+coordinator after correcting the host/boundary configuration and restarting.
+The standalone command does not mutate an already-running coordinator's
+in-memory preflight result. In native mode, inspect `native_sandbox_verified`
+as well; a null native result in UID mode is not a native pass.
 
 The worker reads model-controlled metadata and result files only through a
 bounded regular-file helper; symlinks, FIFOs and oversized files are rejected.
 Those checks protect the coordinator from treating arbitrary model-selected
-files as trusted metadata; they do not replace native sandbox verification.
+files as trusted metadata; they do not replace the selected execution-boundary proof.
 
 The normal service command is `python3 /app/worker.py serve`. Apply the settings
 in `ops/engineering/railway-service.json` directly to this service; that JSON is
@@ -302,7 +356,7 @@ guessing missing values.
 | Milestone | Required evidence |
 |---|---|
 | E1 — prepared worker | Executed local tests for queue claim/recovery, singleton exclusion, disabled/missing-input behavior, quota, timeout and stop behavior; image/CI checks on the actual head. |
-| E2 — deployed but disabled | Exact worker revision, correct service/command, persistent volume, disabled status, credential-free native sandbox preflight passed on the actual host, and no model execution. Healthy-but-sandbox-blocked does not pass E2. |
+| E2 — deployed but disabled | Exact worker source digest/release, correct service/command, persistent volume, disabled status and zero model execution. The explicitly selected execution boundary must pass its credential-free proof on the actual host. Record native versus broader UID/container mode accurately; healthy-but-boundary-blocked does not pass E2. |
 | E3 — bounded unattended session | Real worker model authentication and one task completed without an active chat; actual result, usage and durable journal/report. |
 | E4 — recovery and control | Restart an interrupted bounded task and verify remote-state-aware recovery; competing coordinator refused; engineering stop verified without changing trading state. |
 | E5 — repair and release | An actual authorized issue is reproduced, fixed, tested, merged after exact-head CI and verified on the exact deployed revision. |
