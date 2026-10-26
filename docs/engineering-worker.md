@@ -39,9 +39,10 @@ worker nor one passing latest-20 window guarantees the financial goal.
 
 ## Startup and operating controls
 
-The implementation lives under `ops/engineering/`. Configure its Dockerfile and
-Railway configuration explicitly for the new service; do not replace the trading
-service's root Dockerfile, command or health check.
+The implementation lives under `ops/engineering/`. Upload that directory as the
+new service's build root and set its service settings directly through Railway
+UI/API. Do not replace the trading service's root Dockerfile, command, health
+check or configuration mechanism.
 
 The operator must provide all activation inputs before unattended model work:
 
@@ -101,9 +102,11 @@ green image build or a responding health route.
 
 ## Credentials and authority
 
-Repository checkout/build access in Railway and runtime GitHub access are
-separate. Configure the engineering worker with its own repository-scoped
-credential when it needs to push branches, create PRs and inspect CI. The fact
+The worker source upload and runtime GitHub access are separate. The engineering
+service is not connected to the repository as a Railway build source: its image
+is uploaded from `ops/engineering/` alone. When enabled, the coordinator still
+needs its own repository-scoped credential to clone `ang-kl/jiaoyi`, push
+branches, create PRs and inspect CI. The fact
 that `gh` works in this managed chat environment does not demonstrate that the
 Railway worker can do those operations.
 
@@ -175,15 +178,29 @@ PF as a percentage or missing broker costs as zero.
 
 ## Railway deployment procedure
 
-The new worker has **not been deployed or authenticated** at this document's
-creation. These steps describe the intended deployment, not a completion claim.
+The separate `jiaoyi-engineering` service has been created in the existing
+project (service `ef9f73f0-5b65-4aba-9ce9-2d1582cb487c`) with a `/data` volume
+and `ENGINEERING_ENABLED=0`. Its image upload is pending at this update: it is
+**not yet verified deployed or authenticated**.
+
+Railway rejected the proposed `railwayConfigFile` setting with “Config as Code
+deprecated; use IaC.” The existing trading service is not migrated. Instead,
+this new service uses direct UI/API settings; the checked-in
+`ops/engineering/railway-service.json` is a reference and is **not auto-applied**.
+The procedure is:
 
 1. Review the worker PR and its actual check results. Keep the existing trading
    service and its settings unchanged.
-2. Add one separate service in the existing Railway project, sourced from
-   `ang-kl/jiaoyi`. Select the worker's `ops/engineering/railway.toml`
-   configuration and `ops/engineering/Dockerfile`; verify the resolved build and
-   start command target the engineering worker, not `jiaoyi`.
+2. Use the separate `jiaoyi-engineering` service without connecting the full
+   repository as its Railway source. Apply the direct service settings from
+   `ops/engineering/railway-service.json`: Dockerfile path `Dockerfile`, command
+   `python3 /app/worker.py serve`, `/health`, one replica, `ALWAYS` restart,
+   20-second draining and application sleep disabled. Upload only
+   `ops/engineering/` with Railway CLI `up --path-as-root`, explicitly targeting
+   the engineering service and production environment. The upload root makes
+   `ops/engineering/Dockerfile` become `Dockerfile` inside that build context and
+   prevents the trading service's root `railway.toml` from controlling this build.
+   Verify the resolved build and start command target the engineering worker.
 3. Attach a persistent volume at the state directory configured by the runner.
    Size it for the Rust registry/build cache, worktrees, isolated PostgreSQL and
    durable reports using measured needs and the owner's hosting allowance; no
@@ -266,12 +283,19 @@ bounded regular-file helper; symlinks, FIFOs and oversized files are rejected.
 Those checks protect the coordinator from treating arbitrary model-selected
 files as trusted metadata; they do not replace native sandbox verification.
 
-The normal service command is `python3 /app/worker.py serve`. The separate
-`ops/engineering/railway.toml` selects `ops/engineering/Dockerfile`, one replica,
-`ALWAYS` process restart and `/health`. Configure that custom config path in the
-new Railway service's Settings; otherwise the repository's root config targets
-the trading binary. A partially prepared service stays explicitly blocked or
-disabled rather than guessing missing values.
+The normal service command is `python3 /app/worker.py serve`. Apply the settings
+in `ops/engineering/railway-service.json` directly to this service; that JSON is
+reference material, not a deployment configuration that Railway reads
+implicitly. Build context is `ops/engineering/`, matching the CI command:
+
+```sh
+docker build --tag jiaoyi-engineering:ci ops/engineering
+```
+
+Do not upload the repository root or reuse its root `railway.toml` for this
+worker. The source context contains no trading binary or production config. A
+partially prepared service stays explicitly blocked or disabled rather than
+guessing missing values.
 
 ## Acceptance and milestone reports
 
