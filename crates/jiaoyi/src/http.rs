@@ -1,6 +1,7 @@
 //! HTTP on $PORT: `/` (the status page), `/health`, `/phase1/report`,
 //! `/research/inventory`, `/research/bars`, `/research/jobs`,
-//! `/research/trials`, `/trading/costs`, `/trading/orders` and `/trading/executions`. Read-only: no
+//! `/research/trials`, `/trading/costs`, `/trading/orders`, `/trading/executions`
+//! and `/operations/reports`. Read-only: no
 //! route writes.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,6 +41,8 @@ pub fn router(state: AppState) -> Router {
         .route("/trading/costs", get(trading_costs))
         .route("/trading/orders", get(trading_orders))
         .route("/trading/executions", get(trading_executions))
+        .route("/operations/reports", get(operations_reports))
+        .route("/operations", get(operations_page))
         .with_state(state)
 }
 
@@ -67,8 +70,33 @@ async fn health(State(s): State<AppState>) -> Response {
     {
         Ok(mut v) => {
             v["history_sync"] = serde_json::to_value(history).unwrap_or_default();
+            let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+            v["supervision"] = match crate::supervisor::reports(&s.pool, &accounts).await {
+                Ok(mut report) => {
+                    report.as_object_mut().unwrap().remove("recent_events");
+                    report["reports_url"] = json!("/operations/reports");
+                    report
+                }
+                Err(_) => json!({"state": "unavailable", "reports_url": "/operations/reports"}),
+            };
             Json(v).into_response()
         }
+        Err(e) => unavailable(e),
+    }
+}
+
+async fn operations_reports(State(s): State<AppState>) -> Response {
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    match crate::supervisor::reports(&s.pool, &accounts).await {
+        Ok(reports) => Json(reports).into_response(),
+        Err(e) => unavailable(e),
+    }
+}
+
+async fn operations_page(State(s): State<AppState>) -> Response {
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    match crate::supervisor::reports(&s.pool, &accounts).await {
+        Ok(reports) => Html(crate::operations::page(&reports)).into_response(),
         Err(e) => unavailable(e),
     }
 }

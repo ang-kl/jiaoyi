@@ -17,7 +17,7 @@ use jiaoyi_ctrader::messages::{
     ProtoOaClosePositionDetail, ProtoOaDeal, ProtoOaLightSymbol, ProtoOaPayloadType, ProtoOaSymbol,
     ProtoOaTrader,
 };
-use jiaoyi_ctrader::testkit::{d1_bar, FakeBroker};
+use jiaoyi_ctrader::testkit::{d1_bar, FakeBroker, ScriptedDealReply};
 use jiaoyi_store::{self as store, settings};
 use serde_json::json;
 use sqlx::PgPool;
@@ -204,6 +204,357 @@ async fn sync_as(
         .await
         .unwrap();
     log
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn recent_deals_progress_during_backfill_and_between_full_passes(pool: PgPool) {
+    prepare(&pool).await;
+    settings::change(
+        &pool,
+        "history.probe_years",
+        None,
+        Some(json!(0)),
+        "test",
+        "no probe",
+    )
+    .await
+    .unwrap();
+    let mut f = fake();
+    let mut closing = f.deals[1];
+    closing.deal_id = 4;
+    closing.position_id = 99;
+    closing.order_id = 1004;
+    closing.create_timestamp = Utc::now().timestamp_millis() + 600;
+    closing.execution_timestamp = closing.create_timestamp;
+    let closing_at = closing.execution_timestamp;
+    f.deals[2].position_id = 99;
+    f.deals.push(closing);
+    let (conn, log) = f.spawn();
+    let account = permitted();
+    let session = loader::authorise(&pool, &conn, &broker(), &account)
+        .await
+        .unwrap();
+    let status = history::HistoryStatusMap::default();
+    let (trigger, stop) = shutdown::channel();
+    let ticks = TickHistory::Off {
+        reason: "test: no tick download".into(),
+    };
+    let maintain = history::maintain_account(
+        &pool,
+        &session,
+        &account,
+        &ticks,
+        &status,
+        &stop,
+        std::time::Duration::from_millis(40),
+    );
+    let observe = async {
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            loop {
+                let count: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM deals WHERE account_id=$1 AND deal_id=4",
+                )
+                .bind(A)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                if count == 1 {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("a closing deal becomes visible without another full tick pass");
+        assert!(
+            status
+                .lock()
+                .unwrap()
+                .get(&A)
+                .unwrap()
+                .last_sync_finished_at
+                .is_none(),
+            "a recent close is fetched while the older backfill is still active"
+        );
+        tokio::time::timeout(std::time::Duration::from_secs(12), async {
+            while status
+                .lock()
+                .unwrap()
+                .get(&A)
+                .unwrap()
+                .last_sync_finished_at
+                .is_none()
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("the full pass also continues while recent reads use the limiter");
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM deals WHERE account_id=$1 AND deal_id=4")
+                .bind(A)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            count, 1,
+            "overlapping polls retain one account/deal identity"
+        );
+        let full_reads: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM trader_reads WHERE account_id=$1")
+                .bind(A)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            full_reads, 1,
+            "the six-hour full pass is not repeated by the deal timer"
+        );
+        let st = status.lock().unwrap().get(&A).unwrap().clone();
+        assert!(
+            st.last_sync_finished_at.is_some(),
+            "the initial full pass completed"
+        );
+        assert!(st.deal_sync_through.unwrap().timestamp_millis() >= closing_at);
+        assert!(st.last_deal_sync_finished_at.is_some());
+        assert!(st.last_deal_sync_error.is_none());
+        let log = log.lock().unwrap();
+        assert!(
+            log.deal_requests.len() >= 3,
+            "initial, full and repeated recent reads occurred"
+        );
+        assert!(
+            log.tick_requests.is_empty(),
+            "tick-history off remains respected"
+        );
+        assert_eq!(log.account_auths, [A], "one shared session is reused");
+        trigger.fire();
+    };
+    let (result, ()) = tokio::join!(maintain, observe);
+    result.unwrap();
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_recent_deal_poll_rejects_a_different_accounts_session(pool: PgPool) {
+    prepare(&pool).await;
+    let other = A + 1;
+    store::upsert_account(&pool, other, Environment::Demo)
+        .await
+        .unwrap();
+    let other_account = Allowlist::parse(Some(&other.to_string()))
+        .unwrap()
+        .permit(other)
+        .unwrap();
+    let (conn, log) = fake().spawn();
+    let account = permitted();
+    let session = loader::authorise(&pool, &conn, &broker(), &account)
+        .await
+        .unwrap();
+    let error = history::refresh_recent_deals(&pool, &session, &other_account, &Default::default())
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("does not belong"));
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM deals WHERE account_id=$1")
+        .bind(other)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    assert!(log.lock().unwrap().deal_requests.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn recent_deals_are_not_starved_by_an_active_tick_download(pool: PgPool) {
+    prepare(&pool).await;
+    settings::change(
+        &pool,
+        "history.probe_years",
+        None,
+        Some(json!(0)),
+        "test",
+        "no probe",
+    )
+    .await
+    .unwrap();
+    let mut f = fake();
+    let account = permitted();
+    sync_as(
+        &pool,
+        f.clone(),
+        &account,
+        &TickHistory::Off {
+            reason: "seed historical deal coverage only".into(),
+        },
+        &Default::default(),
+    )
+    .await;
+    // A long, multi-page tick window remains active while the new deal
+    // becomes visible. Both kinds of reads use the same historical limiter.
+    f.max_ticks_per_response = 1;
+    let mut closing = f.deals[1];
+    closing.deal_id = 4;
+    closing.position_id = 99;
+    closing.order_id = 1004;
+    closing.execution_timestamp = Utc::now().timestamp_millis() + 2500;
+    closing.create_timestamp = closing.execution_timestamp;
+    let closing_at = closing.execution_timestamp;
+    f.deals.push(closing);
+    let (conn, log) = f.spawn();
+    let session = loader::authorise(&pool, &conn, &broker(), &account)
+        .await
+        .unwrap();
+    let status = history::HistoryStatusMap::default();
+    let (trigger, stop) = shutdown::channel();
+    let maintain = history::maintain_account(
+        &pool,
+        &session,
+        &account,
+        &TickHistory::On,
+        &status,
+        &stop,
+        std::time::Duration::from_millis(100),
+    );
+    let observe = async {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let n: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM deals WHERE account_id=$1 AND deal_id=4",
+                )
+                .bind(A)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                if n == 1 {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("recent deal polling must progress while tick history is active");
+        assert!(status
+            .lock()
+            .unwrap()
+            .get(&A)
+            .unwrap()
+            .last_sync_finished_at
+            .is_none());
+        let log = log.lock().unwrap();
+        assert!(
+            !log.tick_requests.is_empty(),
+            "a tick download actually started"
+        );
+        assert!(
+            log.deal_requests[0].1 < closing_at,
+            "the initial poll did not already include the new deal"
+        );
+        assert_eq!(
+            log.account_auths,
+            [A],
+            "the timer reuses the full pass's session"
+        );
+        trigger.fire();
+    };
+    let (result, ()) = tokio::join!(maintain, observe);
+    result.unwrap();
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn delayed_full_deal_reply_cannot_overwrite_a_newer_fee_revision(pool: PgPool) {
+    prepare(&pool).await;
+    settings::change(
+        &pool,
+        "history.probe_years",
+        None,
+        Some(json!(0)),
+        "test",
+        "no probe",
+    )
+    .await
+    .unwrap();
+    let mut f = fake();
+    let mut old = f.deals[1];
+    old.execution_timestamp = Utc::now().timestamp_millis() - 3_600_000;
+    old.create_timestamp = old.execution_timestamp;
+    // No version stamp is supplied: request/write serialization, not guessed
+    // broker version semantics, must retain the newest complete response.
+    old.utc_last_update_timestamp = None;
+    let mut newer = old;
+    newer.close_position_detail.as_mut().unwrap().commission = -800;
+    f.trader.as_mut().unwrap().registration_timestamp =
+        Some(Utc::now().timestamp_millis() - 86_400_000);
+    f.max_deals_per_response = 0;
+    f.deals = vec![newer];
+    f.scripted_deal_replies.lock().unwrap().extend([
+        ScriptedDealReply {
+            delay: std::time::Duration::ZERO,
+            deals: vec![old],
+        },
+        ScriptedDealReply {
+            delay: std::time::Duration::from_secs(1),
+            deals: vec![old],
+        },
+        ScriptedDealReply {
+            delay: std::time::Duration::ZERO,
+            deals: vec![newer],
+        },
+    ]);
+    let (conn, log) = f.spawn();
+    let account = permitted();
+    let session = loader::authorise(&pool, &conn, &broker(), &account)
+        .await
+        .unwrap();
+    let status = history::HistoryStatusMap::default();
+    let (trigger, stop) = shutdown::channel();
+    let off = TickHistory::Off {
+        reason: "deal ordering fixture".into(),
+    };
+    let maintain = history::maintain_account(
+        &pool,
+        &session,
+        &account,
+        &off,
+        &status,
+        &stop,
+        std::time::Duration::from_millis(40),
+    );
+    let observe = async {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while log.lock().unwrap().deal_requests.len() < 2 {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        assert_eq!(
+            log.lock().unwrap().deal_requests.len(),
+            2,
+            "a poll cannot overtake a full-window read whose older response is not durable yet"
+        );
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let fee: Option<i64> = sqlx::query_scalar(
+                    "SELECT close_commission FROM deals WHERE account_id=$1 AND deal_id=2",
+                )
+                .bind(A)
+                .fetch_optional(&pool)
+                .await
+                .unwrap()
+                .flatten();
+                if fee == Some(-800) {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("the newer revision follows the older write and remains authoritative");
+        trigger.fire();
+    };
+    let (result, ()) = tokio::join!(maintain, observe);
+    result.unwrap();
 }
 
 /// The plan as deployed on 25-10-2026 with A named only by a demo variable:

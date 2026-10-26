@@ -5,7 +5,7 @@
 //! There are no broker credentials where this code is built; every frame the
 //! fake sends is constructed from the .proto definitions, not recorded.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -14,6 +14,14 @@ use prost::Message;
 use crate::client::Connection;
 use crate::frame::{read_frame, write_frame};
 use crate::pb::{self, ProtoMessage, ProtoOaPayloadType as Oa, ProtoPayloadType as Common};
+
+/// A history-response revision, optionally delayed while the connection
+/// remains free to answer another correlated read.
+#[derive(Debug, Clone)]
+pub struct ScriptedDealReply {
+    pub delay: Duration,
+    pub deals: Vec<pb::ProtoOaDeal>,
+}
 
 /// One scripted spot update: (bid, ask), either side may be absent.
 pub type SidedQuote = (Option<u64>, Option<u64>);
@@ -57,6 +65,8 @@ pub struct FakeBroker {
     pub block_ticks_before: Option<i64>,
     /// Deal history of the account.
     pub deals: Vec<pb::ProtoOaDeal>,
+    /// Ordered read snapshots, shared by clones. Empty means `deals` as usual.
+    pub scripted_deal_replies: Arc<Mutex<VecDeque<ScriptedDealReply>>>,
     /// At most this many deals per response (0 = unlimited); more sets hasMore.
     pub max_deals_per_response: usize,
     /// The trader record; a default one when `None`.
@@ -627,8 +637,11 @@ impl FakeBroker {
                             req.to_timestamp.unwrap_or(i64::MAX),
                         );
                         log2.lock().unwrap().deal_requests.push((from, to));
-                        let mut deals: Vec<pb::ProtoOaDeal> = self
-                            .deals
+                        let scripted = self.scripted_deal_replies.lock().unwrap().pop_front();
+                        let (delay, available) = scripted
+                            .map(|r| (r.delay, r.deals))
+                            .unwrap_or_else(|| (Duration::ZERO, self.deals.clone()));
+                        let mut deals: Vec<pb::ProtoOaDeal> = available
                             .iter()
                             .filter(|d| {
                                 d.execution_timestamp >= from && d.execution_timestamp <= to
@@ -642,7 +655,7 @@ impl FakeBroker {
                             deals.truncate(self.max_deals_per_response);
                             has_more = true;
                         }
-                        out.push(reply(
+                        let message = reply(
                             id,
                             Oa::ProtoOaDealListRes as i32,
                             pb::ProtoOaDealListRes {
@@ -652,7 +665,16 @@ impl FakeBroker {
                                 has_more,
                             }
                             .encode_to_vec(),
-                        ));
+                        );
+                        if delay.is_zero() {
+                            out.push(message);
+                        } else {
+                            let writer = wr.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(delay).await;
+                                let _ = write_frame(&mut *writer.lock().await, &message).await;
+                            });
+                        }
                     } else if pt == Oa::ProtoOaTraderReq as i32 {
                         let trader = self.trader.clone().unwrap_or(pb::ProtoOaTrader {
                             ctid_trader_account_id: self.account_id,
