@@ -1538,6 +1538,129 @@ async fn an_unconfirmed_strategy_3_open_adopted_at_reconcile_is_listed(pool: PgP
     });
 }
 
+fn second_prepared_crypto(t: &mut strategy3::Trader<'_, '_>) -> i64 {
+    // Two independent USD-quoted crypto symbols use the same deterministic
+    // price/session fixture; their broker identities and retry state differ.
+    let id = BTC + 1;
+    let mut other = t.syms[&BTC].clone();
+    other.id = id;
+    other.name = "ETHUSD".into();
+    other.last_try = None;
+    t.syms.insert(id, other);
+    id
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn account_funding_rejection_backs_off_other_symbols_then_retries(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_orders: Some("NOT_ENOUGH_MONEY".into()),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let other = second_prepared_crypto(&mut t);
+        t.on_quote(
+            other,
+            Some(60_455.0),
+            Some(60_460.0),
+            at(45) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            orders(&log).len(),
+            1,
+            "an account funding rejection suppresses other entry attempts"
+        );
+        t.on_quote(
+            other,
+            Some(60_500.0),
+            Some(60_505.0),
+            at(46) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            orders(&log).len(),
+            2,
+            "the existing retry interval expires; no owner pause is written"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn symbol_rejection_does_not_back_off_other_symbols(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_orders: Some("MARKET_CLOSED".into()),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let other = second_prepared_crypto(&mut t);
+        t.on_quote(
+            other,
+            Some(60_455.0),
+            Some(60_460.0),
+            at(45) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            orders(&log).len(),
+            2,
+            "a symbol rejection does not declare the account unfunded"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn funding_backoff_keeps_the_open_positions_tp1(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+    });
+    f.reject_orders = Some("NOT_ENOUGH_MONEY".into());
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.prepare(BTC, today(), at(45)).await;
+        let other = second_prepared_crypto(&mut t);
+        t.on_quote(
+            other,
+            Some(60_455.0),
+            Some(60_460.0),
+            at(45) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            orders(&log).len(),
+            1,
+            "one rejected entry on the new connection"
+        );
+        t.on_quote(
+            BTC,
+            Some(62_113.21),
+            Some(62_118.0),
+            at(45) + Duration::seconds(2),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            1,
+            "TP1 proceeds during funding backoff"
+        );
+    });
+}
+
 /// A broker rejection is listed with nothing filled.
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_rejected_strategy_3_open_is_listed_with_nothing_filled(pool: PgPool) {

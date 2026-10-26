@@ -605,6 +605,9 @@ pub struct Trader<'a, 'c> {
     pub commission: Result<costs::CommissionBook, String>,
     commission_read: Option<std::time::Instant>,
     pending: Vec<Pending>,
+    /// A broker funding rejection applies to this account, across symbols.
+    /// Only entry retries wait; existing positions keep every exit.
+    funding_retry_at: Option<DateTime<Utc>>,
     /// Program positions on the account at the last reconcile (any strategy).
     program_positions: usize,
     pub d: Decisions<'a>,
@@ -694,6 +697,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             commission: Err("not read yet".into()),
             commission_read: None,
             pending: Vec::new(),
+            funding_retry_at: None,
             program_positions: 0,
             d: Decisions::new(pool, account_id),
             hash: prereg_hash(),
@@ -1511,6 +1515,17 @@ impl<'a, 'c> Trader<'a, 'c> {
         {
             return Ok(());
         }
+        if let Some(retry_at) = self.funding_retry_at.filter(|t| now < *t) {
+            self.d
+                .note(
+                    Some(&name),
+                    "funding_backoff",
+                    "the broker rejected an entry for insufficient funds: account entry retries wait; exits continue",
+                    json!({"retry_at": retry_at}),
+                )
+                .await;
+            return Ok(());
+        }
         self.prepare(symbol_id, s, now).await;
         let sym = self.syms[&symbol_id].clone();
         let day = match &sym.day {
@@ -1770,6 +1785,11 @@ impl<'a, 'c> Trader<'a, 'c> {
                 // the same).
                 // Claude · № 17,060 25-Oct (ordered: owner "merge when green
                 // and deploy"; Codex round 3 on #15)
+                if matches!(&sent.outcome, Outcome::Rejected { code: Some(code), .. } if code == "NOT_ENOUGH_MONEY")
+                {
+                    self.funding_retry_at =
+                        Some(now + chrono::Duration::from_std(ENTRY_RETRY).unwrap_or_default());
+                }
                 if matches!(sent.outcome, Outcome::Filled { .. }) || partly_filled(&sent) {
                     self.reconcile(Utc::now()).await?;
                 } else if matches!(sent.outcome, Outcome::Unconfirmed) {
