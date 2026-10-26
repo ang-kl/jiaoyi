@@ -88,6 +88,65 @@ async fn supervisor_reports_survive_restart_and_heartbeat_without_poll_spam(pool
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
+async fn unchanged_fractional_metrics_do_not_flood_recent_events(pool: PgPool) {
+    let now = Utc::now() - Duration::minutes(10);
+    let mut original = assessment(A, "s3", 20);
+    // Values observed in public reports: decoding the stored JSON can change
+    // their final binary digit even though the computed assessment is unchanged.
+    original["window"]["profit_factor"] = json!(1.1034585194393083);
+    original["window"]["realized_payoff"] = json!(9.361774283725401);
+    original["sample_identity"] = json!("same-window");
+    original["assessed_at"] = json!(now);
+    assert!(
+        supervisor::record_report(&pool, A, "s3", original.clone(), now)
+            .await
+            .unwrap()
+    );
+    let mut next_poll = original.clone();
+    next_poll["assessed_at"] = json!(now + Duration::seconds(60));
+    assert!(
+        !supervisor::record_report(&pool, A, "s3", next_poll, now + Duration::seconds(60))
+            .await
+            .unwrap(),
+        "identical fractional metrics must not create another assessment-change event"
+    );
+    // The unchanged window still receives its durable heartbeat.
+    assert!(supervisor::record_report(
+        &pool,
+        A,
+        "s3",
+        original.clone(),
+        now + Duration::seconds(supervisor::HEARTBEAT_SECS)
+    )
+    .await
+    .unwrap());
+    let view = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(view["reports"][1]["report"]["report_type"], "heartbeat");
+    assert_eq!(view["recent_events"].as_array().unwrap().len(), 1);
+
+    // Keep detecting real metric changes, even with the same cohort identity.
+    // A one-bit change is not discarded by rounding or a numeric tolerance.
+    let previous = original["window"]["profit_factor"].as_f64().unwrap();
+    original["window"]["profit_factor"] = json!(f64::from_bits(previous.to_bits() + 1));
+    original["assessed_at"] = json!(now + Duration::seconds(301));
+    assert!(
+        supervisor::record_report(&pool, A, "s3", original, now + Duration::seconds(301))
+            .await
+            .unwrap()
+    );
+    let view = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(view["recent_events"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        view["recent_events"][0]["report"]["report_type"],
+        "assessment_changed"
+    );
+    assert_eq!(
+        view["recent_events"][0]["report"]["milestones_newly_reached"],
+        json!([])
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
 async fn unavailable_evidence_and_recovery_do_not_reannounce_old_milestones(pool: PgPool) {
     let now = Utc::now();
     supervisor::record_report(&pool, A, "s3", assessment(A, "s3", 20), now)
@@ -112,6 +171,114 @@ async fn unavailable_evidence_and_recovery_do_not_reannounce_old_milestones(pool
         .unwrap();
     assert_eq!(latest["milestones_newly_reached"], json!([]));
     assert_eq!(latest["milestone_high_water"], 20);
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn last_success_survives_failures_heartbeats_and_legacy_reports(pool: PgPool) {
+    let start = Utc::now() - Duration::minutes(20);
+    let unavailable = |account| {
+        json!({
+            "account_id": account, "strategy":"s3", "state":"unknown",
+            "missing_reasons":["assessment_unavailable"]
+        })
+    };
+    // A completed computation can report unknown financial evidence. Its
+    // success clock says nothing about goal acceptance or broker freshness.
+    let mut completed = assessment(A, "s3", 20);
+    completed["assessed_at"] = json!(start);
+    completed["state"] = json!("unknown");
+    completed["missing_reasons"] = json!(["no broker-history fetch receipt is stored"]);
+    supervisor::record_report(&pool, A, "s3", completed.clone(), start)
+        .await
+        .unwrap();
+    let report = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(
+        report["reports"][1]["report"]["last_success_at"],
+        json!(start)
+    );
+
+    // A rolling deployment can inherit a successful report from the old
+    // version, which did not store the new field.
+    sqlx::query("INSERT INTO trading_decisions(account_id,kind,reason,detail) SELECT account_id,kind,reason,detail-'last_success_at' FROM trading_decisions WHERE account_id=$1 ORDER BY id DESC LIMIT 1")
+        .bind(A).execute(&pool).await.unwrap();
+    for seconds in [1, 301] {
+        assert!(supervisor::record_report(
+            &pool,
+            A,
+            "s3",
+            unavailable(A),
+            start + Duration::seconds(seconds)
+        )
+        .await
+        .unwrap());
+        let report = supervisor::reports(&pool, &[A]).await.unwrap();
+        let detail = &report["reports"][1]["report"];
+        assert_eq!(detail["last_success_at"], json!(start));
+        assert_eq!(detail["milestones_newly_reached"], json!([]));
+    }
+    let recovered_at = start + Duration::seconds(302);
+    completed["assessed_at"] = json!(recovered_at);
+    supervisor::record_report(&pool, A, "s3", completed, recovered_at)
+        .await
+        .unwrap();
+    let report = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(
+        report["reports"][1]["report"]["last_success_at"],
+        json!(recovered_at)
+    );
+
+    // Failure on first observation, including a legacy failure heartbeat,
+    // has no known successful computation. A fresh caller must preserve null.
+    supervisor::record_report(&pool, B, "s3", unavailable(B), start)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO trading_decisions(account_id,kind,reason,detail) SELECT account_id,kind,reason,detail-'last_success_at' FROM trading_decisions WHERE account_id=$1 ORDER BY id DESC LIMIT 1")
+        .bind(B).execute(&pool).await.unwrap();
+    supervisor::record_report(
+        &pool,
+        B,
+        "s3",
+        unavailable(B),
+        start + Duration::seconds(300),
+    )
+    .await
+    .unwrap();
+    let report = supervisor::reports(&pool, &[B]).await.unwrap();
+    assert_eq!(
+        report["reports"][1]["report"]["last_success_at"],
+        Value::Null
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn unavailable_report_cannot_inherit_a_future_legacy_success_clock(pool: PgPool) {
+    let now = Utc::now() - Duration::minutes(1);
+    let mut completed = assessment(A, "s3", 20);
+    completed["assessed_at"] = json!(now);
+    supervisor::record_report(&pool, A, "s3", completed.clone(), now + Duration::hours(1))
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO trading_decisions(account_id,kind,reason,detail) SELECT account_id,kind,reason,detail-'last_success_at' FROM trading_decisions WHERE account_id=$1 ORDER BY id DESC LIMIT 1")
+        .bind(A).execute(&pool).await.unwrap();
+    let unavailable = json!({"account_id":A,"strategy":"s3","state":"unknown","missing_reasons":["assessment_unavailable"]});
+    supervisor::record_report(&pool, A, "s3", unavailable, now)
+        .await
+        .unwrap();
+    let report = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(
+        report["reports"][1]["report"]["last_success_at"],
+        Value::Null
+    );
+    let recovered_at = now + Duration::seconds(1);
+    completed["assessed_at"] = json!(recovered_at);
+    supervisor::record_report(&pool, A, "s3", completed, recovered_at)
+        .await
+        .unwrap();
+    let report = supervisor::reports(&pool, &[A]).await.unwrap();
+    assert_eq!(
+        report["reports"][1]["report"]["last_success_at"],
+        json!(recovered_at)
+    );
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
@@ -169,11 +336,16 @@ async fn fresh_poll_repairs_future_report_clock_without_waiting_for_wall_time(po
         .unwrap();
     let before = supervisor::reports(&pool, &[A]).await.unwrap();
     assert_eq!(before["reports"][1]["monitor_state"], "clock_unknown");
+    assert_eq!(
+        before["reports"][1]["report"]["last_success_at"],
+        Value::Null
+    );
     assert!(supervisor::record_report(&pool, A, "s3", a.clone(), now)
         .await
         .unwrap());
     let after = supervisor::reports(&pool, &[A]).await.unwrap();
     assert_eq!(after["reports"][1]["monitor_state"], "alive");
+    assert_eq!(after["reports"][1]["report"]["last_success_at"], json!(now));
     assert_eq!(
         after["reports"][1]["report"]["report_type"],
         "clock_recovery"

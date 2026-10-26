@@ -73,6 +73,10 @@ async fn operations_reports_are_read_only_and_account_scoped(pool: PgPool) {
     for row in reports {
         assert_eq!(row["account_id"], account);
     }
+    assert_eq!(
+        reports[1]["report"]["last_success_at"],
+        json!(first_check + Duration::seconds(301))
+    );
     let events = value["recent_events"].as_array().unwrap();
     assert_eq!(
         events.len(),
@@ -98,7 +102,8 @@ async fn operations_reports_are_read_only_and_account_scoped(pool: PgPool) {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let html = std::str::from_utf8(&body).unwrap();
     assert!(html.contains("Continuous assessment"));
-    assert!(html.contains("External push delivery is not configured"));
+    assert!(html.contains("Telegram HTML summaries use their separate schedules"));
+    assert!(html.contains("this page does not imply an immediate alert was delivered"));
     assert!(html.contains("Recent milestones and assessment changes"));
     let response = app
         .oneshot(
@@ -121,4 +126,20 @@ fn operations_page_escapes_report_text() {
     }));
     assert!(!page.contains("<script>untrusted</script>"));
     assert!(page.contains("&lt;script&gt;untrusted&lt;/script&gt;"));
+}
+
+#[test]
+fn operations_page_shows_last_success_separately_from_failure_time() {
+    let page = jiaoyi::operations::page(&json!({
+        "reports":[{"account_id":1,"strategy":"s3","monitor_state":"alive",
+        "checked_at":"2026-10-26T17:05:00Z",
+        "report":{"last_success_at":"2026-10-26T17:00:00Z",
+        "assessment":{"state":"unknown","missing_reasons":["assessment_unavailable"]}}},
+        {"account_id":2,"strategy":"s3","report":{"last_success_at":null}}]
+    }));
+    assert!(page.contains("Last completed assessment"));
+    assert!(page.contains("27-10-2026 01:05:00 SGT</td><td>27-10-2026 01:00:00 SGT"));
+    assert!(page.contains("assessment_unavailable"));
+    assert!(page.contains("not recorded"));
+    assert!(page.contains("a completed computation can still report unknown broker evidence"));
 }

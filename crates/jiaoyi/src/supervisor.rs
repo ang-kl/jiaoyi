@@ -38,25 +38,14 @@ fn valid_strategy(strategy: &str) -> Result<(), sqlx::Error> {
     }
 }
 
-fn basis(mut assessment: Value) -> Value {
-    if let Some(a) = assessment.as_object_mut() {
-        // A successful history refresh can advance its receipt clock without
-        // changing the cohort or evidence verdict. Keep semantic freshness
-        // (history_complete/state/missing_reasons), not those moving clocks.
-        for key in [
-            "assessed_at",
-            "history_fetched_at",
-            "history_through",
-            "history_window_from",
-        ] {
-            a.remove(key);
-        }
-    }
-    assessment
-}
-
 fn timestamp(value: &Value) -> Option<DateTime<Utc>> {
     value.as_str()?.parse().ok()
+}
+
+fn assessment_unavailable(assessment: &Value) -> bool {
+    assessment["missing_reasons"]
+        .as_array()
+        .is_some_and(|reasons| reasons.iter().any(|r| r == "assessment_unavailable"))
 }
 
 /// Persist a changed assessment or a bounded heartbeat. This is not a broker
@@ -85,15 +74,28 @@ pub async fn record_report(
         .bind(format!("jiaoyi:supervisor-report:{account_id}:{strategy}"))
         .execute(&mut *tx)
         .await?;
-    let previous: Option<Value> = sqlx::query_scalar(
-        "SELECT detail FROM trading_decisions WHERE account_id = $1 AND kind = $2
+    // Compare the stored and incoming JSONB directly: decoding a stored JSON
+    // number to f64 can shift its last bit and falsely announce a changed
+    // assessment on every poll. JSONB compares exact numeric values without
+    // rounding away real metric changes. Only moving receipt clocks are
+    // excluded; freshness verdicts, cohort identity and missing evidence stay.
+    let previous = sqlx::query(
+        "SELECT detail,
+           ((detail->'assessment') - ARRAY['assessed_at', 'history_fetched_at',
+              'history_through', 'history_window_from'])
+           IS DISTINCT FROM
+           ($3::jsonb - ARRAY['assessed_at', 'history_fetched_at',
+              'history_through', 'history_window_from']) AS assessment_changed
+         FROM trading_decisions WHERE account_id = $1 AND kind = $2
          ORDER BY id DESC LIMIT 1",
     )
     .bind(account_id)
     .bind(report_kind)
+    .bind(&assessment)
     .fetch_optional(&mut *tx)
     .await?;
-    let previous_detail = previous.as_ref();
+    let previous_detail = previous.as_ref().map(|row| row.get::<Value, _>("detail"));
+    let previous_detail = previous_detail.as_ref();
     let previous_check = previous_detail.and_then(|d| timestamp(&d["checked_at"]));
     let wall_now = Utc::now();
     let previous_clock_is_future = previous_check.is_some_and(|last| last > wall_now);
@@ -114,10 +116,9 @@ pub async fn record_report(
             return Ok(false);
         }
     }
-    let current_basis = basis(assessment.clone());
-    let changed = previous_detail
-        .and_then(|d| d.get("assessment"))
-        .is_none_or(|a| basis(a.clone()) != current_basis);
+    let changed = previous
+        .as_ref()
+        .is_none_or(|row| row.get::<bool, _>("assessment_changed"));
     let heartbeat_due = previous_check.is_none_or(|last| {
         let age = checked_at.signed_duration_since(last).num_seconds();
         previous_clock_is_future || age >= HEARTBEAT_SECS
@@ -126,6 +127,20 @@ pub async fn record_report(
         tx.commit().await?;
         return Ok(false);
     }
+    // This records a completed computation, even if it found unknown broker
+    // evidence. Failure heartbeats must not masquerade as successful checks.
+    // Use only durable evidence, including during restart/rolling deployment;
+    // an old report without this field can prove its own successful check.
+    let previous_success = previous_detail.and_then(|d| match d.get("last_success_at") {
+        Some(at) => timestamp(at),
+        None if !assessment_unavailable(&d["assessment"]) => timestamp(&d["checked_at"]),
+        None => None,
+    });
+    let last_success_at = if !assessment_unavailable(&assessment) && checked_at <= wall_now {
+        Some(checked_at)
+    } else {
+        previous_success.filter(|at| *at <= wall_now && *at <= checked_at)
+    };
     let count = assessment["measured_closed_positions"]
         .as_u64()
         .unwrap_or(0);
@@ -161,6 +176,7 @@ pub async fn record_report(
         "supervisor": "railway_assessment_supervisor",
         "strategy": strategy,
         "checked_at": checked_at,
+        "last_success_at": last_success_at,
         "report_type": report_type,
         "milestones_newly_reached": milestones,
         "milestone_high_water": count.max(previous_count),
@@ -345,8 +361,9 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
         "heartbeat_interval_secs": HEARTBEAT_SECS,
         "stale_after_secs": STALE_AFTER_SECS,
         "checked_at_meaning": "last persisted assessment; unchanged reports are heartbeated every five minutes",
+        "last_success_at_meaning": "last persisted completed assessment computation, including unknown broker evidence; assessment_unavailable does not advance it; null means no known successful check",
         "monitor_state_meaning": "recency of persisted assessment, not broker-loop liveness or a goal-acceptance verdict",
-        "report_delivery": "durable decision history and this read-only route; external push delivery is not configured",
+        "report_delivery": "durable decision history and this read-only route; owner Telegram HTML summaries use separate schedules and receipts",
         "authority": {
             "broker_actions": false,
             "automatic_pause": false,
