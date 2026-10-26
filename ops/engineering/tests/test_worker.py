@@ -1,4 +1,6 @@
 import concurrent.futures
+import contextlib
+import io
 import importlib.util
 import json
 import os
@@ -58,6 +60,24 @@ class WorkerTests(Fixture, unittest.TestCase):
         self.assertNotIn("private-key", json.dumps(s))
         self.assertEqual(s["execution_boundary"], {"mode": "codex", "verified": None})
         self.assertEqual(len(s["worker_source_sha256"]), 64)
+
+    def test_model_discovery_only_reads_metadata_and_keeps_key_out_of_logs(self):
+        c = w.Coordinator(self.config(OPENAI_API_KEY="private-model-key"))
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self, _): return b'{"data":[{"id":"gpt-coding-model"}]}'
+        def request(req, timeout):
+            self.assertEqual(req.full_url, "https://api.openai.com/v1/models")
+            self.assertEqual(req.get_method(), "GET")
+            self.assertEqual(req.get_header("Authorization"), "Bearer private-model-key")
+            return Response()
+        log = io.StringIO()
+        with patch.object(w.urllib.request, "urlopen", side_effect=request), contextlib.redirect_stdout(log):
+            c.discover_models()
+        self.assertIn("gpt-coding-model", log.getvalue())
+        self.assertNotIn("private-model-key", log.getvalue())
+        self.assertEqual(c.catalog_state, "available_in_private_logs")
 
     def test_recovery_preserves_quota_and_selects_ci_repair(self):
         first = self.store.enqueue("reproduce failure")
@@ -162,6 +182,38 @@ class WorkerTests(Fixture, unittest.TestCase):
             self.assertFalse(t.is_alive())
         self.assertEqual(self.store.used(), 0)
         self.assertEqual(self.store.jobs(), [])
+
+    def test_first_enabled_job_is_bounded_acceptance_and_consumes_one_reservation(self):
+        c = w.Coordinator(self.config(PORT="18948", ENGINEERING_ENABLED="1", OPENAI_API_KEY="fake",
+            GH_TOKEN="fake", RAILWAY_TOKEN="fake", ENGINEERING_MODEL="fake-model",
+            ENGINEERING_DAILY_SESSION_LIMIT="1", ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap"))
+        def model(job, _):
+            self.assertEqual(job["task"], w.ACCEPTANCE_TASK)
+            c.store.update(job["id"], "completed", result="simulated acceptance")
+            c.shutdown.set()
+        with patch.object(c, "prepare", return_value=self.root), patch.object(c, "run_job", side_effect=model) as launch:
+            c.serve()
+        self.assertEqual(launch.call_count, 1)
+        self.assertEqual(self.store.used(), 1)
+
+    def test_failed_acceptance_prevents_routine_model_work(self):
+        jid = self.store.enqueue(w.ACCEPTANCE_TASK)
+        self.store.update(jid, "failed", result="capability missing")
+        self.store.enqueue("later engineering task")
+        c = w.Coordinator(self.config(PORT="18949", ENGINEERING_ENABLED="1", OPENAI_API_KEY="fake",
+            GH_TOKEN="fake", RAILWAY_TOKEN="fake", ENGINEERING_MODEL="fake-model",
+            ENGINEERING_DAILY_SESSION_LIMIT="2", ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap"))
+        timer = threading.Timer(0.25, c.shutdown.set)
+        timer.start()
+        try:
+            with patch.object(c, "prepare") as prepare, patch.object(c, "run_job") as model:
+                c.serve()
+                prepare.assert_not_called()
+                model.assert_not_called()
+        finally:
+            timer.cancel()
+        self.assertEqual(c.phase, "acceptance_blocked")
+        self.assertEqual(self.store.used(), 0)
 
 
 class ReleaseTests(Fixture, unittest.TestCase):

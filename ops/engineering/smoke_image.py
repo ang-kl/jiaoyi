@@ -12,7 +12,11 @@ os.umask(0o022)
 
 
 def run(*args, cwd=None):
-    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+    p = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    if p.returncode:
+        print(p.stderr, flush=True)
+        p.check_returncode()
+    return p.stdout.strip()
 
 
 with tempfile.TemporaryDirectory(prefix="engineering-smoke-") as temp:
@@ -63,6 +67,12 @@ else:
                            env=probe_env, user=c.uid, group=c.gid, capture_output=True, text=True)
     assert probe.stdout.splitlines()[0] == str(script), "simulated CLI is not executable; refuse real model fallback"
     run("psql", "postgres://engineering@127.0.0.1:15432/postgres", "-c", "SELECT 1")
+    # SQLx 0.8.6 test setup creates bookkeeping in DATABASE_URL's database
+    # before it creates individual test databases (src/testing/mod.rs).
+    run("psql", "postgres://engineering@127.0.0.1:15432/postgres", "-v", "ON_ERROR_STOP=1",
+        "-c", "CREATE SCHEMA _sqlx_test; CREATE TABLE _sqlx_test.databases (db_name text PRIMARY KEY)")
+    run("psql", "postgres://engineering@127.0.0.1:15432/postgres", "-c", "CREATE DATABASE worker_probe")
+    run("psql", "postgres://engineering@127.0.0.1:15432/postgres", "-c", "DROP DATABASE worker_probe")
     denied = subprocess.run(["psql", "postgres://engineering@127.0.0.1:15432/postgres", "-v", "ON_ERROR_STOP=1",
                              "-c", "COPY (SELECT 1) TO PROGRAM 'true'"], capture_output=True)
     assert denied.returncode != 0 and b"permission denied" in denied.stderr and b"pg_execute_server_program" in denied.stderr, denied.stderr

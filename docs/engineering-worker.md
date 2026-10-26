@@ -15,7 +15,7 @@ configured. Authorization to engineer does not select a new trading policy.
 | Invariants | Preserve all six [factory invariants](factory-charter.md), pre-registrations, ownership, SL/TP, sizing, limits, account activation and existing exits. Engineering shutdown never means a trading pause. |
 | Assumptions | The worker needs its own model authentication, repository permissions, hosting, persistent volume and an explicit session allowance. This chat's authentication does not prove the new service is authenticated. |
 | Expected outcomes | Disabled-by-default startup; durable queue and reports; interrupted-work recovery; one coordinator per shared state volume; bounded sessions; an engineering-only stop control; existing release gates and exact-deployment verification. |
-| Execution | Root coordinates implementation and review. The model prompt permits bounded specialist assignments when the installed runtime supports them; no unattended sub-agent behavior has yet been verified. Specialists do not become independent trading controllers or release competing changes. |
+| Execution | Root coordinates implementation and review. Codex is configured with `multi_agent` enabled and `agents.max_threads=4`; no real model or unattended sub-agent execution has yet been verified. Specialists do not become independent trading controllers or release competing changes. |
 | Evidence | Separate local/mock behavior, CI, deployed startup, real model authentication, restart recovery and an actual verified engineering task. Missing receipts stay open. |
 | Close | Prepared code is not unattended acceptance. Declare operational completion only after all live acceptance checks below have evidence. Owner-only policy decisions and economic acceptance remain separate. |
 
@@ -56,7 +56,9 @@ The operator must provide all activation inputs before unattended model work:
 
 A daily session cap and timeout bound attempts and duration. They are **not a
 hard dollar ceiling**: sessions have different token usage and models have
-different prices. Record the owner's operating allowance separately, use the
+different prices. The daily quota counts top-level attempts, not sub-agent API
+calls. Up to four configured agent threads and the time bound do not provide a
+dollar cap. Record the owner's operating allowance separately, use the
 provider's available billing controls, and report usage accurately. Do not
 invent a dollar budget or claim an API project budget is necessarily a hard
 spending cutoff. Hosting costs are separate from model costs.
@@ -131,9 +133,11 @@ The native sandbox failed on the local Docker host because required user
 namespaces were blocked. It also failed on the actual initial Railway worker;
 the mechanism on Railway is not established. The initial worker successfully
 booted but remained disabled with zero sessions and a zero daily allowance.
-The explicit external-boundary implementation is a subsequent change, pending
-its own image, CI and actual-host preflight evidence. Native sandbox failure is
-not relabelled as a pass. Real authenticated model execution remains open.
+A subsequent UID/container image has now passed its actual Railway boundary
+preflight while remaining disabled. Native sandbox failure is not relabelled as
+a pass. The latest SQLx test-role grant and first-session acceptance gate still
+need their own final CI/deployment evidence; real authenticated model execution
+remains open.
 
 ## Credentials and authority
 
@@ -217,10 +221,21 @@ project (service `ef9f73f0-5b65-4aba-9ce9-2d1582cb487c`) with a `/data` volume
 and `ENGINEERING_ENABLED=0`. Initial deployment
 `ab2cb805-ea71-4c0e-b165-f19603364a3b` successfully booted; live status showed
 `disabled`, zero sessions, daily cap zero and `native_sandbox_verified: false`.
-PR #28 was merged at a commit beginning `c54`; that deployed native-mode worker
-is not a model-capable acceptance result. The subsequent explicit UID/container
-boundary implementation is **not yet verified deployed**. No real model
-authentication, model session or unattended repair has been accepted.
+PR #28 was merged at a commit beginning `c54`; that native-mode startup did not
+pass execution-boundary acceptance. The subsequent UID revision
+`1a5c30c2-cfc2-43f2-bfe2-722bc8d1c401` succeeded at 21:38 SGT. Its live status
+reported `execution_boundary: {mode: uid-container, verified: true}`,
+`native_sandbox_verified: null` (not run), `disabled`, zero sessions and a zero
+daily allowance. Source digest
+`c3c1fad8814bf7e7244328f22ef874e5ae9a1fde62baffbae9fcdf18e3a2e2b7`
+matched the checked worker at repository revision beginning `5b304`.
+
+That verifies the initial UID infrastructure/boundary result, not a paid model
+session. Live missing-input names were `OPENAI_API_KEY`, `GH_TOKEN`,
+`RAILWAY_TOKEN`, `ENGINEERING_MODEL`, `ENGINEERING_DAILY_SESSION_LIMIT` and
+`ENGINEERING_BUDGET_ACK`. No credentials or allowance have been inferred. The
+new SQLx metadata-schema grant and first-session acceptance gate are subsequent
+changes whose final CI/deployment remains pending. E3–E5 stay open.
 
 Railway rejected the proposed `railwayConfigFile` setting with “Config as Code
 deprecated; use IaC.” The existing trading service is not migrated. Instead,
@@ -257,9 +272,13 @@ The procedure is:
    model, owner-approved session allowance and required budget acknowledgement. Authenticate the model through `OPENAI_API_KEY`
    configured on this worker; the coordinator supplies it to Codex login over
    stdin, not as a command-line argument.
-6. Enable one bounded acceptance task. Check its real model call, durable
-   evidence, restart behavior, stop control and release receipts. Advance to
-   routine unattended work only when those checks have passed.
+6. Once activation inputs are supplied, the first paid task is the built-in
+   read-only acceptance task. It takes priority over manually queued work and
+   cannot edit files, create a PR, trade or deploy. Failed or owner-blocked
+   acceptance blocks normal automatic engineering. Check its actual model call,
+   commands, optional bounded sub-agent result and durable report before
+   claiming E3. Recovery, stop behavior and a real repair/release still require
+   their separate E4–E5 evidence; read-only acceptance does not establish them.
 
 The implemented configuration is:
 
@@ -270,7 +289,7 @@ The implemented configuration is:
 | `ENGINEERING_PREFLIGHT_ON_START` | Image default `1` runs the credential-free check for the explicitly selected execution boundary; keep it enabled. |
 | `ENGINEERING_ISOLATION_MODE` | Python default `codex`; dedicated Railway image explicitly sets `uid-container`. The latter is a broader external OS boundary, not native workspace confinement. No automatic fallback. |
 | `ENGINEERING_MODEL` | Explicit model identifier available to this worker; no default model is invented. |
-| `ENGINEERING_DAILY_SESSION_LIMIT` | Explicit daily reservation cap, 1–1000, using the SGT date; default `0` blocks activation. |
+| `ENGINEERING_DAILY_SESSION_LIMIT` | Explicit daily top-level reservation cap, 1–1000, using the SGT date; default `0` blocks activation. Does not count sub-agent API calls or impose a dollar cap. |
 | `ENGINEERING_SESSION_TIMEOUT_SECONDS` | Per-process session bound, default 1800, allowed 30–7200 seconds. |
 | `ENGINEERING_POLL_SECONDS` | Delay before generating another default assessment task when no queue is ready, default 1800, allowed 60–86400 seconds; this is not a trading poll interval. |
 | `ENGINEERING_BUDGET_ACK` | Must equal `session-limits-are-not-a-dollar-cap` before activation. This records acknowledgement; it is not a dollar limit. |
@@ -287,7 +306,10 @@ process environment excludes `GH_TOKEN`, `RAILWAY_TOKEN`, production database
 and broker variables. The test URL points to local PostgreSQL on port 15432.
 The `engineering` database role has `CREATEDB` for isolated tests but is
 `NOSUPERUSER`, with no role creation, replication or bypass-RLS privilege;
-it cannot use `COPY PROGRAM`. The administrator uses the PostgreSQL OS user's
+it cannot use `COPY PROGRAM`. `GRANT CREATE ON DATABASE postgres TO engineering`
+is required for SQLx's test metadata schema: the actual missing-grant check
+failed with permission denied, then passed with the grant while retaining
+`NOSUPERUSER` and the `COPY PROGRAM` denial. The administrator uses the PostgreSQL OS user's
 private Unix socket. TCP authentication permits only the test role, preventing
 the model from connecting as the database administrator.
 
@@ -330,7 +352,10 @@ prints the selected execution boundary, its verified result and `model_calls:
 coordinator after correcting the host/boundary configuration and restarting.
 The standalone command does not mutate an already-running coordinator's
 in-memory preflight result. In native mode, inspect `native_sandbox_verified`
-as well; a null native result in UID mode is not a native pass.
+as well; a null native result in UID mode is not a native pass. `/status.acceptance`
+reports the first acceptance task's state. Successful structured model reports
+are redacted and written to project-private Railway logs, not the public status
+route; those logs are not an external push notification.
 
 The worker reads model-controlled metadata and result files only through a
 bounded regular-file helper; symlinks, FIFOs and oversized files are rejected.
@@ -357,7 +382,7 @@ guessing missing values.
 |---|---|
 | E1 — prepared worker | Executed local tests for queue claim/recovery, singleton exclusion, disabled/missing-input behavior, quota, timeout and stop behavior; image/CI checks on the actual head. |
 | E2 — deployed but disabled | Exact worker source digest/release, correct service/command, persistent volume, disabled status and zero model execution. The explicitly selected execution boundary must pass its credential-free proof on the actual host. Record native versus broader UID/container mode accurately; healthy-but-boundary-blocked does not pass E2. |
-| E3 — bounded unattended session | Real worker model authentication and one task completed without an active chat; actual result, usage and durable journal/report. |
+| E3 — bounded unattended session | Real worker model authentication and the first built-in read-only task completed without an active chat; actual commands/result, any real sub-agent receipt, usage evidence and durable report. A configured feature is not an executed sub-agent. |
 | E4 — recovery and control | Restart an interrupted bounded task and verify remote-state-aware recovery; competing coordinator refused; engineering stop verified without changing trading state. |
 | E5 — repair and release | An actual authorized issue is reproduced, fixed, tested, merged after exact-head CI and verified on the exact deployed revision. |
 
@@ -376,3 +401,10 @@ There is no configured external push destination and no guaranteed wake-up
 delivery. Persist milestones, failures, recovery and owner decisions for the
 next SGT owner session. The legacy 07:35 SGT Claude report transfer remains
 unverified; do not create a duplicate sender or claim it migrated.
+
+When the worker has its API key but no selected model, startup can read the
+provider's model catalog with a metadata-only GET. Available GPT model IDs go
+to project-private Railway logs; the key and API response body are not logged.
+This starts no inference and consumes no session allowance. The coordinator can
+then select an available coding model without asking the owner to know API IDs.
+The explicit model and every other activation requirement still gate model work.
