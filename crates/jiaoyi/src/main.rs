@@ -70,11 +70,13 @@ async fn main() -> anyhow::Result<()> {
         stop.clone(),
     )));
     // Reporting is independent; delivery failures never stop trading exits.
-    tasks.push(tokio::spawn(jiaoyi::telegram_report::run(
-        pool.clone(),
-        cfg.plan.permitted.iter().map(|(a, _)| a.id()).collect(),
-        stop.clone(),
-    )));
+    if jiaoyi::telegram_report::DeliveryConfig::from_env().is_some() {
+        tasks.push(tokio::spawn(jiaoyi::telegram_report::run(
+            pool.clone(),
+            cfg.plan.permitted.iter().map(|(a, _)| a.id()).collect(),
+            stop.clone(),
+        )));
+    }
     // The research engine: the pre-registered jobs, one at a time.
     tasks.push(tokio::spawn(jiaoyi::edge::runner::run(
         pool.clone(),
