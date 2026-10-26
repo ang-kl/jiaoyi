@@ -847,6 +847,8 @@ impl<'a, 'c> Trader<'a, 'c> {
             e.tp1_sent |= tp1_sent;
         }
         self.own.retain(|id, _| seen.contains(id));
+        let broker_positions: Vec<i64> = res.position.iter().map(|p| p.position_id).collect();
+        self.recover_history_exits(&broker_positions).await?;
         // An unresolved open still pending at the broker, or younger than one
         // reconcile interval, stays pending (its risk held, its symbol
         // blocked); an older one with nothing at the broker is released
@@ -1826,7 +1828,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     let known = owned
                         || s3s::has_open_fill(self.pool, self.account_id(), deal.position_id)
                             .await?;
-                    let recorded_close = s3s::is_recorded_close_deal(
+                    let recorded_close = s3s::is_local_close_deal(
                         self.pool,
                         self.account_id(),
                         deal.position_id,
@@ -1869,6 +1871,103 @@ impl<'a, 'c> Trader<'a, 'c> {
         }
     }
 
+    // Codex · № 17,225 26-Oct: actual broker absence plus independently synced deals.
+    async fn recover_history_exits(&self, broker_positions: &[i64]) -> anyhow::Result<()> {
+        let account = self.account_id();
+        let mut recovered = 0;
+        for exit in s3s::history_exits(self.pool, account, broker_positions).await? {
+            if !self
+                .can_record_broker_exit(exit.position_id, exit.deal_id)
+                .await?
+            {
+                continue;
+            }
+            let volume = match exit.closed_volume {
+                Some(v) if v > 0 && v <= exit.filled_volume => v,
+                _ => {
+                    tracing::warn!(
+                        account,
+                        position = exit.position_id,
+                        deal = exit.deal_id,
+                        "strategy 3 history exit has unknown closed volume"
+                    );
+                    continue;
+                }
+            };
+            let key = format!("s3-broker:{account}:{}:{}", exit.position_id, exit.deal_id);
+            let detail = json!({"strategy": STRATEGY, "reason": "history_reconciled",
+                "evidence_source": "broker_history", "deal_id": exit.deal_id,
+                "order_id": exit.order_id, "open_entry_key": exit.entry_key});
+            let inserted = s3s::record_broker_exit(
+                self.pool,
+                &s3s::OrderRow {
+                    account_id: account,
+                    entry_key: key.clone(),
+                    label: LABEL.into(),
+                    prereg_hash: exit.prereg_hash.clone(),
+                    kind: "broker_exit".into(),
+                    symbol: exit.symbol.clone(),
+                    symbol_id: exit.symbol_id,
+                    position_id: Some(exit.position_id),
+                    side: exit.side.clone(),
+                    session_date: exit.session_date,
+                    decided_at: exit.executed_at,
+                    bid: None,
+                    ask: None,
+                    volume: Some(volume),
+                    detail: detail.clone(),
+                },
+                &s3s::FillRow {
+                    account_id: account,
+                    entry_key: key,
+                    label: LABEL.into(),
+                    prereg_hash: exit.prereg_hash,
+                    kind: "broker_exit".into(),
+                    symbol: exit.symbol,
+                    position_id: Some(exit.position_id),
+                    side: exit.side,
+                    outcome: "filled".into(),
+                    sent_at: exit.executed_at,
+                    answered_at: Some(exit.executed_at),
+                    latency_ms: None,
+                    decision_price: None,
+                    fill_price: exit.fill_price,
+                    slippage: None,
+                    spread: None,
+                    volume: Some(volume),
+                    detail,
+                },
+            )
+            .await?;
+            recovered += i64::from(inserted);
+        }
+        if recovered > 0 {
+            tracing::info!(account, recovered, "strategy 3 history exits recovered");
+        }
+        Ok(())
+    }
+
+    /// Stream and history must use the same durable close-accounting boundary.
+    async fn can_record_broker_exit(&self, position: i64, deal: i64) -> anyhow::Result<bool> {
+        let account = self.account_id();
+        let (local_deal, unsettled) =
+            s3s::close_accounting(self.pool, account, position, deal).await?;
+        if local_deal {
+            return Ok(false);
+        }
+        if unsettled {
+            tracing::warn!(
+                account,
+                position,
+                deal,
+                reason = "unsettled_local_close",
+                "strategy 3 broker exit accounting deferred"
+            );
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
     fn warn_execution_drop(&self, event: &EventRecord, reason: &str) {
         tracing::warn!(
             account = self.account_id(), position = ?event.position_id,
@@ -1893,6 +1992,12 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
             return Ok(());
         };
+        if !self
+            .can_record_broker_exit(deal.position_id, deal.deal_id)
+            .await?
+        {
+            return Ok(());
+        }
         let own = self.own.get(&deal.position_id);
         let side = deal.position_side.or(own.map(|o| o.side)).or_else(|| {
             deal.deal_side.map(|s| match s {

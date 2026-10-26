@@ -1966,3 +1966,471 @@ async fn correlated_local_close_is_not_double_counted_as_broker_exit(pool: PgPoo
         );
     });
 }
+
+// Codex · № 17,225 26-Oct: absence plus confirmed broker history, not absence alone.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+#[allow(clippy::type_complexity)]
+async fn reconcile_recovers_a_stream_missed_close_from_history_once(pool: PgPool) {
+    use jiaoyi_ctrader::messages::{ProtoOaClosePositionDetail, ProtoOaDealStatus};
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        let close_price = p.stop_loss.unwrap() - 3.0;
+        let executed = Utc::now();
+        let deal = ProtoOaDeal {
+            deal_id: 99997,
+            order_id: 99998,
+            position_id: p.position_id,
+            symbol_id: BTC,
+            volume: 13,
+            filled_volume: 13,
+            trade_side: 2,
+            deal_status: ProtoOaDealStatus::Filled as i32,
+            execution_price: Some(close_price),
+            execution_timestamp: executed.timestamp_millis(),
+            close_position_detail: Some(ProtoOaClosePositionDetail {
+                entry_price: p.price.unwrap(),
+                closed_volume: Some(13),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let before = log.lock().unwrap().closes.len();
+        f.positions.lock().unwrap().clear();
+        t.reconcile(at(50)).await.unwrap();
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 0, "broker absence alone is not a fill");
+        let mut incomplete = deal;
+        incomplete
+            .close_position_detail
+            .as_mut()
+            .unwrap()
+            .closed_volume = None;
+        store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&incomplete)], Utc::now())
+            .await
+            .unwrap();
+        t.reconcile(at(52)).await.unwrap();
+        let unknown: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(unknown, 0, "do not invent missing closed quantity");
+        store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&deal)], Utc::now())
+            .await
+            .unwrap();
+        // History can arrive one sync later than the position's disappearance.
+        t.reconcile(at(55)).await.unwrap();
+        t.reconcile(at(56)).await.unwrap();
+        let rows: Vec<(Option<f64>,Option<f64>,Option<f64>,Option<i64>,Option<i64>)> = sqlx::query_as(
+            "SELECT fill_price,slippage,spread,latency_ms,volume FROM strategy3_fills WHERE kind='broker_exit'")
+            .fetch_all(&pool).await.unwrap();
+        assert_eq!(
+            rows,
+            vec![(Some(close_price), None, None, None, Some(13))],
+            "actual fill, one record, no invented historical quote/latency"
+        );
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            before,
+            "recovery sends nothing"
+        );
+    });
+    with_trader!(&pool, f, Environment::Demo, |_t, _log| {});
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 1, "restart does not duplicate a recovered deal");
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn history_recovery_preserves_held_positions_and_excludes_local_fills(pool: PgPool) {
+    use jiaoyi_ctrader::messages::{ProtoOaClosePositionDetail, ProtoOaDealStatus};
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        // A TP1 filled by the existing gate already has its exact broker deal.
+        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+            .await
+            .unwrap();
+        let wire: (Option<String>, i32, Vec<u8>, DateTime<Utc>) = sqlx::query_as(
+            "SELECT e.client_msg_id,e.payload_type,e.raw,e.received_at FROM trading_events e
+             JOIN trading_intents i ON i.entry_key=e.entry_key
+             WHERE i.account_id=$1 AND i.kind='close' AND e.deal_id IS NOT NULL LIMIT 1",
+        )
+        .bind(DEMO)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let message = jiaoyi_ctrader::ReceivedExecution {
+            client_msg_id: wire.0,
+            payload_type: wire.1 as u32,
+            payload: wire.2,
+            received_at: wire.3,
+        };
+        let close = jiaoyi_ctrader::trading::closing_deal(DEMO, &message).unwrap();
+        let ids = (close.deal_id, close.order_id);
+        let mut own_close = ProtoOaDeal {
+            deal_id: ids.0,
+            order_id: ids.1,
+            position_id: p.position_id,
+            symbol_id: BTC,
+            volume: 5,
+            filled_volume: 5,
+            trade_side: 2,
+            deal_status: ProtoOaDealStatus::Filled as i32,
+            execution_price: Some(62_113.21),
+            execution_timestamp: Utc::now().timestamp_millis(),
+            close_position_detail: Some(ProtoOaClosePositionDetail {
+                entry_price: p.price.unwrap(),
+                closed_volume: Some(5),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&own_close)], Utc::now())
+            .await
+            .unwrap();
+        // The remaining 8 cents close at the broker. A stale/fresh position
+        // snapshot that still contains the position must defer recovery.
+        own_close.deal_id = 99981;
+        own_close.order_id = 99982;
+        own_close.volume = 8;
+        own_close.filled_volume = 8;
+        own_close
+            .close_position_detail
+            .as_mut()
+            .unwrap()
+            .closed_volume = Some(8);
+        store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&own_close)], Utc::now())
+            .await
+            .unwrap();
+        t.reconcile(at(65)).await.unwrap();
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            count, 0,
+            "history alone does not override a present broker position"
+        );
+        // Foreign account, unowned position and rejected deal cannot qualify.
+        let mut wrong = own_close;
+        wrong.deal_id = 99983;
+        store::history::upsert_deals(&pool, DEMO + 1, &[history::deal_row(&wrong)], Utc::now())
+            .await
+            .unwrap();
+        wrong.deal_id = 99984;
+        wrong.position_id += 1000;
+        store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&wrong)], Utc::now())
+            .await
+            .unwrap();
+        wrong.position_id = p.position_id;
+        wrong.deal_id = 99985;
+        wrong.deal_status = ProtoOaDealStatus::Rejected as i32;
+        store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&wrong)], Utc::now())
+            .await
+            .unwrap();
+        wrong.deal_id = 99986;
+        wrong.deal_status = ProtoOaDealStatus::Filled as i32;
+        wrong.symbol_id = BTC + 1000;
+        store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&wrong)], Utc::now())
+            .await
+            .unwrap();
+        f.positions.lock().unwrap().clear();
+        t.reconcile(at(70)).await.unwrap();
+        let volumes: Vec<(String, Option<i64>)> = sqlx::query_as(
+            "SELECT kind,volume FROM strategy3_fills WHERE kind<>'open' ORDER BY kind",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            volumes,
+            vec![("broker_exit".into(), Some(8)), ("tp1".into(), Some(5))],
+            "account for each real closing part once"
+        );
+    });
+}
+
+#[derive(Clone, Copy)]
+enum LocalCloseCheckpoint {
+    Pending,
+    ReceiptOnly,
+    IncompleteCoverage,
+}
+
+async fn challenge_local_close_checkpoint(pool: &PgPool, case: LocalCloseCheckpoint) {
+    loaded(pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        let key = "s3-local-checkpoint";
+        let partial = matches!(case, LocalCloseCheckpoint::IncompleteCoverage);
+        let requested = if partial { 5 } else { 13 };
+        let kind = if partial { "tp1" } else { "session_end" };
+        store::trading::record_intent(
+            pool,
+            &store::trading::IntentRow {
+                account_id: DEMO,
+                entry_key: key.into(),
+                client_msg_id: "local-checkpoint".into(),
+                kind: "close".into(),
+                symbol_id: Some(BTC),
+                position_id: Some(p.position_id),
+                side: None,
+                volume: Some(requested),
+                relative_stop: None,
+                stop_price: None,
+                take_profit: None,
+                risk: None,
+                max_risk: 0.0,
+                settings_version: None,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO strategy3_orders(account_id,entry_key,label,prereg_hash,kind,symbol,symbol_id,position_id,decided_at)
+            VALUES ($1,$2,'jiaoyi-s3','checkpoint',$3,'BTCUSD',$4,$5,now())")
+            .bind(DEMO).bind(key).bind(kind).bind(BTC).bind(p.position_id).execute(pool).await.unwrap();
+        let local_deal = 99960;
+        let make_deal = |id, volume| ProtoOaDeal {
+            deal_id: id,
+            order_id: id + 1,
+            position_id: p.position_id,
+            symbol_id: BTC,
+            volume,
+            filled_volume: volume,
+            trade_side: 2,
+            deal_status: 2,
+            execution_price: Some(60_009.0),
+            execution_timestamp: Utc::now().timestamp_millis(),
+            close_position_detail: Some(jiaoyi_ctrader::messages::ProtoOaClosePositionDetail {
+                entry_price: p.price.unwrap(),
+                closed_volume: Some(volume),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        // This is the durable state the gate can leave before its caller
+        // writes the local fill summary; no timing/sleep oracle is used.
+        if !matches!(case, LocalCloseCheckpoint::Pending) {
+            let volume = if partial { 3 } else { 13 };
+            let mut wire = jiaoyi_ctrader::testkit::server_fill(
+                DEMO,
+                p.clone(),
+                local_deal,
+                62_113.21,
+                volume,
+                true,
+                false,
+            );
+            wire.client_msg_id = Some("local-checkpoint".into());
+            let mut event = jiaoyi_ctrader::trading::decode_execution(DEMO, &wire).unwrap();
+            event.entry_key = Some(key.into());
+            if partial {
+                event.kind = "ORDER_PARTIAL_FILL".into();
+                store::trading::record_event(pool, &trading::event_row(&event))
+                    .await
+                    .unwrap();
+                event.kind = "ORDER_FILLED".into();
+            }
+            store::trading::record_event(pool, &trading::event_row(&event))
+                .await
+                .unwrap();
+        }
+        if partial {
+            store::strategy3::record_fill(
+                pool,
+                &store::strategy3::FillRow {
+                    account_id: DEMO,
+                    entry_key: key.into(),
+                    label: "jiaoyi-s3".into(),
+                    prereg_hash: "checkpoint".into(),
+                    kind: kind.into(),
+                    symbol: "BTCUSD".into(),
+                    position_id: Some(p.position_id),
+                    side: Some("buy".into()),
+                    outcome: "filled".into(),
+                    sent_at: Utc::now(),
+                    answered_at: Some(Utc::now()),
+                    latency_ms: None,
+                    decision_price: None,
+                    fill_price: Some(62_113.21),
+                    slippage: None,
+                    spread: None,
+                    volume: Some(5),
+                    detail: json!({}),
+                },
+            )
+            .await
+            .unwrap();
+        }
+        let candidate_id = if partial { local_deal + 1 } else { local_deal };
+        let candidate_volume = if partial { 2 } else { 13 };
+        let mut deals = vec![history::deal_row(&make_deal(
+            candidate_id,
+            candidate_volume,
+        ))];
+        if partial {
+            deals.push(history::deal_row(&make_deal(local_deal + 2, 8)));
+        }
+        store::history::upsert_deals(pool, DEMO, &deals, Utc::now())
+            .await
+            .unwrap();
+        f.positions.lock().unwrap().clear();
+        t.reconcile(at(70)).await.unwrap();
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            count, 0,
+            "do not race or overlap pending/incompletely covered local bookkeeping"
+        );
+        let mut wire = jiaoyi_ctrader::testkit::server_fill(
+            DEMO,
+            p.clone(),
+            candidate_id,
+            60_009.0,
+            candidate_volume,
+            true,
+            false,
+        );
+        wire.client_msg_id = Some("broker-correlation".into());
+        t.server_event(&wire).await;
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            count, 0,
+            "stream path must preserve the same unresolved local state"
+        );
+        if partial {
+            let mut receipt = jiaoyi_ctrader::testkit::server_fill(
+                DEMO,
+                p.clone(),
+                candidate_id,
+                62_113.21,
+                2,
+                true,
+                false,
+            );
+            receipt.client_msg_id = Some("local-checkpoint".into());
+            let mut event = jiaoyi_ctrader::trading::decode_execution(DEMO, &receipt).unwrap();
+            event.entry_key = Some(key.into());
+            store::trading::record_event(pool, &trading::event_row(&event))
+                .await
+                .unwrap();
+        } else {
+            if matches!(case, LocalCloseCheckpoint::Pending) {
+                store::trading::record_event(
+                    pool,
+                    &store::trading::EventRow {
+                        account_id: DEMO,
+                        entry_key: Some(key.into()),
+                        client_msg_id: Some("local-checkpoint".into()),
+                        payload_type: 2126,
+                        kind: "ORDER_REJECTED".into(),
+                        position_id: Some(p.position_id),
+                        order_id: None,
+                        deal_id: None,
+                        symbol_id: Some(BTC),
+                        side: None,
+                        price: None,
+                        volume: None,
+                        stop_loss: None,
+                        label: Some("jiaoyi-s3".into()),
+                        error_code: None,
+                        description: None,
+                        is_server_event: None,
+                        raw: vec![],
+                        received_at: Utc::now(),
+                    },
+                )
+                .await
+                .unwrap();
+            }
+            store::strategy3::record_fill(
+                pool,
+                &store::strategy3::FillRow {
+                    account_id: DEMO,
+                    entry_key: key.into(),
+                    label: "jiaoyi-s3".into(),
+                    prereg_hash: "checkpoint".into(),
+                    kind: kind.into(),
+                    symbol: "BTCUSD".into(),
+                    position_id: Some(p.position_id),
+                    side: Some("buy".into()),
+                    outcome: if matches!(case, LocalCloseCheckpoint::Pending) {
+                        "rejected"
+                    } else {
+                        "filled"
+                    }
+                    .into(),
+                    sent_at: Utc::now(),
+                    answered_at: Some(Utc::now()),
+                    latency_ms: None,
+                    decision_price: None,
+                    fill_price: None,
+                    slippage: None,
+                    spread: None,
+                    volume: Some(requested),
+                    detail: json!({}),
+                },
+            )
+            .await
+            .unwrap();
+        }
+        t.reconcile(at(75)).await.unwrap();
+        let volumes: Vec<Option<i64>> = sqlx::query_scalar(
+            "SELECT volume FROM strategy3_fills WHERE kind='broker_exit' ORDER BY id",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap();
+        let expected = match case {
+            LocalCloseCheckpoint::Pending => vec![Some(13)],
+            LocalCloseCheckpoint::ReceiptOnly => vec![],
+            LocalCloseCheckpoint::IncompleteCoverage => vec![Some(8)],
+        };
+        assert_eq!(
+            volumes, expected,
+            "resume only distinct unaccounted broker closing volume after settlement"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn history_defers_intent_before_local_receipt(pool: PgPool) {
+    challenge_local_close_checkpoint(&pool, LocalCloseCheckpoint::Pending).await;
+}
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn history_defers_receipt_before_local_summary(pool: PgPool) {
+    challenge_local_close_checkpoint(&pool, LocalCloseCheckpoint::ReceiptOnly).await;
+}
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn history_defers_incompletely_persisted_local_volume(pool: PgPool) {
+    challenge_local_close_checkpoint(&pool, LocalCloseCheckpoint::IncompleteCoverage).await;
+}
