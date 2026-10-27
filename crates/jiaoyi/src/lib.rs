@@ -17,6 +17,7 @@ pub mod research;
 pub mod service;
 pub mod shutdown;
 pub mod status_page;
+pub mod stop_loss_review;
 pub mod strategy3;
 pub mod supervisor;
 pub mod telegram_report;
