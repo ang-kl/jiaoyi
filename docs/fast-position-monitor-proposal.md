@@ -6,7 +6,7 @@
 
 **Conversation reference:** № 17,535; owner request: “craft a .MD file about what you want to do”
 
-**Status:** Proposal only. No monitor implementation, activation or deployment is claimed.
+**Status:** Original proposal retained below; implementation and validation record added in §FPM.17–20. Production activation requires the recorded release read-back.
 
 **Evidence cutoff:** Local source inspection at 21:34:53 SGT; production was not queried for this proposal.
 
@@ -112,3 +112,13 @@ Historical and analytical work runs outside the protection-critical path.
 - [Existing report snapshot collector](../crates/jiaoyi/src/trading_report_snapshot.rs) and [history scheduling](../crates/jiaoyi/src/history.rs): reuse suitable observations rather than introducing another polling service.
 - [Verified trailing mechanisms and remaining evidence gaps](verified-trading-mechanisms-2026-10-27.md), [statement-loss lessons](lessons-2026-10-27-statements.md), [lean owner contract](queued-lean-owner-contract.md) and [engineering-worker contract](engineering-worker.md).
 - [Dated journal](../journal/2026-10-27.md): actual work, validation and release receipts remain distinct from this proposal.
+
+## 10. Implementation and evidence record
+
+[§FPM.17] Owner authorization: chat №17,577 §1 (28-10-2026 05:46 SGT), implement/merge this plan and resume engineering; №17,581 §1 (05:59 SGT), include chat references in every PR. Prepared 28-10-2026 06:12:45 SGT by <Codex (GPT-6), effort: not exposed by this session>. Current implementation incorporates main through #54, including #49/#50's current Strategy 3 v3 registration, #51/#52's watches/logging and #53's explicit stop-cause diagnostic. Existing positions continue to use their frozen opening plans; the original proposal's v2 source is historical, not a replacement for v3.
+
+[§FPM.18] Demonstrated two specific historical-data blockages with scripted broker replies held for ten seconds: a periodic S1 daily-bar refresh prevented an existing trail, and S3 preparation for a flat ETH symbol prevented an owned BTC position's TP1. The failing fixtures produced no required protective action; the repaired fixtures produced the registered S1 amend and exactly one S3 partial close before the historical reply. S1 now polls a single bounded refresh future beside quote/execution processing. S3 continues owned-position exits, broker execution processing and its session clock while awaiting preparation, with one mutable trader and the existing execution gate. Flat-symbol entries retain their first eligible decision quote. Neither remedy creates a second trading-state writer.
+
+[§FPM.19] An independent three-second watchdog reads current in-memory progress; actor timers call only the shared registered exit evaluators. Side-specific quotes older than six seconds, future timestamps and fresh crossed quotes are refused by the additive timer. Quote handling retains its registered logic. Health distinguishes watchdog completion from actor work, actual exit-pass completion, received/processed quote time and existing broker-book sample age. Unknown exit resolution remains null rather than a fabricated count. No new broker poll, database schema, raw-tick archive, inference or individual stop-loss notification is added. A slow reconciliation, execution gate or database operation can still delay its actor; the watchdog exposes that delay. Three seconds is a cadence, not an end-to-end execution guarantee.
+
+[§FPM.20] Targeted checks cover held reads, single-flight refresh, no timer entry, TP1 overlap/deduplication, stale/future quote refusal, cancellation, reconnect cleanup, original protection and ownership. Necessary startup corrections to #51's watches compare the actual v3 digest, read typed production P&L coverage evidence with explicit unknowns, and deduplicate limit transitions by account/strategy/limit rather than moving measurements. Every generated/repaired PR now carries the owner's actual chat references and SGT preparation time. Exact test counts and release receipts belong in the dated journal/log. Required exact-head CI, Railway monitor observations and engineering resume remain the release gates. Financial progress from this code change is not measured; no passing trading window or historical loss recovery is claimed.
