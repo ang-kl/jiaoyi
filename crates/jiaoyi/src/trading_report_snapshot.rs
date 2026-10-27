@@ -77,8 +77,30 @@ struct Read {
     pnl: pb::ProtoOaGetPositionUnrealizedPnLRes,
     started: DateTime<Utc>,
     observed: DateTime<Utc>,
-    consistent: bool,
+    book_stable: bool,
+    balance_stable: bool,
+    pnl_coverage_complete: bool,
     source_times: Value,
+}
+
+impl Read {
+    fn consistent(&self) -> bool {
+        self.book_stable && self.balance_stable && self.pnl_coverage_complete
+    }
+
+    fn failure_reasons(&self) -> Vec<&'static str> {
+        [
+            (!self.book_stable, "book_changed"),
+            (!self.balance_stable, "balance_changed"),
+            (
+                !self.pnl_coverage_complete,
+                "pnl_position_coverage_incomplete",
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(failed, reason)| failed.then_some(reason))
+        .collect()
+    }
 }
 
 async fn read(session: &AccountSession<'_>) -> anyhow::Result<Read> {
@@ -96,15 +118,20 @@ async fn read(session: &AccountSession<'_>) -> anyhow::Result<Read> {
     let trader = session.trader().await?;
     // Millisecond marks match the broker's inclusive cash-flow timestamp unit.
     let observed = DateTime::from_timestamp_millis(Utc::now().timestamp_millis()).unwrap();
-    let consistent =
-        same_book(&book_before, &book) && same_balance(&before, &trader) && pnl_covers(&book, &pnl);
+    // Evaluate each predicate independently so a book/balance mismatch cannot
+    // hide actual position-ID coverage. Valuation still requires all three.
+    let book_stable = same_book(&book_before, &book);
+    let balance_stable = same_balance(&before, &trader);
+    let pnl_coverage_complete = pnl_covers(&book, &pnl);
     Ok(Read {
         trader,
         book,
         pnl,
         started,
         observed,
-        consistent,
+        book_stable,
+        balance_stable,
+        pnl_coverage_complete,
         source_times: json!({"trader_before":trader_before_at,"reconcile_before":reconcile_before_at,
             "unrealized":pnl_at,"reconcile_after":reconcile_after_at,"trader_after":observed}),
     })
@@ -190,7 +217,7 @@ async fn cached_market(
 }
 
 fn position_margin(read: &Read) -> Option<f64> {
-    if !read.consistent {
+    if !read.consistent() {
         return None;
     }
     if read.book.position.is_empty() {
@@ -321,15 +348,15 @@ fn risk_and_exposure(read: &Read, market: &Market, equity: Option<f64>) -> Value
             unpriced_pending += 1;
         }
     }
-    if !read.consistent || linked_protection_ambiguous > 0 {
+    if !read.consistent() || linked_protection_ambiguous > 0 {
         projection = None;
         pending_projection = None;
         notional = None;
     }
     // The API net UPL explicitly excludes potential closing commissions. A
     // stop projection without those unquoted costs is not total equity risk.
-    json!({"open_risk": if read.consistent && read.book.position.is_empty() { Some(0.0) } else { None::<f64> },
-        "pending_risk": if read.consistent && pending.is_empty() && linked_protection_ambiguous == 0 { Some(0.0) } else { None::<f64> },
+    json!({"open_risk": if read.consistent() && read.book.position.is_empty() { Some(0.0) } else { None::<f64> },
+        "pending_risk": if read.consistent() && pending.is_empty() && linked_protection_ambiguous == 0 { Some(0.0) } else { None::<f64> },
         "open_stop_loss_before_unquoted_exit_costs":projection,
         "pending_stop_loss_before_unquoted_costs":pending_projection,
         "gross_leverage":notional.zip(equity).filter(|(_,e)| *e>0.0).map(|(n,e)| n/e),
@@ -406,7 +433,7 @@ pub async fn capture(pool: &PgPool, session: &AccountSession<'_>) -> anyhow::Res
         )
     };
     let mut sample = read(session).await?;
-    if !sample.consistent {
+    if !sample.consistent() {
         sample = read(session).await?;
     }
     let currency = assets
@@ -418,7 +445,7 @@ pub async fn capture(pool: &PgPool, session: &AccountSession<'_>) -> anyhow::Res
         .and_then(|r| r["name"].as_str())
         .map(str::to_owned);
     let balance = money(sample.trader.balance, sample.trader.money_digits);
-    let floating = if sample.consistent {
+    let floating = if sample.consistent() {
         sample
             .pnl
             .position_unrealized_pn_l
@@ -436,17 +463,21 @@ pub async fn capture(pool: &PgPool, session: &AccountSession<'_>) -> anyhow::Res
     let mut notes = vec!["Actual bounded broker observations; not an atomic historical account mark.",
         "Equity is balance plus broker net unrealized P&L; excludes unverified credit/bonuses. Broker net unrealized excludes potential closing commission.",
         "Credit is not directly supplied by these broker responses; no bonus is assumed to be cash credit.",
-        "Nonempty-book total stop risk is unknown until future exit costs are verified. Supplemental price-risk projections exclude unquoted exit charges, slippage and gaps."];
-    if !sample.consistent {
-        notes.push("Two bounded attempts could not establish matching book/P&L/balance observations; float/equity/margin/risk are incomplete.");
+        "Nonempty-book total stop risk is unknown until future exit costs are verified. Supplemental price-risk projections exclude unquoted exit charges, slippage and gaps."]
+        .into_iter().map(str::to_owned).collect::<Vec<_>>();
+    let failure_reasons = sample.failure_reasons();
+    if !sample.consistent() {
+        // Existing report views truncate notes; show the actual failed checks first.
+        notes.insert(0, format!("Snapshot incomplete: {}; float/equity/margin/risk withheld after two bounded attempts.", failure_reasons.join(", ")));
     }
     if !sample.book.position.is_empty() && sample.trader.total_margin_calculation_type != Some(1) {
-        notes.push("Account margin is unknown: per-position margin is not summed under absent/MAX/NET broker aggregation.");
+        notes.push("Account margin is unknown: per-position margin is not summed under absent/MAX/NET broker aggregation.".into());
     }
     let mut detail = json!({"environment":environment,"currency":currency,"observed_at":sample.observed,
         "source_times":sample.source_times,"asset_source":asset_source,
-        "source_complete":sample.consistent && balance.is_some() && floating.is_some() && currency.is_some(),
-        "pnl_coverage_complete":sample.consistent,
+        "source_complete":sample.consistent() && balance.is_some() && floating.is_some() && currency.is_some(),
+        "book_stable":sample.book_stable,"balance_stable":sample.balance_stable,
+        "pnl_coverage_complete":sample.pnl_coverage_complete,"failure_reasons":failure_reasons,
         "balance":balance,"float":floating,"equity":equity,"credit":null,
         "equity_basis":"balance_plus_broker_net_unrealized_excluding_unverified_credit",
         "used_margin":used_margin,"free_margin":equity.zip(used_margin).map(|(e,m)|e-m),
@@ -612,6 +643,189 @@ mod tests {
         assert!(!pnl_covers(&book, &pnl));
         pnl.position_unrealized_pn_l[1].position_id = 8;
         assert!(!pnl_covers(&book, &pnl));
+    }
+
+    // Exercise real collector reads and persisted JSON, not just predicates.
+    async fn diagnostic_fixture(pool: PgPool, failure: Option<&str>, empty: bool) {
+        use std::{
+            collections::VecDeque,
+            sync::{Arc, Mutex},
+        };
+        jiaoyi_store::upsert_account(&pool, ACCOUNT, Environment::Demo)
+            .await
+            .unwrap();
+        let trader = pb::ProtoOaTrader {
+            ctid_trader_account_id: ACCOUNT,
+            balance: 1234567,
+            money_digits: Some(3),
+            deposit_asset_id: 1,
+            total_margin_calculation_type: Some(1),
+            ..Default::default()
+        };
+        let mut before_trader = trader.clone();
+        if failure == Some("balance_changed") {
+            before_trader.balance_version = Some(1);
+        }
+        let book = pb::ProtoOaReconcileRes {
+            ctid_trader_account_id: ACCOUNT,
+            position: if empty {
+                vec![]
+            } else {
+                vec![pb::ProtoOaPosition {
+                    position_id: 7,
+                    position_status: 1,
+                    money_digits: Some(3),
+                    used_margin: Some(1000),
+                    ..Default::default()
+                }]
+            },
+            ..Default::default()
+        };
+        let mut before_book = book.clone();
+        if failure == Some("book_changed") {
+            before_book.position[0].stop_loss = Some(1.0);
+        }
+        let pnl = pb::ProtoOaGetPositionUnrealizedPnLRes {
+            ctid_trader_account_id: ACCOUNT,
+            money_digits: 3,
+            position_unrealized_pn_l: if empty {
+                vec![]
+            } else {
+                vec![pb::ProtoOaPositionUnrealizedPnL {
+                    position_id: if failure == Some("pnl_position_coverage_incomplete") {
+                        8
+                    } else {
+                        7
+                    },
+                    gross_unrealized_pn_l: 2345,
+                    net_unrealized_pn_l: 1234,
+                }]
+            },
+            ..Default::default()
+        };
+        let (conn, log) = FakeBroker {
+            account_id: ACCOUNT,
+            assets: vec![(1, "USD".into())],
+            scripted_traders: Arc::new(Mutex::new(VecDeque::from([
+                before_trader.clone(),
+                trader.clone(),
+                before_trader,
+                trader,
+            ]))),
+            scripted_books: Arc::new(Mutex::new(VecDeque::from([
+                before_book.clone(),
+                book.clone(),
+                before_book,
+                book,
+            ]))),
+            scripted_pnl: Arc::new(Mutex::new(VecDeque::from([pnl.clone(), pnl]))),
+            ..Default::default()
+        }
+        .spawn();
+        conn.application_auth("client", &Secret::new("secret"))
+            .await
+            .unwrap();
+        let account = Allowlist::parse(Some("49236051"))
+            .unwrap()
+            .permit(ACCOUNT)
+            .unwrap();
+        let session = conn
+            .account_auth(&account, &Secret::new("tok"))
+            .await
+            .unwrap();
+        capture(&pool, &session).await.unwrap();
+        let detail: Value = sqlx::query_scalar("SELECT detail FROM report_account_snapshots WHERE account_id=$1 AND sample_key='latest'")
+            .bind(ACCOUNT).fetch_one(&pool).await.unwrap();
+        // This assertion reproduces the original mislabel for balance/book only.
+        assert_eq!(
+            detail["pnl_coverage_complete"],
+            failure != Some("pnl_position_coverage_incomplete")
+        );
+        assert_eq!(detail["book_stable"], failure != Some("book_changed"));
+        assert_eq!(detail["balance_stable"], failure != Some("balance_changed"));
+        assert_eq!(
+            detail["failure_reasons"],
+            json!(failure.into_iter().collect::<Vec<_>>())
+        );
+        assert_eq!(detail["source_complete"], failure.is_none());
+        assert_eq!(detail["balance"], 1234.567);
+        if let Some(reason) = failure {
+            for field in [
+                "float",
+                "equity",
+                "used_margin",
+                "free_margin",
+                "margin_level",
+                "open_risk",
+                "pending_risk",
+                "gross_leverage",
+                "open_stop_loss_before_unquoted_exit_costs",
+                "pending_stop_loss_before_unquoted_costs",
+            ] {
+                assert!(
+                    detail[field].is_null(),
+                    "{field} must be withheld for {reason}"
+                );
+            }
+            assert!(detail["notes"][0].as_str().unwrap().contains(reason));
+            // Use the actual collected notes: the existing view truncates them.
+            let period =
+                crate::telegram_report::period_due("2026-10-26T21:15:00Z".parse().unwrap());
+            let html = crate::trading_report_view::render(
+                &period,
+                &[],
+                &[
+                    json!({"account_id":ACCOUNT,"environment":"demo","currency":"USD","snapshot":detail}),
+                ],
+                &json!({"reports":[]}),
+            );
+            assert!(html.contains(&format!("Snapshot incomplete: {reason}")));
+            assert!(html.contains(&format!("Source note: Snapshot incomplete: {reason}")));
+        } else {
+            assert_eq!(detail["float"], if empty { 0.0 } else { 1.234 });
+            assert_eq!(detail["equity"], 1234.567 + if empty { 0.0 } else { 1.234 });
+        }
+        let log = log.lock().unwrap();
+        let attempts = if failure.is_some() { 2 } else { 1 };
+        for (payload, per_attempt) in [
+            (pb::ProtoOaPayloadType::ProtoOaTraderReq, 2),
+            (pb::ProtoOaPayloadType::ProtoOaReconcileReq, 2),
+            (
+                pb::ProtoOaPayloadType::ProtoOaGetPositionUnrealizedPnlReq,
+                1,
+            ),
+        ] {
+            assert_eq!(
+                log.payload_types
+                    .iter()
+                    .filter(|t| **t == payload as u32)
+                    .count(),
+                attempts * per_attempt
+            );
+        }
+        assert_eq!(log.account_auths, vec![ACCOUNT]);
+        assert!(log.orders.is_empty() && log.amends.is_empty() && log.closes.is_empty());
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn balance_only_mismatch_preserves_actual_pnl_coverage(pool: PgPool) {
+        diagnostic_fixture(pool, Some("balance_changed"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn book_only_mismatch_preserves_actual_pnl_coverage(pool: PgPool) {
+        diagnostic_fixture(pool, Some("book_changed"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn pnl_id_mismatch_is_reported_independently(pool: PgPool) {
+        diagnostic_fixture(pool, Some("pnl_position_coverage_incomplete"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn complete_nonempty_book_preserves_money_precision_and_one_attempt(pool: PgPool) {
+        diagnostic_fixture(pool, None, false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn complete_empty_book_has_no_diagnostic_failures(pool: PgPool) {
+        diagnostic_fixture(pool, None, true).await;
     }
 
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
@@ -855,7 +1069,9 @@ mod tests {
             pnl,
             started: Utc::now(),
             observed: Utc::now(),
-            consistent: true,
+            book_stable: true,
+            balance_stable: true,
+            pnl_coverage_complete: true,
             source_times: json!({}),
         };
         let market = Market {
