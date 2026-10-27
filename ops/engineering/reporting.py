@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from zoneinfo import ZoneInfo
@@ -113,6 +114,33 @@ def send_document(token, chat_id, filename, body, caption):
     if not isinstance(receipt, dict) or not isinstance(receipt.get("message_id"), int):
         raise DeliveryError("telegram_receipt_unknown", uncertain=True)
     return receipt["message_id"]
+
+
+def send_message(token, chat_id, text):
+    """One short owner alert. No document, no retry storm."""
+    if not token or not chat_id:
+        raise DeliveryError("telegram_not_configured")
+    body = urllib.parse.urlencode({
+        "chat_id": chat_id,
+        "text": text[:3500],
+        "disable_web_page_preview": "true",
+    }).encode()
+    request = urllib.request.Request(
+        "https://api.telegram.org/bot" + token + "/sendMessage",
+        data=body, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        raise DeliveryError("telegram_http_" + str(error.code), uncertain=error.code >= 500) from None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        raise DeliveryError("telegram_response_unknown", uncertain=True) from None
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        raise DeliveryError("telegram_rejected")
+    message = (payload.get("result") or {}).get("message_id")
+    if not isinstance(message, int) or message <= 0:
+        raise DeliveryError("telegram_receipt_unknown", uncertain=True)
+    return message
 
 
 def collect(coordinator, hours=6, until=None):

@@ -513,7 +513,7 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     }
     if let Some(first) = s3.first() {
         h.push_str(&format!(
-            r#"<p class="sub">Pre-registration <span class="mono">{}</span>, hash <span class="mono">{}</span>; label <span class="mono">{}</span>. Entries on the first quote beyond the noise band.</p>"#,
+            r#"<p class="sub">Pre-registration <span class="mono">{}</span>, hash <span class="mono">{}</span>; label <span class="mono">{}</span>. Entries at a 30-minute mark on the mid; skipped when C is at least R.</p>"#,
             txt(&first["prereg_file"]),
             esc(&short(first["prereg_hash"].as_str().unwrap_or("—"), 12)),
             txt(&first["label"]),
