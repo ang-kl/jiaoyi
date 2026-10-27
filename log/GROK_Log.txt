@@ -61,3 +61,7 @@
 № 17,612 · 28-10-2026, 07:30 SGT · by Grok 4.7
 §1 Owner: proceed. PR #70 wires JIAOYI_GROK_API and JIAOYI_GROK_MODEL into the engineering service. JIAOYU_GROK_MODEL is a typo and is not read. Ceiling is 10.
 §2 Sentiment is a measurement. One call per symbol per session. attach_sentiment records it and does not change the side, the stop, or the target.
+
+№ 17,613 · 28-10-2026, 07:31 SGT · by Grok 4.7
+§1 Owner: is the GROK_API an edge for pre-trade and live trade around the clock.
+§2 No. It is a source. An edge is 15 of 20 closed trades under the current hash at the realised payoff. A headline does not change that count. Around the clock does not either: the mark decision is 30 minutes, and the cost gate skips when C ≥ R.
