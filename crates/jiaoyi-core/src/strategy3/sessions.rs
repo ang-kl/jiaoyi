@@ -18,7 +18,7 @@
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
 use chrono_tz::Tz;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::universe::AssetClass;
 
@@ -110,7 +110,7 @@ pub fn rule_for(name: &str, class: AssetClass) -> Option<SessionRule> {
 }
 
 /// One session, in UTC.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Session {
     /// The trading date, on the session's own calendar.
     pub date: NaiveDate,

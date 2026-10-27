@@ -6,6 +6,8 @@ use jiaoyi_store::sqlx::{self, PgPool, Row};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
+mod session;
+
 const CANDIDATES: &str = r#"
 WITH exits AS (
  SELECT 's1'::text AS strategy,f.account_id,f.position_id,f.symbol,f.detail,
@@ -183,8 +185,11 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
                 target = Some(s * (tp - entry) > 0.0);
             }
         }
-        // A date alone does not prove original exchange/session eligibility.
-        let session: Option<bool> = None;
+        // Only the saved original S3 snapshot can establish entry-window
+        // eligibility; legacy/date-only evidence remains unknown.
+        let session = (strategy == "s3" && registered == Some(true))
+            .then(|| session::check(&setup))
+            .flatten();
         let checks = json!({"gate_risk_recorded":gate,"sizing_within_gate_cap":sizing,
             "preregistration_matches_current_reference":registered,"entry_direction_valid":direction,
             "entry_trigger_valid":trigger,"original_stop_geometry_valid":stop,
@@ -210,13 +215,23 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
           SUM(CASE WHEN is_closing AND COALESCE(close_money_digits,money_digits) BETWEEN 0 AND 18
             THEN (close_gross_profit::float8+close_swap::float8-abs(close_commission::float8)
             -abs(close_pnl_conversion_fee::float8))/power(10::float8,COALESCE(close_money_digits,money_digits)) END) AS net,
-          COALESCE(BOOL_OR(deal_id=$3 AND is_closing),false) AS exit_present
-          FROM deals WHERE account_id=$1 AND position_id=$2 AND filled_volume>0"#)
-            .bind(account).bind(position).bind(deal).fetch_one(pool).await?;
-        // A complete broker-history receipt must cover the entry through exit;
-        // absent coverage stays unknown even when apparent volumes balance.
-        let coverage: bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM deal_fetches WHERE account_id=$1 AND status='ok' AND complete AND window_from<=$2 AND window_to>=$3 AND fetched_at>=$3)")
-            .bind(account).bind(created).bind(closed).fetch_one(pool).await?;
+          COALESCE(BOOL_OR(deal_id=$3 AND is_closing),false) AS exit_present,
+          min(executed_at) AS first_deal_at,max(executed_at) AS last_deal_at
+          FROM deals WHERE account_id=$1 AND position_id=$2 AND filled_volume>0
+            AND executed_at<=$4 AND fetched_at<=$4"#)
+            .bind(account).bind(position).bind(deal).bind(now).fetch_one(pool).await?;
+        // `complete` means sealed for history backfill. A successful recent
+        // poll also fetched every page; it deliberately leaves that flag false.
+        // Require an error-free, coherent, already-observed receipt covering
+        // this position. Balanced volumes alone never prove history coverage.
+        let first = money
+            .get::<Option<DateTime<Utc>>, _>("first_deal_at")
+            .map_or(created, |at| created.min(at));
+        let last = money
+            .get::<Option<DateTime<Utc>>, _>("last_deal_at")
+            .map_or(closed, |at| closed.max(at));
+        let coverage: bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM deal_fetches WHERE account_id=$1 AND status='ok' AND error IS NULL AND window_from<=$2 AND window_to>=$3 AND window_from<=window_to AND fetched_at>=window_to AND fetched_at>=$3 AND window_to<=$4 AND fetched_at<=$4)")
+            .bind(account).bind(first).bind(last).bind(now).fetch_one(pool).await?;
         let opened: i64 = money.get("opened");
         let finished = opened > 0
             && opened >= receipts
@@ -329,15 +344,19 @@ mod tests {
             .bind(json!({"reason":reason,"deal_id":position*10+1,"raw":"BALANCE_SECRET","commission":500000})).execute(pool).await.unwrap();
     }
 
-    async fn history(pool: &PgPool, account: i64, position: i64, closed: i64, costs: bool) {
+    async fn history_deals(pool: &PgPool, account: i64, position: i64, closed: i64, costs: bool) {
         for (closing, volume, id, gross) in [
             (false, 100, position * 10, 0),
             (true, closed, position * 10 + 1, -900),
         ] {
-            sqlx::query("INSERT INTO deals(account_id,deal_id,order_id,position_id,broker_symbol_id,volume,filled_volume,trade_side,deal_status,created_at,executed_at,is_closing,close_gross_profit,close_swap,close_commission,close_pnl_conversion_fee,close_money_digits,raw,fetched_at) VALUES($1,$2,$2,$3,1,$4,$4,'BUY','FILLED',now(),now(),$5,$6,0,-100,0,$7,''::bytea,now())")
+            sqlx::query("INSERT INTO deals(account_id,deal_id,order_id,position_id,broker_symbol_id,volume,filled_volume,trade_side,deal_status,created_at,executed_at,is_closing,close_gross_profit,close_swap,close_commission,close_pnl_conversion_fee,close_money_digits,raw,fetched_at) VALUES($1,$2,$2,$3,1,$4,$4,'BUY','FILLED',now()-interval '2 hours',CASE WHEN $5 THEN now()-interval '1 minute' ELSE now()-interval '2 hours' END,$5,$6,0,-100,0,$7,''::bytea,now())")
                 .bind(account).bind(id).bind(position).bind(volume).bind(closing).bind(gross)
                 .bind(costs.then_some(2_i32)).execute(pool).await.unwrap();
         }
+    }
+
+    async fn history(pool: &PgPool, account: i64, position: i64, closed: i64, costs: bool) {
+        history_deals(pool, account, position, closed, costs).await;
         sqlx::query("INSERT INTO deal_fetches(account_id,window_from,window_to,status,complete) VALUES($1,now()-interval '3 hours',now(),'ok',true)")
             .bind(account).execute(pool).await.unwrap();
     }
@@ -376,6 +395,73 @@ mod tests {
             "JPY",
         ] {
             assert!(!public.contains(private), "leaked {private}");
+        }
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn successful_live_history_is_coverage_even_when_the_window_is_unsealed(pool: PgPool) {
+        seed(&pool, 1, 1, true, "stop_loss").await;
+        history_deals(&pool, 1, 1, 100, true).await;
+        // The real recent-history poll has fetched every page successfully,
+        // but leaves complete=false because the rolling window is not sealed.
+        sqlx::query("INSERT INTO deal_fetches(account_id,window_from,window_to,fetched_at,status,complete) VALUES(1,now()-interval '3 hours',now(),now(),'ok',false)")
+            .execute(&pool).await.unwrap();
+        let result = evidence(&pool, &[1]).await.unwrap();
+        let case = &result["cases"][0];
+        assert_eq!(case["net_costs_complete"], true);
+        assert_eq!(case["net_r"], -1.0);
+        assert!(!case["missing_evidence"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("broker_history_coverage")));
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn history_receipts_must_be_account_scoped_error_free_and_observed(pool: PgPool) {
+        let cutoff = Utc::now();
+        for account in 1..=7 {
+            seed(&pool, account, account, true, "stop_loss").await;
+            history_deals(&pool, account, account, 100, true).await;
+            let mut from = cutoff - Duration::hours(3);
+            let mut to = cutoff - Duration::seconds(10);
+            let mut fetched = cutoff - Duration::seconds(5);
+            let mut status = "ok";
+            let mut error: Option<&str> = None;
+            let mut receipt_account = account;
+            match account {
+                1 => {
+                    status = "failed";
+                    error = Some("reported source error");
+                }
+                2 => {
+                    to = cutoff - Duration::minutes(2);
+                    fetched = cutoff - Duration::minutes(1);
+                }
+                3 => {
+                    to = cutoff + Duration::days(1);
+                    fetched = to;
+                }
+                4 => {
+                    from = cutoff;
+                }
+                5 => {
+                    fetched = cutoff - Duration::minutes(2);
+                }
+                6 => {
+                    receipt_account = 999;
+                }
+                _ => {}
+            }
+            sqlx::query("INSERT INTO deal_fetches(account_id,window_from,window_to,fetched_at,status,complete,error) VALUES($1,$2,$3,$4,$5,false,$6)")
+                .bind(receipt_account).bind(from).bind(to).bind(fetched).bind(status).bind(error)
+                .execute(&pool).await.unwrap();
+        }
+        let result = evidence(&pool, &[1, 2, 3, 4, 5, 6, 7]).await.unwrap();
+        for case in result["cases"].as_array().unwrap() {
+            assert_eq!(case["net_costs_complete"], case["account_id"] == 7);
+            if case["account_id"] != 7 {
+                assert!(case["net_r"].is_null());
+            }
         }
     }
 
@@ -464,7 +550,11 @@ mod tests {
             // strategy3::on_spot/S3Ledger, including the nested target plan.
             let detail = json!({"session_date":now.date_naive(),"decided_at":now,
                 "bid":bid,"ask":ask,"side":Dir::Buy,"band":b,"open":b.open,"sigma":b.sigma,
-                "entry":entry,"order":plan});
+                "entry":entry,"order":plan,
+                "session":jiaoyi_core::strategy3::sessions::Session {
+                    date:now.date_naive(), open:now-Duration::hours(1),
+                    close:now+Duration::hours(1),lunch:None },
+                "volume_limits":limits});
             let key = format!("s3:1:1:case:{position}");
             sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk,created_at) VALUES(1,$1,$1,'open',1,'buy',100,100000,10,11,$2)")
                 .bind(&key).bind(now).execute(&pool).await.unwrap();
@@ -511,7 +601,7 @@ mod tests {
                 true
             );
             assert_eq!(c["checks"]["entry_trigger_valid"], c["position_id"] == 1);
-            assert!(c["checks"]["original_session_valid"].is_null());
+            assert_eq!(c["checks"]["original_session_valid"], true);
         }
     }
 }
