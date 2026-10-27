@@ -1,19 +1,31 @@
-//! Strategy 3: intraday momentum on the noise band (owner-approved v2,
-//! 25-10-2026 ~10:45 SGT; entry "Tick-triggered only", ~10:50 SGT).
-//! The rules are `docs/preregistration-2026-10-25-strategy3.md`, embedded
-//! here and hashed: every decision, intent and trade records that hash and
-//! the label `jiaoyi-s3`.
+//! Strategy 3: intraday momentum on the noise band.
 //!
-//! One loop per permitted account, demo and live ("Live too, from now"):
+//! **Refinement, 27-10-2026 (v3).** The 25 Oct registration entered on the
+//! first tick beyond the band, with TP1 at 3R + C. The 27 Oct statements
+//! printed the barrier rate of that geometry (27–34% on the demos, 0% on
+//! ETH/metals/oils), and the measured median C was ~2.2R, so the barrier
+//! was ~5R. A no-drift process cannot hit that often enough to pay for the
+//! stops. This loop now trades the v3 registration:
+//!
+//! - Entry is a 30-minute mark decision on the mid, not the first tick.
+//! - A symbol is skipped when the cost reserve C is at least R.
+//! - `REQUIRED_RR` is 1.38. Owner, 27-10-2026: target near 1.4R.
+//!
+//! The rules are `docs/preregistration-2026-10-27-strategy3-v3.md`, embedded
+//! here and hashed: every decision, intent and trade records that hash and
+//! the label `jiaoyi-s3`. The 25 Oct file remains the record of the rule
+//! that produced the statement losses. It is not the rule this loop trades.
+//!
+//! One loop per permitted account, demo and live:
 //! - **Sessions.** Each symbol trades its own session (`jiaoyi_core::strategy3::sessions`).
 //! - **Band.** At the session's first quote after 30 minutes, the M30 bars
 //!   of the last sessions are read from the broker. They give the session's
 //!   open and σ at each 30-minute mark. A session without a first bar with
 //!   ticks is a holiday.
-//! - **Entry.** On every quote: the band at that instant (σ interpolated
-//!   between marks). The first ask above it buys, the first bid below it
-//!   sells. There is no entry in the session's last 30 minutes, and at most
-//!   one Strategy 3 position per symbol.
+//! - **Entry.** Only at a 30-minute mark, within 5 seconds of it. The mid
+//!   above the upper band buys; the mid below the lower band sells. No
+//!   entry in the session's last 30 minutes, and at most one Strategy 3
+//!   position per symbol. If C ≥ R the entry is skipped.
 //! - **Exits** (bot-trade `risk_coverage_partial_v1`).
 //!   - The stop is R from the fill.
 //!   - The broker take-profit is TP2, or TP1 when the size cannot be split.
@@ -65,9 +77,12 @@ pub const STRATEGY: &str = "Strategy 3: intraday momentum";
 /// The label on every position Strategy 3 opens.
 pub const LABEL: &str = "jiaoyi-s3";
 /// The pre-registration, relative to the repository root.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-10-25-strategy3.md";
+/// v3 (27-10-2026): mark decision and cost gate. The 25 Oct file is the
+/// record of the rule that produced the statement losses.
+pub const PREREG_FILE: &str = "docs/preregistration-2026-10-27-strategy3-v3.md";
 /// Its text, compiled in.
-pub const PREREG_TEXT: &str = include_str!("../../../docs/preregistration-2026-10-25-strategy3.md");
+pub const PREREG_TEXT: &str =
+    include_str!("../../../docs/preregistration-2026-10-27-strategy3-v3.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -187,9 +202,11 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
 
 // ---------------------------------------------------------------- pure parts
 
-/// The entry signal of a quote at `now`: the band at that instant and the
-/// side the quote triggers, `Ok(None)` inside the band, `Err(why)` when no
-/// entry may be taken now.
+/// The entry signal of a quote at `now`.
+///
+/// v3 (27-10-2026): a decision only at a 30-minute mark, on the mid. A quote
+/// that is not at a mark is `Ok(None)` — not an error, and not an entry.
+/// The 25 Oct tick rule (`band::triggered`) is not called here.
 pub fn signal(
     table: &SigmaTable,
     session: &Session,
@@ -199,8 +216,11 @@ pub fn signal(
     ask: Option<f64>,
 ) -> Result<Option<(Dir, Band)>, String> {
     band::entry_window(session, now)?;
+    if !band::at_decision_mark(session, now) {
+        return Ok(None);
+    }
     let b = band::band_at(table, session, open, now)?;
-    Ok(band::triggered(&b, bid, ask).map(|d| (d, b)))
+    Ok(band::mark_decision(&b, bid, ask).map(|d| (d, b)))
 }
 
 /// How the volume was chosen.
@@ -1626,6 +1646,24 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
         };
         let rel = relative_stop(b.half_width, limits.digits);
+        let r_price = rel as f64 / 100_000.0;
+        // v3 cost gate (27-10-2026). The statements measured median C ≈ 2.2R,
+        // so TP1 sat near 5R and a no-drift process hit it ~16% of the time.
+        // Skip when the reserve is at least the stop. This does not change Q.
+        if !(r_price > 0.0) || cost.total >= r_price {
+            self.skip(
+                symbol_id,
+                &name,
+                &format!(
+                    "cost reserve C ({:.6}) >= R ({:.6}): barrier too far for a no-drift process; skipped",
+                    cost.total, r_price
+                ),
+                detail,
+                now,
+            )
+            .await;
+            return Ok(());
+        }
         let e = Entry {
             side,
             band: b,
@@ -2348,9 +2386,9 @@ mod tests {
         digits: 2,
     };
 
-    /// The fixture's entry: a buy at 60,460.00, R 450.00, C 301.208 (TP1
-    /// 1,651.21). Expected closes from the planner's own formula,
-    /// ceil(v × 751.208 / 2,101.21) with a runner of at least 1: self-derived.
+    /// The fixture's entry: a buy at 60,460.00, R 450.00, C 301.208.
+    /// Q = 1.38, so TP1 distance = 1.38×450 + 301.208 = 922.208.
+    /// f = 751.208 / 1,372.208. Expected closes from that formula.
     #[test]
     fn tp1_s_close_follows_the_volume_held() {
         let b = PlanBasis {
@@ -2360,15 +2398,15 @@ mod tests {
             cost: 301.208,
         };
         let close = |v| tp1_close_volume(&b, &BTC, v);
-        assert_eq!(close(13), 5, "the planned close");
-        assert_eq!(close(4), 2);
-        assert_eq!(close(2), 1);
+        assert_eq!(close(13), 8, "the planned close");
+        assert_eq!(close(4), 3);
+        assert_eq!(close(2), 2, "the rest would be below the minimum: whole");
         assert_eq!(close(1), 1, "unsplittable: the whole position");
         let sell = PlanBasis {
             side: Dir::Sell,
             ..b
         };
-        assert_eq!(tp1_close_volume(&sell, &BTC, 13), 5);
+        assert_eq!(tp1_close_volume(&sell, &BTC, 13), 8);
         let detail = json!({"entry": {"side": "sell", "entry_price": 60_455.0, "r": 450.0,
                                        "cost": {"total": 301.208}}});
         assert_eq!(
@@ -2387,7 +2425,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-10-25-strategy3.md"
+            "/../../docs/preregistration-2026-10-27-strategy3-v3.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)
@@ -2395,7 +2433,11 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect();
         assert_eq!(disk_hash, prereg_hash());
-        assert!(PREREG_TEXT.contains("Tick-triggered only"));
+        // v3: mark decision and cost gate. The tick rule is no longer the traded rule.
+        assert!(PREREG_TEXT.contains("mark decision"));
+        assert!(PREREG_TEXT.contains("C ≥ R"));
+        assert!(PREREG_TEXT.contains("REQUIRED_RR"));
+        assert!(!PREREG_TEXT.contains("Tick-triggered only"));
     }
 
     #[test]
@@ -2460,15 +2502,16 @@ mod tests {
             digits: 2,
         };
         let o = plan_order(&e, &lim, 10_000).unwrap();
-        assert_eq!(o.plan.close_volume, 2600);
-        assert!((o.tp1_distance - 30.4).abs() < 1e-9);
-        assert!((o.tp2_distance - 40.4).abs() < 1e-9);
-        // The broker's take-profit is TP2, 40.40 from the fill.
-        assert_eq!(o.relative_take_profit, 4_040_000);
+        // Q = 1.38: TP1 = 1.38×10 + 0.4 = 14.2; TP2 = 24.2; f = 10.4/24.2.
+        assert_eq!(o.plan.close_volume, 4300);
+        assert!((o.tp1_distance - 14.2).abs() < 1e-9);
+        assert!((o.tp2_distance - 24.2).abs() < 1e-9);
+        // The broker's take-profit is TP2, 24.20 from the fill.
+        assert_eq!(o.relative_take_profit, 2_420_000);
         // Unsplittable: the broker's take-profit is TP1.
         let o = plan_order(&e, &lim, 100).unwrap();
         assert_eq!(o.plan.mode, targets::Mode::WholePositionMinimum);
-        assert_eq!(o.relative_take_profit, 3_040_000);
+        assert_eq!(o.relative_take_profit, 1_420_000);
         // A short whose TP1 would fall below zero: refused with bot-trade's
         // reason (target_price_invalid).
         let dear = Entry {

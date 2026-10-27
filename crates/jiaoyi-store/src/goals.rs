@@ -337,6 +337,11 @@ async fn watermark(pool: &PgPool, account_id: i64) -> Result<String, sqlx::Error
 /// The latest 20 owned, fully closed positions. Missing later exits never
 /// silently disappear behind an older passing sample. Concurrent receipt or
 /// history changes make this poll unknown; a later stable poll can assess it.
+///
+/// **Episode note (27-10-2026).** This window is per strategy and account.
+/// Three demos copying one signal are one episode, not three. A claim about
+/// the rule uses the signal, not the accounts. The card does not multiply
+/// them. See `docs/preregistration-2026-10-27-strategy3-v3.md`.
 pub async fn assess(
     pool: &PgPool,
     account_id: i64,

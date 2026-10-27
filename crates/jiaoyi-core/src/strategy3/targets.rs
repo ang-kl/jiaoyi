@@ -2,7 +2,8 @@
 //! by line from `agent/services/momentum-target-policy.js`
 //! (`planMomentumTargets`, owner-approved for Strategy 3, 25-10-2026).
 //!
-//! With R the risk (entry to stop), C the cost reserve per unit and Q = 3:
+//! With R the risk (entry to stop), C the cost reserve per unit and Q the
+//! required reward multiple (`REQUIRED_RR`, 1.38 from 27-10-2026):
 //! - TP1 (the trigger) = entry ± (Q·R + C), rounded outward to a whole tick;
 //! - the close fraction at TP1 is f = (R + C) / (TP1 distance + R), the
 //!   volume rounded up to the step and at least the broker minimum;
@@ -22,8 +23,14 @@ use serde::Serialize;
 pub const POLICY: &str = "risk_coverage_partial_v1";
 /// `MOMENTUM_MAX_PRICE_DIGITS`: a relative bracket carries at most 5 decimals.
 pub const MAX_PRICE_DIGITS: i32 = 5;
-/// `MOMENTUM_MIN_REQUIRED_RR`: TP1 sits Q·R + C from the entry, Q = 3.
-pub const REQUIRED_RR: f64 = 3.0;
+/// `MOMENTUM_MIN_REQUIRED_RR`: TP1 sits Q·R + C from the entry.
+///
+/// **Owner, 27-10-2026: target near 1.4R.** Q = 1.38, the goal's payoff
+/// reference. The previous hard minimum was 3.0. The 27 Oct statements
+/// showed 3R + C (median C ≈ 2.2R, barrier ≈ 5R) cannot produce 73% wins
+/// on a no-drift process. A further change of Q is a further registration.
+/// See `docs/preregistration-2026-10-27-strategy3-v3.md`.
+pub const REQUIRED_RR: f64 = 1.38;
 const SNAP_TOLERANCE_TICKS: f64 = 1e-6;
 
 /// `side`: buy or sell.
@@ -340,11 +347,17 @@ mod tests {
         }
         assert_eq!(
             plan(&Input {
-                required_rr: 2.9,
+                required_rr: 1.37,
                 ..i
             }),
             Err("required_rr_below_hard_minimum")
         );
+        // Owner 27-10-2026: near 1.4R is the minimum, and it plans.
+        assert!(plan(&Input {
+            required_rr: 1.38,
+            ..i
+        })
+        .is_ok());
         assert_eq!(
             plan(&Input { digits: 6, ..i }),
             Err("relative_bracket_precision_unsupported")
