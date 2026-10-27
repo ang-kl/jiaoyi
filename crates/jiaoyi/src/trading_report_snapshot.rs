@@ -81,6 +81,114 @@ fn pnl_coverage_diagnostics(
     })
 }
 
+// Counts describe observed links only: history sync can lag this sample and a
+// closing deal may be partial. No claim about full closure or stale marks follows.
+async fn extra_pnl_relationship_diagnostics(
+    pool: &PgPool,
+    account: i64,
+    book: &pb::ProtoOaReconcileRes,
+    pnl: &pb::ProtoOaGetPositionUnrealizedPnLRes,
+    observed: DateTime<Utc>,
+) -> Value {
+    let mut result = json!({
+        "evidence_state":"response_account_mismatch",
+        "pending_entry_position_match_count":null,
+        "pending_protection_position_match_count":null,
+        "pending_order_missing_position_ref_count":null,
+        "opening_deal_observed_count":null,
+        "closing_deal_observed_count":null,
+        "owned_fill_observed_count":null,
+    });
+    if book.ctid_trader_account_id != account || pnl.ctid_trader_account_id != account {
+        return result;
+    }
+    if book.position.iter().any(|p| p.position_id <= 0)
+        || pnl
+            .position_unrealized_pn_l
+            .iter()
+            .any(|p| p.position_id <= 0)
+        || book
+            .order
+            .iter()
+            .any(|o| o.position_id.is_some_and(|id| id <= 0))
+    {
+        result["evidence_state"] = json!("invalid_position_id");
+        return result;
+    }
+    let positions: BTreeSet<_> = book.position.iter().map(|p| p.position_id).collect();
+    let extras: BTreeSet<_> = pnl
+        .position_unrealized_pn_l
+        .iter()
+        .map(|p| p.position_id)
+        .filter(|id| !positions.contains(id))
+        .collect();
+    let protection = |o: &pb::ProtoOaOrder| o.closing_order == Some(true) || o.order_type == 4;
+    for (field, protective) in [
+        ("pending_entry_position_match_count", false),
+        ("pending_protection_position_match_count", true),
+    ] {
+        result[field] = json!(extras
+            .iter()
+            .filter(|id| book
+                .order
+                .iter()
+                .any(|o| o.position_id == Some(**id) && protection(o) == protective))
+            .count());
+    }
+    result["pending_order_missing_position_ref_count"] = json!(book
+        .order
+        .iter()
+        .filter(|o| o.position_id.is_none())
+        .count());
+    if extras.is_empty() {
+        result["evidence_state"] = json!("not_applicable");
+        for field in [
+            "opening_deal_observed_count",
+            "closing_deal_observed_count",
+            "owned_fill_observed_count",
+        ] {
+            result[field] = json!(0);
+        }
+        return result;
+    }
+    // Only the extra IDs on this account; no payloads/IDs/amounts are retained.
+    let ids: Vec<_> = extras.into_iter().collect();
+    let rows = sqlx::query(
+        r#"SELECT
+        EXISTS(SELECT 1 FROM deals d WHERE d.account_id=$1 AND d.position_id=x.id
+            AND d.executed_at <= $3 AND d.filled_volume>0
+            AND d.deal_status IN ('FILLED','PARTIALLY_FILLED') AND NOT d.is_closing) AS opening,
+        EXISTS(SELECT 1 FROM deals d WHERE d.account_id=$1 AND d.position_id=x.id
+            AND d.executed_at <= $3 AND d.filled_volume>0
+            AND d.deal_status IN ('FILLED','PARTIALLY_FILLED') AND d.is_closing) AS closing,
+        EXISTS(SELECT 1 FROM trading_events e JOIN trading_intents i
+            ON i.entry_key=e.entry_key AND i.account_id=e.account_id
+            WHERE e.account_id=$1 AND e.position_id=x.id AND i.kind='open'
+            AND e.kind=ANY($4) AND e.volume>0 AND e.received_at <= $3) AS owned
+        FROM unnest($2::bigint[]) AS x(id)"#,
+    )
+    .bind(account)
+    .bind(&ids)
+    .bind(observed)
+    .bind(jiaoyi_store::trading::FILL_KINDS)
+    .fetch_all(pool)
+    .await;
+    match rows {
+        Ok(rows) => {
+            result["evidence_state"] = json!("stored_observations_only_closure_unknown");
+            for (field, column) in [
+                ("opening_deal_observed_count", "opening"),
+                ("closing_deal_observed_count", "closing"),
+                ("owned_fill_observed_count", "owned"),
+            ] {
+                result[field] = json!(rows.iter().filter(|r| r.get::<bool, _>(column)).count());
+            }
+        }
+        Err(_) => result["evidence_state"] = json!("store_read_failed"),
+    }
+    result
+}
+
 fn same_balance(a: &pb::ProtoOaTrader, b: &pb::ProtoOaTrader) -> bool {
     a.balance == b.balance
         && a.balance_version == b.balance_version
@@ -481,6 +589,14 @@ pub async fn capture(pool: &PgPool, session: &AccountSession<'_>) -> anyhow::Res
     let used_margin = position_margin(&sample);
     let market = cached_market(pool, account, sample.observed, &listed).await?;
     let risk = risk_and_exposure(&sample, &market, equity);
+    let relationships = extra_pnl_relationship_diagnostics(
+        pool,
+        account,
+        &sample.book,
+        &sample.pnl,
+        sample.observed,
+    )
+    .await;
     let mut notes = vec!["Actual bounded broker observations; not an atomic historical account mark.",
         "Equity is balance plus broker net unrealized P&L; excludes unverified credit/bonuses. Broker net unrealized excludes potential closing commission.",
         "Credit is not directly supplied by these broker responses; no bonus is assumed to be cash credit.",
@@ -500,6 +616,7 @@ pub async fn capture(pool: &PgPool, session: &AccountSession<'_>) -> anyhow::Res
         "book_stable":sample.book_stable,"balance_stable":sample.balance_stable,
         "pnl_coverage_complete":sample.pnl_coverage_complete,"failure_reasons":failure_reasons,
         "pnl_coverage_diagnostics":pnl_coverage_diagnostics(&sample.book, &sample.pnl),
+        "extra_pnl_relationship_diagnostics":relationships,
         "balance":balance,"float":floating,"equity":equity,"credit":null,
         "equity_basis":"balance_plus_broker_net_unrealized_excluding_unverified_credit",
         "used_margin":used_margin,"free_margin":equity.zip(used_margin).map(|(e,m)|e-m),
@@ -667,6 +784,112 @@ mod tests {
         assert!(!pnl_covers(&book, &pnl));
     }
 
+    async fn seed_relationship_observations(pool: &PgPool) {
+        // A partial closing observation deliberately does not prove full closure.
+        sqlx::query("INSERT INTO deals(account_id,deal_id,order_id,position_id,broker_symbol_id,volume,filled_volume,trade_side,deal_status,created_at,executed_at,is_closing,raw,fetched_at) VALUES ($1,1,1,8,1,100,100,'BUY','FILLED',now()-interval '1 minute',now()-interval '1 minute',false,''::bytea,now()), ($1,2,1,8,1,100,10,'SELL','PARTIALLY_FILLED',now()-interval '1 minute',now()-interval '1 minute',true,''::bytea,now()), ($2,3,1,9,1,100,100,'BUY','FILLED',now(),now(),false,''::bytea,now()), ($1,4,1,10,1,100,0,'BUY','REJECTED',now(),now(),false,''::bytea,now())")
+            .bind(ACCOUNT).bind(ACCOUNT+1).execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO deals(account_id,deal_id,order_id,position_id,broker_symbol_id,volume,filled_volume,trade_side,deal_status,created_at,executed_at,is_closing,raw,fetched_at) VALUES ($1,5,1,12,1,100,100,'BUY','FILLED',now(),now(),false,''::bytea,now()), ($1,6,1,13,1,100,10,'SELL','PARTIALLY_FILLED',now(),now(),true,''::bytea,now()), ($1,7,1,14,1,100,100,'BUY','FILLED',now(),now()+interval '1 day',false,''::bytea,now())")
+            .bind(ACCOUNT).execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,max_risk) VALUES($1,'relation-owned','test','open',1),($2,'relation-foreign','test','open',1)")
+            .bind(ACCOUNT).bind(ACCOUNT+1).execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,position_id,volume,raw,received_at) VALUES ($1,'relation-owned',1,'ORDER_PARTIAL_FILL',8,10,''::bytea,now()), ($2,'relation-foreign',1,'ORDER_FILLED',9,100,''::bytea,now()), ($1,'relation-foreign',1,'ORDER_FILLED',9,100,''::bytea,now())")
+            .bind(ACCOUNT).bind(ACCOUNT+1).execute(pool).await.unwrap();
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn extra_relationships_preserve_unknowns_and_account_scope(pool: PgPool) {
+        seed_relationship_observations(&pool).await;
+        let mut book = pb::ProtoOaReconcileRes {
+            ctid_trader_account_id: ACCOUNT,
+            ..Default::default()
+        };
+        let mut pnl = pb::ProtoOaGetPositionUnrealizedPnLRes {
+            ctid_trader_account_id: ACCOUNT,
+            position_unrealized_pn_l: [8, 9, 10, 11]
+                .into_iter()
+                .map(|position_id| pb::ProtoOaPositionUnrealizedPnL {
+                    position_id,
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let result =
+            extra_pnl_relationship_diagnostics(&pool, ACCOUNT, &book, &pnl, Utc::now()).await;
+        for field in [
+            "opening_deal_observed_count",
+            "closing_deal_observed_count",
+            "owned_fill_observed_count",
+        ] {
+            assert_eq!(
+                result[field], 1,
+                "{field}: foreign/rejected/unobserved rows must not qualify"
+            );
+        }
+        assert_eq!(
+            result["evidence_state"],
+            "stored_observations_only_closure_unknown"
+        );
+        for (ids, expected) in [
+            (vec![8, 8], [1, 1, 1]),
+            (vec![12], [1, 0, 0]),
+            (vec![13], [0, 1, 0]),
+            (vec![9, 10, 11, 14], [0, 0, 0]),
+        ] {
+            let mut selected = pnl.clone();
+            selected.position_unrealized_pn_l = ids
+                .into_iter()
+                .map(|position_id| pb::ProtoOaPositionUnrealizedPnL {
+                    position_id,
+                    ..Default::default()
+                })
+                .collect();
+            let result =
+                extra_pnl_relationship_diagnostics(&pool, ACCOUNT, &book, &selected, Utc::now())
+                    .await;
+            for (field, expected) in [
+                "opening_deal_observed_count",
+                "closing_deal_observed_count",
+                "owned_fill_observed_count",
+            ]
+            .into_iter()
+            .zip(expected)
+            {
+                assert_eq!(result[field], expected, "independent observation: {field}");
+            }
+        }
+        book.ctid_trader_account_id += 1;
+        let result =
+            extra_pnl_relationship_diagnostics(&pool, ACCOUNT, &book, &pnl, Utc::now()).await;
+        assert_eq!(result["evidence_state"], "response_account_mismatch");
+        assert!(result["opening_deal_observed_count"].is_null());
+        assert!(result["pending_entry_position_match_count"].is_null());
+        book.ctid_trader_account_id = ACCOUNT;
+        pnl.ctid_trader_account_id += 1;
+        assert_eq!(
+            extra_pnl_relationship_diagnostics(&pool, ACCOUNT, &book, &pnl, Utc::now()).await
+                ["evidence_state"],
+            "response_account_mismatch"
+        );
+        pnl.ctid_trader_account_id = ACCOUNT;
+        pnl.position_unrealized_pn_l[0].position_id = 0;
+        let result =
+            extra_pnl_relationship_diagnostics(&pool, ACCOUNT, &book, &pnl, Utc::now()).await;
+        assert_eq!(result["evidence_state"], "invalid_position_id");
+        assert!(result["owned_fill_observed_count"].is_null());
+        pnl.position_unrealized_pn_l[0].position_id = 8;
+        let unavailable = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/unavailable")
+            .unwrap();
+        unavailable.close().await;
+        let result =
+            extra_pnl_relationship_diagnostics(&unavailable, ACCOUNT, &book, &pnl, Utc::now())
+                .await;
+        assert_eq!(result["evidence_state"], "store_read_failed");
+        assert!(result["closing_deal_observed_count"].is_null());
+        assert_eq!(result["pending_entry_position_match_count"], 0);
+    }
+
     // Exercise real collector reads and persisted JSON, not just predicates.
     async fn diagnostic_fixture(pool: PgPool, failure: Option<&str>, empty: bool) {
         use std::{
@@ -708,6 +931,32 @@ mod tests {
         }
         if failure == Some("non_open_position") {
             book.position[0].position_status = 2;
+        }
+        if failure == Some("extra_pnl_position") {
+            // Already-held pre-orders and protection: observe links, never amend.
+            book.order = vec![
+                pb::ProtoOaOrder {
+                    position_id: Some(8),
+                    order_type: 3,
+                    relative_stop_loss: Some(100),
+                    relative_take_profit: Some(200),
+                    ..Default::default()
+                },
+                pb::ProtoOaOrder {
+                    position_id: Some(8),
+                    order_type: 4,
+                    closing_order: Some(true),
+                    stop_loss: Some(1.0),
+                    take_profit: Some(2.0),
+                    ..Default::default()
+                },
+                pb::ProtoOaOrder {
+                    order_type: 2,
+                    stop_loss: Some(1.0),
+                    ..Default::default()
+                },
+            ];
+            seed_relationship_observations(&pool).await;
         }
         let mut before_book = book.clone();
         if failure == Some("book_changed") {
@@ -810,6 +1059,24 @@ mod tests {
                 "non_open_position_count": expected_counts[4],
             })
         );
+        assert_eq!(
+            detail["extra_pnl_relationship_diagnostics"]["evidence_state"],
+            if expected_counts[1] > 0 {
+                "stored_observations_only_closure_unknown"
+            } else {
+                "not_applicable"
+            }
+        );
+        if failure == Some("extra_pnl_position") {
+            assert_eq!(
+                detail["extra_pnl_relationship_diagnostics"],
+                json!({
+                "evidence_state":"stored_observations_only_closure_unknown",
+                "pending_entry_position_match_count":1,"pending_protection_position_match_count":1,
+                "pending_order_missing_position_ref_count":1,"opening_deal_observed_count":1,
+                "closing_deal_observed_count":1,"owned_fill_observed_count":1})
+            );
+        }
         assert_eq!(detail["source_complete"], failure.is_none());
         assert_eq!(detail["balance"], 1234.567);
         if let Some(reason) = reason {
