@@ -143,3 +143,92 @@ fn operations_page_shows_last_success_separately_from_failure_time() {
     assert!(page.contains("not recorded"));
     assert!(page.contains("a completed computation can still report unknown broker evidence"));
 }
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(pool: PgPool) {
+    let account = 47790949;
+    let foreign = 46130058;
+    let legacy = 49236051;
+    let absent = 43002148;
+    let at = chrono::DateTime::from_timestamp_micros(Utc::now().timestamp_micros()).unwrap();
+    for id in [account, foreign, legacy, absent] {
+        store::upsert_account(&pool, id, Environment::Demo)
+            .await
+            .unwrap();
+    }
+    let counts = json!({"missing_pnl_position_count":1,"extra_pnl_position_count":0,
+        "duplicate_position_id_count":0,"duplicate_pnl_id_count":0,"non_open_position_count":0});
+    let mut private = json!({"account_id":foreign,"observed_at":"PRIVATE_TIMESTAMP",
+        "book_stable":true,"balance_stable":true,"pnl_coverage_complete":false,"source_complete":false,
+        "failure_reasons":["pnl_position_coverage_incomplete"],"pnl_coverage_diagnostics":counts,
+        "balance":1234567.89,"float":98765.43,"equity":999999.99,"price":54321.12,
+        "notes":["PRIVATE_NOTES"],"raw_payload":{"secret":"PRIVATE_PAYLOAD"}});
+    private["pnl_coverage_diagnostics"]["unapproved"] = json!("PRIVATE_NESTED");
+    for (id, detail) in [
+        (account, private),
+        (foreign, json!({"notes":["FOREIGN_SNAPSHOT"]})),
+        (
+            legacy,
+            json!({"book_stable":"PRIVATE_STRING","balance_stable":null,
+            "failure_reasons":["book_changed","PRIVATE_REASON"],
+            "pnl_coverage_diagnostics":{"missing_pnl_position_count":-1,"extra_pnl_position_count":"PRIVATE_COUNT"}}),
+        ),
+    ] {
+        store::sqlx::query("INSERT INTO report_account_snapshots(account_id,sample_key,observed_at,detail) VALUES($1,'latest',$2,$3)")
+            .bind(id).bind(at).bind(detail).execute(&pool).await.unwrap();
+    }
+    let app = router(AppState {
+        pool,
+        loading: Arc::new(AtomicBool::new(false)),
+        recorders: Default::default(),
+        history: Default::default(),
+        trading_loops: Default::default(),
+        strategy3_loops: Default::default(),
+        allowed_accounts: Arc::new(BTreeSet::from([account, legacy, absent])),
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/operations/reports")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let text = std::str::from_utf8(&body).unwrap();
+    for forbidden in [
+        "PRIVATE_",
+        "FOREIGN_SNAPSHOT",
+        "1234567.89",
+        "98765.43",
+        "999999.99",
+        "54321.12",
+    ] {
+        assert!(!text.contains(forbidden), "leaked {forbidden}");
+    }
+    let value: Value = serde_json::from_slice(&body).unwrap();
+    let rows = value["account_source_diagnostics"]
+        .as_array()
+        .expect("curated source evidence");
+    assert_eq!(rows.len(), 3);
+    let row = rows.iter().find(|r| r["account_id"] == account).unwrap();
+    assert_eq!(
+        row,
+        &json!({"account_id":account,"observed_at":at,
+        "book_stable":true,"balance_stable":true,"pnl_coverage_complete":false,"source_complete":false,
+        "failure_reasons":["pnl_position_coverage_incomplete"],"pnl_coverage_diagnostics":counts})
+    );
+    let unknown_counts = json!({"missing_pnl_position_count":null,"extra_pnl_position_count":null,
+        "duplicate_position_id_count":null,"duplicate_pnl_id_count":null,"non_open_position_count":null});
+    for id in [legacy, absent] {
+        assert_eq!(
+            rows.iter().find(|r| r["account_id"] == id).unwrap(),
+            &json!({"account_id":id,"observed_at":if id==legacy {Some(at)} else {None},
+                "book_stable":null,"balance_stable":null,"pnl_coverage_complete":null,"source_complete":null,
+                "failure_reasons":null,"pnl_coverage_diagnostics":unknown_counts})
+        );
+    }
+    assert!(rows.iter().all(|r| r["account_id"] != foreign));
+}
