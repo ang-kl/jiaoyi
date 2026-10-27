@@ -156,14 +156,21 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
             .await
             .unwrap();
     }
-    let counts = json!({"missing_pnl_position_count":1,"extra_pnl_position_count":0,
+    let counts = json!({"missing_pnl_position_count":0,"extra_pnl_position_count":1,
         "duplicate_position_id_count":0,"duplicate_pnl_id_count":0,"non_open_position_count":0});
+    let relationships = json!({"pending_entry_position_match_count":1,
+        "pending_protection_position_match_count":1,"pending_order_missing_position_ref_count":1,
+        "opening_deal_observed_count":1,"closing_deal_observed_count":1,"owned_fill_observed_count":1,
+        "evidence_state":"stored_observations_only_closure_unknown"});
     let mut private = json!({"account_id":foreign,"observed_at":"PRIVATE_TIMESTAMP",
         "book_stable":true,"balance_stable":true,"pnl_coverage_complete":false,"source_complete":false,
         "failure_reasons":["pnl_position_coverage_incomplete"],"pnl_coverage_diagnostics":counts,
+        "extra_pnl_relationship_diagnostics":relationships,
         "balance":1234567.89,"float":98765.43,"equity":999999.99,"price":54321.12,
         "notes":["PRIVATE_NOTES"],"raw_payload":{"secret":"PRIVATE_PAYLOAD"}});
     private["pnl_coverage_diagnostics"]["unapproved"] = json!("PRIVATE_NESTED");
+    private["extra_pnl_relationship_diagnostics"]["unapproved"] =
+        json!({"position_id":"PRIVATE_POSITION_ID","amount":"PRIVATE_RELATION_AMOUNT"});
     for (id, detail) in [
         (account, private),
         (foreign, json!({"notes":["FOREIGN_SNAPSHOT"]})),
@@ -171,7 +178,12 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
             legacy,
             json!({"book_stable":"PRIVATE_STRING","balance_stable":null,
             "failure_reasons":["book_changed","PRIVATE_REASON"],
-            "pnl_coverage_diagnostics":{"missing_pnl_position_count":-1,"extra_pnl_position_count":"PRIVATE_COUNT"}}),
+            "pnl_coverage_diagnostics":{"missing_pnl_position_count":-1,"extra_pnl_position_count":"PRIVATE_COUNT"},
+            "extra_pnl_relationship_diagnostics":{"pending_entry_position_match_count":-1,
+                "pending_protection_position_match_count":"PRIVATE_COUNT",
+                "pending_order_missing_position_ref_count":1.5,"opening_deal_observed_count":true,
+                "closing_deal_observed_count":{"value":1},"owned_fill_observed_count":[1],
+                "evidence_state":"PRIVATE_RELATION_REASON"}}),
         ),
     ] {
         store::sqlx::query("INSERT INTO report_account_snapshots(account_id,sample_key,observed_at,detail) VALUES($1,'latest',$2,$3)")
@@ -220,16 +232,22 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
         row,
         &json!({"account_id":account,"observed_at":at,
         "book_stable":true,"balance_stable":true,"pnl_coverage_complete":false,"source_complete":false,
-        "failure_reasons":["pnl_position_coverage_incomplete"],"pnl_coverage_diagnostics":counts})
+        "failure_reasons":["pnl_position_coverage_incomplete"],"pnl_coverage_diagnostics":counts,
+        "extra_pnl_relationship_diagnostics":relationships})
     );
     let unknown_counts = json!({"missing_pnl_position_count":null,"extra_pnl_position_count":null,
         "duplicate_position_id_count":null,"duplicate_pnl_id_count":null,"non_open_position_count":null});
+    let unknown_relationships = json!({"pending_entry_position_match_count":null,
+        "pending_protection_position_match_count":null,"pending_order_missing_position_ref_count":null,
+        "opening_deal_observed_count":null,"closing_deal_observed_count":null,"owned_fill_observed_count":null,
+        "evidence_state":null});
     for id in [legacy, absent] {
         assert_eq!(
             rows.iter().find(|r| r["account_id"] == id).unwrap(),
             &json!({"account_id":id,"observed_at":if id==legacy {Some(at)} else {None},
                 "book_stable":null,"balance_stable":null,"pnl_coverage_complete":null,"source_complete":null,
-                "failure_reasons":null,"pnl_coverage_diagnostics":unknown_counts})
+                "failure_reasons":null,"pnl_coverage_diagnostics":unknown_counts,
+                "extra_pnl_relationship_diagnostics":unknown_relationships})
         );
     }
     assert!(rows.iter().all(|r| r["account_id"] != foreign));

@@ -65,6 +65,7 @@ pub mod messages {
         ProtoOaInterval,
         ProtoOaLightSymbol,
         ProtoOaMinCommissionType,
+        ProtoOaOrder,
         ProtoOaPayloadType,
         ProtoOaPosition,
         ProtoOaPositionUnrealizedPnL,

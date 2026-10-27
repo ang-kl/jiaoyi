@@ -313,6 +313,21 @@ fn source_diagnostic(account: i64, observed_at: Option<DateTime<Utc>>, detail: &
         result["pnl_coverage_diagnostics"][field] =
             json!(detail["pnl_coverage_diagnostics"][field].as_u64());
     }
+    let relationships = &detail["extra_pnl_relationship_diagnostics"];
+    let mut curated = json!({"evidence_state":relationships["evidence_state"].as_str().filter(|s|
+        matches!(*s, "stored_observations_only_closure_unknown" | "not_applicable" |
+            "response_account_mismatch" | "invalid_position_id" | "store_read_failed"))});
+    for field in [
+        "pending_entry_position_match_count",
+        "pending_protection_position_match_count",
+        "pending_order_missing_position_ref_count",
+        "opening_deal_observed_count",
+        "closing_deal_observed_count",
+        "owned_fill_observed_count",
+    ] {
+        curated[field] = json!(relationships[field].as_u64());
+    }
+    result["extra_pnl_relationship_diagnostics"] = curated;
     result
 }
 
