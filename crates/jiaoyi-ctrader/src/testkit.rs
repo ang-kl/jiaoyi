@@ -73,6 +73,10 @@ pub struct FakeBroker {
     pub max_deals_per_response: usize,
     /// The trader record; a default one when `None`.
     pub trader: Option<pb::ProtoOaTrader>,
+    /// Ordered account-read replies; empty queues use the normal fake state.
+    pub scripted_traders: Arc<Mutex<VecDeque<pb::ProtoOaTrader>>>,
+    pub scripted_books: Arc<Mutex<VecDeque<pb::ProtoOaReconcileRes>>>,
+    pub scripted_pnl: Arc<Mutex<VecDeque<pb::ProtoOaGetPositionUnrealizedPnLRes>>>,
     /// The token's grant (`ProtoOAGetAccountListByAccessTokenRes`). `None`:
     /// the fake's own account, demo. An account the grant omits is refused
     /// authorisation with CH_ACCESS_TOKEN_INVALID, as the broker does.
@@ -678,13 +682,19 @@ impl FakeBroker {
                             });
                         }
                     } else if pt == Oa::ProtoOaTraderReq as i32 {
-                        let trader = self.trader.clone().unwrap_or(pb::ProtoOaTrader {
-                            ctid_trader_account_id: self.account_id,
-                            balance: 1_000_000,
-                            deposit_asset_id: 1,
-                            money_digits: Some(2),
-                            ..Default::default()
-                        });
+                        let trader = self
+                            .scripted_traders
+                            .lock()
+                            .unwrap()
+                            .pop_front()
+                            .or_else(|| self.trader.clone())
+                            .unwrap_or(pb::ProtoOaTrader {
+                                ctid_trader_account_id: self.account_id,
+                                balance: 1_000_000,
+                                deposit_asset_id: 1,
+                                money_digits: Some(2),
+                                ..Default::default()
+                            });
                         out.push(reply(
                             id,
                             Oa::ProtoOaTraderRes as i32,
@@ -1044,33 +1054,41 @@ impl FakeBroker {
                         out.push(reply(
                             id,
                             Oa::ProtoOaReconcileRes as i32,
-                            pb::ProtoOaReconcileRes {
-                                payload_type: None,
-                                ctid_trader_account_id: self.account_id,
-                                position: positions,
-                                order: vec![],
-                            }
-                            .encode_to_vec(),
+                            self.scripted_books
+                                .lock()
+                                .unwrap()
+                                .pop_front()
+                                .unwrap_or_else(|| pb::ProtoOaReconcileRes {
+                                    payload_type: None,
+                                    ctid_trader_account_id: self.account_id,
+                                    position: positions,
+                                    order: vec![],
+                                })
+                                .encode_to_vec(),
                         ));
                     } else if pt == Oa::ProtoOaGetPositionUnrealizedPnlReq as i32 {
                         let positions = self.positions.lock().unwrap().clone();
                         out.push(reply(
                             id,
                             Oa::ProtoOaGetPositionUnrealizedPnlRes as i32,
-                            pb::ProtoOaGetPositionUnrealizedPnLRes {
-                                payload_type: None,
-                                ctid_trader_account_id: self.account_id,
-                                position_unrealized_pn_l: positions
-                                    .iter()
-                                    .map(|p| pb::ProtoOaPositionUnrealizedPnL {
-                                        position_id: p.position_id,
-                                        gross_unrealized_pn_l: self.unrealized_net,
-                                        net_unrealized_pn_l: self.unrealized_net,
-                                    })
-                                    .collect(),
-                                money_digits: 2,
-                            }
-                            .encode_to_vec(),
+                            self.scripted_pnl
+                                .lock()
+                                .unwrap()
+                                .pop_front()
+                                .unwrap_or_else(|| pb::ProtoOaGetPositionUnrealizedPnLRes {
+                                    payload_type: None,
+                                    ctid_trader_account_id: self.account_id,
+                                    position_unrealized_pn_l: positions
+                                        .iter()
+                                        .map(|p| pb::ProtoOaPositionUnrealizedPnL {
+                                            position_id: p.position_id,
+                                            gross_unrealized_pn_l: self.unrealized_net,
+                                            net_unrealized_pn_l: self.unrealized_net,
+                                        })
+                                        .collect(),
+                                    money_digits: 2,
+                                })
+                                .encode_to_vec(),
                         ));
                     } else if pt == Oa::ProtoOaUnsubscribeSpotsReq as i32 {
                         out.push(reply(
