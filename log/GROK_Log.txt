@@ -88,3 +88,7 @@
 № 17,633 · 28-10-2026, 07:50 SGT · by Grok 4.7
 §1 Owner: Codex is past № 17,632. The committed CODEX_Log.txt on main stops at № 17,624. This entry skips to № 17,633 so the two logs do not reuse a number.
 §2 Live health at 07:51 SGT: no open positions on the four accounts. Current sessions are AUS200, BTCUSD and ETHUSD, all deadline_missed. JPN225 is prepared for 08:00 SGT and is not yet a mark. No named halt. worth_a_permit refused affirm, pretrade and sentiment. No Grok API call. Used permits: 0.
+
+№ 17,634 · 28-10-2026, 07:53 SGT · by Grok 4.7
+§1 PR #62 check failed. The provenance fixture still resolved EURUSD. Migration 0018 removed that name, so the recorder found no symbol.
+§2 The fixture now resolves GBPUSD, which the universe still contains. Pushed. Not merged until the check passes.
