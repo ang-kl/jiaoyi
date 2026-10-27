@@ -11,13 +11,15 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use jiaoyi_core::allowlist::{Environment, PermittedAccount};
 use jiaoyi_ctrader::Connection;
 use jiaoyi_store::sqlx::PgPool;
 use jiaoyi_store::ticks::{self, TickRow};
 use serde::Serialize;
-use tokio::sync::broadcast::error::RecvError;
+use serde_json::json;
+use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 use tokio::time::Instant;
 
 use crate::config::BrokerConfig;
@@ -31,6 +33,37 @@ pub const RETRY_AFTER: Duration = Duration::from_secs(30);
 pub const MAINTAIN_EVERY: Duration = Duration::from_secs(3600);
 /// Partitions created ahead of today.
 pub const PARTITIONS_AHEAD: u32 = 3;
+
+/// Versioned observations, not a claim that a recording session is complete.
+/// Sessions without a start marker predate this evidence and remain unknown.
+const SOURCE_MARKER_VERSION: u32 = 1;
+
+async fn source_marker(
+    pool: &PgPool,
+    account_id: i64,
+    session_id: &str,
+    observed_at: DateTime<Utc>,
+    next_seq: i64,
+    lost_count: Option<u64>,
+) -> anyhow::Result<()> {
+    let (kind, reason) = match lost_count {
+        None => ("tick_recording_started", "spot_receiver_subscribed"),
+        Some(_) => ("tick_recording_gap", "spot_receiver_lagged"),
+    };
+    let mut detail = json!({
+        "marker_version": SOURCE_MARKER_VERSION,
+        "session_id": session_id,
+        "observed_at": observed_at,
+        "last_assigned_seq": next_seq.checked_sub(1).filter(|seq| *seq >= 0),
+    });
+    if let Some(n) = lost_count {
+        // This counts lost broadcast messages, not inferred ticks, time, or symbols.
+        detail["lost_count"] = json!(n);
+    }
+    jiaoyi_store::trading::record_decision(pool, account_id, None, kind, reason, &detail, None)
+        .await
+        .context("persist tick recording source marker")
+}
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct RecorderStatus {
@@ -278,7 +311,16 @@ pub async fn record(
     // so a refresh by either is seen by both.
     let session = loader::authorise(pool, conn, broker, account).await?;
     let mut rx = conn.spot_events();
+    let observed_at = Utc::now();
     session.subscribe_spots(&ids).await?;
+    let session_id = format!(
+        "{}-{}-{}",
+        account.id(),
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let mut seq: i64 = 0;
+    source_marker(pool, account.id(), &session_id, observed_at, seq, None).await?;
     // An end that arrives from here on is seen by `ends` (taken before the
     // authorisation). The quotes received before it are still recorded.
     let recovered_from = {
@@ -303,13 +345,6 @@ pub async fn record(
 
     let mut buf: Vec<TickRow> = Vec::new();
     let mut written = 0u64;
-    let session_id = format!(
-        "{}-{}-{}",
-        account.id(),
-        std::process::id(),
-        Utc::now().timestamp_nanos_opt().unwrap_or_default()
-    );
-    let mut seq: i64 = 0;
     // The first flush comes one interval after the start (a plain `interval`
     // would fire at once).
     let mut flush = tokio::time::interval_at(Instant::now() + cfg.flush_every, cfg.flush_every);
@@ -318,7 +353,7 @@ pub async fn record(
     let deadline = opts.until.map(tokio::time::sleep_until);
     tokio::pin!(deadline);
 
-    let outcome: anyhow::Result<()> = loop {
+    let outcome: anyhow::Result<()> = 'recording: loop {
         tokio::select! {
             r = rx.recv() => match r {
                 Ok(spot) => {
@@ -329,6 +364,9 @@ pub async fn record(
                 Err(RecvError::Lagged(n)) => {
                     tracing::warn!(account = %account, missed = n, "tick recorder lagged; quotes missed");
                     with_status(status, account.id(), |s| s.ticks_missed_lagging += n);
+                    if let Err(e) = source_marker(pool, account.id(), &session_id, Utc::now(), seq, Some(n)).await {
+                        break Err(e);
+                    }
                 }
                 Err(RecvError::Closed) => {
                     let why = conn.closed_reason().unwrap_or_else(|| "no reason given".into());
@@ -339,9 +377,20 @@ pub async fn record(
                 if let Ok(e) = e {
                     if e.affects(account.id()) {
                         // Keep the quotes that arrived before the end.
-                        while let Ok(spot) = rx.try_recv() {
-                            if let Some(row) = tick_row(spot, account.id(), &ids, &session_id, &mut seq) {
-                                buf.push(row);
+                        loop {
+                            match rx.try_recv() {
+                                Ok(spot) => {
+                                    if let Some(row) = tick_row(spot, account.id(), &ids, &session_id, &mut seq) {
+                                        buf.push(row);
+                                    }
+                                }
+                                Err(TryRecvError::Lagged(n)) => {
+                                    with_status(status, account.id(), |s| s.ticks_missed_lagging += n);
+                                    if let Err(e) = source_marker(pool, account.id(), &session_id, Utc::now(), seq, Some(n)).await {
+                                        break 'recording Err(e);
+                                    }
+                                }
+                                Err(TryRecvError::Empty | TryRecvError::Closed) => break,
                             }
                         }
                         tracing::warn!(account = %account, reason = %e.reason, "account session ended by the broker; re-authorising");

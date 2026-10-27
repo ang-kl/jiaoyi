@@ -35,6 +35,9 @@ pending stop remains on the protective side. Fill stop gaps adversely at the
 executable quote, targets conservatively at their trigger price. No same-quote
 future peek or optimistic stop fills. Broker minimum-distance/latency/fill
 uncertainty must be reported; this scenario cannot prove live amend acceptance.
+The known session-close clock uses the first executable recorded quote at or
+after that close; absent such a quote leaves open volume censored. This timing
+clarification was recorded before any real comparison was run.
 
 ## Frozen sample and data admission
 

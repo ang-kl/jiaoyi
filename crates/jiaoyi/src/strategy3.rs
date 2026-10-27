@@ -1563,6 +1563,10 @@ impl<'a, 'c> Trader<'a, 'c> {
             .await;
             return Ok(());
         };
+        // Keep the actual entry-time grid and UTC session for later replay;
+        // today's symbol metadata or calendar must not replace this snapshot.
+        detail["volume_limits"] = json!(limits);
+        detail["session"] = json!(s);
         let spread = match &day.spread {
             Ok((m, _)) => *m,
             Err(why) => {
