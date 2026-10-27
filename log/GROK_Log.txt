@@ -76,3 +76,7 @@
 
 № 17,616 · 28-10-2026, 07:44 SGT · by Grok 4.7
 §1 Owner: explain the 15 of 20. 0.73 × 20 = 14.6, so the first passing count is 15 (75%). 14/20 = 70% fails. A net win is broker cash above zero. A flat stays in the 20. The 1.38 payoff is a second number, not part of the count.
+
+№ 17,617 · 28-10-2026, 07:45 SGT · by Grok 4.7
+§1 Owner: sure of PR #74, or cut the window from 20 to 10.
+§2 PR #74 is a log. The 20 is the charter, not that PR. Do not cut it. A coin-flip rule passes 15/20 about 2.1% of the time, and 8/10 about 5.5%. Ten trades arrive sooner and pass by luck more often. I-7 stands until the owner orders the change.
