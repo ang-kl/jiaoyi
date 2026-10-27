@@ -52,3 +52,8 @@
 §1 Owner: queue reverse, Chandelier, MAE and MFE, tested and not confusing.
 §2 Chandelier is an exit (best − R long, best + R short). MAE and MFE are measurements and move nothing. Reverse flips a side and is not wired to the live entry, so the primary hash is unchanged.
 §3 Test chandelier_mae_mfe_and_reverse_are_distinct passes. PR #65 carries the change.
+
+№ 17,611 · 28-10-2026, 07:27 SGT · by Grok 4.7
+§1 Owner: 10 Grok permits a day for engineering fixes; ChatGPT has 18. Use prudently. JIAOYU_GROK_MODEL is a typo; the others are JIAOYI_.
+§2 Sentiment and news cannot manufacture the 73%. Proposed as a pre-trade measurement, not a rule, so the primary hash is unchanged until a separate window shows the filter helps.
+§3 PR #65 merged. The trail, Chandelier, MAE, MFE and reverse functions are on main.
