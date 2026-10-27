@@ -1130,22 +1130,40 @@ class Coordinator:
                  "commit", "-m", "fix: bounded engineering task " + str(jid), cwd=workspace)
         head = self.git("rev-parse", "HEAD", cwd=workspace)
         self.git("push", "origin", "HEAD:refs/heads/" + branch, cwd=workspace, write=True)
+        # Publication succeeded. Persist the exact head before PR API reads:
+        # list/search projections can lag a repaired branch's successful push.
+        # Any later failure resumes the existing read-only release path, not AI.
+        self.store.update(jid, "ci_wait", pr=remote["number"] if remote else job["pr"], head=head, result=saved)
         body = self.store.private / f"{jid}-pr.md"
         body.write_text("Automated bounded engineering task.\n\n" + json.loads(saved)["summary"]
                         + "\n\nValidation reported by session:\n" + json.loads(saved)["tests"]
                         + "\n\nRequired check and docker CI must pass on this exact head before merge.\n"
                         + "Owner decisions: " + json.loads(saved)["owner_decisions"])
         if not remote:
-            self.gh("pr", "create", "--repo", REPO, "--head", branch, "--base", "main",
-                    "--title", "fix: bounded engineering task " + str(jid), "--body-file", str(body), write=True)
-        remote = self.existing_pr(branch)
-        if not remote or remote["headRefOid"] != head:
-            raise RuntimeError("created PR identity not verified")
-        self.store.update(jid, "ci_wait", pr=remote["number"], head=head, result=saved)
+            created = self.gh("pr", "create", "--repo", REPO, "--head", branch, "--base", "main",
+                              "--title", "fix: bounded engineering task " + str(jid), "--body-file", str(body), write=True)
+            match = re.fullmatch(r"https://github\.com/" + re.escape(REPO) + r"/pull/([1-9][0-9]*)", created)
+            if match:
+                self.store.update(jid, "ci_wait", pr=int(match[1]))
+        # Authoritative REST identity and exact-head CI are checked by release.
+        # Never overwrite this published head with a possibly stale PR list head.
 
     def release(self, job):
         jid, number = job["id"], job["pr"]
         if job["state"] == "ci_wait":
+            if number is None:
+                # A lost create acknowledgement can still mean a PR exists.
+                # Read before considering any intervention; never create twice.
+                remote = None
+                for _ in range(3):
+                    remote = self.existing_pr("engineering/job-" + str(jid))
+                    if remote:
+                        break
+                if not remote:
+                    self.store.update(jid, "owner_blocked", result="Published head retained; PR publication unconfirmed after three reads. Inspect branch/PR creation before any explicit retry; model work must not repeat.")
+                    return
+                number = remote["number"]
+                self.store.update(jid, "ci_wait", pr=number)
             pr = json.loads(self.gh("api", f"repos/{REPO}/pulls/{number}"))
             if (pr["base"]["ref"] != "main" or pr["head"]["repo"]["full_name"] != REPO
                     or pr["head"]["ref"] != "engineering/job-" + str(jid)
