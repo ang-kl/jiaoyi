@@ -43,3 +43,7 @@
 № 17,598 · 28-10-2026, 07:02 SGT · by Grok 4.7
 §1 cTrader Algo is C# or Python cBots, with backtest, genetic/grid optimization and Monte Carlo (5.10). Open API is 50 requests a second, 5 for history. The factory already uses the Open API, not a cBot.
 §2 Other quant-capable brokers: Interactive Brokers for multi-asset, Alpaca for US equities, Tradier/Schwab for options, MetaTrader 5 for the EA library, OANDA for FX. Switching does not create the 73%.
+
+№ 17,608 · 28-10-2026, 07:09 SGT · by Grok 4.7
+§1 Owner: "change the forbid." The 25 Oct sentence forbade stop amends so an amend could not drop the broker take-profit. The gate already carries the take-profit on an amend.
+§2 PR #65: v5 registration retires the forbid. An owned S3 position trails to best − R (long) or best + R (short). The stop never loosens. No amend in the session's last 30 minutes.
