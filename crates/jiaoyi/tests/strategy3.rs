@@ -2754,3 +2754,185 @@ async fn history_defers_receipt_before_local_summary(pool: PgPool) {
 async fn history_defers_incompletely_persisted_local_volume(pool: PgPool) {
     challenge_local_close_checkpoint(&pool, LocalCloseCheckpoint::IncompleteCoverage).await;
 }
+
+/// The owner's deadline is before the open, even with no incoming quotes.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn preopen_is_prepared_before_open_without_quotes_or_orders(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake((60_455.0, 60_462.0));
+    let mut full = Vec::new();
+    for day in 1..=20 {
+        for mark in 0..48 {
+            full.push(m30_bar(
+                today().open - Duration::days(day) + Duration::minutes(mark * 30),
+                e5(OPEN),
+                e5(61_000.0),
+                e5(59_000.0),
+                e5(OPEN * 1.0075),
+                100,
+            ));
+        }
+    }
+    full.push(m30_bar(
+        today().open,
+        e5(OPEN),
+        e5(OPEN),
+        e5(OPEN),
+        e5(OPEN),
+        10,
+    ));
+    f.m30_bars.insert(BTC, full);
+    let (conn, log) = f.spawn();
+    let session = loader::authorise(&pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let list = allowlist();
+    let live = trading::LivenessMap::default();
+    let mut ends = conn.session_ends();
+    let (trigger, mut stop) = shutdown::channel();
+    let before_open = today().open - Duration::minutes(19);
+    let offset = before_open - Utc::now();
+    let controller = async {
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+        trigger.fire();
+    };
+    let (result, _) = tokio::join!(
+        strategy3::run_session_with_event_offset(
+            &pool,
+            &list,
+            Environment::Demo,
+            &session,
+            &live,
+            &mut ends,
+            &mut stop,
+            offset
+        ),
+        controller,
+    );
+    result.unwrap();
+    let prepared: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM trading_decisions WHERE account_id=$1 AND kind='s3_preopen'",
+    )
+    .bind(DEMO)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        prepared > 0,
+        "historical setup must complete before open, without waiting for an entry quote"
+    );
+    let row: serde_json::Value = sqlx::query_scalar(
+        "SELECT detail FROM trading_decisions WHERE kind='s3_preopen' ORDER BY id DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let prepared: strategy3::preopen::Prepared = serde_json::from_value(row).unwrap();
+    assert!(prepared.ready() && prepared.on_time());
+    assert_eq!(prepared.session, today());
+    assert!(prepared.completed_at < today().open - Duration::minutes(10));
+    let health = strategy3::preopen::health(&pool, DEMO, before_open + Duration::seconds(10))
+        .await
+        .unwrap();
+    assert!(health["symbols"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["state"] == "prepared_on_time"));
+    {
+        let l = log.lock().unwrap();
+        assert!(l.orders.is_empty() && l.amends.is_empty() && l.closes.is_empty());
+    }
+    let requests = log.lock().unwrap().trendbar_requests.len();
+    // Reconnect after the deadline retains the original receipt and does
+    // not repeat the historical download or misreport preparation as late.
+    let list2 = allowlist();
+    let mut restored = strategy3::Trader::new(&pool, &list2, Environment::Demo, &session)
+        .await
+        .unwrap();
+    assert!(
+        restored.syms[&BTC]
+            .preopen
+            .as_ref()
+            .is_some_and(|p| p.completed_at == prepared.completed_at),
+        "reconnect reloads the durable pre-open receipt"
+    );
+    restored
+        .on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+        .await
+        .unwrap();
+    assert_eq!(
+        log.lock().unwrap().trendbar_requests.len(),
+        requests + 1,
+        "entry reads only today's opening bar; full history was already prepared"
+    );
+    assert_eq!(
+        log.lock().unwrap().orders.len(),
+        1,
+        "registered entry still works with the prepared statistics"
+    );
+    // The separate pre-open worker itself sent no trading frames.
+    // The on-quote assertion above exercises the unchanged registered entry.
+    let log = log.lock().unwrap();
+    assert!(log.amends.is_empty() && log.closes.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_preopen_history_wait_does_not_starve_an_owned_tp1(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(t.own.len(), 1);
+    });
+    f.trendbar_reply_delays
+        .lock()
+        .unwrap()
+        .push_back(std::time::Duration::from_secs(10));
+    f.quote_sequence = vec![(
+        500,
+        BTC,
+        (Some(e5(61_384.21) as u64), Some(e5(62_118.0) as u64)),
+    )];
+    let (conn, log) = f.spawn();
+    let session = loader::authorise(&pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let list = allowlist();
+    let live = trading::LivenessMap::default();
+    let mut ends = conn.session_ends();
+    let (trigger, mut stop) = shutdown::channel();
+    let offset = today().close - Duration::minutes(19) - Utc::now();
+    let close = async {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        trigger.fire();
+    };
+    let (result, _) = tokio::join!(
+        strategy3::run_session_with_event_offset(
+            &pool,
+            &list,
+            Environment::Demo,
+            &session,
+            &live,
+            &mut ends,
+            &mut stop,
+            offset
+        ),
+        close
+    );
+    result.unwrap();
+    let l = log.lock().unwrap();
+    assert!(
+        !l.trendbar_requests.is_empty(),
+        "pre-open historical read started"
+    );
+    assert_eq!(
+        l.closes.len(),
+        1,
+        "TP1 executes while the preparation reply is still held"
+    );
+    assert_eq!(l.closes[0].volume, 8);
+    assert!(l.orders.is_empty() && l.amends.is_empty());
+}

@@ -140,3 +140,35 @@ Historical handover: №17,602 §§1–2 and №17,603 §§1–3 (28Oct06:28SGT)
 reported PR57 merged/deployed and engineering resumed, with1/18 sessions
 used at that observation. See PR57 §§5–7 for the actual release receipt.
 This documentation update makes no fresh runtime or financial claim.
+
+ENTRY 28-10-2026 07:25:53 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,613–17,615 (pre-trade status); №17,616 §1; №17,617 §1;
+        №17,618 §§1–2; №17,619 §1; №17,620 §1; №17,621 §1.
+[§LOG.15] Build S3 pre-open preparation: T-20 start/T-10 completion deadline,
+independent read-only preparation using existing connections/pacing; compact
+receipts in existing decisions, restored across reconnect; health shows every
+configured symbol's schedule/readiness/deadline. Actual opening price and
+fresh execution/risk checks remain at entry. No new policy, AI loop, service
+or database schema. Full-history download is avoided when valid prepared
+coefficients exist. Source failure retries do not take trading management down.
+See journal §ENG-20261028-PREOPEN.1–4 and docs/s3-preopen-preparation.md.
+Original quote-free preparation test failed; corrected test, held-read TP1
+fixture, all46 S3 tests, three unit checks, fmt and workspace Clippy passed.
+CI/merge/deployment still pending at this entry; financial delta unmeasured.
+
+[§LOG.16] Queued owner stock request after the S3 release: expand US/European
+stock watchlist and pre-market preparation; exclude Chinese stocks/indices.
+See docs/queued-us-europe-stock-preparation.md. Read Grok's changed log through
+№17,609 (07:16SGT), blob1e3a1f0f3f28e61a9eb277fbb26937fa4f896ede. Its
+PR65 is still open at the last read; do not overwrite its trailing work when
+integrating later main changes, or treat the log itself as new authority.
+
+ENTRY 28-10-2026 07:33:22 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,622 §1; №17,623 §1; №17,624 §1.
+[§LOG.17] PR68: https://github.com/ang-kl/jiaoyi/pull/68. First head passed
+all required CI. Read and integrated main's PR65/v5 exit changes and Grok
+log through №17,614, retaining their work. Combined source: Clippy and
+all46 S3 integration tests passed. New-head CI/merge and deployed pre-open
+completion proof remain pending. No financial acceptance is claimed.

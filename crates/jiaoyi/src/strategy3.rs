@@ -45,6 +45,8 @@
 //!
 //! Every order goes through `jiaoyi_ctrader::trading::send`, the one gate.
 
+pub mod preopen;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -551,6 +553,7 @@ pub struct Day {
     pub prepared_at: DateTime<Utc>,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn load_day(
     pool: &PgPool,
     session: &AccountSession<'_>,
@@ -559,8 +562,13 @@ async fn load_day(
     rule: SessionRule,
     s: Session,
     now: DateTime<Utc>,
+    prepared_table: Option<SigmaTable>,
 ) -> Result<Day, (String, DateTime<Utc>)> {
-    let from = s.open - chrono::Duration::days(BAR_DAYS);
+    let from = if prepared_table.is_some() {
+        s.open
+    } else {
+        s.open - chrono::Duration::days(BAR_DAYS)
+    };
     match session.m30_bars(symbol_id, from, now).await {
         Err(e) => Err((format!("M30 bars unreadable: {e}"), now)),
         Ok(raw) => {
@@ -573,6 +581,9 @@ async fn load_day(
                 ) else {
                     continue;
                 };
+                if now < s.open && b.open_time + chrono::Duration::minutes(30) > now {
+                    continue;
+                }
                 let (Some(o), Some(c)) = (b.open.to_f64(), b.close.to_f64()) else {
                     continue;
                 };
@@ -585,7 +596,7 @@ async fn load_day(
                     close: c,
                 });
             }
-            let table = band::sigma_table(&rule, &s, &bars);
+            let table = prepared_table.unwrap_or_else(|| band::sigma_table(&rule, &s, &bars));
             let open = match (bars.iter().find(|b| b.open_time == s.open), first_volume) {
                 (Some(b), Some(v)) if v > 0 => Ok(b.open),
                 _ => Err(format!(
@@ -622,6 +633,7 @@ pub struct Sym {
     pub bid_at: Option<DateTime<Utc>>,
     pub ask_at: Option<DateTime<Utc>>,
     pub day: Option<Result<Day, (String, DateTime<Utc>)>>,
+    pub preopen: Option<preopen::Prepared>,
     /// The last entry attempt, so a refused trigger waits [`ENTRY_RETRY`].
     pub last_try: Option<DateTime<Utc>>,
     pub last_decision_mark: Option<DateTime<Utc>>,
@@ -848,6 +860,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     bid_at: None,
                     ask_at: None,
                     day: None,
+                    preopen: None,
                     last_try: None,
                     last_decision_mark: None,
                 },
@@ -875,6 +888,15 @@ impl<'a, 'c> Trader<'a, 'c> {
             live: Default::default(),
         };
         t.read_commission().await;
+        if preopen::restore(pool, account_id, &mut t.syms, Utc::now())
+            .await
+            .is_err()
+        {
+            tracing::warn!(
+                account = account_id,
+                "pre-open cache unavailable at reconnect; entry-time preparation remains available"
+            );
+        }
         Ok(t)
     }
 
@@ -1317,7 +1339,22 @@ impl<'a, 'c> Trader<'a, 'c> {
         let Some(rule) = self.syms.get(&symbol_id).and_then(|x| x.rule) else {
             return Ok(());
         };
-        let read = load_day(self.pool, self.session, account_id, symbol_id, rule, s, now);
+        let table = self
+            .syms
+            .get(&symbol_id)
+            .and_then(|sym| sym.preopen.as_ref())
+            .filter(|p| p.matches(symbol_id, s) && p.table.is_some() && p.missing_marks == 0)
+            .and_then(|p| p.table.clone());
+        let read = load_day(
+            self.pool,
+            self.session,
+            account_id,
+            symbol_id,
+            rule,
+            s,
+            now,
+            table,
+        );
         let day = self.protect_while_reading(read).await?;
         let name = self.syms[&symbol_id].name.clone();
         match &day {
@@ -2779,49 +2816,66 @@ pub async fn run_session_with_event_offset(
     let mut clock = tokio::time::interval(Duration::from_secs(1));
     let mut exits = tokio::time::interval(crate::fast_monitor::INTERVAL);
     exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let specs = preopen::specs(pool, account_id, &t.syms, t.deposit.is_some()).await?;
+    let (prepared_tx, mut prepared_rx) = tokio::sync::watch::channel(HashMap::new());
+    let preparation = preopen::run(pool, session, specs, prepared_tx, shutdown.clone(), offset);
+    tokio::pin!(preparation);
     initializing.complete();
-    loop {
-        tokio::select! {
-            _ = shutdown.wait() => return Ok(()),
-            e = ends.recv() => {
-                if let Ok(e) = e {
-                    if e.affects(account_id) {
-                        anyhow::bail!("the broker ended the session: {}", e.reason);
+    let management = async {
+        loop {
+            tokio::select! {
+                changed=prepared_rx.changed()=>{
+                    if changed.is_err() {return Ok(())}
+                    let ready=prepared_rx.borrow_and_update().clone();
+                    for p in ready.values() {
+                        if let Some(sym)=p.symbol_id.and_then(|id|t.syms.get_mut(&id)) {sym.preopen=Some(p.clone());}
                     }
-                }
-            }
-            _ = reconcile_tick.tick() => crate::fast_monitor::observe(live, account_id, "reconcile", t.reconcile(Utc::now())).await?,
-            _ = clock.tick() => crate::fast_monitor::observe(live, account_id, "session_exit", t.session_end(Utc::now()+offset)).await?,
-            _ = exits.tick() => crate::fast_monitor::observe(live,account_id,"registered_exits",t.check_exits(Utc::now()+offset)).await?,
-            m = execs.recv() => match m {
-                Ok(m) => {
-                    crate::fast_monitor::observe(live, account_id, "execution", t.server_event(&m)).await;
-                    crate::fast_monitor::execution_processed(live, account_id, m.received_at);
                 },
-                Err(RecvError::Lagged(_)) => {}
-                Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
-            },
-            s = spots.recv() => match s {
-                Ok(spot) => {
-                    let ev = spot.event;
-                    if ev.ctid_trader_account_id != account_id {
-                        continue;
+                _ = shutdown.wait() => return Ok(()),
+                e = ends.recv() => {
+                    if let Ok(e) = e {
+                        if e.affects(account_id) {
+                            anyhow::bail!("the broker ended the session: {}", e.reason);
+                        }
                     }
-                    crate::fast_monitor::observe(live, account_id, "quote", t.on_quote(
-                        ev.symbol_id,
-                        ev.bid.map(|b| b as f64 / 100_000.0),
-                        ev.ask.map(|a| a as f64 / 100_000.0),
-                        spot.received_at+offset,
-                    ))
-                    .await?;
-                    crate::fast_monitor::quote_processed(live, account_id, spot.received_at);
-                    crate::trading::beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
                 }
-                Err(RecvError::Lagged(_)) => {}
-                Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
-            },
+                _ = reconcile_tick.tick() => crate::fast_monitor::observe(live, account_id, "reconcile", t.reconcile(Utc::now())).await?,
+                _ = clock.tick() => crate::fast_monitor::observe(live, account_id, "session_exit", t.session_end(Utc::now()+offset)).await?,
+                _ = exits.tick() => crate::fast_monitor::observe(live,account_id,"registered_exits",t.check_exits(Utc::now()+offset)).await?,
+                m = execs.recv() => match m {
+                    Ok(m) => {
+                        crate::fast_monitor::observe(live, account_id, "execution", t.server_event(&m)).await;
+                        crate::fast_monitor::execution_processed(live, account_id, m.received_at);
+                    },
+                    Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
+                },
+                s = spots.recv() => match s {
+                    Ok(spot) => {
+                        let ev = spot.event;
+                        if ev.ctid_trader_account_id != account_id {
+                            continue;
+                        }
+                        crate::fast_monitor::observe(live, account_id, "quote", t.on_quote(
+                            ev.symbol_id,
+                            ev.bid.map(|b| b as f64 / 100_000.0),
+                            ev.ask.map(|a| a as f64 / 100_000.0),
+                            spot.received_at+offset,
+                        ))
+                        .await?;
+                        crate::fast_monitor::quote_processed(live, account_id, spot.received_at);
+                        crate::trading::beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
+                    }
+                    Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
+                },
+            }
         }
-    }
+    };
+    tokio::pin!(management);
+    // Poll the read-only worker even while an actor handler awaits the
+    // database or an execution receipt. Only the actor owns trading state.
+    tokio::select! {result=&mut management=>result, result=&mut preparation=>result}
 }
 
 // ---------------------------------------------------------------- health
@@ -2874,6 +2928,7 @@ pub async fn health(
             "open_positions": rec.as_ref().map(|(_, d)| d["positions"].clone()).unwrap_or(json!([])),
             "last_reconcile_at": rec.map(|(at, _)| at),
             "today": today,
+            "preopen_preparation": preopen::health(pool,id,Utc::now()).await.unwrap_or_else(|_|json!({"state":"unavailable"})),
             "liveness": liveness,
             // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
             "performance": crate::limits::health(pool, id, &crate::limits::S3).await.unwrap_or_else(|e| json!({"error": e.to_string()})),
