@@ -415,6 +415,15 @@ class Coordinator:
     def stop(self):
         return self.shutdown.is_set() or (self.config.root / "STOP").exists()
 
+    def stop_cause(self):
+        """Why work is held. A log dump cannot see the volume, so name the cause."""
+        if self.shutdown.is_set():
+            return "shutdown"
+        if (self.config.root / "STOP").exists():
+            return "stop_file"
+        blocked = self.config.blocked()
+        return blocked or "running"
+
     def pulse(self):
         self.pulse_at = time.monotonic()
 
@@ -530,7 +539,8 @@ class Coordinator:
             self._activity_signature = signature
         active = activity["active_job"] or {}
         print(json.dumps({"event": "engineering_activity_heartbeat", "at": snapshot["at"], "state": snapshot["state"],
-                          "reason": activity["reason"], "job": active.get("id"),
+                          "reason": activity["reason"], "stop_cause": self.stop_cause(),
+                          "job": active.get("id"),
                           "watches_running": snapshot["state"] != "stopped",
                           "heartbeat_age_seconds": snapshot["heartbeat_age_seconds"],
                           "coordinator_heartbeat_stale": activity["coordinator_heartbeat_stale"],
