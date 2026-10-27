@@ -15,6 +15,7 @@
 pub mod bootstrap;
 pub mod control;
 pub mod dsr;
+pub mod exit_replay;
 pub mod h1;
 pub mod money;
 pub mod normal;

@@ -330,6 +330,11 @@ async fn a_quote_beyond_the_band_between_marks_enters_at_that_quote(pool: PgPool
         assert!((detail["sigma"].as_f64().unwrap() - 0.0075).abs() < 1e-12);
         assert!((detail["entry"]["cost"]["total"].as_f64().unwrap() - 301.208).abs() < 1e-6);
         assert_eq!(detail["order"]["plan"]["close_volume"], 5);
+        assert_eq!(
+            detail["volume_limits"],
+            serde_json::to_value(t.syms[&BTC].limits.unwrap()).unwrap()
+        );
+        assert_eq!(detail["session"], serde_json::to_value(today()).unwrap());
         let (outcome, slippage, latency, fill): (String, f64, i64, f64) = sqlx::query_as(
             "SELECT outcome, slippage, latency_ms, fill_price FROM strategy3_fills WHERE kind = 'open'",
         )
