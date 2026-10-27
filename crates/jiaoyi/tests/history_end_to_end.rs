@@ -774,9 +774,10 @@ async fn health_shows_the_broker_leverage_and_tick_history_and_no_money(pool: Pg
             .starts_with("named by JIAOYI_DEMO_ACCOUNT_ID_2 only"),
         "{th}"
     );
-    // No money: the balance (1001000, money digits 2) is nowhere on it.
+    // No money: neither the balance field nor its raw/formatted value is public.
+    // The fixed `balance_stable` diagnostic is permitted source evidence.
     assert!(
-        !text.contains("1001000") && !text.contains("10010.00") && !text.contains("balance"),
+        !text.contains("1001000") && !text.contains("10010.00") && !text.contains("\"balance\":"),
         "{text}"
     );
 }

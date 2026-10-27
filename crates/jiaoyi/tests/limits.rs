@@ -584,10 +584,14 @@ async fn health_shows_performance_limits_and_the_pause_in_r_without_money(pool: 
     assert!(near(s3["performance"]["net_r"].as_f64().unwrap(), 1.0));
     assert_eq!(s3["performance"]["owner_decision_needed"], false);
     assert_eq!(s3["owner_pause"]["paused"], false);
-    // R only: no money field and no money figure.
+    // R only: no money field and no money figure. Fixed source diagnostics
+    // such as balance_stable and pnl_coverage_complete are permitted.
     let text = h.to_string().to_lowercase();
-    for word in ["balance", "gross", "commission", "net_money", "pnl"] {
-        assert!(!text.contains(word), "{word} on /health");
+    for field in ["balance", "gross", "commission", "net_money", "pnl"] {
+        assert!(
+            !text.contains(&format!("\"{field}\":")),
+            "{field} on /health"
+        );
     }
     for a in [s1, s3] {
         for part in ["performance", "owner_pause", "trigger_distance"] {

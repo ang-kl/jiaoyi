@@ -187,6 +187,7 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
         allowed_accounts: Arc::new(BTreeSet::from([account, legacy, absent])),
     });
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/operations/reports")
@@ -198,14 +199,15 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let text = std::str::from_utf8(&body).unwrap();
-    for forbidden in [
+    let forbidden_values = [
         "PRIVATE_",
         "FOREIGN_SNAPSHOT",
         "1234567.89",
         "98765.43",
         "999999.99",
         "54321.12",
-    ] {
+    ];
+    for forbidden in forbidden_values {
         assert!(!text.contains(forbidden), "leaked {forbidden}");
     }
     let value: Value = serde_json::from_slice(&body).unwrap();
@@ -231,4 +233,22 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
         );
     }
     assert!(rows.iter().all(|r| r["account_id"] != foreign));
+
+    // Health embeds the same projection, so it must preserve the exact whitelist
+    // and account scope even when the saved snapshot contains private values.
+    let response = app
+        .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let text = std::str::from_utf8(&body).unwrap();
+    for forbidden in forbidden_values {
+        assert!(!text.contains(forbidden), "health leaked {forbidden}");
+    }
+    let health: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        health["supervision"]["account_source_diagnostics"],
+        value["account_source_diagnostics"]
+    );
 }
