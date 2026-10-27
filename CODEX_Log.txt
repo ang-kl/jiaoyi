@@ -1,0 +1,89 @@
+CODEX_Log.txt — Codex project handover log
+
+Purpose: trace Codex work to the owner's chat, code, checks and release receipts.
+This file belongs to Codex. Append entries; preserve earlier evidence. Other AI
+should read it and maintain its own separately named log, identifying its actual
+model and effort. Never attribute another AI's work to yourself.
+
+Every entry must contain:
+  - Relevant chat serial (№) and chat paragraph reference (§).
+  - Source date/time and entry date/time in Asia/Singapore (SGT).
+  - by <AI model, effort>; mark an unexposed setting as unreported.
+  - What changed, actual checks, PR/commit receipts and remaining work.
+  - Evidence limits: planned, locally checked, CI-passed and deployed differ.
+Do not store credentials, raw account statements or private account money here.
+Log paragraph labels below are document references, not new chat serials.
+
+ENTRY 2026-10-28 06:03:48 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: № 17,583 §1, 28-10-2026 SGT (log-file request acknowledged; exact
+        acknowledgement minute was pending, entry time is recorded above).
+[§LOG.1] Owner requests CODEX_Log.txt so other AI can read the relevant chat
+serials, paragraphs, SGT times and model/effort attribution. This is Codex's
+append-only record. A focused documentation PR publishes this file and its
+dated journal entry. PR publication/merge receipts remain in GitHub and chat;
+do not restart CI merely to add the PR's own number to its source log.
+
+Source: № 17,581 §1, 28-10-2026 05:59 SGT;
+        № 17,582 §1, 28-10-2026 06:00 SGT.
+[§LOG.2] Every PR created or updated from this instruction must identify the
+relevant CHAT № and § references and SGT source/generation times. A task/job ID
+or a document paragraph alone does not replace the chat references. Other AI
+may cite the numbered messages; they must not impersonate this chat's serials.
+
+Source: № 17,577 §1, 28-10-2026 05:46 SGT;
+        № 17,579 §1, 28-10-2026 05:55 SGT;
+        № 17,580 §1, 28-10-2026 05:58 SGT.
+[§LOG.3] ACTIVE TASK: build docs/fast-position-monitor-proposal.md, merge after
+required exact-head CI, verify Railway, then resume jiaoyi-engineering. This
+owner instruction lifts the earlier engineering hold for this work. The worker
+is still stopped until the release/startup sequence is verified; do not report
+it as resumed before a real receipt. Its existing daily allowance is a ceiling,
+not a target, with no automatic paid-API fallback.
+
+[§LOG.4] Main baseline read: 9b5d82f7e58133dcc63c1342b818d4b728a4dbe4 (#52),
+including #49/#50's Strategy 3 v3 repairs and #51's engineering watches. Current
+implementation checkout: /workspace/jiaoyi-fast-monitor, branch
+fix/independent-position-monitor. The older /workspace/jiaoyi checkout contains
+the parked candidate and must not overwrite newer main changes. Its retained
+patch is /workspace/fast-monitor-parked-2026-10-27.patch, SHA256
+9b2ea360e48bc8c7887f1d9a3ed84fa13d96e01a79afe3791f26db124cdfcf68.
+
+[§LOG.5] Executed failure evidence: slow daily-bar replies blocked S1 trailing;
+slow preparation on a flat S3 symbol blocked an owned symbol's TP1. The targeted
+fixtures failed with no protective action and passed after the respective
+repairs. S1 now polls historical refresh alongside management. S3's candidate
+continues exit-only processing while historical data waits, with one mutable
+trader and the existing order gate. Five watchdog tests and the targeted stale-
+quote/duplicate-TP1 checks passed. Full current-candidate validation, PR, merge
+and deployment remain pending at this entry; later edits require their checks.
+
+[§LOG.6] Registered boundaries remain: new S3 decisions follow v3's 30-minute
+mark and 1.38R policy; existing positions keep their recorded opening plans.
+No S3 trailing or stop amendments. S1 keeps its registered trail and pacing.
+Only owned positions may be managed. Existing pre-orders and broker SL/TP are
+preserved. No automatic strategy pause, size increase or new entry from an
+exit-only timer. Rust monitoring calls no model. No individual SL Telegram.
+
+Source: № 17,576 §§1–4, 28-10-2026 05:36 SGT.
+[§LOG.7] Read #51 before resuming. Its engineering watches are not the 3-second
+Rust monitor. Known watch defects: digest checked by length, P&L watch reads
+non-production fields, and limit measurement changes can repeat alerts. Three
+new regression assertions reproduced those issues. They require correction or
+an explicit retained limitation before deploying that watcher source. #52 adds
+registration/watch logging; preserve those changes.
+
+Source: № 17,573 §§1–3, 27-10-2026 22:58 SGT.
+[§LOG.8] Previous completed repair: #49 was merged by the owner before fixes;
+#50 supplied the fixes and deployed as 9dbd4eef5da11300c5a14d81736b370ed9328158.
+453 workspace tests and PR/main CI passed. Eight loops were active; 14 common
+positions retained observed SL/TP. The engineering STOP was then verified,
+with no added worker model session. Historical setup-review registration
+lookup remains current-reference scoped; no complete legacy revalidation was
+claimed. See journal/2026-10-27.md and #50's publication receipt.
+
+[§LOG.9] Financial goal remains risk:reward 1:1.38 and at least 73% net wins
+over the latest 20 fully closed owned positions, separately per strategy and
+account (15/20 = 75%). Planned geometry, realized payoff and registered PASS
+are separate. No code/test/release result here establishes financial progress
+or consistent profitability. Current financial delta: not measured.
