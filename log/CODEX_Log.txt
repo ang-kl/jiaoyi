@@ -1,8 +1,8 @@
-CODEX_Log.txt — Codex project handover log
+log/CODEX_Log.txt — Codex project handover log
 
 Purpose: trace Codex work to the owner's chat, code, checks and release receipts.
 This file belongs to Codex. Append entries; preserve earlier evidence. Other AI
-should read it and maintain its own separately named log, identifying its actual
+should read it and maintain its own separately named log under log/, identifying its actual
 model and effort. Never attribute another AI's work to yourself.
 
 Every entry must contain:
@@ -16,9 +16,9 @@ Log paragraph labels below are document references, not new chat serials.
 
 ENTRY 2026-10-28 06:03:48 SGT (Asia/Singapore)
 by <Codex (GPT-6), effort: not exposed by this session>
-Source: № 17,583 §1, 28-10-2026 SGT (log-file request acknowledged; exact
+Source: № 17,583 §1 and № 17,584 §1, 28-10-2026 SGT (log-file and location requests; exact
         acknowledgement minute was pending, entry time is recorded above).
-[§LOG.1] Owner requests CODEX_Log.txt so other AI can read the relevant chat
+[§LOG.1] Owner requests log/CODEX_Log.txt on main so other AI can read the relevant chat
 serials, paragraphs, SGT times and model/effort attribution. This is Codex's
 append-only record. A focused documentation PR publishes this file and its
 dated journal entry. PR publication/merge receipts remain in GitHub and chat;
