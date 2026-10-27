@@ -12,10 +12,10 @@ configured. Authorization to engineer does not select a new trading policy.
 |---|---|
 | Intent | Continue engineering without an active chat or the owner's MacBook, with a main coordinator, bounded work, milestones and owner decisions. |
 | Interpretation | One separate Railway engineering service starts bounded Codex CLI sessions from a durable queue. The existing `jiaoyi` service remains the only trading executor. |
-| Invariants | Preserve all [factory invariants](factory-charter.md), including the owner's goals, serial/paragraph references and SGT date/time, pre-registrations, ownership, SL/TP, sizing, limits, account activation and existing exits. Engineering shutdown never means a trading pause. |
+| Invariants | Preserve all [factory invariants](factory-charter.md), including the owner's goals, serial/paragraph references, SGT date/time, time-efficient delivery and purposeful preparation; pre-registrations, ownership, SL/TP, sizing, limits, account activation and existing exits. Engineering shutdown never means a trading pause. |
 | Assumptions | The worker needs its own model authentication, repository permissions, hosting, persistent volume and an explicit session allowance. This chat's authentication does not prove the new service is authenticated. |
 | Expected outcomes | Disabled-by-default startup; durable queue and reports; interrupted-work recovery; one coordinator per shared state volume; bounded sessions; an engineering-only stop control; existing release gates and exact-deployment verification. |
-| Execution | Root coordinates implementation and review. Codex is configured with `multi_agent` enabled and `agents.max_threads=4`; no real model or unattended sub-agent execution has yet been verified. Specialists do not become independent trading controllers or release competing changes. |
+| Execution | Root coordinates implementation and review. Codex is configured with `multi_agent` enabled and `agents.max_threads=4`. Use bounded specialist assignments only when they advance the task; the coordinator reviews their actual evidence, integrates the result and ends completed assignments. Live authentication/delegation receipts and current activity belong in the dated journal/status, not a permanent claim that agents are always running. Specialists do not become independent trading controllers or release competing changes. |
 | Evidence | Separate local/mock behavior, CI, deployed startup, real model authentication, restart recovery and an actual verified engineering task. Missing receipts stay open. |
 | Close | Prepared code is not unattended acceptance. Declare operational completion only after all live acceptance checks below have evidence. Owner-only policy decisions and economic acceptance remain separate. |
 
@@ -36,6 +36,37 @@ This worker does not turn the chat into a perpetual process. It starts new,
 bounded sessions with durable context. Model, hosting, GitHub and Railway
 availability still determine whether those sessions can progress. Neither the
 worker nor one passing latest-20 window guarantees the financial goal.
+
+## Auditable activity and waiting
+
+The engineering coordinator is Python; the trading and supervision loops are
+Rust/Tokio. A waiting engineering process is not evidence of a missing Rust
+`.await`. Inspect the actual coordinator heartbeat, queue, decision and source
+scope before diagnosing a freeze or inventing another repair.
+
+`/status.activity` explains the existing state: waiting for a public-evidence
+poll, queued work awaiting dispatch, pending verification, a scheduled task,
+allowance exhaustion, active work, an error or a stale main-loop heartbeat.
+It includes the latest job/model outcome and timestamps, last public poll,
+next poll time, remaining sessions and bounded active-child output age/time
+budget. The public scope is health and strategy assessment windows; it does
+not prove whole-account source quality or a defect-free codebase. Pending
+verification is explicit and does not become success because time passes.
+
+An independent observer emits a compact JSON console heartbeat every five
+seconds. It never refreshes the main loop's pulse, reserves a session or calls
+an LLM. Therefore a frozen coordinator remains stale even if the observer and
+HTTP server still respond; existing health failure remains observable. A quiet
+child output file is a distinct observation, not a claim that inference has
+crashed. The existing session timeout is unchanged.
+
+Only meaningful activity transitions and actual public-assessment decisions
+are appended to the existing event journal. Clock/output-age churn adds no
+database rows. Jobs use the same job ID across model and release receipts;
+public activity exposes no task prose, model-result prose, private log paths,
+credential values or account money. Manual work enters the existing durable
+queue with an actual incident and bounded acceptance; do not manufacture a
+failing artifact or make the model retry until it produces activity.
 
 ## Startup and operating controls
 

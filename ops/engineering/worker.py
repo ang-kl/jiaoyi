@@ -381,6 +381,9 @@ class Coordinator:
         self.phase = "starting"
         self.pulse_at = time.monotonic()
         self.next_poll = 0
+        self.active_session = None
+        self.activity_shutdown = threading.Event()
+        self._activity_signature = None
         self.uid = self.gid = None
         self.sandbox_ready = None
         self.boundary_ready = None
@@ -394,12 +397,142 @@ class Coordinator:
     def pulse(self):
         self.pulse_at = time.monotonic()
 
+    @staticmethod
+    def public_time(value):
+        """Accept timestamps, never arbitrary strings from remote evidence."""
+        try:
+            parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(dt.timezone.utc).isoformat() if parsed.tzinfo else None
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    def activity(self, phase, used):
+        """Bounded public explanation; no prompts, result prose or log contents."""
+        with self.store.connect() as c:
+            last = c.execute("SELECT id,state,updated,CASE WHEN length(result)<=262144 THEN result END AS result "
+                             "FROM jobs ORDER BY updated DESC,id DESC LIMIT 1").fetchone()
+            active = c.execute("SELECT id FROM jobs WHERE state='running' ORDER BY id LIMIT 1").fetchone()
+            pending_count = c.execute("SELECT COUNT(*) FROM jobs WHERE state='verification_pending'").fetchone()[0]
+            pending = [r[0] for r in c.execute("SELECT id FROM jobs WHERE state='verification_pending' ORDER BY id LIMIT 20")]
+            ready = c.execute("SELECT COUNT(*) FROM jobs WHERE state IN ('queued','repair_queued','verification_queued')").fetchone()[0]
+            scheduled = c.execute("SELECT COUNT(*) FROM jobs WHERE state='scheduled'").fetchone()[0]
+            assessment = c.execute("SELECT at,detail FROM events WHERE kind='public_evidence_assessed' ORDER BY id DESC LIMIT 1").fetchone()
+            model = c.execute("SELECT at,job,detail FROM events WHERE kind='model_report' ORDER BY id DESC LIMIT 1").fetchone()
+            started = (c.execute("SELECT started FROM sessions WHERE job=? ORDER BY id DESC LIMIT 1", (active[0],)).fetchone()
+                       if active else None)
+        outcomes = ("changes", "no_change", "owner_blocked", "verified", "verification_pending")
+        def outcome(raw):
+            try:
+                value = json.loads(raw or "{}")
+                value = value.get("outcome") if isinstance(value, dict) else None
+                return value if value in outcomes else None
+            except (ValueError, TypeError):
+                return None
+        last_job = ({"id": last["id"], "state": last["state"], "updated": self.public_time(last["updated"]),
+                     "outcome": outcome(last["result"])} if last else None)
+        last_model = ({"job_id": model["job"], "at": self.public_time(model["at"]),
+                       "outcome": outcome(model["detail"])} if model else None)
+        last_assessment = None
+        if assessment:
+            try:
+                detail = json.loads(assessment["detail"])
+                decision = detail.get("decision")
+                last_assessment = {"at": self.public_time(assessment["at"]),
+                                   "source_at": self.public_time(detail.get("source_at")),
+                                   "decision": decision if decision in ("changed_public_evidence", "unchanged_public_evidence") else "unknown",
+                                   "queued_job_id": detail.get("queued_job_id") if type(detail.get("queued_job_id")) is int else None}
+            except (ValueError, TypeError, AttributeError):
+                pass
+        if phase == "stopped" or self.config.blocked():
+            reason = "engineering_stopped" if phase == "stopped" else "activation_blocked"
+        elif time.monotonic() - self.pulse_at >= 120:
+            reason = "coordinator_heartbeat_stale"
+        elif phase.startswith("error:"):
+            reason = "coordinator_error"
+        elif phase == "starting":
+            reason = "coordinator_starting"
+        elif phase in ("blocked_execution_boundary", "acceptance_blocked", "handoff_blocked"):
+            reason = phase
+        elif active:
+            reason = "active_job"
+        elif used >= self.config.limit:
+            reason = "session_allowance_exhausted"
+        elif phase in ("ci_wait", "deployment_wait"):
+            reason = phase
+        elif ready:
+            reason = "queued_work_awaiting_coordinator"
+        elif scheduled:
+            reason = "waiting_for_scheduled_work"
+        elif pending_count:
+            reason = "no_queued_work_verification_pending"
+        else:
+            reason = "no_queued_work_waiting_for_public_evidence_poll"
+        active_job = None
+        session = self.active_session
+        if active:
+            active_job = {"id": active[0], "started_at": self.public_time(started[0]) if started else None,
+                          "model_started_at": None, "timeout_seconds": self.config.timeout,
+                          "remaining_seconds": None, "output_age_seconds": None, "output_state": "not_running_model"}
+            if session and session["id"] == active[0]:
+                elapsed = max(0, time.monotonic() - session["started"])
+                output_age, has_output = elapsed, False
+                try:
+                    info = session["output"].stat(follow_symlinks=False)
+                    if stat.S_ISREG(info.st_mode) and info.st_size:
+                        output_age, has_output = max(0, time.time() - info.st_mtime), True
+                except OSError:
+                    pass
+                active_job.update(model_started_at=session["at"], remaining_seconds=round(max(0, self.config.timeout - elapsed), 1),
+                                  output_age_seconds=round(output_age, 1),
+                                  output_state="quiet" if output_age >= 120 else "recent_output" if has_output else "no_output_yet")
+        next_seconds = max(0, self.next_poll - time.monotonic())
+        return {"reason": reason, "last_job": last_job, "last_model_assessment": last_model,
+                "last_public_assessment": last_assessment,
+                "checked_scope": ["public_health", "public_strategy_assessment_windows"] if last_assessment else [],
+                "automatic_assessment_scope": ["public_health", "public_strategy_assessment_windows"],
+                "scope_limit": "These checks do not establish whole-account source quality or absence of software defects.",
+                "pending_verification": {"count": pending_count, "ids": pending},
+                "queued_count": ready, "session_budget_remaining": max(0, self.config.limit - used),
+                "next_poll_at": (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=next_seconds)).isoformat(),
+                "next_poll_in_seconds": round(next_seconds, 1), "active_job": active_job,
+                "coordinator_heartbeat_stale": time.monotonic() - self.pulse_at >= 120}
+
+    def activity_tick(self):
+        snapshot = self.status()
+        activity = snapshot["activity"]
+        stable = {k: activity[k] for k in ("reason", "last_job", "last_model_assessment", "last_public_assessment", "pending_verification")}
+        stable.update(state=snapshot["state"], active_job_id=(activity["active_job"] or {}).get("id"))
+        signature = json.dumps(stable, sort_keys=True)
+        if signature != self._activity_signature:
+            self.store.event("activity_transition", stable["active_job_id"], signature)
+            self._activity_signature = signature
+        active = activity["active_job"] or {}
+        print(json.dumps({"event": "engineering_activity_heartbeat", "at": snapshot["at"], "state": snapshot["state"],
+                          "reason": activity["reason"], "job": active.get("id"),
+                          "heartbeat_age_seconds": snapshot["heartbeat_age_seconds"],
+                          "coordinator_heartbeat_stale": activity["coordinator_heartbeat_stale"],
+                          "model_output_state": active.get("output_state"),
+                          "model_output_age_seconds": active.get("output_age_seconds"),
+                          "next_poll_at": activity["next_poll_at"],
+                          "remaining_sessions": activity["session_budget_remaining"], "model_calls": 0}), flush=True)
+
+    def activity_loop(self):
+        # This observer must never pulse the coordinator or reserve inference.
+        while not self.shutdown.is_set() and not self.activity_shutdown.is_set():
+            try:
+                self.activity_tick()
+            except Exception as error:
+                print(json.dumps({"event": "engineering_activity_error", "error": type(error).__name__, "model_calls": 0}), flush=True)
+            self.activity_shutdown.wait(5)
+
     def status(self):
         reason = self.config.blocked()
         phase = "stopped" if self.stop() else reason or self.phase
+        used = self.store.used()
         return {"service": "jiaoyi-engineering", "at": now(), "state": phase,
                 "heartbeat_age_seconds": round(time.monotonic() - self.pulse_at, 1),
-                "sessions_today_sgt": self.store.used(), "daily_session_limit": self.config.limit,
+                "sessions_today_sgt": used, "daily_session_limit": self.config.limit,
+                "activity": self.activity(phase, used),
                 "native_sandbox_verified": self.sandbox_ready,
                 "execution_boundary": {"mode": self.config.isolation, "verified": self.boundary_ready},
                 "worker_source_sha256": self.source_digest,
@@ -546,7 +679,11 @@ class Coordinator:
                 raise RuntimeError("automatic evidence snapshot too large")
             snapshots.append(json.loads(body))
         fingerprint = evidence_fingerprint(*snapshots, sgt_day(), self.source_digest)
-        return self.store.enqueue_changed_evidence(DEFAULT_TASK, fingerprint)
+        jid = self.store.enqueue_changed_evidence(DEFAULT_TASK, fingerprint)
+        self.store.event("public_evidence_assessed", jid, json.dumps({
+            "decision": "changed_public_evidence" if jid is not None else "unchanged_public_evidence",
+            "queued_job_id": jid, "source_at": self.public_time(snapshots[1].get("as_of"))}))
+        return jid
 
     def prepare(self):
         if os.geteuid() != 0:
@@ -867,8 +1004,12 @@ class Coordinator:
                 "--json", "--output-schema", str(HERE / "result-schema.json"),
                 "--output-last-message", str(result_path), "--cd", str(workspace), prompt]
         self.phase = "running"
-        result = bounded_process(args, logfile=self.store.private / f"{jid}-session.log",
-                                 timeout=self.config.timeout, **common)
+        logfile = self.store.private / f"{jid}-session.log"
+        self.active_session = {"id": jid, "started": time.monotonic(), "at": now(), "output": logfile.with_suffix(".raw")}
+        try:
+            result = bounded_process(args, logfile=logfile, timeout=self.config.timeout, **common)
+        finally:
+            self.active_session = None
         if result != "ok":
             self.store.update(jid, "queued" if result == "interrupted" else "failed", result=result)
             return
@@ -1015,6 +1156,8 @@ class Coordinator:
             server = ThreadingHTTPServer(("0.0.0.0", self.config.port), Handler)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             threading.Thread(target=self.reporter.run, daemon=True).start()
+            activity_thread = threading.Thread(target=self.activity_loop, daemon=True)
+            activity_thread.start()
             try:
                 if self.config.env.get("ENGINEERING_PREFLIGHT_ON_START") == "1":
                     self.probe_boundary()
@@ -1074,6 +1217,8 @@ class Coordinator:
                                 self.store.update(job["id"], "failed", result=detail)
                     self.shutdown.wait(5)
             finally:
+                self.activity_shutdown.set()
+                activity_thread.join(timeout=1)
                 server.shutdown()
                 server.server_close()
 
