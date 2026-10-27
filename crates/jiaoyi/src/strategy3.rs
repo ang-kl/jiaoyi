@@ -1932,7 +1932,8 @@ impl<'a, 'c> Trader<'a, 'c> {
         // fraction skips. A positive fraction is recorded and does not raise size.
         // Grok 4.7. Other models: do not plug in the goal, and do not double
         // after a loss.
-        let keys = s3s::open_keys_for_hash(self.pool, self.account_id(), symbol_id, &self.hash).await?;
+        let keys =
+            s3s::open_keys_for_hash(self.pool, self.account_id(), symbol_id, &self.hash).await?;
         let (closed, _) = ts::closed_trades(self.pool, self.account_id(), "s3:").await?;
         let rs: Vec<f64> = closed
             .iter()

@@ -39,7 +39,14 @@ pub fn fraction(p: f64, b: f64) -> Option<f64> {
 pub fn read(rs: &[f64]) -> Reading {
     let n = rs.len();
     if n < MIN_CLOSES {
-        return Reading { n, wins: rs.iter().filter(|r| **r > 0.0).count(), p: None, b: None, f_star: None, quarter: None };
+        return Reading {
+            n,
+            wins: rs.iter().filter(|r| **r > 0.0).count(),
+            p: None,
+            b: None,
+            f_star: None,
+            quarter: None,
+        };
     }
     let wins: Vec<f64> = rs.iter().copied().filter(|r| *r > 0.0).collect();
     let losses: Vec<f64> = rs.iter().copied().filter(|r| *r < 0.0).collect();
@@ -47,7 +54,11 @@ pub fn read(rs: &[f64]) -> Reading {
     let b = if losses.is_empty() {
         None
     } else {
-        let mean_win = if wins.is_empty() { 0.0 } else { wins.iter().sum::<f64>() / wins.len() as f64 };
+        let mean_win = if wins.is_empty() {
+            0.0
+        } else {
+            wins.iter().sum::<f64>() / wins.len() as f64
+        };
         let mean_loss = losses.iter().map(|r| r.abs()).sum::<f64>() / losses.len() as f64;
         (mean_loss > 0.0).then(|| mean_win / mean_loss)
     };
@@ -59,7 +70,14 @@ pub fn read(rs: &[f64]) -> Reading {
         None => Some(p),
     };
     let quarter = f_star.filter(|f| *f > 0.0).map(|f| f / 4.0);
-    Reading { n, wins: wins.len(), p: Some(p), b, f_star, quarter }
+    Reading {
+        n,
+        wins: wins.len(),
+        p: Some(p),
+        b,
+        f_star,
+        quarter,
+    }
 }
 
 /// Skip only when the fraction is an input and is not positive.
