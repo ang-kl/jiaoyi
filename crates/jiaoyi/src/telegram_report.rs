@@ -2,13 +2,13 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, TimeZone, Utc};
-use chrono_tz::{America::New_York, Asia::Singapore};
+use chrono_tz::America::New_York;
 use jiaoyi_core::secret::Secret;
 use jiaoyi_store::sqlx::{self, PgPool, Row};
 use reqwest::{multipart, Client};
 use serde_json::{json, Value};
 
-use crate::{shutdown::Shutdown, status_page::esc, supervisor};
+use crate::{shutdown::Shutdown, supervisor};
 
 #[derive(Clone)]
 pub struct DeliveryConfig {
@@ -129,7 +129,6 @@ pub async fn build(
     period: &Period,
 ) -> Result<String, sqlx::Error> {
     let mut daily = Vec::new();
-    let mut books = Vec::new();
     let generated_at = Utc::now();
     for &account in accounts {
         let currency: Option<String> =
@@ -164,83 +163,105 @@ pub async fn build(
                 "cash_net":row.get::<f64,_>("cash_net"),"history_covers_period":coverage,
                 "history_through":history.as_ref().map(|r|r.get::<DateTime<Utc>,_>("window_to")),
                 "history_fetched_at":history.as_ref().map(|r|r.get::<DateTime<Utc>,_>("fetched_at"))}));
-            let kind = if strategy == "s1" {
-                "reconcile"
-            } else {
-                "s3_reconcile"
-            };
-            let book = sqlx::query("SELECT at,detail FROM trading_decisions WHERE account_id=$1 AND kind=$2 ORDER BY id DESC LIMIT 1")
-                .bind(account).bind(kind).fetch_optional(pool).await?;
-            books.push(json!({"account":account,"strategy":strategy,"at":book.as_ref().map(|r|r.get::<DateTime<Utc>,_>("at")),
-                "detail":book.as_ref().map(|r|r.get::<Value,_>("detail"))}));
         }
     }
     let goals = supervisor::reports(pool, accounts).await?;
-    Ok(render(period, &daily, &books, &goals))
-}
-
-fn num(v: &Value, scale: f64) -> String {
-    v.as_f64()
-        .filter(|x| x.is_finite())
-        .map(|x| format!("{:.2}", x * scale))
-        .unwrap_or_else(|| "unknown".into())
-}
-
-fn sgt_time(at: DateTime<Utc>) -> String {
-    at.with_timezone(&Singapore)
-        .format("%d-%m-%Y %H:%M:%S SGT")
-        .to_string()
-}
-
-fn source_time(value: &Value) -> String {
-    value
-        .as_str()
-        .and_then(|s| s.parse::<DateTime<Utc>>().ok())
-        .map(sgt_time)
-        .unwrap_or_else(|| "unknown".into())
-}
-
-pub fn render(period: &Period, daily: &[Value], books: &[Value], goals: &Value) -> String {
-    let serial = format!("T-{}", period.ny_date.format("%Y%m%d"));
-    let mut body=format!("<h1>Trading day ending {} · 17:00 New York</h1><p>SGT window [{} → {}). Generated {}. Delivery after 17:15 NY (05:15/06:15 SGT, DST-aware). This is an accounting cutoff, not a claim that every CFD or crypto venue is closed.</p><details><summary>Technical UTC window</summary><p>[{} → {})</p></details>",period.ny_date,sgt_time(period.from),sgt_time(period.to),sgt_time(Utc::now()),period.from,period.to);
-    body.push_str("<h2>Day's executions</h2><table><tr><th>Account / strategy</th><th>Fully closed positions / known wins</th><th>Closing deals</th><th>Known cash net</th><th>Unpriced deals / positions</th><th>History coverage</th></tr>");
-    for r in daily {
-        let cash = if r["unpriced_deals"].as_i64().is_some_and(|n| n > 0)
-            && r["closing_deals"] == r["unpriced_deals"]
+    let mut account_rows = crate::trading_report_data::collect(pool, accounts, period).await?;
+    for row in &mut daily {
+        if let Some(account) = account_rows
+            .iter()
+            .find(|a| a["account_id"] == row["account"])
         {
-            "unknown".into()
-        } else {
-            num(&r["cash_net"], 1.0)
-        };
-        body.push_str(&format!("<tr><td>{} / {}</td><td>{} / {}</td><td>{}</td><td>{} {}</td><td>{} / {}</td><td>{}; through {}</td></tr>",
-            esc(&r["account"].to_string()),esc(r["strategy"].as_str().unwrap_or("unknown")),r["positions"],r["wins"],r["closing_deals"],cash,esc(r["currency"].as_str().unwrap_or("deposit currency unknown")),r["unpriced_deals"],r["unpriced_positions"],if r["history_covers_period"]==true {"covers window"} else {"partial / unknown"},esc(&source_time(&r["history_through"]))));
+            row["currency"] = account["currency"].clone();
+            row["history_covers_period"] = account["daily"]["history_complete"].clone();
+        }
     }
-    body.push_str("</table><p>Cash net sums only owned closing deals executed in this window, including partial closes: gross + swap − |closing commission| − |conversion fee|. Missing money fields are unpriced, never zero. Fully closed positions are assigned by final close time; known wins are not a complete win rate when any position is unpriced. Account currencies are never added together. Late history can revise these observations.</p><h2>Latest-20 reference · snapshot at generation</h2><table><tr><th>Account / strategy</th><th>State / monitor</th><th>Wins / closes</th><th>Win rate</th><th>Realized payoff</th><th>Net R</th><th>Persisted check SGT</th><th>Missing evidence</th></tr>");
-    for r in goals["reports"].as_array().into_iter().flatten() {
-        let a = &r["report"]["assessment"];
-        let w = &a["window"];
-        body.push_str(&format!("<tr><td>{} / {}</td><td>{} / {}</td><td>{} / {}</td><td>{}%</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",esc(&r["account_id"].to_string()),esc(r["strategy"].as_str().unwrap_or("unknown")),esc(a["state"].as_str().unwrap_or("unknown")),esc(r["monitor_state"].as_str().unwrap_or("unknown")),w["wins"],w["count"],num(&w["win_rate"],100.0),num(&w["realized_payoff"],1.0),num(&w["net_r"],1.0),esc(&source_time(&r["checked_at"])),esc(&a["missing_reasons"].to_string())));
+    for account in &mut account_rows {
+        let id = account["account_id"].as_i64().unwrap_or_default();
+        let mut risks = Vec::new();
+        for strategy in [&crate::limits::S1, &crate::limits::S3] {
+            let mut risk = crate::limits::health(pool, id, strategy)
+                .await
+                .unwrap_or_else(|_| json!({"notes":["Registered risk assessment unavailable"]}));
+            risk["strategy"] = json!(strategy.code);
+            risk["owner_pause"] = crate::limits::owner_pause(pool, id, strategy)
+                .await
+                .unwrap_or(Value::Null);
+            risks.push(risk);
+        }
+        account["risks"] = json!(risks);
     }
-    body.push_str("</table><p>Target is ≥73% net wins (15/20=75%) and realized payoff reference1.38, separately for each strategy/account. Registered stop/target geometry is unchanged. One passing overlapping window does not establish consistency. These latest-20 cohorts are separate from the daily cash window.</p><h2>Latest reconciled exposure</h2>");
-    for b in books {
-        body.push_str(&format!(
-            "<details><summary>{} / {} · receipt {}</summary><pre>{}</pre></details>",
-            esc(&b["account"].to_string()),
-            esc(b["strategy"].as_str().unwrap_or("unknown")),
-            esc(&source_time(&b["at"])),
-            esc(&b["detail"].to_string())
-        ));
+    Ok(render(period, &daily, &account_rows, &goals))
+}
+
+pub(crate) fn benchmark_gaps(report: &Value) -> (String, String) {
+    let a = &report["report"]["assessment"];
+    let w = &a["window"];
+    let unknown = "unknown (incomplete or stale evidence)".to_owned();
+    if report["monitor_state"] != "alive"
+        || a["history_complete"] != true
+        || !a["missing_reasons"].as_array().is_some_and(Vec::is_empty)
+        || !matches!(
+            a["state"].as_str(),
+            Some("insufficient_evidence" | "below_target" | "window_meets_numeric_reference")
+        )
+    {
+        return (unknown.clone(), unknown);
     }
-    body.push_str("<p>Exposure receipts can be stale and are not a fresh broker snapshot. Current broker-side stop prices are not reconstructed from incomplete receipts. Existing pre-orders, stops/targets, sizing, account activation and owner-only pause decisions are untouched. The report is deterministic: no additional LLM call or model tokens. <a href=\"https://jiaoyi.up.railway.app/operations\">Current assessments</a> · <a href=\"https://jiaoyi.up.railway.app/\">Trading desk</a></p>");
-    let mut numbered = String::new();
-    let mut previous = 0;
-    for (index, (at, _)) in body.match_indices("<p>").enumerate() {
-        numbered.push_str(&body[previous..at + 3]);
-        numbered.push_str(&format!("[§{serial}.{}] ", index + 1));
-        previous = at + 3;
+    let (Some(count), Some(wins)) = (w["count"].as_u64(), w["wins"].as_u64()) else {
+        return (unknown.clone(), unknown);
+    };
+    let window = jiaoyi_store::goals::WINDOW as u64;
+    if count > window || wins > count {
+        return (unknown.clone(), unknown);
     }
-    numbered.push_str(&body[previous..]);
-    format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>jiaoyi trading {}</title><style>body{{font:15px system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#17202a}}table{{border-collapse:collapse;width:100%;font-size:.85rem}}td,th{{padding:.5rem;border-bottom:1px solid #ccc;text-align:left}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}p{{line-height:1.5}}</style><body><div>№{serial}</div>{numbered}</body></html>",period.ny_date)
+    if count < window {
+        return (
+            format!(
+                "{} measured closes short of 20; win gap unknown",
+                window - count
+            ),
+            "unknown (insufficient evidence)".into(),
+        );
+    }
+    let win_gap = (wins as f64 / window as f64 - jiaoyi_store::goals::WIN_RATE_TARGET) * 100.0;
+    let win_gap = if win_gap < 0.0 {
+        format!(
+            "{:.2} pp below 73%; {} net wins below 15/20",
+            -win_gap,
+            15 - wins
+        )
+    } else {
+        format!("{win_gap:.2} pp above 73%; 15/20 minimum met")
+    };
+    let payoff_gap = match w["realized_payoff_state"].as_str() {
+        Some("defined") => w["realized_payoff"]
+            .as_f64()
+            .filter(|p| p.is_finite() && *p >= 0.0)
+            .map(|p| {
+                let gap = p - jiaoyi_store::goals::REALIZED_PAYOFF_REFERENCE;
+                format!(
+                    "{:.6} {} 1.38",
+                    gap.abs(),
+                    if gap < 0.0 {
+                        "below"
+                    } else {
+                        "above or equal to"
+                    }
+                )
+            })
+            .unwrap_or(unknown),
+        Some(state @ ("no_wins" | "no_losses" | "no_wins_or_losses")) => {
+            format!("unknown ({state})")
+        }
+        _ => unknown,
+    };
+    (win_gap, payoff_gap)
+}
+
+/// Private deterministic report presentation, separated from delivery state.
+pub fn render(period: &Period, daily: &[Value], accounts: &[Value], goals: &Value) -> String {
+    crate::trading_report_view::render(period, daily, accounts, goals)
 }
 
 #[derive(Debug)]
@@ -255,26 +276,32 @@ async fn send_document(
     config: &DeliveryConfig,
     period: &Period,
     html: &str,
+    replace_message: Option<i64>,
 ) -> Result<i64, SendError> {
     let part = multipart::Part::bytes(html.as_bytes().to_vec())
         .file_name(format!("jiaoyi-trading-{}.html", period.ny_date))
         .mime_str("text/html")
         .map_err(|_| SendError::Rejected)?;
-    let form = multipart::Form::new()
-        .text("chat_id", config.chat_id.to_string())
-        .text(
-            "caption",
-            format!(
-                "jiaoyi · trading day {} · 17:00 New York close",
-                period.ny_date
+    let form = multipart::Form::new().text("chat_id", config.chat_id.to_string());
+    let (method, form) = if let Some(message_id) = replace_message {
+        ("editMessageMedia", form.text("message_id", message_id.to_string()).text(
+            "media", json!({"type":"document","media":"attach://document",
+                "caption":format!("jiaoyi · trading day {} · revised account report",period.ny_date)}).to_string()))
+    } else {
+        (
+            "sendDocument",
+            form.text(
+                "caption",
+                format!(
+                    "jiaoyi · trading day {} · 17:00 New York close",
+                    period.ny_date
+                ),
             ),
         )
-        .part("document", part);
+    };
+    let form = form.part("document", part);
     let response = client
-        .post(format!(
-            "{origin}/bot{}/sendDocument",
-            config.token.expose()
-        ))
+        .post(format!("{origin}/bot{}/{method}", config.token.expose()))
         .multipart(form)
         .send()
         .await
@@ -301,6 +328,55 @@ async fn send_document(
         .ok_or(SendError::Uncertain)
 }
 
+/// Upgrade a delivered legacy layout in place once fresh account marks exist.
+/// The same Telegram message is edited, so a restart cannot duplicate a report.
+async fn refresh_legacy(
+    pool: &PgPool,
+    accounts: &[i64],
+    config: &DeliveryConfig,
+    period: &Period,
+    origin: &str,
+    key: &str,
+) -> anyhow::Result<()> {
+    if accounts.is_empty() {
+        return Ok(());
+    }
+    let fresh: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT account_id) FROM report_account_snapshots WHERE account_id=ANY($1) AND sample_key='latest' AND observed_at BETWEEN now()-interval '3 minutes' AND now() AND detail->>'source_complete'='true'")
+        .bind(accounts).fetch_one(pool).await?;
+    let mut expected = accounts.to_vec();
+    expected.sort_unstable();
+    expected.dedup();
+    if fresh as usize != expected.len() {
+        return Ok(());
+    }
+    let mut tx = pool.begin().await?;
+    let locked: bool =
+        sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtextextended($1,0))")
+            .bind(key)
+            .fetch_one(&mut *tx)
+            .await?;
+    if !locked {
+        return Ok(());
+    }
+    let row = sqlx::query("SELECT message_id FROM telegram_reports WHERE report_key=$1 AND status='sent' AND html NOT LIKE '%data-report-version=\"2\"%' AND attempts<5 AND attempted_at<=now()-interval '15 minutes'")
+        .bind(key).fetch_optional(&mut *tx).await?;
+    let Some(row) = row else {
+        return Ok(());
+    };
+    let message_id: i64 = row.get("message_id");
+    let html = build(pool, accounts, period).await?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(25))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let edited = matches!(send_document(&client, origin, config, period, &html, Some(message_id)).await, Ok(id) if id == message_id);
+    sqlx::query("UPDATE telegram_reports SET html=CASE WHEN $2 THEN $3 ELSE html END,attempts=attempts+1,attempted_at=now(),last_error=CASE WHEN $2 THEN NULL ELSE 'legacy_revision_not_confirmed' END WHERE report_key=$1")
+        .bind(key).bind(edited).bind(html).execute(&mut *tx).await?;
+    tx.commit().await?;
+    tracing::info!(period=%period.ny_date, confirmed=edited, "legacy daily report revision attempted in place");
+    Ok(())
+}
+
 pub async fn deliver_due(
     pool: &PgPool,
     accounts: &[i64],
@@ -320,12 +396,20 @@ async fn deliver_due_at(
     let period = period_due(now);
     let key = format!("trading:ny-close:{}", period.ny_date);
     let existing = sqlx::query(
-        "SELECT status,attempts,attempted_at FROM telegram_reports WHERE report_key=$1",
+        "SELECT status,attempts,attempted_at,html FROM telegram_reports WHERE report_key=$1",
     )
     .bind(&key)
     .fetch_optional(pool)
     .await?;
     if let Some(r) = existing {
+        if r.get::<String, _>("status") == "sent" {
+            if r.get::<String, _>("html")
+                .contains("data-report-version=\"2\"")
+            {
+                return Ok(());
+            }
+            return refresh_legacy(pool, accounts, config, &period, origin, &key).await;
+        }
         if r.get::<String, _>("status") != "retry"
             || r.get::<i32, _>("attempts") >= 5
             || now
@@ -356,7 +440,7 @@ async fn deliver_due_at(
         .timeout(Duration::from_secs(25))
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
-    match send_document(&client, origin, config, &period, &html).await {
+    match send_document(&client, origin, config, &period, &html, None).await {
         Ok(message_id) => {
             sqlx::query("UPDATE telegram_reports SET status='sent',message_id=$2,sent_at=now(),last_error=NULL WHERE report_key=$1")
                 .bind(&key).bind(message_id).execute(pool).await?;
@@ -428,24 +512,22 @@ mod tests {
     }
 
     #[test]
-    fn html_escapes_source_text_and_keeps_unknowns_separate_from_zero() {
-        let p = period_due(at("2026-10-26T22:00:00Z"));
-        let html = render(
-            &p,
-            &[
-                json!({"account":1,"strategy":"<script>alert(1)</script>","cash_net":0,"currency":"USD","positions":2,"wins":0,"unpriced_positions":2,"closing_deals":2,"unpriced_deals":2,"history_covers_period":false}),
-            ],
-            &[],
-            &json!({"reports":[]}),
-        );
-        assert!(!html.contains("<script>"));
-        assert!(html.contains("&lt;script&gt;"));
-        assert!(html.contains("unknown USD"));
-        assert!(html.contains("partial / unknown"));
-        assert!(html.contains("27-10-2026 05:00:00 SGT"));
-        assert!(html.contains("no additional LLM call"));
-        assert!(html.contains("№T-20261026"));
-        assert!(html.contains("[§T-20261026.1]"));
+    fn retained_benchmark_guards_require_complete_fresh_twenty_position_evidence() {
+        let mut r = json!({"account_id":1,"strategy":"s3","monitor_state":"alive",
+            "report":{"assessment":{"state":"below_target","history_complete":true,
+                "missing_reasons":[],"window":{"count":20,"wins":6,
+                    "realized_payoff":1.2,"realized_payoff_state":"defined"}}}});
+        assert!(benchmark_gaps(&r).0.contains("43.00 pp below"));
+        assert!(benchmark_gaps(&r).1.contains("0.180000 below"));
+        r["monitor_state"] = json!("stale");
+        assert!(benchmark_gaps(&r).0.starts_with("unknown"));
+        r["monitor_state"] = json!("alive");
+        r["report"]["assessment"]["window"]["count"] = json!(12);
+        assert!(benchmark_gaps(&r).0.contains("8 measured closes short"));
+        assert!(benchmark_gaps(&r).1.starts_with("unknown"));
+        r["report"]["assessment"]["window"]["count"] = json!(20);
+        r["report"]["assessment"]["missing_reasons"] = json!(["missing_costs"]);
+        assert!(benchmark_gaps(&r).0.starts_with("unknown"));
     }
 
     async fn server(response: Option<&'static str>) -> (String, tokio::task::JoinHandle<Vec<u8>>) {
@@ -512,6 +594,47 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(receipt, ("sent".into(), 1, Some(72)));
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn legacy_report_is_revised_in_place_once_without_a_second_document(pool: PgPool) {
+        let (origin, request) = server(Some(r#"{"ok":true,"result":{"message_id":72}}"#)).await;
+        let config = DeliveryConfig {
+            token: Secret::new("TEST_TOKEN"),
+            chat_id: 123,
+        };
+        let now = Utc::now();
+        let period = period_due(now);
+        let key = format!("trading:ny-close:{}", period.ny_date);
+        sqlx::query("INSERT INTO telegram_reports(report_key,period_from,period_to,html,status,message_id,sent_at,attempted_at) VALUES($1,$2,$3,'legacy exposure JSON','sent',72,now()-interval '1 hour',now()-interval '1 hour')")
+            .bind(&key).bind(period.from).bind(period.to).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO report_account_snapshots(account_id,sample_key,observed_at,detail) VALUES(1,'latest',now(),$1)")
+            .bind(json!({"observed_at":now,"source_complete":true,"environment":"demo","currency":"USD","balance":100.0,"float":0.0,"equity":100.0}))
+            .execute(&pool).await.unwrap();
+        deliver_due_at(&pool, &[1], &config, now, &origin)
+            .await
+            .unwrap();
+        let wire = String::from_utf8(request.await.unwrap()).unwrap();
+        assert!(wire.starts_with("POST /botTEST_TOKEN/editMessageMedia "));
+        assert!(wire.contains("name=\"message_id\""));
+        assert!(wire.contains("attach://document"));
+        assert!(!wire.contains("/sendDocument"));
+        deliver_due_at(&pool, &[1], &config, now, &origin)
+            .await
+            .unwrap();
+        let row = sqlx::query(
+            "SELECT message_id,attempts,html,status FROM telegram_reports WHERE report_key=$1",
+        )
+        .bind(key)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.get::<i64, _>("message_id"), 72);
+        assert_eq!(row.get::<i32, _>("attempts"), 2);
+        assert_eq!(row.get::<String, _>("status"), "sent");
+        assert!(row
+            .get::<String, _>("html")
+            .contains("data-report-version=\"2\""));
     }
 
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]

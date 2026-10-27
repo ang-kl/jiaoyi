@@ -56,6 +56,10 @@ pub const SENDABLE: &[(i32, &str)] = &[
         "read the account's deal history",
     ),
     (
+        Oa::ProtoOaCashFlowHistoryListReq as i32,
+        "read daily deposits and withdrawals for account reporting",
+    ),
+    (
         Oa::ProtoOaTraderReq as i32,
         "read the account's registration date and deposit asset",
     ),
@@ -200,6 +204,9 @@ request!(pb::ProtoOaReconcileReq => Oa::ProtoOaReconcileReq,
 request!(pb::ProtoOaGetPositionUnrealizedPnLReq => Oa::ProtoOaGetPositionUnrealizedPnlReq,
          pb::ProtoOaGetPositionUnrealizedPnLRes => Oa::ProtoOaGetPositionUnrealizedPnlRes);
 
+request!(pb::ProtoOaCashFlowHistoryListReq => Oa::ProtoOaCashFlowHistoryListReq,
+         pb::ProtoOaCashFlowHistoryListRes => Oa::ProtoOaCashFlowHistoryListRes);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,7 +222,7 @@ mod tests {
     assert_not_impl_any!(pb::ProtoOaMarginCallUpdateReq: Request);
 
     /// The read requests, and nothing else.
-    const EXPECTED_SENDABLE: [i32; 16] = [
+    const EXPECTED_SENDABLE: [i32; 17] = [
         Common::HeartbeatEvent as i32,
         Oa::ProtoOaApplicationAuthReq as i32,
         Oa::ProtoOaAccountAuthReq as i32,
@@ -227,6 +234,7 @@ mod tests {
         Oa::ProtoOaUnsubscribeSpotsReq as i32,
         Oa::ProtoOaGetTickdataReq as i32,
         Oa::ProtoOaDealListReq as i32,
+        Oa::ProtoOaCashFlowHistoryListReq as i32,
         Oa::ProtoOaTraderReq as i32,
         Oa::ProtoOaGetAccountsByAccessTokenReq as i32,
         Oa::ProtoOaAssetListReq as i32,
@@ -314,6 +322,7 @@ mod tests {
             pt::<pb::ProtoOaUnsubscribeSpotsReq>(),
             pt::<pb::ProtoOaGetTickDataReq>(),
             pt::<pb::ProtoOaDealListReq>(),
+            pt::<pb::ProtoOaCashFlowHistoryListReq>(),
             pt::<pb::ProtoOaTraderReq>(),
             pt::<pb::ProtoOaGetAccountListByAccessTokenReq>(),
             pt::<pb::ProtoOaAssetListReq>(),

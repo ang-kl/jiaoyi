@@ -21,3 +21,6 @@ pub mod strategy3;
 pub mod supervisor;
 pub mod telegram_report;
 pub mod trading;
+pub mod trading_report_data;
+pub mod trading_report_snapshot;
+pub mod trading_report_view;

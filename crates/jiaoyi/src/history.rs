@@ -985,14 +985,38 @@ pub async fn maintain_account(
             refresh_recent_deals_with_lock(pool, session, account, status, &deal_lock).await?;
         }
     };
+    // Reporting reuses this read-only session. Its requests/errors never hold
+    // the deal lock, terminate history, or share a trading execution task.
+    let report_samples = async {
+        if crate::telegram_report::DeliveryConfig::from_env().is_none() {
+            return std::future::pending::<anyhow::Result<()>>().await;
+        }
+        let mut timer = tokio::time::interval(Duration::from_secs(60));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            timer.tick().await;
+            // Each client request already has a bounded timeout. Do not wrap
+            // it in cancellation that would leave its pending response behind.
+            if crate::trading_report_snapshot::capture(pool, session)
+                .await
+                .is_err()
+            {
+                tracing::warn!(
+                    account_id = account.id(),
+                    "private report snapshot unavailable; history continues"
+                );
+            }
+        }
+    };
     // Both futures remain polled: a full pass can hold the connection's
     // historical-rate mutex across its sleep while the recent poll waits for
     // that mutex. Awaiting one branch inline would stop the other releasing it.
-    tokio::pin!(full_passes, recent_deals);
+    tokio::pin!(full_passes, recent_deals, report_samples);
     tokio::select! {
         _ = stop.wait() => Ok(()),
         result = &mut full_passes => result,
         result = &mut recent_deals => result,
+        result = &mut report_samples => result,
     }
 }
 

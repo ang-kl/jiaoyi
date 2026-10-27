@@ -110,12 +110,22 @@ The owner amended Telegram delivery on 27 October 2026: NY 17:00 accounting cuto
 send 17:15 New York (05:15/06:15SGT with DST), as an HTML attachment. Include a
 stable serial, paragraph/section references and SGT generation/source times.
 The historical 07:35 SGT handover schedule does not create a second jiaoyi sender.
-The same factual shape remains:
-1. What needs the owner (limit alerts first, each with a recommendation).
-2. Each strategy and account: closed trades, net R, profit factor, drawdown, pause.
-3. Fills: slippage, spread and order-to-fill time against the plan.
-4. How near each symbol came to its trigger.
-5. What was built or fixed, and what is open.
+Owner approved the four-section daily report redesign on 27 October 2026
+(`docs/daily-trading-report-proposal.md`):
+1. Executive summary and performance: owner alerts, live/demo and currency
+   subtotals, every linked account's balance/float/derived equity and daily result;
+   external/manual trades included in account accounting, separately attributed.
+2. Risk, execution and goal progress: margins, verified stop/pending exposure,
+   existing registered limits, owner pause, daily fills and per-strategy/account
+   latest-20 gaps. Unsupported VaR/VWAP/returns remain unavailable.
+3. Regime and factor context: measured relevant exceptions only.
+4. Portfolio-manager commentary: observed contribution, interventions and next
+   actions. Hypotheses stay labelled; no speculative calendar or automatic rule
+   adjustments. Routine trigger-distance and engineering details leave the main
+   trading report unless they explain an actionable trading exception.
+
+Source cutoff marks, current snapshot times and report generation are distinct.
+The approved design preserves every trading and evidence invariant above.
 
 ## The contract for each task
 

@@ -63,6 +63,8 @@ pub struct FakeBroker {
     /// Refuse every tick request whose window starts before this time (ms)
     /// with BLOCKED_PAYLOAD_TYPE and retryAfter 0, as a rate limit would.
     pub block_ticks_before: Option<i64>,
+    /// Balance operations returned to the read-only cash-flow history request.
+    pub cash_flows: Vec<pb::ProtoOaDepositWithdraw>,
     /// Deal history of the account.
     pub deals: Vec<pb::ProtoOaDeal>,
     /// Ordered read snapshots, shared by clones. Empty means `deals` as usual.
@@ -1016,6 +1018,27 @@ impl FakeBroker {
                                 out.push(oa_error(id, "POSITION_NOT_FOUND"));
                             }
                         }
+                    } else if pt == Oa::ProtoOaCashFlowHistoryListReq as i32 {
+                        let req =
+                            pb::ProtoOaCashFlowHistoryListReq::decode(body.as_slice()).unwrap();
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaCashFlowHistoryListRes as i32,
+                            pb::ProtoOaCashFlowHistoryListRes {
+                                payload_type: None,
+                                ctid_trader_account_id: self.account_id,
+                                deposit_withdraw: self
+                                    .cash_flows
+                                    .iter()
+                                    .filter(|r| {
+                                        r.change_balance_timestamp >= req.from_timestamp
+                                            && r.change_balance_timestamp <= req.to_timestamp
+                                    })
+                                    .cloned()
+                                    .collect(),
+                            }
+                            .encode_to_vec(),
+                        ));
                     } else if pt == Oa::ProtoOaReconcileReq as i32 {
                         let positions = self.positions.lock().unwrap().clone();
                         out.push(reply(

@@ -43,6 +43,8 @@ pub mod messages {
         ProtoOaApplicationAuthReq,
         ProtoOaApplicationAuthRes,
         ProtoOaArchivedSymbol,
+        ProtoOaCashFlowHistoryListReq,
+        ProtoOaCashFlowHistoryListRes,
         ProtoOaClientDisconnectEvent,
         // Read-only history and account records (edge verification).
         ProtoOaClosePositionDetail,
@@ -52,6 +54,7 @@ pub mod messages {
         ProtoOaDealListReq,
         ProtoOaDealListRes,
         ProtoOaDealStatus,
+        ProtoOaDepositWithdraw,
         ProtoOaErrorRes,
         ProtoOaExecutionType,
         ProtoOaGetPositionUnrealizedPnLRes,
