@@ -216,10 +216,10 @@ pub fn signal(
     ask: Option<f64>,
 ) -> Result<Option<(Dir, Band)>, String> {
     band::entry_window(session, now)?;
-    if !band::at_decision_mark(session, now) {
+    let Some(mark) = band::decision_mark(session, now) else {
         return Ok(None);
-    }
-    let b = band::band_at(table, session, open, now)?;
+    };
+    let b = band::band_at(table, session, open, mark)?;
     Ok(band::mark_decision(&b, bid, ask).map(|d| (d, b)))
 }
 
@@ -363,6 +363,9 @@ pub struct PlanBasis {
     pub entry: f64,
     pub r: f64,
     pub cost: f64,
+    /// Frozen opening-plan distance, including its original reward policy
+    /// and outward rounding. Never replan an old position with today's Q.
+    pub tp1_distance: f64,
 }
 
 /// The plan basis in a recorded order's detail (`entry`), if complete.
@@ -378,31 +381,38 @@ pub fn plan_basis(detail: &Value) -> Option<PlanBasis> {
         entry: e["entry_price"].as_f64()?,
         r: e["r"].as_f64()?,
         cost: e["cost"]["total"].as_f64()?,
+        tp1_distance: detail["order"]["tp1_distance"].as_f64()?,
     })
 }
 
-/// TP1's close for `volume`, the volume the broker holds: the entry's plan
-/// made again by bot-trade's arithmetic with the same price, R and C, so
-/// TP1's level is unchanged and only the split follows the volume. A volume
-/// that cannot be split, or that the plan refuses, closes whole at TP1.
+/// TP1's close for the volume the broker holds, from the opening plan's
+/// frozen R, C and actual rounded TP1 distance. Today's reward multiple
+/// cannot change an older position's allocation. An unsplittable volume
+/// closes whole at TP1, as in the original coverage policy.
 pub fn tp1_close_volume(b: &PlanBasis, limits: &VolumeLimits, volume: i64) -> i64 {
-    let stop = match b.side {
-        Dir::Buy => b.entry - b.r,
-        Dir::Sell => b.entry + b.r,
-    };
-    match targets::plan(&targets::Input {
-        side: b.side,
-        entry: b.entry,
-        original_stop: stop,
-        required_rr: targets::REQUIRED_RR,
-        cost_reserve: b.cost,
-        digits: limits.digits,
-        volume,
-        min_volume: limits.min,
-        step_volume: limits.step,
-    }) {
-        Ok(p) if p.mode == targets::Mode::PartialRunner => p.close_volume,
-        _ => volume,
+    if !b.r.is_finite()
+        || b.r <= 0.0
+        || !b.cost.is_finite()
+        || b.cost < 0.0
+        || !b.tp1_distance.is_finite()
+        || b.tp1_distance <= b.cost
+        || limits.min <= 0
+        || limits.step <= 0
+        || volume < limits.min
+        || volume % limits.step != 0
+    {
+        return volume;
+    }
+    // The original coverage identity, using the recorded distance instead
+    // of the global required_rr. This works for both 3R and 1.38R plans.
+    let fraction = (b.r + b.cost) / (b.tp1_distance + b.r);
+    let steps =
+        ((volume as f64 * fraction).max(limits.min as f64) / limits.step as f64).ceil() as i64;
+    let close = steps.checked_mul(limits.step).unwrap_or(volume);
+    if close < volume && volume - close >= limits.min {
+        close
+    } else {
+        volume
     }
 }
 
@@ -507,6 +517,7 @@ pub struct Sym {
     pub day: Option<Result<Day, (String, DateTime<Utc>)>>,
     /// The last entry attempt, so a refused trigger waits [`ENTRY_RETRY`].
     pub last_try: Option<DateTime<Utc>>,
+    pub last_decision_mark: Option<DateTime<Utc>>,
 }
 
 /// A Strategy 3 position as reconciled, with its plan when recorded.
@@ -703,6 +714,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     ask: None,
                     day: None,
                     last_try: None,
+                    last_decision_mark: None,
                 },
             );
         }
@@ -1517,6 +1529,7 @@ impl<'a, 'c> Trader<'a, 'c> {
     }
 
     /// An entry on a quote of a symbol with no Strategy 3 position.
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
     async fn entry(&mut self, symbol_id: i64, now: DateTime<Utc>) -> anyhow::Result<()> {
         let sym = self.syms[&symbol_id].clone();
         let name = sym.name.clone();
@@ -1529,6 +1542,38 @@ impl<'a, 'c> Trader<'a, 'c> {
         if band::entry_window(&s, now).is_err() {
             return Ok(());
         }
+        let Some(mark) = band::decision_mark(&s, now) else {
+            return Ok(());
+        };
+        let (Some(bid), Some(ask)) = (sym.bid, sym.ask) else {
+            return Ok(());
+        };
+        if !bid.is_finite() || !ask.is_finite() || bid > ask {
+            return Ok(());
+        }
+        if sym.last_decision_mark.is_some_and(|at| at >= mark) {
+            return Ok(());
+        }
+        // Persist the first eligible quote before any preparation or entry
+        // gate. An inside/no-band/refused decision must not be retried on a
+        // later crossing within this mark, including after reconnect.
+        let previous: Option<Option<String>> = jiaoyi_store::sqlx::query_scalar(
+            "SELECT detail->>'decision_mark' FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_mark_decision' ORDER BY id DESC LIMIT 1")
+            .bind(self.account_id()).bind(&name).fetch_optional(self.pool).await?;
+        if let Some(at) = previous
+            .flatten()
+            .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+        {
+            if at >= mark {
+                self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(at);
+                return Ok(());
+            }
+        }
+        ts::record_decision(self.pool, self.account_id(), Some(&name), "s3_mark_decision",
+            "first eligible quote consumed this decision mark",
+            &json!({"strategy":STRATEGY,"label":LABEL,"prereg_hash":self.hash,"decision_mark":mark,"decided_at":now,"bid":bid,"ask":ask}),
+            self.d.version).await?;
+        self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(mark);
         if sym
             .last_try
             .is_some_and(|t| now - t < chrono::Duration::from_std(ENTRY_RETRY).unwrap_or_default())
@@ -2362,6 +2407,38 @@ pub async fn health(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn review_existing_three_r_plan_keeps_its_original_close_allocation() {
+        let detail = json!({"entry":{"side":"buy","entry_price":60460.0,"r":450.0,"cost":{"total":301.208}},"order":{"tp1_distance":1651.21}});
+        let b = plan_basis(&detail).unwrap();
+        assert_eq!(tp1_close_volume(&b, &BTC, 13), 5);
+        assert_eq!(tp1_close_volume(&b, &BTC, 4), 2);
+    }
+
+    #[test]
+    fn review_a_late_mark_uses_its_own_sigma_without_the_next_mark() {
+        let s = sessions::session_on(
+            &sessions::rule_for("BTCUSD", AssetClass::Crypto).unwrap(),
+            "2026-10-27".parse().unwrap(),
+        )
+        .unwrap();
+        let table = SigmaTable {
+            marks: [(30, Ok(0.01))].into(),
+            sessions_used: vec![],
+        };
+        let x = signal(
+            &table,
+            &s,
+            100.0,
+            s.open + chrono::Duration::minutes(30) + chrono::Duration::milliseconds(1),
+            Some(102.0),
+            Some(102.1),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(x.1.minutes, 30.0);
+        assert_eq!(x.1.sigma, 0.01);
+    }
     use super::*;
 
     fn rules_demo() -> Rules {
@@ -2396,6 +2473,7 @@ mod tests {
             entry: 60_460.0,
             r: 450.0,
             cost: 301.208,
+            tp1_distance: 922.21,
         };
         let close = |v| tp1_close_volume(&b, &BTC, v);
         assert_eq!(close(13), 8, "the planned close");
@@ -2408,14 +2486,15 @@ mod tests {
         };
         assert_eq!(tp1_close_volume(&sell, &BTC, 13), 8);
         let detail = json!({"entry": {"side": "sell", "entry_price": 60_455.0, "r": 450.0,
-                                       "cost": {"total": 301.208}}});
+                                       "cost": {"total": 301.208}}, "order":{"tp1_distance":922.21}});
         assert_eq!(
             plan_basis(&detail),
             Some(PlanBasis {
                 side: Dir::Sell,
                 entry: 60_455.0,
                 r: 450.0,
-                cost: 301.208
+                cost: 301.208,
+                tp1_distance: 922.21
             })
         );
         assert_eq!(plan_basis(&json!({"entry": {"side": "buy"}})), None);
