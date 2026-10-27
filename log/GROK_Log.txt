@@ -84,3 +84,7 @@
 № 17,618 · 28-10-2026, 07:47 SGT · by Grok 4.7
 §1 Owner: fix outstanding proposals. PR #70 merged. It was green. A permit is still only for block_a_send or unblock_a_close.
 §2 PR #62 conflicted and the check failed because the unmatched-P&L flag was not in the expected report. Rebased onto main. The flag is now expected. CI is running. Not merged until it passes.
+
+№ 17,633 · 28-10-2026, 07:50 SGT · by Grok 4.7
+§1 Owner: Codex is past № 17,632. The committed CODEX_Log.txt on main stops at № 17,624. This entry skips to № 17,633 so the two logs do not reuse a number.
+§2 Live health at 07:51 SGT: no open positions on the four accounts. Current sessions are AUS200, BTCUSD and ETHUSD, all deadline_missed. JPN225 is prepared for 08:00 SGT and is not yet a mark. No named halt. worth_a_permit refused affirm, pretrade and sentiment. No Grok API call. Used permits: 0.
