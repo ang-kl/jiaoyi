@@ -11,6 +11,8 @@ import urllib.request
 import uuid
 from zoneinfo import ZoneInfo
 
+from stop_loss_reviews import PREFIX as INTERNAL_REVIEW_PREFIX
+
 SGT = ZoneInfo("Asia/Singapore")
 
 
@@ -117,8 +119,11 @@ def collect(coordinator, hours=6, until=None):
     until = until or dt.datetime.now(dt.timezone.utc)
     since = until - dt.timedelta(hours=hours)
     with coordinator.store.connect() as db:
-        jobs = [dict(r) for r in db.execute("SELECT * FROM jobs WHERE updated>=? AND updated<=? ORDER BY id LIMIT 100",
-                                           (since.isoformat(), until.isoformat()))]
+        jobs = [dict(r) for r in db.execute("SELECT * FROM jobs WHERE updated>=? AND updated<=? AND task NOT LIKE ? ORDER BY id LIMIT 100",
+                                           (since.isoformat(), until.isoformat(), INTERNAL_REVIEW_PREFIX + "%"))]
+        internal_review_count = db.execute(
+            "SELECT count(*) FROM jobs WHERE updated>=? AND updated<=? AND task LIKE ?",
+            (since.isoformat(), until.isoformat(), INTERNAL_REVIEW_PREFIX + "%")).fetchone()[0]
         for job in jobs:
             row = db.execute("SELECT detail FROM events WHERE kind='model_report' AND job=? ORDER BY id DESC LIMIT 1", (job["id"],)).fetchone()
             try:
@@ -143,13 +148,15 @@ def collect(coordinator, hours=6, until=None):
         except Exception:
             pass
     notes = ["Model test summaries are claims until their CI/deployment receipts are verified.",
-             "Telegram files use deterministic templates and confirmed delivery receipts; no extra AI inference."]
+             "Telegram files use deterministic templates and confirmed delivery receipts; no extra AI inference.",
+             "Internal stop-loss review jobs in this window: " + str(internal_review_count)
+             + "; individual findings stay internal and are omitted from Telegram."]
     if coordinator.config.env.get("GH_TOKEN_EXPIRES_ON"):
         notes.append("Owner-reported worker GitHub token expiry date: " + coordinator.config.env["GH_TOKEN_EXPIRES_ON"]
                      + "; exact expiry instant was not supplied. Rotate before this date.")
     return {"since": since.isoformat(), "until": until.isoformat(), "state": coordinator.status()["state"],
             "sessions": coordinator.store.used(), "limit": coordinator.config.limit, "jobs": jobs, "commits": commits,
-            "notes": notes}
+            "notes": notes, "internal_review_count": internal_review_count}
 
 
 class Reporter:

@@ -28,6 +28,24 @@ class ReportTests(Fixture, unittest.TestCase):
         self.assertIn("№E-20261027-054918", body)
         self.assertIn("[§E-20261027-054918.1]", body)
 
+    def test_digest_omits_individual_stop_loss_findings_but_keeps_aggregate_and_engineering(self):
+        c = w.Coordinator(self.config(TELEGRAM_BOT_TOKEN="private-test-token", TELEGRAM_OWNER_CHAT_ID="313940231"))
+        ordinary = c.store.enqueue("authorised engineering repair")
+        c.store.update(ordinary, "completed", result=json.dumps({"summary": "ENGINEERING-RESULT", "tests": "engineering assertion"}))
+        for _ in range(105):
+            jid = c.store.enqueue(w.stop_loss_reviews.PREFIX + " ORIGINAL SETUP REVIEW")
+            c.store.update(jid, "completed", result=json.dumps({"summary": "PRIVATE-SL-SUMMARY", "tests": "PRIVATE-SL-CHECK"}))
+        # Filtering must happen before the job cap; reviews cannot crowd out engineering.
+        report = r.collect(c)
+        self.assertEqual([j["id"] for j in report["jobs"]], [ordinary])
+        self.assertEqual(report["internal_review_count"], 105)
+        body = r.render(report)
+        self.assertIn("ENGINEERING-RESULT", body)
+        self.assertIn("105", body)
+        self.assertNotIn("PRIVATE-SL-SUMMARY", body)
+        self.assertNotIn("PRIVATE-SL-CHECK", body)
+        self.assertEqual(c.store.used(), 0)
+
     def test_real_multipart_format_and_positive_telegram_receipt(self):
         class Reply(io.BytesIO):
             pass

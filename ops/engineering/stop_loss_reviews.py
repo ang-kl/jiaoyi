@@ -1,13 +1,10 @@
 """A bounded public-evidence bridge; inference stays in the existing job queue."""
 import datetime as dt
-import html
 import json
 import math
 import re
 import urllib.request
-from zoneinfo import ZoneInfo
 
-import reporting
 
 PREFIX = "[STOP-LOSS REVIEW]"
 CURSOR = "stop_loss_review_cursor"
@@ -263,82 +260,10 @@ def poll(coordinator, origin="https://jiaoyi.up.railway.app", at=None, review_la
 
 
 def deliver_review(coordinator, job, report):
-    """Deliver once without changing a completed AI job or replaying inference."""
-    try:
-        return _deliver_review(coordinator, job, report)
-    except Exception:
-        # An interrupted claim/POST is conservatively held by its durable event.
-        # Delivery must never turn successful model work into a failed/retried job.
-        return {"state": "delivery_held"}
+    """Owner27Oct: per-stop-loss findings stay in the existing internal store.
 
-
-def _deliver_review(coordinator, job, report):
-    jid = job.get("id") if isinstance(job, dict) else None
-    if not positive(jid) or not isinstance(report, dict) or report.get("outcome") not in ("no_change", "owner_blocked"):
-        return {"state": "not_a_completed_review"}
-    env = coordinator.config.env
-    if not env.get("TELEGRAM_BOT_TOKEN") or not env.get("TELEGRAM_OWNER_CHAT_ID"):
-        return {"state": "not_configured"}
-    with coordinator.store.connect() as c:
-        row = c.execute("SELECT task,state,updated FROM jobs WHERE id=?", (jid,)).fetchone()
-    if row is None or row["state"] not in ("completed", "owner_blocked") or not row["task"].startswith(PREFIX):
-        return {"state": "not_a_completed_review"}
-    try:
-        raw_cases = json.loads(row["task"].split(EVIDENCE_MARKER, 1)[1])["cases"]
-    except (ValueError, TypeError, KeyError, IndexError):
-        return {"state": "invalid_review_evidence"}
-    completed = timestamp(row["updated"]) or dt.datetime.now(dt.timezone.utc)
-    cases = [case_facts(case, completed) for case in raw_cases[:MAX_CASES]] if isinstance(raw_cases, list) else []
-    cases = [case for case in cases if case is not None]
-    if not cases:
-        return {"state": "invalid_review_evidence"}
-    serial = "S-" + completed.astimezone(ZoneInfo("Asia/Singapore")).strftime("%Y%m%d") + "-" + str(jid)
-    def sgt(value):
-        parsed = timestamp(value)
-        return parsed.astimezone(ZoneInfo("Asia/Singapore")).strftime("%d-%m-%Y %H:%M:%S SGT") if parsed else "unknown"
-    def clean(value, limit):
-        value = value if isinstance(value, str) else "unknown"
-        for key, secret in env.items():
-            if secret and re.search(r"TOKEN|SECRET|PASSWORD|API_KEY", key):
-                value = value.replace(secret, "[REDACTED]")
-        value = re.sub(r"https?://api\.telegram\.org/bot[^\s<>\"']+", "[REDACTED_TELEGRAM_URL]", value)
-        return html.escape(value[:limit], quote=True)
-    esc = lambda value: html.escape(str(value), quote=True)
-    paragraphs = []
-    def paragraph(text):
-        paragraphs.append("<p>[§" + serial + "." + str(len(paragraphs) + 1) + "] " + text + "</p>")
-    paragraph("AI review completed " + esc(sgt(row["updated"])) + "; job " + str(jid) + ". Source exit times are shown separately below. Read-only review; no trading controls changed.")
-    paragraph("<b>Goal impact:</b> per-exit net-R appears below when complete costs are known. Latest-20 benchmark delta is <b>not measurable from a single exit and was not provided</b>. Goal ≥73% net wins (15/20 = 75%); realized payoff reference 1.38. No invented percentage improvement or economic acceptance.")
-    for case in cases:
-        checks = ", ".join(key + "=" + ("unknown" if value is None else "pass" if value else "fail") for key, value in case["checks"].items())
-        net = format(case["net_r"], ".4g") + " R" if case["net_costs_complete"] else "unknown (net costs incomplete)"
-        paragraph("<b>Account " + str(case["account_id"]) + " / " + esc(case["environment"]) + " / " + esc(case["strategy"]) + "</b>; symbol ID " + str(case["symbol_id"]) + "; position " + str(case["position_id"]) + "; deal " + str(case["deal_id"]) + ". Source close: " + esc(sgt(case["closed_at"])) + ". Net result: <b>" + esc(net) + "</b>. Exit-reason evidence: " + esc(case["reason_evidence"]) + ". Original entry: " + esc(json.dumps(case["original_entry"], sort_keys=True)) + ". Checks: " + esc(checks) + ". Missing evidence: " + esc(", ".join(case["missing_evidence"]) or "not specified") + ".")
-    paragraph("<b>Original setup / trigger / execution review:</b> " + clean(report.get("summary"), 2500))
-    paragraph("<b>Owner decisions / bounded repair recommendation:</b> " + clean(report.get("owner_decisions"), 600))
-    paragraph("Accounts retain separate findings; coincident exits are one episode, not independent confirmations. Inferred SL proximity is not broker-explicit confirmation. Unknown original wisdom stays unknown; no retuning from one stop-loss, risk increase or pause change is authorized by this report.")
-    document = "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Jiaoyi stop-loss review</title><style>body{font:15px/1.55 system-ui;max-width:960px;margin:24px auto;padding:0 16px}p{overflow-wrap:anywhere}</style><h1>№" + serial + " · Stop-loss original-setup review</h1>" + "".join(paragraphs) + "</html>"
-    stamp = dt.datetime.now(dt.timezone.utc).isoformat()
-    with coordinator.store.connect() as c:
-        c.execute("BEGIN IMMEDIATE")
-        prior = c.execute("SELECT detail FROM events WHERE kind='stop_loss_review_delivery' AND job=? ORDER BY id DESC LIMIT 1", (jid,)).fetchone()
-        if prior:
-            try:
-                prior = json.loads(prior[0])
-                state = prior.get("state")
-                return {"state": "uncertain" if state == "sending" else state if state in ("confirmed", "rejected", "uncertain") else "delivery_held",
-                        "message_id": prior.get("message_id") if positive(prior.get("message_id")) else None}
-            except (ValueError, TypeError, AttributeError):
-                return {"state": "delivery_held"}
-        c.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,'stop_loss_review_delivery',?)", (stamp, jid, json.dumps({"state": "sending", "serial": serial})))
-    receipt = {"state": "uncertain", "serial": serial}
-    try:
-        message = reporting.send_document(env["TELEGRAM_BOT_TOKEN"], env["TELEGRAM_OWNER_CHAT_ID"], serial + ".html", document, "Jiaoyi " + serial + " · stop-loss original-setup review · HTML")
-        if positive(message):
-            receipt.update(state="confirmed", message_id=message)
-    except reporting.DeliveryError as error:
-        receipt["state"] = "uncertain" if error.uncertain else "rejected"
-    except Exception:
-        pass
-    with coordinator.store.connect() as c:
-        c.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,'stop_loss_review_delivery',?)", (dt.datetime.now(dt.timezone.utc).isoformat(), jid, json.dumps(receipt)))
-    return receipt
+    Retain this entry point for completed-job callers, including old delivery
+    receipts. No configuration, receipt or retry can re-enable an external send.
+    The coordinator persists the assessment before calling this function.
+    """
+    return {"state": "internal_only"}
