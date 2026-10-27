@@ -172,3 +172,31 @@ all required CI. Read and integrated main's PR65/v5 exit changes and Grok
 log through №17,614, retaining their work. Combined source: Clippy and
 all46 S3 integration tests passed. New-head CI/merge and deployed pre-open
 completion proof remain pending. No financial acceptance is claimed.
+
+ENTRY 28-10-2026 07:50:53 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,628 §1; №17,629 §1; №17,630 §§1–2; №17,631 §1; №17,632 §§1–2.
+[§LOG.18] COMPLETE: PR68 merged and deployed as
+ea48687a5d4e804869b574b75c2205ee3464fbec, deployment
+905e6085-f6dd-476a-a5ed-5d497dafaa0d. All required CI passed on
+57d09709694512a0369ad93d749b9185444eb200. Actual live proof07:43:19SGT:
+JPN225/BTCUSD/ETHUSD on4 accounts,12/12 prepared_on_time by07:43:10SGT,
+before07:50 deadline/08:00 open. All readiness checks true, missing marks0;
+all8 loops alive/observing/unpaused. Existing v5 registration retained.
+Opening-price/fresh execution checks remain at entry. Future session
+deadlines remain scheduled, not retrospectively verified. Financial delta
+is unmeasured. This completes the pending release entries above.
+
+[§LOG.19] NEXT: Stock preparation/watchlist request (№17,618 §1) durably
+queued and running as Railway engineering job88. US/European shares only;
+exclude Chinese stocks/indices including Chinese issuers' ADRs. Availability
+and preparation must be real; no new stock trade activation is claimed.
+The owner's latest ChatGPT daily ceiling is36, correcting35 and replacing18.
+At07:48SGT the service reported19/36 used, job88 running after environment
+publication/recovery. Keep the ceiling, not a quota; no paid API fallback.
+Read latest status/PRs before claiming the stock build finished.
+
+[§LOG.20] Read changed Grok log through №17,618 (07:47SGT), including its
+PR70 merge notice. Base main f86c9b9 contains that work; this receipt change
+is documentation only. Existing runtime receipts above identify their own
+observed commit/time and do not certify every later main change.
