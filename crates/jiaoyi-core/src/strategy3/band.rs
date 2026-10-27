@@ -6,11 +6,15 @@
 //! - At each 30-minute mark τ after the open, **σ(τ)** is the mean, over the
 //!   last [`LOOKBACK`] sessions, of |price at τ ÷ that session's open − 1|.
 //!   The price at τ is the close of the M30 bar that ends at τ.
-//! - The band is open × (1 ± σ). The entry is tick-triggered (owner,
-//!   25-10-2026 ~10:50 SGT: "Tick-triggered only"): the first ask above the
-//!   upper band buys, the first bid below the lower band sells, with the band
-//!   evaluated at the quote's own instant. R, the trade's risk, is the band's
-//!   half-width at entry, open × σ.
+//! - The band is open × (1 ± σ).
+//!
+//! **Refinement, 27-10-2026 (v3).** The 25 Oct registration entered on the
+//! first tick beyond the band. The statements of that book printed the
+//! barrier rate of a far target, not an edge. v3 decides only at a
+//! 30-minute mark, on the mid, which is the paper's check. [`triggered`] is
+//! kept for the recorded tick rule and its tests. Live entry uses
+//! [`at_decision_mark`] and [`mark_decision`]. See
+//! `docs/preregistration-2026-10-27-strategy3-v3.md`.
 //!
 //! Readings where the text leaves a choice (self-derived, recorded with
 //! every decision):
@@ -20,7 +24,7 @@
 //!   over at most [`MAX_SESSIONS_BACK`] sessions. Fewer than 14 means no band
 //!   at τ, with the reason.
 //! - **Between marks.** At an instant between two marks, σ is interpolated
-//!   linearly between them, so the band can be evaluated on any quote.
+//!   linearly between them. v3 does not decide between marks.
 //! - **Before the first mark.** There is no band before open + 30 minutes.
 
 use std::collections::BTreeMap;
@@ -175,6 +179,10 @@ pub fn band_at(
 /// the upper band buys, a bid below the lower band sells. A quote doing both
 /// (a spread wider than the band) triggers nothing; a quote on the band is
 /// inside it.
+///
+/// **Not the live entry.** This is the 25 Oct tick rule, kept so its tests
+/// and any replay of that hash stay readable. v3 entry uses
+/// [`mark_decision`].
 pub fn triggered(band: &Band, bid: Option<f64>, ask: Option<f64>) -> Option<super::targets::Dir> {
     use super::targets::Dir;
     let buy = ask.is_some_and(|a| a > band.upper);
@@ -183,6 +191,48 @@ pub fn triggered(band: &Band, bid: Option<f64>, ask: Option<f64>) -> Option<supe
         (true, false) => Some(Dir::Buy),
         (false, true) => Some(Dir::Sell),
         _ => None,
+    }
+}
+
+/// How long after a 30-minute mark a quote still counts as that mark's
+/// decision. The paper checks at the mark. Quotes arrive continuously; this
+/// window takes the quote that arrives with the mark and refuses the rest.
+pub const MARK_WINDOW_SECS: i64 = 5;
+
+/// Whether `now` is a v3 decision mark: a multiple of 30 minutes after the
+/// session open, within [`MARK_WINDOW_SECS`] of that instant, and not before
+/// the first mark.
+pub fn at_decision_mark(session: &Session, now: DateTime<Utc>) -> bool {
+    let elapsed = now - session.open;
+    let mins = elapsed.num_minutes();
+    if mins < MARK_MINUTES || mins % MARK_MINUTES != 0 {
+        return false;
+    }
+    let into_mark = elapsed.num_seconds() - mins * 60;
+    (0..MARK_WINDOW_SECS).contains(&into_mark)
+}
+
+/// The v3 side at a mark: the mid buys above the upper band and sells below
+/// the lower. Both sides are required. A mid inside the band, a one-sided
+/// quote, or a quote wider than the band (mid can sit inside while the
+/// sides straddle) enters nothing.
+pub fn mark_decision(
+    band: &Band,
+    bid: Option<f64>,
+    ask: Option<f64>,
+) -> Option<super::targets::Dir> {
+    use super::targets::Dir;
+    let (bid, ask) = (bid?, ask?);
+    if !(bid.is_finite() && ask.is_finite() && ask >= bid) {
+        return None;
+    }
+    let mid = (bid + ask) / 2.0;
+    if mid > band.upper {
+        Some(Dir::Buy)
+    } else if mid < band.lower {
+        Some(Dir::Sell)
+    } else {
+        None
     }
 }
 
@@ -328,6 +378,39 @@ mod tests {
         );
         // Before the first mark: no band.
         assert!(band_at(&t, &s, 100.0, s.open + Duration::minutes(29)).is_err());
+    }
+
+    #[test]
+    fn v3_decides_only_at_the_mark_on_the_mid() {
+        let us = rule_for("US500", AssetClass::EquityIndex).unwrap();
+        let s = session_on(&us, NaiveDate::from_ymd_opt(2026, 11, 2).unwrap()).unwrap();
+        // 15:00 UTC is open+30. Within 5s is a mark; 6s and mid-interval are not.
+        assert!(at_decision_mark(&s, at("2026-11-02T15:00:00Z")));
+        assert!(at_decision_mark(&s, at("2026-11-02T15:00:04Z")));
+        assert!(!at_decision_mark(&s, at("2026-11-02T15:00:05Z")));
+        assert!(!at_decision_mark(&s, at("2026-11-02T15:15:00Z")));
+        assert!(at_decision_mark(&s, at("2026-11-02T15:30:02Z")));
+        let b = Band {
+            open: 100.0,
+            sigma: 0.002,
+            lower: 99.8,
+            upper: 100.2,
+            half_width: 0.2,
+            minutes: 30.0,
+        };
+        use super::super::targets::Dir;
+        // Mid above the upper buys; mid below the lower sells.
+        assert_eq!(
+            mark_decision(&b, Some(100.15), Some(100.27)),
+            Some(Dir::Buy)
+        );
+        assert_eq!(mark_decision(&b, Some(99.71), Some(99.85)), Some(Dir::Sell));
+        // Mid inside, even if a side has crossed: no entry.
+        assert_eq!(mark_decision(&b, Some(100.10), Some(100.25)), None);
+        assert_eq!(mark_decision(&b, Some(100.0), Some(100.01)), None);
+        // One side missing, or a crossed quote: no decision.
+        assert_eq!(mark_decision(&b, None, Some(100.3)), None);
+        assert_eq!(mark_decision(&b, Some(100.3), Some(100.1)), None);
     }
 
     #[test]
