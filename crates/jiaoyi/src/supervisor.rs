@@ -277,6 +277,45 @@ pub async fn run(pool: PgPool, mut accounts: Vec<i64>, mut stop: Shutdown) {
     }
 }
 
+/// A strictly typed projection of private source evidence. Legacy/malformed
+/// fields stay unknown; saved JSON, notes and monetary values never cross here.
+fn source_diagnostic(account: i64, observed_at: Option<DateTime<Utc>>, detail: &Value) -> Value {
+    let reasons = detail["failure_reasons"].as_array().and_then(|values| {
+        values
+            .iter()
+            .map(|value| {
+                value.as_str().filter(|reason| {
+                    matches!(
+                        *reason,
+                        "book_changed" | "balance_changed" | "pnl_position_coverage_incomplete"
+                    )
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+    });
+    let mut result = json!({"account_id":account,"observed_at":observed_at,
+        "failure_reasons":reasons,"pnl_coverage_diagnostics":{}});
+    for field in [
+        "book_stable",
+        "balance_stable",
+        "pnl_coverage_complete",
+        "source_complete",
+    ] {
+        result[field] = json!(detail[field].as_bool());
+    }
+    for field in [
+        "missing_pnl_position_count",
+        "extra_pnl_position_count",
+        "duplicate_position_id_count",
+        "duplicate_pnl_id_count",
+        "non_open_position_count",
+    ] {
+        result["pnl_coverage_diagnostics"][field] =
+            json!(detail["pnl_coverage_diagnostics"][field].as_u64());
+    }
+    result
+}
+
 /// Latest reports for the caller's allowlisted accounts only. `checked_at`
 /// proves the last persisted assessment, not every intervening 60-second poll.
 pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Error> {
@@ -354,6 +393,30 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
             })
         })
         .collect();
+    let snapshots = sqlx::query(
+        "SELECT account_id, observed_at, detail FROM report_account_snapshots
+         WHERE account_id = ANY($1) AND sample_key = 'latest'",
+    )
+    .bind(&allowed)
+    .fetch_all(pool)
+    .await?;
+    let account_source_diagnostics: Vec<Value> = allowed
+        .iter()
+        .map(|account| {
+            if let Some(row) = snapshots
+                .iter()
+                .find(|row| row.get::<i64, _>("account_id") == *account)
+            {
+                source_diagnostic(
+                    *account,
+                    Some(row.get("observed_at")),
+                    &row.get::<Value, _>("detail"),
+                )
+            } else {
+                source_diagnostic(*account, None, &Value::Null)
+            }
+        })
+        .collect();
     Ok(json!({
         "service": "railway_assessment_supervisor",
         "as_of": now,
@@ -372,6 +435,7 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
         },
         "consistency": "no single window establishes sustained goal achievement",
         "reports": reports,
+        "account_source_diagnostics": account_source_diagnostics,
         "recent_events_limit": 100,
         "recent_events": recent_events,
     }))

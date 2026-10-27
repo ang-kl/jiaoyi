@@ -913,8 +913,22 @@ async fn a_repeated_recorder_failure_is_logged_once_and_its_recovery_once(pool: 
         recorder::RecordOptions::default(),
     ));
     // No data load yet: the recorder fails the same way again and again.
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let st = status.lock().unwrap()[&A].clone();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while status
+        .lock()
+        .unwrap()
+        .get(&A)
+        .is_none_or(|st| st.failures_repeated < 3)
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let st = status
+        .lock()
+        .unwrap()
+        .get(&A)
+        .cloned()
+        .expect("recorder must report repeated failures before the deadline");
     assert_eq!(st.failures_logged, 1, "{st:?}");
     assert!(st.failures_repeated >= 3, "{st:?}");
     assert!(st

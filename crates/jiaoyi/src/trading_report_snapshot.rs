@@ -60,6 +60,27 @@ fn pnl_covers(
         && book.position.iter().all(|p| p.position_status == 1)
 }
 
+// Explain the existing predicate using only fixed counts. Duplicate counts
+// mean surplus rows beyond each distinct ID, not the number of repeated IDs.
+fn pnl_coverage_diagnostics(
+    book: &pb::ProtoOaReconcileRes,
+    pnl: &pb::ProtoOaGetPositionUnrealizedPnLRes,
+) -> Value {
+    let positions: BTreeSet<_> = book.position.iter().map(|p| p.position_id).collect();
+    let marks: BTreeSet<_> = pnl
+        .position_unrealized_pn_l
+        .iter()
+        .map(|p| p.position_id)
+        .collect();
+    json!({
+        "missing_pnl_position_count": positions.difference(&marks).count(),
+        "extra_pnl_position_count": marks.difference(&positions).count(),
+        "duplicate_position_id_count": book.position.len() - positions.len(),
+        "duplicate_pnl_id_count": pnl.position_unrealized_pn_l.len() - marks.len(),
+        "non_open_position_count": book.position.iter().filter(|p| p.position_status != 1).count(),
+    })
+}
+
 fn same_balance(a: &pb::ProtoOaTrader, b: &pb::ProtoOaTrader) -> bool {
     a.balance == b.balance
         && a.balance_version == b.balance_version
@@ -478,6 +499,7 @@ pub async fn capture(pool: &PgPool, session: &AccountSession<'_>) -> anyhow::Res
         "source_complete":sample.consistent() && balance.is_some() && floating.is_some() && currency.is_some(),
         "book_stable":sample.book_stable,"balance_stable":sample.balance_stable,
         "pnl_coverage_complete":sample.pnl_coverage_complete,"failure_reasons":failure_reasons,
+        "pnl_coverage_diagnostics":pnl_coverage_diagnostics(&sample.book, &sample.pnl),
         "balance":balance,"float":floating,"equity":equity,"credit":null,
         "equity_basis":"balance_plus_broker_net_unrealized_excluding_unverified_credit",
         "used_margin":used_margin,"free_margin":equity.zip(used_margin).map(|(e,m)|e-m),
@@ -666,7 +688,7 @@ mod tests {
         if failure == Some("balance_changed") {
             before_trader.balance_version = Some(1);
         }
-        let book = pb::ProtoOaReconcileRes {
+        let mut book = pb::ProtoOaReconcileRes {
             ctid_trader_account_id: ACCOUNT,
             position: if empty {
                 vec![]
@@ -681,11 +703,17 @@ mod tests {
             },
             ..Default::default()
         };
+        if failure == Some("duplicate_position_id") {
+            book.position.push(book.position[0].clone());
+        }
+        if failure == Some("non_open_position") {
+            book.position[0].position_status = 2;
+        }
         let mut before_book = book.clone();
         if failure == Some("book_changed") {
             before_book.position[0].stop_loss = Some(1.0);
         }
-        let pnl = pb::ProtoOaGetPositionUnrealizedPnLRes {
+        let mut pnl = pb::ProtoOaGetPositionUnrealizedPnLRes {
             ctid_trader_account_id: ACCOUNT,
             money_digits: 3,
             position_unrealized_pn_l: if empty {
@@ -702,6 +730,34 @@ mod tests {
                 }]
             },
             ..Default::default()
+        };
+        match failure {
+            Some("missing_pnl_position") => pnl.position_unrealized_pn_l.clear(),
+            Some("extra_pnl_position") => {
+                let mut extra = pnl.position_unrealized_pn_l[0];
+                extra.position_id = 8;
+                pnl.position_unrealized_pn_l.push(extra);
+            }
+            Some("duplicate_pnl_id") => pnl
+                .position_unrealized_pn_l
+                .push(pnl.position_unrealized_pn_l[0]),
+            _ => {}
+        }
+        let coverage_failure =
+            failure.is_some_and(|f| !matches!(f, "book_changed" | "balance_changed"));
+        let reason = if coverage_failure {
+            Some("pnl_position_coverage_incomplete")
+        } else {
+            failure
+        };
+        let expected_counts = match failure {
+            Some("pnl_position_coverage_incomplete") => [1, 1, 0, 0, 0],
+            Some("missing_pnl_position") => [1, 0, 0, 0, 0],
+            Some("extra_pnl_position") => [0, 1, 0, 0, 0],
+            Some("duplicate_position_id") => [0, 0, 1, 0, 0],
+            Some("duplicate_pnl_id") => [0, 0, 0, 1, 0],
+            Some("non_open_position") => [0, 0, 0, 0, 1],
+            _ => [0; 5],
         };
         let (conn, log) = FakeBroker {
             account_id: ACCOUNT,
@@ -737,19 +793,26 @@ mod tests {
         let detail: Value = sqlx::query_scalar("SELECT detail FROM report_account_snapshots WHERE account_id=$1 AND sample_key='latest'")
             .bind(ACCOUNT).fetch_one(&pool).await.unwrap();
         // This assertion reproduces the original mislabel for balance/book only.
-        assert_eq!(
-            detail["pnl_coverage_complete"],
-            failure != Some("pnl_position_coverage_incomplete")
-        );
+        assert_eq!(detail["pnl_coverage_complete"], !coverage_failure);
         assert_eq!(detail["book_stable"], failure != Some("book_changed"));
         assert_eq!(detail["balance_stable"], failure != Some("balance_changed"));
         assert_eq!(
             detail["failure_reasons"],
-            json!(failure.into_iter().collect::<Vec<_>>())
+            json!(reason.into_iter().collect::<Vec<_>>())
+        );
+        assert_eq!(
+            detail["pnl_coverage_diagnostics"],
+            json!({
+                "missing_pnl_position_count": expected_counts[0],
+                "extra_pnl_position_count": expected_counts[1],
+                "duplicate_position_id_count": expected_counts[2],
+                "duplicate_pnl_id_count": expected_counts[3],
+                "non_open_position_count": expected_counts[4],
+            })
         );
         assert_eq!(detail["source_complete"], failure.is_none());
         assert_eq!(detail["balance"], 1234.567);
-        if let Some(reason) = failure {
+        if let Some(reason) = reason {
             for field in [
                 "float",
                 "equity",
@@ -818,6 +881,26 @@ mod tests {
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
     async fn pnl_id_mismatch_is_reported_independently(pool: PgPool) {
         diagnostic_fixture(pool, Some("pnl_position_coverage_incomplete"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn missing_pnl_position_has_fixed_diagnostics_and_withholds_valuations(pool: PgPool) {
+        diagnostic_fixture(pool, Some("missing_pnl_position"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn extra_pnl_position_has_fixed_diagnostics_and_withholds_valuations(pool: PgPool) {
+        diagnostic_fixture(pool, Some("extra_pnl_position"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn duplicate_position_id_has_fixed_diagnostics_and_withholds_valuations(pool: PgPool) {
+        diagnostic_fixture(pool, Some("duplicate_position_id"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn duplicate_pnl_id_has_fixed_diagnostics_and_withholds_valuations(pool: PgPool) {
+        diagnostic_fixture(pool, Some("duplicate_pnl_id"), false).await;
+    }
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn non_open_position_has_fixed_diagnostics_and_withholds_valuations(pool: PgPool) {
+        diagnostic_fixture(pool, Some("non_open_position"), false).await;
     }
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
     async fn complete_nonempty_book_preserves_money_precision_and_one_attempt(pool: PgPool) {
