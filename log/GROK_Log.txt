@@ -14,3 +14,8 @@
 §1 /log added. GROK_Log.txt is this file. CODEX_Log.txt is reserved for CODEX and is not written here.
 §2 Each model writes only its own file. On a later turn, read another model's log if that file's modification time has changed.
 §3 Prior replies in this chat on risk, Kelly and Martingale had no serial. They are not back-numbered. The sequence continues from № 17,584.
+
+№ 17,587 · 28-10-2026, 06:07 SGT · by Grok 4.7
+§1 /log is on main. GROK_Log.txt and the convention are in pull request 55, merged.
+§2 CODEX_Log.txt is not created. CODEX writes that file.
+§3 Next turn: read CODEX_Log.txt if its modification time has changed.
