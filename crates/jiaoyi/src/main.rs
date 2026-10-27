@@ -92,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
         trading_loops,
         stop.clone(),
     )));
-    // Strategy 3 (intraday momentum, tick-triggered on the noise band): one
+    // Strategy 3 (intraday momentum, 30-minute mark decision on the mid): one
     // loop per account, demo and live (owner, 25-10-2026: "Live too, from now").
     tasks.push(tokio::spawn(jiaoyi::strategy3::run(
         pool.clone(),

@@ -1,0 +1,96 @@
+"""Tests for the five watches. No network, no broker."""
+import unittest
+
+import watches
+
+
+def health(file=watches.V3_FILE, digest="a" * 64, decisions=None, trades=None, limit=None):
+    return {
+        "status": "ok",
+        "strategy3": [{
+            "account_id": 46130058,
+            "prereg_file": file,
+            "prereg_hash": digest,
+            "today": {
+                "recent_decisions": decisions or [],
+                "trades_today": trades or [],
+            },
+            "performance": {"limit_reached": limit},
+        }],
+    }
+
+
+def operations(wins=6, count=20, payoff=0.4, diagnostics=None):
+    return {
+        "reports": [{
+            "account_id": 46130058,
+            "strategy": "s3",
+            "report": {"assessment": {"window": {
+                "wins": wins, "count": count, "realized_payoff": payoff,
+            }}},
+        }],
+        "account_source_diagnostics": diagnostics if diagnostics is not None else [{
+            "account_id": 47790949,
+            "acceptance_passed": False,
+            "note": "one unmatched extra P&L entry",
+        }],
+    }
+
+
+class WatchesTest(unittest.TestCase):
+    def test_hash_matches_v3_file_and_full_digest(self):
+        reading = watches.hash_watch(health())
+        self.assertFalse(reading["mismatch"])
+        self.assertTrue(reading["rows"][0]["matches_v3"])
+
+    def test_hash_mismatch_on_old_file_or_short_digest(self):
+        self.assertTrue(watches.hash_watch(health(file="docs/preregistration-2026-10-25-strategy3.md"))["mismatch"])
+        self.assertTrue(watches.hash_watch(health(digest="abc"))["mismatch"])
+        self.assertTrue(watches.hash_watch({"strategy3": []})["mismatch"])
+
+    def test_latest20_names_the_gap_and_does_not_invent_a_pass(self):
+        reading = watches.latest20_watch(operations())
+        gap = reading["gaps"][0]
+        self.assertEqual(gap["wins_short"], 9)
+        self.assertAlmostEqual(gap["payoff_short"], 0.98)
+        self.assertTrue(gap["sufficient"])
+        short = watches.latest20_watch(operations(count=7))["gaps"][0]
+        self.assertFalse(short["sufficient"])
+
+    def test_cost_gate_counts_only_the_reserve_reason(self):
+        decisions = [
+            {"symbol": "ETHUSD", "reason": "cost reserve C (1.2) >= R (0.4): skipped"},
+            {"symbol": "ETHUSD", "reason": "cost reserve C (1.1) >= R (0.5): skipped"},
+            {"symbol": "EURUSD", "reason": "paused"},
+        ]
+        tally = watches.cost_gate_watch(health(decisions=decisions))["skips_by_symbol"]
+        self.assertEqual(tally, {"ETHUSD": 2})
+
+    def test_recovery_is_unavailable_and_does_not_cross(self):
+        reading = watches.recovery_watch()
+        self.assertFalse(reading["available"])
+        self.assertFalse(reading["threshold_crossed"])
+
+    def test_47790949_stays_open_when_unmatched_is_named(self):
+        reading = watches.account_47790949_watch(operations())
+        self.assertTrue(reading["present"])
+        self.assertTrue(reading["still_open"])
+
+    def test_events_fire_once_on_change_and_not_on_the_same_poll(self):
+        sent = health(trades=[{"kind": "open", "outcome": "filled", "symbol": "EURUSD", "side": "buy", "at": "t1"}])
+        first, state = watches.events(None, sent, operations())
+        self.assertIn("entry_sent", [event["event"] for event in first])
+        again, _ = watches.events(state, sent, operations())
+        self.assertEqual([event["event"] for event in again], [])
+
+    def test_limit_change_and_hash_mismatch_are_events(self):
+        limited = health(limit=[{"limit": "drawdown_r"}])
+        events, state = watches.events(None, limited, operations())
+        self.assertIn("limit_changed", [event["event"] for event in events])
+        old = health(file="docs/preregistration-2026-10-25-strategy3.md")
+        events, _ = watches.events(state, old, operations())
+        self.assertIn("hash_mismatch", [event["event"] for event in events])
+
+
+if __name__ == "__main__":
+    unittest.main()

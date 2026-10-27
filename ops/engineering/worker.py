@@ -24,9 +24,10 @@ from zoneinfo import ZoneInfo
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from reporting import Reporter
+from reporting import Reporter, send_message
 import stop_loss_reviews
 import review_memory
+import watches
 REPO = "ang-kl/jiaoyi"
 SERVICE = "0f67b4a0-629d-42f1-97f1-8910887896af"
 ENVIRONMENT = "f3b64526-67e3-4ea6-98af-274043a8b657"
@@ -148,6 +149,11 @@ class Store:
         with self.connect() as c:
             c.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,?,?)",
                       (now(), job, kind, detail))
+
+    def last_event(self, kind):
+        with self.connect() as c:
+            row = c.execute("SELECT detail FROM events WHERE kind=? ORDER BY id DESC LIMIT 1", (kind,)).fetchone()
+        return row["detail"] if row else None
 
     def enqueue(self, task):
         if not task.strip() or len(task) > 16000:
@@ -714,7 +720,30 @@ class Coordinator:
         self.store.event("public_evidence_assessed", jid, json.dumps({
             "decision": "changed_public_evidence" if jid is not None else "unchanged_public_evidence",
             "queued_job_id": jid, "source_at": self.public_time(snapshots[1].get("as_of"))}))
+        self._emit_watch_events(snapshots[0], snapshots[1])
         return jid
+
+    def _emit_watch_events(self, health, operations):
+        """Five watches, four Telegram events. No session, no rule change."""
+        raw = self.store.last_event("watch_state")
+        previous = json.loads(raw) if raw else None
+        emitted, state = watches.events(previous, health, operations)
+        self.store.event("watch_state", detail=json.dumps(state, default=str))
+        self.store.event("watch_reading", detail=json.dumps(watches.watches(health, operations), default=str))
+        if not emitted:
+            return
+        token = self.reporter.env.get("TELEGRAM_BOT_TOKEN")
+        chat = self.reporter.env.get("TELEGRAM_OWNER_CHAT_ID")
+        for event in emitted:
+            text = "jiaoyi " + event["event"] + "\n" + json.dumps(event["detail"], default=str)[:500]
+            try:
+                if token and chat:
+                    send_message(token, chat, text)
+                    self.store.event("watch_telegram", detail=event["event"])
+                else:
+                    self.store.event("watch_telegram_unconfigured", detail=event["event"])
+            except Exception as error:
+                self.store.event("watch_telegram_error", detail=type(error).__name__ + ":" + event["event"])
 
     def prepare(self):
         if os.geteuid() != 0:
