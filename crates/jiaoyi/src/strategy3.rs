@@ -11,10 +11,15 @@
 //! - A symbol is skipped when the cost reserve C is at least R.
 //! - `REQUIRED_RR` is 1.38. Owner, 27-10-2026: target near 1.4R.
 //!
-//! The rules are `docs/preregistration-2026-10-28-strategy3-v4.md`, embedded
-//! here and hashed: every decision, intent and trade records that hash and
-//! the label `jiaoyi-s3`. The 25 Oct file remains the record of the rule
-//! that produced the statement losses. It is not the rule this loop trades.
+//! The rules are `docs/preregistration-2026-10-28-strategy3-v5.md`, embedded
+//! and hashed: every decision, intent and trade records that hash and the
+//! label `jiaoyi-s3`. The 25 Oct file remains the record of the rule that
+//! produced the statement losses. It is not the rule this loop trades.
+//!
+//! **Trailing, 28-10-2026 (v5).** Owner: “change the forbid.” The 25 Oct
+//! “no stop amends” sentence is retired. An owned position may trail its
+//! stop to best − R (long) or best + R (short). The amend carries the
+//! take-profit, so the target is not deleted. The stop never loosens.
 //!
 //! One loop per permitted account, demo and live:
 //! - **Sessions.** Each symbol trades its own session (`jiaoyi_core::strategy3::sessions`).
@@ -79,10 +84,10 @@ pub const LABEL: &str = "jiaoyi-s3";
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-10-28-strategy3-v4.md";
+pub const PREREG_FILE: &str = "docs/preregistration-2026-10-28-strategy3-v5.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-10-28-strategy3-v4.md");
+    include_str!("../../../docs/preregistration-2026-10-28-strategy3-v5.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -201,6 +206,48 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
 }
 
 // ---------------------------------------------------------------- pure parts
+
+/// The Chandelier stop: best − R for a long, best + R for a short.
+/// Returns `None` when the inputs are not a price or R is not positive.
+/// This is an exit rule. It is not MAE and it is not MFE.
+pub fn chandelier_stop(side: Side, best: f64, r: f64) -> Option<f64> {
+    if !best.is_finite() || best <= 0.0 || !r.is_finite() || r <= 0.0 {
+        return None;
+    }
+    let stop = match side {
+        Side::Buy => best - r,
+        Side::Sell => best + r,
+    };
+    (stop.is_finite() && stop > 0.0).then_some(stop)
+}
+
+/// Maximum adverse and maximum favourable excursion, in price units from the
+/// entry. These are measurements. They do not move a stop and they do not
+/// close a position.
+pub fn update_excursions(side: Side, entry: f64, price: f64, mae: f64, mfe: f64) -> (f64, f64) {
+    if !entry.is_finite() || !price.is_finite() {
+        return (mae, mfe);
+    }
+    let adverse = match side {
+        Side::Buy => (entry - price).max(0.0),
+        Side::Sell => (price - entry).max(0.0),
+    };
+    let favourable = match side {
+        Side::Buy => (price - entry).max(0.0),
+        Side::Sell => (entry - price).max(0.0),
+    };
+    (mae.max(adverse), mfe.max(favourable))
+}
+
+/// The opposite side. The reverse strategy is this function and a separate
+/// label. It is not the primary signal and it does not share the primary
+/// hash's evidence.
+pub fn reverse_side(side: Dir) -> Dir {
+    match side {
+        Dir::Buy => Dir::Sell,
+        Dir::Sell => Dir::Buy,
+    }
+}
 
 /// The entry signal of a quote at `now`.
 ///
@@ -609,11 +656,26 @@ pub struct Own {
     /// retried, never given up).
     pub end_attempts: i64,
     pub end_next_try: Option<DateTime<Utc>>,
+    /// Best executable price since the position was seen (highest bid for a
+    /// long, lowest ask for a short). The Chandelier hangs from this.
+    pub best: Option<f64>,
+    /// Maximum adverse excursion from the entry, in price units. A measurement.
+    /// The Chandelier does not read it.
+    pub mae: f64,
+    /// Maximum favourable excursion from the entry, in price units. A measurement.
+    /// The Chandelier does not read it.
+    pub mfe: f64,
+    /// When the last stop amend was sent, so a trail is not sent more often
+    /// than once per [`TRAIL_AMEND_SECS`].
+    pub last_amend: Option<DateTime<Utc>>,
 }
 
 /// After a session-end or TP1 close the gate refused or the broker rejected,
 /// the next try waits this long (self-derived).
 pub const END_RETRY: Duration = Duration::from_secs(10);
+
+/// A Strategy 3 trail is not sent more often than this per position.
+pub const TRAIL_AMEND_SECS: i64 = 30;
 
 // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
 // one rule for both strategies' fills.
@@ -1018,6 +1080,10 @@ impl<'a, 'c> Trader<'a, 'c> {
                 tp1_next_try: None,
                 end_attempts,
                 end_next_try: None,
+                best: None,
+                mae: 0.0,
+                mfe: 0.0,
+                last_amend: None,
             });
             // A plan recorded after the position was first seen fills what is
             // still unknown.
@@ -1381,6 +1447,10 @@ impl<'a, 'c> Trader<'a, 'c> {
         if owned {
             for pid in positions {
                 self.tp1(pid, bid, ask, now).await?;
+                // Grok 4.7 · № 17,608 28-Oct (ordered: owner "change the forbid"):
+                // the trail moves the stop only in the trade's favour and
+                // carries the take-profit, so the amend does not delete it.
+                self.trail(pid, bid, ask, now).await?;
             }
         }
         Ok(owned)
@@ -1441,6 +1511,178 @@ impl<'a, 'c> Trader<'a, 'c> {
                 x.tp1_sent = false;
                 x.tp1_next_try =
                     Some(now + chrono::Duration::from_std(END_RETRY).unwrap_or_default());
+            }
+        }
+        Ok(())
+    }
+
+    /// Move an owned position's stop to best − R (long) or best + R (short).
+    /// The amend carries the broker's take-profit, so the target is not
+    /// deleted. The stop never loosens. An amend is not sent in the session's
+    /// last 30 minutes, and not more often than once per [`TRAIL_AMEND_SECS`].
+    ///
+    /// Grok 4.7 · № 17,608 28-Oct (ordered: owner "change the forbid"):
+    /// the 25 Oct "no stop amends" sentence is retired by the v5 registration.
+    /// The gate already re-sends the take-profit on an amend.
+    async fn trail(
+        &mut self,
+        position_id: i64,
+        bid: Option<f64>,
+        ask: Option<f64>,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        let Some(o) = self.own.get(&position_id).cloned() else {
+            return Ok(());
+        };
+        let (Some(entry), Some(current_stop)) = (o.entry, o.stop) else {
+            return Ok(());
+        };
+        let r = (entry - current_stop).abs();
+        if !r.is_finite() || r <= 0.0 {
+            return Ok(());
+        }
+        let price = match o.side {
+            Side::Buy => bid,
+            Side::Sell => ask,
+        };
+        let Some(p) = price.filter(|x| x.is_finite() && *x > 0.0) else {
+            return Ok(());
+        };
+        let best = match (o.best, o.side) {
+            (Some(b), Side::Buy) => b.max(p),
+            (Some(b), Side::Sell) => b.min(p),
+            (None, _) => p,
+        };
+        if let Some(x) = self.own.get_mut(&position_id) {
+            x.best = Some(best);
+            if let Some(entry) = x.entry {
+                let (mae, mfe) = update_excursions(x.side, entry, p, x.mae, x.mfe);
+                x.mae = mae;
+                x.mfe = mfe;
+            }
+        }
+        let new_stop = match o.side {
+            Side::Buy => best - r,
+            Side::Sell => best + r,
+        };
+        let better = match o.side {
+            Side::Buy => new_stop > current_stop,
+            Side::Sell => new_stop < current_stop,
+        };
+        if !better || !new_stop.is_finite() || new_stop <= 0.0 {
+            return Ok(());
+        }
+        if o.last_amend
+            .is_some_and(|t| now.signed_duration_since(t).num_seconds() < TRAIL_AMEND_SECS)
+        {
+            return Ok(());
+        }
+        // No amend in the session's last 30 minutes.
+        if let Some(sym) = self.syms.get(&o.symbol_id) {
+            if let Some(session) = sym.rule.and_then(|rule| sessions::session_at(&rule, now)) {
+                if session.close - now < chrono::Duration::minutes(30) {
+                    return Ok(());
+                }
+            }
+        }
+        let account_id = self.account_id();
+        let name = self
+            .syms
+            .get(&o.symbol_id)
+            .map(|s| s.name.clone())
+            .unwrap_or_default();
+        let ticks = (new_stop * 100_000.0).round() as i64;
+        let key = format!("s3-trail:{account_id}:{}:{ticks}", o.position_id);
+        let rules = rules(self.pool, account_id, self.env).await?;
+        let order = s3s::OrderRow {
+            account_id,
+            entry_key: key.clone(),
+            label: LABEL.into(),
+            prereg_hash: self.hash.clone(),
+            kind: "trail".into(),
+            symbol: name.clone(),
+            symbol_id: o.symbol_id,
+            position_id: Some(o.position_id),
+            side: Some(o.side.as_str().into()),
+            session_date: o.session_date,
+            decided_at: now,
+            bid,
+            ask,
+            volume: Some(o.volume),
+            detail: json!({"strategy": STRATEGY, "from_stop": current_stop, "best": best,
+                "r": r, "new_stop": new_stop, "open_entry_key": o.entry_key}),
+        };
+        let ledger = S3Ledger {
+            inner: PgLedger {
+                pool: self.pool,
+                settings_version: Some(rules.version),
+            },
+            order,
+            recorded_at: Mutex::new(None),
+        };
+        let policy = Policy {
+            edge: Ok(()),
+            max_risk: f64::INFINITY,
+        };
+        let cmd = Command::AmendStop {
+            position_id: o.position_id,
+            side: o.side,
+            current_stop: Some(current_stop),
+            new_stop,
+        };
+        match gate::send(
+            self.session,
+            self.allowlist,
+            &ledger,
+            &policy,
+            cmd,
+            &key,
+            Duration::from_secs(rules.order_wait_secs),
+        )
+        .await
+        {
+            Ok(sent) => {
+                if let Some(x) = self.own.get_mut(&position_id) {
+                    x.last_amend = Some(now);
+                    if matches!(sent.outcome, Outcome::Amended { .. }) {
+                        x.stop = Some(new_stop);
+                    }
+                }
+                self.record_fill(
+                    &ledger,
+                    &key,
+                    "trail",
+                    &name,
+                    Some(o.position_id),
+                    o.side,
+                    Some(new_stop),
+                    bid,
+                    ask,
+                    o.volume,
+                    &sent,
+                )
+                .await?;
+                self.d
+                    .note(
+                        Some(&name),
+                        "trail",
+                        &format!("stop to {new_stop}: {:?}", sent.outcome),
+                        json!({"position_id": o.position_id, "from_stop": current_stop, "best": best}),
+                    )
+                    .await;
+            }
+            Err(e) => {
+                if let Some(x) = self.own.get_mut(&position_id) {
+                    x.last_amend = Some(now);
+                }
+                self.d
+                    .note(
+                        Some(&name),
+                        "trail_refused",
+                        &e.to_string(),
+                        json!({"position_id": o.position_id}),
+                    )
+                    .await;
             }
         }
         Ok(())
@@ -2741,7 +2983,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-10-28-strategy3-v4.md"
+            "/../../docs/preregistration-2026-10-28-strategy3-v5.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)
@@ -2877,5 +3119,38 @@ mod tests {
         assert!((quote_to_deposit("JPY", "USD", &mids).unwrap() - 1.0 / 150.0).abs() < 1e-12);
         assert!((quote_to_deposit("EUR", "USD", &mids).unwrap() - 1.1).abs() < 1e-12);
         assert_eq!(quote_to_deposit("GBP", "USD", &mids), None);
+    }
+
+    #[test]
+    fn chandelier_mae_mfe_and_reverse_are_distinct() {
+        // Chandelier is an exit. It hangs from the best by R and never
+        // loosens. It does not read MAE or MFE.
+        let long = chandelier_stop(Side::Buy, 110.0, 5.0).unwrap();
+        assert_eq!(long, 105.0);
+        let short = chandelier_stop(Side::Sell, 90.0, 5.0).unwrap();
+        assert_eq!(short, 95.0);
+        assert!(chandelier_stop(Side::Buy, 110.0, 0.0).is_none());
+        assert!(chandelier_stop(Side::Buy, f64::NAN, 5.0).is_none());
+
+        // MAE and MFE are measurements. They grow, and they do not move a stop.
+        let (mae, mfe) = update_excursions(Side::Buy, 100.0, 97.0, 0.0, 0.0);
+        assert_eq!((mae, mfe), (3.0, 0.0));
+        let (mae, mfe) = update_excursions(Side::Buy, 100.0, 108.0, mae, mfe);
+        assert_eq!((mae, mfe), (3.0, 8.0));
+        // A later price inside the extremes does not shrink either.
+        let (mae, mfe) = update_excursions(Side::Buy, 100.0, 102.0, mae, mfe);
+        assert_eq!((mae, mfe), (3.0, 8.0));
+        // A short's adverse is up, its favourable is down.
+        let (mae, mfe) = update_excursions(Side::Sell, 100.0, 104.0, 0.0, 0.0);
+        assert_eq!((mae, mfe), (4.0, 0.0));
+        let (mae, mfe) = update_excursions(Side::Sell, 100.0, 93.0, mae, mfe);
+        assert_eq!((mae, mfe), (4.0, 7.0));
+        // The Chandelier stop is unchanged by these numbers.
+        assert_eq!(chandelier_stop(Side::Buy, 110.0, 5.0), Some(105.0));
+
+        // Reverse flips the side and is not the primary signal.
+        assert_eq!(reverse_side(Dir::Buy), Dir::Sell);
+        assert_eq!(reverse_side(Dir::Sell), Dir::Buy);
+        assert_ne!(reverse_side(Dir::Buy), Dir::Buy);
     }
 }
