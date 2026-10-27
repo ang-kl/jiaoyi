@@ -272,6 +272,26 @@ pub async fn median_spread(
     Ok(m.filter(|_| n > 0).map(|m| (m, n)))
 }
 
+/// Open entry keys for this account, symbol and pre-registration hash.
+/// Kelly reads only closes under the hash it is trading.
+pub async fn open_keys_for_hash(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+    prereg_hash: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT entry_key FROM strategy3_orders
+         WHERE account_id = $1 AND symbol_id = $2 AND prereg_hash = $3 AND kind = 'open'",
+    )
+    .bind(account_id)
+    .bind(symbol_id)
+    .bind(prereg_hash)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.get("entry_key")).collect())
+}
+
 /// `/health` → `strategy3`: per account, the open plans' positions and today's
 /// decisions and trades (UTC day). No money.
 pub async fn today(pool: &PgPool, account_id: i64) -> Result<Value, sqlx::Error> {
