@@ -270,7 +270,7 @@ class Config:
         self.env = dict(os.environ if env is None else env)
         self.root = Path(self.env.get("ENGINEERING_STATE_DIR", "/data"))
         self.enabled = self.env.get("ENGINEERING_ENABLED") == "1"
-        self.model = self.env.get("ENGINEERING_MODEL", "")
+        self.model = self.env.get("ENGINEERING_MODEL") or self.env.get("JIAOYI_GROK_MODEL", "")
         self.auth_mode = self.env.get("ENGINEERING_AUTH_MODE", "api-key")
         if self.auth_mode not in ("api-key", "chatgpt"):
             raise ValueError("unsupported engineering authentication mode")
@@ -278,6 +278,9 @@ class Config:
         if self.isolation not in ("codex", "uid-container"):
             raise ValueError("unsupported engineering isolation mode")
         self.base_limit = self.integer("ENGINEERING_DAILY_SESSION_LIMIT", 0, 0, 1000)
+        # Owner, 28-10-2026: Grok has 10 permits a day. The ceiling is not a quota.
+        self.grok_limit = self.integer("JIAOYI_GROK_API_DURATION", 0, 0, 10000)
+        self.grok_start = self.env.get("JIAOYI_GROK_API_START", "")
         self.extra_limit = self.integer("ENGINEERING_EXTRA_SESSION_LIMIT", 0, 0, 1000)
         self.extra_date = self.env.get("ENGINEERING_EXTRA_SESSION_DATE", "")
         if self.extra_limit:
@@ -309,7 +312,10 @@ class Config:
     def missing(self):
         credentials = ("GH_TOKEN", "RAILWAY_TOKEN")
         if self.auth_mode == "api-key":
-            credentials += ("OPENAI_API_KEY",)
+            # JIAOYI_GROK_API is accepted in place of OPENAI_API_KEY. The secret
+            # is never logged. JIAOYU_GROK_MODEL is a typo and is not read.
+            if not self.env.get("OPENAI_API_KEY") and not self.env.get("JIAOYI_GROK_API"):
+                credentials += ("OPENAI_API_KEY",)
         required = [k for k in credentials if not self.env.get(k)]
         if (not self.model and self.auth_mode == "api-key") or (self.model and not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", self.model)):
             required.append("ENGINEERING_MODEL")
