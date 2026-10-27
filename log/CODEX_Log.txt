@@ -119,3 +119,24 @@ tasks, zero aborted; corrected stale7/9 expectations to include the new
 watchdog. Full-workspace and new-head CI checks are running. No merge or
 production monitor activation is claimed at this entry. Engineering remains
 stopped until the monitor release read-back passes.
+
+ENTRY 28-10-2026 06:55:47 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,604 §1 (28-10-2026 06:54 SGT); №17,605 §1 (06:55 SGT).
+[§LOG.13] SERIAL CHECK REMINDER: Before choosing a chat serial, refresh main
+and check log/GROK_Log.txt for changes. This is the case-sensitive repository
+filename referred to by the owner as Grok_Log.txt. Compare its Git blob SHA
+or content hash with the last recorded check; checkout modification time
+alone can change without a content change. If changed, read the new entries.
+Choose one more than the highest serial observed across the current chat
+and the latest Codex/Grok logs; do not rely on this file's older entries
+alone. Preserve published numbers and write only Codex's own log. Recheck
+when resuming work; a recorded next number is not a permanent reservation.
+
+[§LOG.14] Checked Grok blob e0ee7ac120ec0dae1f65ed1c14d58440d790088b on main at 28-10-2026 06:55:47 SGT.
+Highest Grok serial: №17,595. Current chat: №17,605. This reply continued
+after chat №17,604 rather than restarting from Grok's older number.
+Historical handover: №17,602 §§1–2 and №17,603 §§1–3 (28Oct06:28SGT)
+reported PR57 merged/deployed and engineering resumed, with1/18 sessions
+used at that observation. See PR57 §§5–7 for the actual release receipt.
+This documentation update makes no fresh runtime or financial claim.
