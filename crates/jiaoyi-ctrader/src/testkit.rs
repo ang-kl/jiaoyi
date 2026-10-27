@@ -42,6 +42,9 @@ pub struct FakeBroker {
     pub symbols: Vec<pb::ProtoOaSymbol>,
     /// D1 bars per symbol id.
     pub bars: HashMap<i64, Vec<pb::ProtoOaTrendbar>>,
+    /// Optional delays for successive trendbar replies. Delayed reads leave
+    /// the connection free to process quotes and trading requests.
+    pub trendbar_reply_delays: Arc<Mutex<VecDeque<Duration>>>,
     /// M30 bars per symbol id (Strategy 3), served for M30 requests.
     pub m30_bars: HashMap<i64, Vec<pb::ProtoOaTrendbar>>,
     /// Quotes (bid, ask) sent per symbol id after a spot subscription.
@@ -474,7 +477,7 @@ impl FakeBroker {
                             bars = bars.split_off(bars.len() - self.max_bars_per_response);
                             has_more = true;
                         }
-                        out.push(reply(
+                        let message = reply(
                             id,
                             Oa::ProtoOaGetTrendbarsRes as i32,
                             pb::ProtoOaGetTrendbarsRes {
@@ -487,7 +490,22 @@ impl FakeBroker {
                                 ..Default::default()
                             }
                             .encode_to_vec(),
-                        ));
+                        );
+                        let delay = self
+                            .trendbar_reply_delays
+                            .lock()
+                            .unwrap()
+                            .pop_front()
+                            .unwrap_or_default();
+                        if delay.is_zero() {
+                            out.push(message);
+                        } else {
+                            let writer = wr.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(delay).await;
+                                let _ = write_frame(&mut *writer.lock().await, &message).await;
+                            });
+                        }
                     } else if pt == Oa::ProtoOaSubscribeSpotsReq as i32 {
                         let req = pb::ProtoOaSubscribeSpotsReq::decode(body.as_slice()).unwrap();
                         out.push(reply(

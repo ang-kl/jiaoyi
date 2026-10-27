@@ -504,6 +504,64 @@ pub struct Day {
     pub prepared_at: DateTime<Utc>,
 }
 
+async fn load_day(
+    pool: &PgPool,
+    session: &AccountSession<'_>,
+    account_id: i64,
+    symbol_id: i64,
+    rule: SessionRule,
+    s: Session,
+    now: DateTime<Utc>,
+) -> Result<Day, (String, DateTime<Utc>)> {
+    let from = s.open - chrono::Duration::days(BAR_DAYS);
+    match session.m30_bars(symbol_id, from, now).await {
+        Err(e) => Err((format!("M30 bars unreadable: {e}"), now)),
+        Ok(raw) => {
+            let mut bars = Vec::new();
+            let mut first_volume = None;
+            for tb in &raw {
+                let Ok(b) = jiaoyi_ctrader::decode_bar(
+                    tb,
+                    jiaoyi_ctrader::messages::ProtoOaTrendbarPeriod::M30,
+                ) else {
+                    continue;
+                };
+                let (Some(o), Some(c)) = (b.open.to_f64(), b.close.to_f64()) else {
+                    continue;
+                };
+                if b.open_time == s.open {
+                    first_volume = Some(b.tick_volume);
+                }
+                bars.push(M30 {
+                    open_time: b.open_time,
+                    open: o,
+                    close: c,
+                });
+            }
+            let table = band::sigma_table(&rule, &s, &bars);
+            let open = match (bars.iter().find(|b| b.open_time == s.open), first_volume) {
+                (Some(b), Some(v)) if v > 0 => Ok(b.open),
+                _ => Err(format!(
+                    "no M30 bar with ticks at the session open {}: a holiday, skipped",
+                    s.open
+                )),
+            };
+            let spread = match s3s::median_spread(pool, account_id, symbol_id).await {
+                Ok(Some(x)) => Ok(x),
+                Ok(None) => Err("no recorded two-sided quote in 7 days: no spread".into()),
+                Err(e) => Err(format!("recorded quotes unreadable: {e}")),
+            };
+            Ok(Day {
+                session: s,
+                open,
+                table,
+                spread,
+                prepared_at: now,
+            })
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Sym {
     pub id: i64,
@@ -514,6 +572,8 @@ pub struct Sym {
     pub quote: Option<String>,
     pub bid: Option<f64>,
     pub ask: Option<f64>,
+    pub bid_at: Option<DateTime<Utc>>,
+    pub ask_at: Option<DateTime<Utc>>,
     pub day: Option<Result<Day, (String, DateTime<Utc>)>>,
     /// The last entry attempt, so a refused trigger waits [`ENTRY_RETRY`].
     pub last_try: Option<DateTime<Utc>>,
@@ -650,6 +710,10 @@ pub struct Trader<'a, 'c> {
     program_positions: usize,
     pub d: Decisions<'a>,
     hash: String,
+    protect_during_reads: bool,
+    read_shutdown: Option<Shutdown>,
+    event_offset: chrono::Duration,
+    protected_through: HashMap<i64, DateTime<Utc>>,
     /// The loops' liveness, shared with `/health` (each reconcile run beats
     /// it). A trader driven on its own keeps its own map.
     // Claude · № 17,074 25-Oct (ordered: owner "merge when green and deploy";
@@ -719,6 +783,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                         .and_then(|q| q.quote_of(id).ok().map(|x| x.0)),
                     bid: None,
                     ask: None,
+                    bid_at: None,
+                    ask_at: None,
                     day: None,
                     last_try: None,
                     last_decision_mark: None,
@@ -740,6 +806,10 @@ impl<'a, 'c> Trader<'a, 'c> {
             program_positions: 0,
             d: Decisions::new(pool, account_id),
             hash: prereg_hash(),
+            protect_during_reads: false,
+            read_shutdown: None,
+            event_offset: chrono::Duration::zero(),
+            protected_through: HashMap::new(),
             live: Default::default(),
         };
         t.read_commission().await;
@@ -748,6 +818,96 @@ impl<'a, 'c> Trader<'a, 'c> {
 
     fn account_id(&self) -> i64 {
         self.session.account().id()
+    }
+
+    /// Await non-execution data while the same mutable trader continues
+    /// registered exits. This is one writer, never a concurrent controller.
+    async fn protect_while_reading<F: std::future::Future>(
+        &mut self,
+        read: F,
+    ) -> anyhow::Result<F::Output> {
+        if !self.protect_during_reads {
+            return Ok(read.await);
+        }
+        let mut quotes = self.session.connection().spot_events();
+        let mut executions = self.session.connection().executions();
+        let mut stop = self
+            .read_shutdown
+            .clone()
+            .expect("runtime protection has a shutdown receiver");
+        let mut exits = tokio::time::interval(crate::fast_monitor::INTERVAL);
+        exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut clock = tokio::time::interval(Duration::from_secs(1));
+        clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        tokio::pin!(read);
+        let progress = crate::fast_monitor::WorkGuard::start(
+            &self.live,
+            self.account_id(),
+            "historical_read_with_exit_pump",
+        );
+        loop {
+            tokio::select! {
+                _ = stop.wait() => anyhow::bail!("shutdown during historical preparation"),
+                result = &mut read => { progress.complete(); return Ok(result); },
+                _ = exits.tick() => self.check_exits(Utc::now()+self.event_offset).await?,
+                _ = clock.tick() => self.session_end(Utc::now()+self.event_offset).await?,
+                event = quotes.recv() => match event {
+                    Ok(q) if q.event.ctid_trader_account_id == self.account_id() => {
+                        let id=q.event.symbol_id;
+                        // Flat symbols are left for the outer entry path,
+                        // preserving their first eligible quote and order.
+                        if self.own.values().any(|p| p.symbol_id==id) {
+                            let at=q.received_at+self.event_offset;
+                            if let Some(sym)=self.syms.get_mut(&id) {
+                                if let Some(b)=q.event.bid {sym.bid=Some(b as f64/100_000.0);sym.bid_at=Some(at);}
+                                if let Some(a)=q.event.ask {sym.ask=Some(a as f64/100_000.0);sym.ask_at=Some(at);}
+                            }
+                            self.protected_through.insert(id,at);
+                            self.check_exits(Utc::now()+self.event_offset).await?;
+                            crate::fast_monitor::quote_processed(&self.live,self.account_id(),q.received_at);
+                        }
+                    },
+                    Ok(_) | Err(RecvError::Lagged(_)) => {},
+                    Err(RecvError::Closed) => anyhow::bail!("quote stream closed during historical preparation"),
+                },
+                event=executions.recv()=>match event {
+                    Ok(e)=>{
+                        self.server_event(&e).await;
+                        crate::fast_monitor::execution_processed(&self.live,self.account_id(),e.received_at);
+                    },
+                    Err(RecvError::Lagged(_))=>{},
+                    Err(RecvError::Closed)=>anyhow::bail!("execution stream closed during historical preparation"),
+                },
+            }
+        }
+    }
+
+    /// An exit-only pass over owned positions. Cached executable sides must
+    /// be fresh; a timer cannot manufacture a quote or enter a new trade.
+    pub async fn check_exits(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
+        let ids: Vec<i64> = self.own.values().map(|p| p.symbol_id).collect();
+        for id in ids {
+            let Some(sym) = self.syms.get(&id) else {
+                continue;
+            };
+            let bid = sym.bid.filter(|b| {
+                b.is_finite() && *b > 0.0 && crate::fast_monitor::quote_is_fresh(sym.bid_at, now)
+            });
+            let ask = sym.ask.filter(|a| {
+                a.is_finite() && *a > 0.0 && crate::fast_monitor::quote_is_fresh(sym.ask_at, now)
+            });
+            if bid.zip(ask).is_some_and(|(b, a)| b > a) {
+                continue;
+            }
+            self.exits_for_symbol(id, bid, ask, now).await?;
+        }
+        crate::fast_monitor::exit_check_completed(
+            &self.live,
+            self.account_id(),
+            self.own.len(),
+            self.pending.len(),
+        );
+        Ok(())
     }
 
     async fn read_commission(&mut self) {
@@ -1071,7 +1231,12 @@ impl<'a, 'c> Trader<'a, 'c> {
     /// Prepare a symbol's session: the M30 bars, the open and σ, and the
     /// median spread. Kept for the session; a broker error is retried after
     /// [`PREPARE_RETRY`].
-    pub async fn prepare(&mut self, symbol_id: i64, s: Session, now: DateTime<Utc>) {
+    pub async fn prepare(
+        &mut self,
+        symbol_id: i64,
+        s: Session,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
         let fresh = match self.syms.get(&symbol_id).and_then(|x| x.day.as_ref()) {
             Some(Ok(d)) => d.session.date != s.date,
             Some(Err((_, at))) => {
@@ -1080,59 +1245,14 @@ impl<'a, 'c> Trader<'a, 'c> {
             None => true,
         };
         if !fresh {
-            return;
+            return Ok(());
         }
         let account_id = self.account_id();
         let Some(rule) = self.syms.get(&symbol_id).and_then(|x| x.rule) else {
-            return;
+            return Ok(());
         };
-        let from = s.open - chrono::Duration::days(BAR_DAYS);
-        let day = match self.session.m30_bars(symbol_id, from, now).await {
-            Err(e) => Err((format!("M30 bars unreadable: {e}"), now)),
-            Ok(raw) => {
-                let mut bars = Vec::new();
-                let mut first_volume = None;
-                for tb in &raw {
-                    let Ok(b) = jiaoyi_ctrader::decode_bar(
-                        tb,
-                        jiaoyi_ctrader::messages::ProtoOaTrendbarPeriod::M30,
-                    ) else {
-                        continue;
-                    };
-                    let (Some(o), Some(c)) = (b.open.to_f64(), b.close.to_f64()) else {
-                        continue;
-                    };
-                    if b.open_time == s.open {
-                        first_volume = Some(b.tick_volume);
-                    }
-                    bars.push(M30 {
-                        open_time: b.open_time,
-                        open: o,
-                        close: c,
-                    });
-                }
-                let table = band::sigma_table(&rule, &s, &bars);
-                let open = match (bars.iter().find(|b| b.open_time == s.open), first_volume) {
-                    (Some(b), Some(v)) if v > 0 => Ok(b.open),
-                    _ => Err(format!(
-                        "no M30 bar with ticks at the session open {}: a holiday, skipped",
-                        s.open
-                    )),
-                };
-                let spread = match s3s::median_spread(self.pool, account_id, symbol_id).await {
-                    Ok(Some(x)) => Ok(x),
-                    Ok(None) => Err("no recorded two-sided quote in 7 days: no spread".into()),
-                    Err(e) => Err(format!("recorded quotes unreadable: {e}")),
-                };
-                Ok(Day {
-                    session: s,
-                    open,
-                    table,
-                    spread,
-                    prepared_at: now,
-                })
-            }
-        };
+        let read = load_day(self.pool, self.session, account_id, symbol_id, rule, s, now);
+        let day = self.protect_while_reading(read).await?;
         let name = self.syms[&symbol_id].name.clone();
         match &day {
             Ok(d) => {
@@ -1160,6 +1280,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         if let Some(x) = self.syms.get_mut(&symbol_id) {
             x.day = Some(day);
         }
+        Ok(())
     }
 
     fn open_risk(&self) -> Result<f64, String> {
@@ -1191,14 +1312,26 @@ impl<'a, 'c> Trader<'a, 'c> {
         ask: Option<f64>,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
+        // The nested exit pump already managed these owned-symbol events.
+        // Replaying them must not turn a formerly owned quote into an entry
+        // or move the cached market back in time.
+        if self
+            .protected_through
+            .get(&symbol_id)
+            .is_some_and(|at| now <= *at)
+        {
+            return Ok(());
+        }
         let Some(sym) = self.syms.get_mut(&symbol_id) else {
             return Ok(());
         };
         if bid.is_some() {
             sym.bid = bid;
+            sym.bid_at = Some(now);
         }
         if ask.is_some() {
             sym.ask = ask;
+            sym.ask_at = Some(now);
         }
         let (bid, ask) = (sym.bid, sym.ask);
         let reacted = self.react(symbol_id, bid, ask, now).await;
@@ -1222,22 +1355,35 @@ impl<'a, 'c> Trader<'a, 'c> {
         ask: Option<f64>,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
-        let positions: Vec<i64> = self
-            .own
-            .values()
-            .filter(|o| o.symbol_id == symbol_id)
-            .map(|o| o.position_id)
-            .collect();
-        if !positions.is_empty() {
-            for pid in positions {
-                self.tp1(pid, bid, ask, now).await?;
-            }
+        if self.exits_for_symbol(symbol_id, bid, ask, now).await? {
             return Ok(());
         }
         if self.pending.iter().any(|p| p.symbol_id == symbol_id) {
             return Ok(());
         }
         self.entry(symbol_id, now).await
+    }
+
+    async fn exits_for_symbol(
+        &mut self,
+        symbol_id: i64,
+        bid: Option<f64>,
+        ask: Option<f64>,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<bool> {
+        let positions: Vec<i64> = self
+            .own
+            .values()
+            .filter(|o| o.symbol_id == symbol_id)
+            .map(|o| o.position_id)
+            .collect();
+        let owned = !positions.is_empty();
+        if owned {
+            for pid in positions {
+                self.tp1(pid, bid, ask, now).await?;
+            }
+        }
+        Ok(owned)
     }
 
     async fn tp1(
@@ -1598,8 +1744,10 @@ impl<'a, 'c> Trader<'a, 'c> {
                 .await;
             return Ok(());
         }
-        self.prepare(symbol_id, s, now).await;
-        let sym = self.syms[&symbol_id].clone();
+        self.prepare(symbol_id, s, now).await?;
+        let mut sym = self.syms[&symbol_id].clone();
+        sym.bid = Some(bid);
+        sym.ask = Some(ask);
         let day = match &sym.day {
             Some(Ok(d)) if d.session.date == s.date => d.clone(),
             _ => return Ok(()),
@@ -2295,13 +2443,46 @@ pub async fn run_session(
     ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
+    run_session_with_event_offset(
+        pool,
+        allowlist,
+        env,
+        session,
+        live,
+        ends,
+        shutdown,
+        chrono::Duration::zero(),
+    )
+    .await
+}
+
+/// The production loop with a deterministic event-clock offset for its
+/// scripted-broker test. Production preserves the actual received clock.
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub async fn run_session_with_event_offset(
+    pool: &PgPool,
+    allowlist: &Allowlist,
+    env: Environment,
+    session: &AccountSession<'_>,
+    live: &crate::trading::LivenessMap,
+    ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
+    shutdown: &mut Shutdown,
+    offset: chrono::Duration,
+) -> anyhow::Result<()> {
     let account_id = session.account().id();
     crate::trading::beat(live, account_id, |l| {
         l.started_at.get_or_insert_with(Utc::now);
     });
     let conn = session.connection();
+    let _observer =
+        crate::fast_monitor::SessionObserver::start(conn, live, account_id, shutdown.clone());
+    let initializing = crate::fast_monitor::WorkGuard::start(live, account_id, "initializing");
     let mut t = Trader::new(pool, allowlist, env, session).await?;
     t.live = live.clone();
+    t.protect_during_reads = true;
+    t.read_shutdown = Some(shutdown.clone());
+    t.event_offset = offset;
     if t.syms.is_empty() {
         anyhow::bail!("no resolved symbols stored for this account yet (a data load comes first)");
     }
@@ -2314,6 +2495,9 @@ pub async fn run_session(
     let mut reconcile_tick = tokio::time::interval(Duration::from_secs(r0.reconcile_secs));
     reconcile_tick.tick().await;
     let mut clock = tokio::time::interval(Duration::from_secs(1));
+    let mut exits = tokio::time::interval(crate::fast_monitor::INTERVAL);
+    exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    initializing.complete();
     loop {
         tokio::select! {
             _ = shutdown.wait() => return Ok(()),
@@ -2324,10 +2508,14 @@ pub async fn run_session(
                     }
                 }
             }
-            _ = reconcile_tick.tick() => t.reconcile(Utc::now()).await?,
-            _ = clock.tick() => t.session_end(Utc::now()).await?,
+            _ = reconcile_tick.tick() => crate::fast_monitor::observe(live, account_id, "reconcile", t.reconcile(Utc::now())).await?,
+            _ = clock.tick() => crate::fast_monitor::observe(live, account_id, "session_exit", t.session_end(Utc::now()+offset)).await?,
+            _ = exits.tick() => crate::fast_monitor::observe(live,account_id,"registered_exits",t.check_exits(Utc::now()+offset)).await?,
             m = execs.recv() => match m {
-                Ok(m) => t.server_event(&m).await,
+                Ok(m) => {
+                    crate::fast_monitor::observe(live, account_id, "execution", t.server_event(&m)).await;
+                    crate::fast_monitor::execution_processed(live, account_id, m.received_at);
+                },
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
             },
@@ -2337,13 +2525,14 @@ pub async fn run_session(
                     if ev.ctid_trader_account_id != account_id {
                         continue;
                     }
-                    t.on_quote(
+                    crate::fast_monitor::observe(live, account_id, "quote", t.on_quote(
                         ev.symbol_id,
                         ev.bid.map(|b| b as f64 / 100_000.0),
                         ev.ask.map(|a| a as f64 / 100_000.0),
-                        spot.received_at,
-                    )
+                        spot.received_at+offset,
+                    ))
                     .await?;
+                    crate::fast_monitor::quote_processed(live, account_id, spot.received_at);
                     crate::trading::beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
                 }
                 Err(RecvError::Lagged(_)) => {}
@@ -2382,6 +2571,7 @@ pub async fn health(
         let reconcile_secs = r.as_ref().map(|r| r.reconcile_secs);
         let l = live.get(&id);
         let liveness = json!({
+            "broker_snapshot": crate::fast_monitor::broker_snapshot(pool, id).await,
             "state": reconcile_secs.map(|s| crate::trading::liveness_state(l, s, Utc::now())),
             "stalled_after_secs": reconcile_secs.map(|s| 2 * s),
             "started_at": l.and_then(|l| l.started_at),

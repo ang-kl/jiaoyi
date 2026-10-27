@@ -57,7 +57,7 @@ lessons and their actual validation in `journal/YYYY-MM-DD.md` (SGT date).
 | I-5 | **Limits alert and recommend; the owner pauses** (amended 25-10, № 17,115). | Test: a limit reached is flagged and the strategy keeps trading. |
 | I-6 | A position this program did not open is reported, never managed. | Reconcile's external positions. |
 | I-7 | The agreed goals and measurement benchmark remain invariant until the owner explicitly changes them. A framework, a model run or a code change is not a substitute for measured trading evidence. | Per-strategy/account latest 20, authoritative broker net results, exact cohort/cost/freshness and unknowns; retain failed windows. |
-| I-8 | Owner-facing updates retain serial and paragraph numbering. Chat continues its existing serial sequence; generated reports carry stable document serials and numbered paragraphs/sections. | Check message/report references; retries and restarts do not silently change the evidence period or impersonate a new chat serial. |
+| I-8 | Owner-facing updates retain serial and paragraph numbering. Chat continues its existing serial sequence; generated reports carry stable document serials and numbered paragraphs/sections. Every PR description cites the relevant chat № and § references with SGT source and preparation times. | Check message/report/PR references; a job ID alone is insufficient. Retries and restarts do not silently change the evidence period or impersonate a new chat serial. |
 | I-9 | Owner-facing updates and reports include date and time in Asia/Singapore. Source/event cutoffs are distinguished from generation/delivery time. | Explicit SGT timestamp and dated report window; UTC may remain as separately labelled technical evidence. |
 | I-10 | **Time is essential: "Remember that Time is Money."** Deliver the smallest useful result promptly; the session allowance is never a quota. | Give each assignment a bounded outcome and time budget; reuse proven work and existing evidence. Fix demonstrated critical failures minimally; log noncritical issues and wait for real impact. Avoid repeated investigations, needless PRs, frameworks and style work. |
 | I-11 | **"It's not the will to win that matters—everyone has that. It's the will to prepare to win that matters."** Preparation must make the next goal-relevant action ready. | Read the current rules, proven lessons and necessary source evidence; check affected accounting, existing pre-orders/stops and required release gates when applicable. Verify money/risk claims; keep unavailable evidence explicit. Do not demand perfect optional data, fabricate readiness or build capabilities without a demonstrated need. |
@@ -73,6 +73,14 @@ invent fixes to spend it or rebuild an unreleased proposal repeatedly. Preserve
 proposal/test/release evidence and resolve its handoff blocker first. A normal
 registered loss is not automatically a software defect. Adopt bot-trade lessons
 only with source, observed evidence, applicability and a failure check.
+
+Owner chat №17,581 §1 (28-10-2026 05:59 SGT) extends I-8 to every PR.
+Chat №17,583 §1 and №17,584 §1 (28-10-2026 SGT) require Codex's append-only
+handover at `log/CODEX_Log.txt` on main. Each AI reads the existing logs and
+keeps its own separately named file in `log/`, recording relevant chat №/§,
+source and entry SGT date/time, `by <AI model, effort>`, actual checks and
+release receipts. Mark an unexposed model/effort as unreported; do not invent
+it or attribute another AI's work to yourself. Preserve earlier log evidence.
 
 The owner's analytical domains (technical, fundamental, macro, news/sentiment,
 options/derivatives, crypto/alternatives, reflection/memory) and operational

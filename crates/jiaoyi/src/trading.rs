@@ -59,6 +59,7 @@ use tokio::sync::broadcast::error::RecvError;
 use crate::config::Config;
 use crate::edge::h1job::QuoteAssets;
 use crate::edge::prereg;
+use crate::fast_monitor;
 use crate::loader;
 use crate::shutdown::Shutdown;
 
@@ -82,6 +83,8 @@ pub const LEVELS_REFRESH: Duration = Duration::from_secs(30 * 60);
 // held at the 04:02:28 reconcile on all four accounts)
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Liveness {
+    #[serde(skip)]
+    pub monitor: crate::fast_monitor::Progress,
     pub started_at: Option<DateTime<Utc>>,
     pub last_reconcile_run_at: Option<DateTime<Utc>>,
     pub last_quote_at: Option<DateTime<Utc>>,
@@ -822,6 +825,7 @@ pub async fn health(pool: &PgPool, live: &HashMap<i64, Liveness>) -> jiaoyi_stor
         // In memory: every reconcile run and the last quote, recorded or not.
         let l = live.get(&id);
         let liveness = json!({
+            "broker_snapshot": crate::fast_monitor::broker_snapshot(pool, id).await,
             "state": r.as_ref().map(|r| liveness_state(l, r.reconcile_secs, Utc::now())),
             "stalled_after_secs": r.as_ref().map(|r| 2 * r.reconcile_secs),
             "started_at": l.and_then(|l| l.started_at),
@@ -891,6 +895,8 @@ struct Sym {
     levels: Result<Levels, String>,
     bid: Option<f64>,
     ask: Option<f64>,
+    bid_at: Option<DateTime<Utc>>,
+    ask_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1424,11 +1430,42 @@ pub async fn run_session(
     ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
+    run_session_with_levels_refresh(
+        pool,
+        allowlist,
+        env,
+        session,
+        d,
+        live,
+        ends,
+        shutdown,
+        LEVELS_REFRESH,
+    )
+    .await
+}
+
+/// The same production session, with an injectable refresh cadence for the
+/// scripted-broker starvation test. Production uses `LEVELS_REFRESH`.
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub async fn run_session_with_levels_refresh(
+    pool: &PgPool,
+    allowlist: &Allowlist,
+    env: Environment,
+    session: &AccountSession<'_>,
+    d: &mut Decisions<'_>,
+    live: &LivenessMap,
+    ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
+    shutdown: &mut Shutdown,
+    levels_refresh: Duration,
+) -> anyhow::Result<()> {
     let account_id = session.account().id();
     beat(live, account_id, |l| {
         l.started_at.get_or_insert_with(Utc::now);
     });
     let conn = session.connection();
+    let _observer = fast_monitor::SessionObserver::start(conn, live, account_id, shutdown.clone());
+    let initializing = fast_monitor::WorkGuard::start(live, account_id, "initializing");
     let mut syms: HashMap<i64, Sym> = HashMap::new();
     let quotes = jiaoyi_store::latest_assets(pool, account_id)
         .await?
@@ -1472,6 +1509,8 @@ pub async fn run_session(
                 levels: Err("not read yet".into()),
                 bid: None,
                 ask: None,
+                bid_at: None,
+                ask_at: None,
             },
         );
     }
@@ -1512,8 +1551,29 @@ pub async fn run_session(
     session.subscribe_spots(&ids).await?;
     let mut reconcile_tick = tokio::time::interval(Duration::from_secs(r0.reconcile_secs));
     reconcile_tick.tick().await;
-    let mut levels_tick = tokio::time::interval(LEVELS_REFRESH);
+    let mut levels_tick = tokio::time::interval(levels_refresh);
+    levels_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     levels_tick.tick().await;
+    // Historical reads are polled alongside the protection loop, never
+    // awaited inside a selected handler. One bounded producer means there
+    // is at most one refresh in flight, even when its broker reply is slow.
+    let (levels_tx, mut levels_rx) = tokio::sync::mpsc::channel(1);
+    let levels_loading = std::sync::atomic::AtomicBool::new(false);
+    let refresh_levels = async {
+        loop {
+            levels_tick.tick().await;
+            levels_loading.store(true, std::sync::atomic::Ordering::Relaxed);
+            let mut updates = Vec::with_capacity(ids.len());
+            for id in &ids {
+                updates.push((*id, read_levels(session, *id).await));
+            }
+            let (applied, receipt) = tokio::sync::oneshot::channel();
+            if levels_tx.send((updates, applied)).await.is_err() || receipt.await.is_err() {
+                return;
+            }
+        }
+    };
+    tokio::pin!(refresh_levels);
     let mut tried: HashSet<String> = HashSet::new();
     let ctx = Ctx {
         pool,
@@ -1521,9 +1581,24 @@ pub async fn run_session(
         session,
         env,
     };
+    initializing.complete();
+    let mut exits = tokio::time::interval(fast_monitor::INTERVAL);
+    exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
             _ = shutdown.wait() => return Ok(()),
+            _ = exits.tick() => {
+                fast_monitor::observe(live,account_id,"registered_exits",async {
+                    let ids:HashSet<i64>=book.own.values().map(|p|p.symbol_id).collect();
+                    for id in ids {
+                        if let Some(sym)=syms.get(&id) {
+                            manage_positions(&ctx,d,sym,&mut book,trail_amend_secs,true,Utc::now()).await?;
+                        }
+                    }
+                    fast_monitor::exit_check_completed(live,account_id,book.own.len(),book.pending.len());
+                    Ok::<(),anyhow::Error>(())
+                }).await?;
+            }
             e = ends.recv() => {
                 if let Ok(e) = e {
                     if e.affects(account_id) {
@@ -1532,6 +1607,7 @@ pub async fn run_session(
                 }
             }
             _ = reconcile_tick.tick() => {
+                fast_monitor::observe(live, account_id, "reconcile", async {
                 let r = rules(pool, account_id, env).await?;
                 d.version = Some(r.version);
                 trail_amend_secs = r.trail_amend_secs;
@@ -1540,15 +1616,20 @@ pub async fn run_session(
                 note_reconcile(d, rec).await;
                 beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
                 crate::limits::check(pool, account_id, &crate::limits::S1, limit_detail(), d.version).await?;
+                Ok::<(), anyhow::Error>(())
+                }).await?;
             }
-            _ = levels_tick.tick() => {
-                for id in &ids {
-                    let l = read_levels(session, *id).await;
-                    if let Some(s) = syms.get_mut(id) { s.levels = l; }
+            _ = &mut refresh_levels => anyhow::bail!("the levels refresh channel closed"),
+            Some((updates, applied)) = levels_rx.recv() => {
+                for (id, levels) in updates {
+                    if let Some(s) = syms.get_mut(&id) { s.levels = levels; }
                 }
+                levels_loading.store(false, std::sync::atomic::Ordering::Relaxed);
+                let _ = applied.send(());
             }
             m = execs.recv() => match m {
                 Ok(m) => {
+                    fast_monitor::observe(live, account_id, "execution", async {
                     // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
                     // a stop the broker executed is recorded with its fill, before
                     // reconcile drops the position. A lost record ends the session.
@@ -1566,18 +1647,23 @@ pub async fn run_session(
                             beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
                         }
                     }
+                    Ok::<(), anyhow::Error>(())
+                    }).await?;
+                    fast_monitor::execution_processed(live, account_id, m.received_at);
                 }
                 Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
             },
             s = spots.recv() => match s {
                 Ok(spot) => {
+                    let received_at = spot.received_at;
                     let ev = spot.event;
                     let Some(sym) = syms.get_mut(&ev.symbol_id) else { continue };
-                    if let Some(b) = ev.bid { sym.bid = Some(b as f64 / 100_000.0); }
-                    if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0); }
+                    if let Some(b) = ev.bid { sym.bid = Some(b as f64 / 100_000.0);sym.bid_at=Some(received_at); }
+                    if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0);sym.ask_at=Some(received_at); }
                     let sym = sym.clone();
-                    on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut book, &mut tried, trail_amend_secs).await?;
+                    fast_monitor::observe(live, account_id, "quote", on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut book, &mut tried, trail_amend_secs, !levels_loading.load(std::sync::atomic::Ordering::Relaxed))).await?;
+                    fast_monitor::quote_processed(live, account_id, received_at);
                     let now = Utc::now();
                     let distance = trigger_distance(&sym.levels, sym.bid, sym.ask, now);
                     beat(live, account_id, |l| {
@@ -1655,23 +1741,42 @@ async fn server_event(
     })
 }
 
+/// The one Strategy 1 management evaluator, shared by quotes and the
+/// timer. It contains no entry path and always uses the existing gate.
 #[allow(clippy::too_many_arguments)]
-async fn on_quote(
+async fn manage_positions(
     ctx: &Ctx<'_, '_>,
     d: &mut Decisions<'_>,
-    syms: &HashMap<i64, Sym>,
     sym: &Sym,
-    deposit: Option<&str>,
     book: &mut Book,
-    tried: &mut HashSet<String>,
     trail_amend_secs: u64,
+    fresh_only: bool,
+    now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
     let (pool, allowlist, session) = (ctx.pool, ctx.allowlist, ctx.session);
     let account_id = session.account().id();
     let name = sym.name.as_str();
+    if fresh_only
+        && fast_monitor::quote_is_fresh(sym.bid_at, now)
+        && fast_monitor::quote_is_fresh(sym.ask_at, now)
+        && sym.bid.zip(sym.ask).is_some_and(|(b, a)| b > a)
+    {
+        return Ok(());
+    }
     // Trail Strategy 1's positions on this symbol.
     let lv = sym.levels.as_ref().ok();
     for o in book.own.values_mut().filter(|o| o.symbol_id == sym.id) {
+        if fresh_only
+            && !fast_monitor::quote_is_fresh(
+                match o.side {
+                    Side::Buy => sym.bid_at,
+                    Side::Sell => sym.ask_at,
+                },
+                now,
+            )
+        {
+            continue;
+        }
         let price = match o.side {
             Side::Buy => sym.bid,
             Side::Sell => sym.ask,
@@ -1769,6 +1874,30 @@ async fn on_quote(
                 .await;
             }
         }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn on_quote(
+    ctx: &Ctx<'_, '_>,
+    d: &mut Decisions<'_>,
+    syms: &HashMap<i64, Sym>,
+    sym: &Sym,
+    deposit: Option<&str>,
+    book: &mut Book,
+    tried: &mut HashSet<String>,
+    trail_amend_secs: u64,
+    entries_ready: bool,
+) -> anyhow::Result<()> {
+    let (pool, allowlist, session) = (ctx.pool, ctx.allowlist, ctx.session);
+    let account_id = session.account().id();
+    let name = sym.name.as_str();
+    manage_positions(ctx, d, sym, book, trail_amend_secs, false, Utc::now()).await?;
+    // Previously the whole loop waited for refreshed levels. Keep that
+    // restriction for new entries, while existing positions retain exits.
+    if !entries_ready {
+        return Ok(());
     }
     // An entry, when the symbol has no Strategy 1 position.
     if book.own.values().any(|o| o.symbol_id == sym.id) {
@@ -2252,6 +2381,8 @@ mod tests {
                     levels: Err(String::new()),
                     bid: Some(bid),
                     ask: Some(ask),
+                    bid_at: None,
+                    ask_at: None,
                 },
             )
         };

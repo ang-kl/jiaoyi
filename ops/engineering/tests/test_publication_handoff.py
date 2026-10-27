@@ -71,8 +71,20 @@ class PublicationHandoffTests(unittest.TestCase):
         def gh(*args, **options):
             if args[:2] == ("pr", "list"):
                 return json.dumps([self.list_pr()] if repair else [])
+            if args[:3] == ("api", "--method", "PATCH"):
+                self.assertTrue(options["write"])
+                self.assertEqual(args[3], "repos/ang-kl/jiaoyi/pulls/42")
+                body = Path(args[5].removeprefix("body=@")).read_text()
+                self.assertIn("№ 17,581 §1", body)
+                self.assertIn("SGT", body)
+                self.assertIn("engineering job " + str(self.jid), body)
+                return "{}"
             if args[:2] == ("pr", "create"):
                 self.assertTrue(options["write"])
+                body = Path(args[args.index("--body-file") + 1]).read_text()
+                self.assertIn("№ 17,581 §1", body)
+                self.assertIn("SGT", body)
+                self.assertIn("engineering job " + str(self.jid), body)
                 saved = self.c.store.jobs()[0]
                 self.assertEqual(saved["state"], "ci_wait")
                 self.assertEqual(saved["head"], self.git("rev-parse", "refs/heads/engineering/job-1", cwd=self.remote))

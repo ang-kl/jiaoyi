@@ -31,6 +31,12 @@ import watches
 REPO = "ang-kl/jiaoyi"
 SERVICE = "0f67b4a0-629d-42f1-97f1-8910887896af"
 ENVIRONMENT = "f3b64526-67e3-4ea6-98af-274043a8b657"
+# Standing owner mandate. Future coordinators may supply the actual new chat
+# references; a generated job ID must never impersonate a numbered chat turn.
+CHAT_REFERENCES = (
+    "№ 17,577 §1 (28-10-2026 05:46 SGT: implement monitor and resume); "
+    "№ 17,581 §1 (28-10-2026 05:59 SGT: PR traceability)"
+)
 PROTECTED = (".github/", "ops/engineering/", "config/", "docs/preregistration-",
              "docs/factory-charter.md", "docs/phase-0-rulebook.md", "railway.toml",
              "Dockerfile", "crates/jiaoyi-ctrader/src/trading.rs",
@@ -1173,7 +1179,10 @@ class Coordinator:
         # Any later failure resumes the existing read-only release path, not AI.
         self.store.update(jid, "ci_wait", pr=remote["number"] if remote else job["pr"], head=head, result=saved)
         body = self.store.private / f"{jid}-pr.md"
-        body.write_text("Automated bounded engineering task.\n\n" + json.loads(saved)["summary"]
+        prepared = dt.datetime.now(ZoneInfo("Asia/Singapore")).strftime("%d-%m-%Y %H:%M:%S SGT")
+        references = self.config.env.get("ENGINEERING_CHAT_REFERENCES", CHAT_REFERENCES)
+        body.write_text("Chat references: " + references + "\n\nPrepared: " + prepared
+                        + "; engineering job " + str(jid) + ".\n\n§1. Automated bounded engineering task.\n\n" + json.loads(saved)["summary"]
                         + "\n\nValidation reported by session:\n" + json.loads(saved)["tests"]
                         + "\n\nRequired check and docker CI must pass on this exact head before merge.\n"
                         + "Owner decisions: " + json.loads(saved)["owner_decisions"])
@@ -1183,6 +1192,9 @@ class Coordinator:
             match = re.fullmatch(r"https://github\.com/" + re.escape(REPO) + r"/pull/([1-9][0-9]*)", created)
             if match:
                 self.store.update(jid, "ci_wait", pr=int(match[1]))
+        else:
+            self.gh("api", "--method", "PATCH", f"repos/{REPO}/pulls/{remote['number']}",
+                    "-F", "body=@" + str(body), write=True)
         # Authoritative REST identity and exact-head CI are checked by release.
         # Never overwrite this published head with a possibly stale PR list head.
 
