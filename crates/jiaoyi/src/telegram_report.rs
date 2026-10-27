@@ -341,12 +341,11 @@ async fn refresh_legacy(
     if accounts.is_empty() {
         return Ok(());
     }
-    let fresh: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT account_id) FROM report_account_snapshots WHERE account_id=ANY($1) AND sample_key='latest' AND observed_at BETWEEN now()-interval '3 minutes' AND now() AND detail->>'source_complete'='true'")
+    let fresh: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT account_id) FROM report_account_snapshots WHERE account_id=ANY($1) AND sample_key='latest' AND observed_at BETWEEN now()-interval '3 minutes' AND now()")
         .bind(accounts).fetch_one(pool).await?;
-    let mut expected = accounts.to_vec();
-    expected.sort_unstable();
-    expected.dedup();
-    if fresh as usize != expected.len() {
+    // Incomplete/missing accounts belong in the report with explicit unknowns;
+    // they must not suppress every other account's delivered evidence.
+    if fresh == 0 {
         return Ok(());
     }
     let mut tx = pool.begin().await?;
@@ -597,7 +596,7 @@ mod tests {
     }
 
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
-    async fn legacy_report_is_revised_in_place_once_without_a_second_document(pool: PgPool) {
+    async fn partial_account_evidence_does_not_block_in_place_report_revision(pool: PgPool) {
         let (origin, request) = server(Some(r#"{"ok":true,"result":{"message_id":72}}"#)).await;
         let config = DeliveryConfig {
             token: Secret::new("TEST_TOKEN"),
@@ -611,15 +610,24 @@ mod tests {
         sqlx::query("INSERT INTO report_account_snapshots(account_id,sample_key,observed_at,detail) VALUES(1,'latest',now(),$1)")
             .bind(json!({"observed_at":now,"source_complete":true,"environment":"demo","currency":"USD","balance":100.0,"float":0.0,"equity":100.0}))
             .execute(&pool).await.unwrap();
-        deliver_due_at(&pool, &[1], &config, now, &origin)
+        sqlx::query("INSERT INTO report_account_snapshots(account_id,sample_key,observed_at,detail) VALUES(2,'latest',now(),$1)")
+            .bind(json!({"observed_at":now,"source_complete":false,"environment":"demo","currency":"EUR","balance":90.0,"float":null,"equity":null}))
+            .execute(&pool).await.unwrap();
+        deliver_due_at(&pool, &[1, 2, 3], &config, now, &origin)
             .await
             .unwrap();
-        let wire = String::from_utf8(request.await.unwrap()).unwrap();
+        let wire = String::from_utf8(
+            tokio::time::timeout(Duration::from_secs(2), request)
+                .await
+                .expect("incomplete account blocked the entire revision")
+                .unwrap(),
+        )
+        .unwrap();
         assert!(wire.starts_with("POST /botTEST_TOKEN/editMessageMedia "));
         assert!(wire.contains("name=\"message_id\""));
         assert!(wire.contains("attach://document"));
         assert!(!wire.contains("/sendDocument"));
-        deliver_due_at(&pool, &[1], &config, now, &origin)
+        deliver_due_at(&pool, &[1, 2, 3], &config, now, &origin)
             .await
             .unwrap();
         let row = sqlx::query(
@@ -635,6 +643,15 @@ mod tests {
         assert!(row
             .get::<String, _>("html")
             .contains("data-report-version=\"2\""));
+        let html: String = row.get("html");
+        assert!(html.contains("Account 2"));
+        assert!(html.contains("Account 3"));
+        assert!(html.contains("unavailable"));
+        assert!(!html
+            .split("<div class=cards>")
+            .next()
+            .unwrap()
+            .contains("EUR 90.00"));
     }
 
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
