@@ -69,3 +69,7 @@
 № 17,614 · 28-10-2026, 07:32 SGT · by Grok 4.7
 §1 Owner: does "the API is not an edge" mean the program has no edge.
 §2 No edge has been shown. That is not the same as "cannot have one." The old 3R barrier made 73% nearly unreachable. The current geometry makes it reachable. The count is still missing: 15 of 20 closed trades under the current hash.
+
+№ 17,615 · 28-10-2026, 07:34 SGT · by Grok 4.7
+§1 Owner: change to have edge, and do not spend the Grok API on meaningless time.
+§2 No code change creates the 15 of 20. PR #70 now refuses a permit unless the call can block a send or unblock a close. An affirmation spends nothing.
