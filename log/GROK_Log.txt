@@ -57,3 +57,15 @@
 §1 Owner: 10 Grok permits a day for engineering fixes; ChatGPT has 18. Use prudently. JIAOYU_GROK_MODEL is a typo; the others are JIAOYI_.
 §2 Sentiment and news cannot manufacture the 73%. Proposed as a pre-trade measurement, not a rule, so the primary hash is unchanged until a separate window shows the filter helps.
 §3 PR #65 merged. The trail, Chandelier, MAE, MFE and reverse functions are on main.
+
+№ 17,612 · 28-10-2026, 07:30 SGT · by Grok 4.7
+§1 Owner: proceed. PR #70 wires JIAOYI_GROK_API and JIAOYI_GROK_MODEL into the engineering service. JIAOYU_GROK_MODEL is a typo and is not read. Ceiling is 10.
+§2 Sentiment is a measurement. One call per symbol per session. attach_sentiment records it and does not change the side, the stop, or the target.
+
+№ 17,613 · 28-10-2026, 07:31 SGT · by Grok 4.7
+§1 Owner: is the GROK_API an edge for pre-trade and live trade around the clock.
+§2 No. It is a source. An edge is 15 of 20 closed trades under the current hash at the realised payoff. A headline does not change that count. Around the clock does not either: the mark decision is 30 minutes, and the cost gate skips when C ≥ R.
+
+№ 17,614 · 28-10-2026, 07:32 SGT · by Grok 4.7
+§1 Owner: does "the API is not an edge" mean the program has no edge.
+§2 No edge has been shown. That is not the same as "cannot have one." The old 3R barrier made 73% nearly unreachable. The current geometry makes it reachable. The count is still missing: 15 of 20 closed trades under the current hash.
