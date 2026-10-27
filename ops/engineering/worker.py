@@ -972,11 +972,21 @@ class Coordinator:
         if repairing:
             prompt += "\n\nRepair the existing branch's CI failure. Untrusted CI evidence:\n" + (job["result"] or "")
         if verifying:
-            prompt += ("\n\nREAD-ONLY POST-DEPLOYMENT VERIFICATION. Do not modify any file. "
-                       "Verify the specific task's affected behavior with actual read-only evidence. "
-                       "Return verified only when the behavior is demonstrated, otherwise "
-                       "verification_pending with what is missing. Exact deployed SHA and health "
-                       "were checked by the coordinator, but are not sufficient behavior evidence. "
+            prompt += ("\n\nREAD-ONLY POST-DEPLOYMENT VERIFICATION. Keep source files and Git metadata unchanged. "
+                       "Use one focused agent; do not spawn sub-agents. This verification has a five-minute hard limit. "
+                       "Demonstrate the specific task's affected positive behavior from current deployed read-only evidence. "
+                       "Exact deployed SHA and reachable health were checked by the coordinator, but are not sufficient "
+                       "behavior evidence. For an error/negative path, you may run existing focused regression tests "
+                       "against only this worker's existing isolated DATABASE_URL, with unchanged source. Existing "
+                       "test fixtures, private scratch and configured build caches may be written; do not add tests "
+                       "or obtain new DB access. Record actual executed assertions/results and prove the tested affected "
+                       "implementation matches the deployed source. A compiler/setup failure is not behavioral evidence. "
+                       "Combine that controlled negative-path proof with current deployed positive proof; separately "
+                       "state when a natural production negative case was not observed. Do not withhold engineering "
+                       "completion solely to wait for a production outage or malformed broker event when that combined "
+                       "evidence demonstrates the required behavior. Never induce a production failure. Return verified "
+                       "only with the required proof, otherwise verification_pending naming the specific missing proof. "
+                       "Engineering completion is separate from financial acceptance; acceptance_passed must remain false. "
                        "PR: " + str(job["pr"]) + "; merged SHA: " + str(job["merged"])
                        + "; prior report: " + (job["result"] or ""))
         if reviewing:
@@ -1004,7 +1014,9 @@ class Coordinator:
                                                 "data": json.loads(data)}))
                 os.chown(snapshot, self.uid, self.gid)
                 prompt += "\nRead the coordinator's live evidence snapshot: " + str(snapshot)
-            prompt += ("\nOther unavailable live evidence means verification_pending, never guessed success."
+            prompt += ("\nMissing required deployed positive proof means verification_pending, never guessed success; "
+                       "an unobserved natural negative case alone is not a blocker when the controlled path and "
+                       "current deployed positive behavior are proven."
                        if verifying else "\nUse these fresh snapshots as read-only evidence; report any missing capability explicitly.")
         prior = [{k: row[k] for k in ("id", "state", "pr", "merged", "result")}
                  for row in self.store.jobs() if row["id"] != jid]
@@ -1041,15 +1053,16 @@ class Coordinator:
         os.chown(prompt_path, self.uid, self.gid)
         policy = "danger-full-access" if self.config.isolation == "uid-container" else "read-only" if (verifying or accepting or reviewing) else "workspace-write"
         # Sub-agents need the parent's persisted rollout to load their context.
+        focused = reviewing or verifying
         args = ["codex", "exec", "--ignore-user-config", "--sandbox", policy,
-                "--disable" if reviewing else "--enable", "multi_agent", "-c", "agents.max_threads=" + ("1" if reviewing else "4"),
+                "--disable" if focused else "--enable", "multi_agent", "-c", "agents.max_threads=" + ("1" if focused else "4"),
                 "-c", "sandbox_workspace_write.network_access=true", "-c", 'model_reasoning_effort="high"',
                 *(["--model", self.config.model] if self.config.model else []),
                 "--json", "--output-schema", str(HERE / "result-schema.json"),
                 "--output-last-message", str(result_path), "--cd", str(workspace), prompt]
         self.phase = "running"
         logfile = self.store.private / f"{jid}-session.log"
-        session_timeout = min(self.config.timeout, 300) if reviewing else self.config.timeout
+        session_timeout = min(self.config.timeout, 300) if focused else self.config.timeout
         self.active_session = {"id": jid, "started": time.monotonic(), "at": now(), "output": logfile.with_suffix(".raw"), "timeout": session_timeout}
         try:
             result = bounded_process(args, logfile=logfile, timeout=session_timeout, **common)
@@ -1090,6 +1103,8 @@ class Coordinator:
                 raise RuntimeError("verification changed files")
             if report["outcome"] not in ("verified", "verification_pending"):
                 raise RuntimeError("verification outcome required")
+            if report.get("acceptance_passed") is not False:
+                raise RuntimeError("verification cannot declare financial acceptance")
             state = "completed" if report["outcome"] == "verified" else "verification_pending"
             self.store.update(jid, state, result=saved)
             self.store.event(state, jid, saved)
