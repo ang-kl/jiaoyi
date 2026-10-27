@@ -388,6 +388,63 @@ async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
     assert!(!h.to_string().contains("balance"));
 }
 
+/// Slow historical reads must not stop protection on an already owned
+/// position. The fake continues answering quotes and orders during the read.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_slow_daily_bar_refresh_does_not_starve_the_existing_trail(pool: PgPool) {
+    loaded_with(
+        &pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    let mut f = fake_on(&[ETH, BTC], 2_000);
+    f.fill_quotes.insert(ETH, (3608.0, 3611.0));
+    f.fill_quotes.insert(BTC, (3608.0, 3611.0));
+    f.quote_sequence = vec![
+        (0, ETH, q(3608.0, 3611.0)),
+        (500, BTC, q(3608.0, 3611.0)),
+        (600, ETH, q(3700.0, 3701.0)),
+    ];
+    f.trendbar_reply_delays.lock().unwrap().extend([
+        Duration::ZERO,
+        Duration::ZERO,
+        Duration::from_secs(10),
+    ]);
+    let (conn, log) = f.spawn();
+    let session = loader::authorise(&pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let mut ends = conn.session_ends();
+    let (_trigger, mut stop) = shutdown::channel();
+    let mut d = trading::decisions(&pool, DEMO);
+    let live = trading::LivenessMap::default();
+    let list = allowlist();
+    tokio::select! {
+        r = trading::run_session_with_levels_refresh(&pool, &list, Environment::Demo, &session, &mut d, &live, &mut ends, &mut stop, Duration::from_millis(200)) => r.unwrap(),
+        _ = tokio::time::sleep(Duration::from_secs(2)) => {},
+    }
+    let l = log.lock().unwrap();
+    assert_eq!(l.orders.len(), 1, "the registered initial entry filled");
+    assert_eq!(
+        l.trendbar_requests.len(),
+        3,
+        "one refresh started without stacking another request"
+    );
+    assert_eq!(
+        l.amends.len(),
+        1,
+        "the trail must complete while the refresh is still awaiting its reply"
+    );
+    assert_eq!(l.amends[0].stop_loss, Some(3580.0));
+    assert_eq!(
+        l.orders[0].symbol_id, ETH,
+        "the unrelated BTC entry still waits for current refreshed levels"
+    );
+}
+
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_live_account_is_armed_and_holds_the_signal_until_the_edge_passes(pool: PgPool) {
     loaded(&pool).await;

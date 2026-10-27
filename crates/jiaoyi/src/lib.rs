@@ -5,6 +5,7 @@
 pub mod admission;
 pub mod config;
 pub mod edge;
+pub mod fast_monitor;
 pub mod fills;
 pub mod history;
 pub mod http;

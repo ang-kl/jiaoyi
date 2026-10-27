@@ -80,6 +80,7 @@ async fn health(State(s): State<AppState>) -> Response {
                 }
                 Err(_) => json!({"state": "unavailable", "reports_url": "/operations/reports"}),
             };
+            crate::fast_monitor::attach(&mut v, &s.trading_loops, &s.strategy3_loops);
             Json(v).into_response()
         }
         Err(e) => unavailable(e),

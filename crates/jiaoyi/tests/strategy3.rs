@@ -285,6 +285,149 @@ fn at(min: i64) -> DateTime<Utc> {
     today().open + Duration::minutes(min)
 }
 
+/// A flat symbol's slow session preparation cannot delay an already owned
+/// symbol's TP1. The fake still answers quotes and trading requests.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
+    const OTHER: i64 = BTC + 1;
+    loaded(&pool).await;
+    let mut f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(t.own.len(), 1);
+    });
+    settings::change(
+        &pool,
+        "universe.symbols",
+        Some(DEMO),
+        Some(json!([
+            {"name":"BTCUSD","class":"crypto"},{"name":"ETHUSD","class":"crypto"}
+        ])),
+        "test",
+        "two-symbol exit starvation fixture",
+    )
+    .await
+    .unwrap();
+    let run = store::start_run(&pool, DEMO).await.unwrap();
+    for (id, name) in [(BTC, "BTCUSD"), (OTHER, "ETHUSD")] {
+        let s = ProtoOaSymbol {
+            symbol_id: id,
+            digits: 2,
+            pip_position: 2,
+            min_volume: Some(1),
+            step_volume: Some(1),
+            ..Default::default()
+        };
+        store::upsert_symbol(
+            &pool,
+            &loader::symbol_row(DEMO, name, AssetClass::Crypto, Some(true), &s, Utc::now()),
+        )
+        .await
+        .unwrap();
+        store::record_resolution(
+            &pool,
+            run,
+            DEMO,
+            name,
+            AssetClass::Crypto,
+            &Resolution::Resolved { symbol_id: id },
+        )
+        .await
+        .unwrap();
+    }
+    store::finish_run(&pool,run,"ok",&store::RunSummary{
+        assets:Some(json!([{"asset_id":1,"name":"USD"},{"asset_id":9,"name":"BTC"}])),
+        listed_symbols:Some(json!([{"id":BTC,"quote_asset_id":1,"base_asset_id":9},{"id":OTHER,"quote_asset_id":1,"base_asset_id":9}])),
+        ..Default::default()
+    }).await.unwrap();
+    f.m30_bars.insert(OTHER, bars(10, 20));
+    f.trendbar_reply_delays
+        .lock()
+        .unwrap()
+        .push_back(std::time::Duration::from_secs(10));
+    f.quote_sequence = vec![
+        (
+            0,
+            OTHER,
+            (Some(e5(60_455.0) as u64), Some(e5(60_460.0) as u64)),
+        ),
+        (
+            500,
+            BTC,
+            (Some(e5(61_384.21) as u64), Some(e5(61_389.0) as u64)),
+        ),
+    ];
+    let (conn, log) = f.spawn();
+    let session = loader::authorise(&pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let mut ends = conn.session_ends();
+    let (_trigger, mut stop) = shutdown::channel();
+    let live = trading::LivenessMap::default();
+    let list = allowlist();
+    let offset = at(30) - Utc::now();
+    tokio::select! {
+        r=strategy3::run_session_with_event_offset(&pool,&list,Environment::Demo,&session,&live,&mut ends,&mut stop,offset)=>r.unwrap(),
+        _=tokio::time::sleep(std::time::Duration::from_secs(2))=>{},
+    }
+    let l = log.lock().unwrap();
+    assert_eq!(
+        l.trendbar_requests.len(),
+        1,
+        "the flat symbol's history request started"
+    );
+    assert!(
+        l.orders.is_empty(),
+        "no new entry before its setup is ready"
+    );
+    assert_eq!(
+        l.closes.len(),
+        1,
+        "owned TP1 must finish while the other history read is pending"
+    );
+    assert_eq!(l.closes[0].volume, 8);
+    assert!(l.amends.is_empty(), "S3 must never amend its stop");
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn exit_timer_rejects_stale_or_future_quotes_and_does_not_repeat_tp1(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, log| {
+            // Timer checks cannot turn a flat symbol into an entry.
+            t.syms.get_mut(&BTC).unwrap().bid = Some(61_384.21);
+            t.check_exits(at(30)).await.unwrap();
+            assert!(orders(&log).is_empty());
+            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+                .await
+                .unwrap();
+            let now = at(61);
+            {
+                let s = t.syms.get_mut(&BTC).unwrap();
+                s.bid = Some(61_384.21);
+                s.bid_at = Some(now - Duration::seconds(7));
+            }
+            t.check_exits(now).await.unwrap();
+            assert!(closes(&log).is_empty());
+            t.syms.get_mut(&BTC).unwrap().bid_at = Some(now + Duration::seconds(1));
+            t.check_exits(now).await.unwrap();
+            assert!(closes(&log).is_empty());
+            t.on_quote(BTC, Some(61_384.21), Some(61_389.0), now)
+                .await
+                .unwrap();
+            t.check_exits(now + Duration::seconds(1)).await.unwrap();
+            t.check_exits(now + Duration::seconds(2)).await.unwrap();
+            assert_eq!(closes(&log), vec![8]);
+            assert!(log.lock().unwrap().amends.is_empty());
+        }
+    );
+}
+
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: PgPool) {
     loaded(&pool).await;
@@ -1679,7 +1822,7 @@ async fn funding_backoff_keeps_the_open_positions_tp1(pool: PgPool) {
     });
     f.reject_orders = Some("NOT_ENOUGH_MONEY".into());
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.prepare(BTC, today(), at(30)).await;
+        t.prepare(BTC, today(), at(30)).await.unwrap();
         let other = second_prepared_crypto(&mut t);
         t.on_quote(
             other,

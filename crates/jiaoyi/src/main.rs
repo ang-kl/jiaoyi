@@ -70,6 +70,11 @@ async fn main() -> anyhow::Result<()> {
     let trigger = Arc::new(trigger);
     let mut tasks = service::start_recorders(&pool, &cfg, &recorders, &stop);
     tasks.extend(service::start_history(&pool, &cfg, &history, &stop));
+    tasks.push(tokio::spawn(jiaoyi::fast_monitor::run(
+        trading_loops.clone(),
+        strategy3_loops.clone(),
+        stop.clone(),
+    )));
     tasks.push(tokio::spawn(jiaoyi::supervisor::run(
         pool.clone(),
         cfg.plan.permitted.iter().map(|(a, _)| a.id()).collect(),

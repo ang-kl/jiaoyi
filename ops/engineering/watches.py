@@ -9,6 +9,8 @@ from these public routes; the watch records that and does not invent a rate.
 """
 
 V3_FILE = "docs/preregistration-2026-10-27-strategy3-v3.md"
+# SHA256 of the registered file embedded by the trading image, not its length.
+V3_HASH = "f93a5de61bc7a44d0667da3376416adf2bb8414e41f1fa9895d344c7d5e0350b"
 GOAL_WINS = 15
 GOAL_PAYOFF = 1.38
 ACCOUNT_47790949 = 47790949
@@ -30,7 +32,7 @@ def hash_watch(health):
     for row in _rows(health.get("strategy3")):
         file = row.get("prereg_file")
         digest = row.get("prereg_hash")
-        ok = file == V3_FILE and isinstance(digest, str) and len(digest) == 64
+        ok = file == V3_FILE and digest == V3_HASH
         if not ok:
             mismatch = True
         rows.append({
@@ -87,18 +89,23 @@ def recovery_watch():
 
 
 def account_47790949_watch(operations):
-    """Whether the unmatched extra P&L entry is still named."""
+    """Use the production coverage diagnostic; missing evidence stays unknown."""
     for row in _rows(operations.get("account_source_diagnostics")):
         if row.get("account_id") != ACCOUNT_47790949:
             continue
-        text = json_text(row)
-        open_item = "unmatched" in text or row.get("acceptance_passed") is False
+        extra = (row.get("pnl_coverage_diagnostics") or {}).get("extra_pnl_position_count")
+        count_known = isinstance(extra, int) and not isinstance(extra, bool) and extra >= 0
+        open_item = None
+        if count_known and extra > 0:
+            open_item = True
+        elif count_known and row.get("pnl_coverage_complete") is True and row.get("book_stable") is True:
+            open_item = False
         return {
             "present": True,
             "still_open": open_item,
-            "acceptance_passed": row.get("acceptance_passed"),
+            "extra_pnl_position_count": extra if count_known else None,
         }
-    return {"present": False, "still_open": None, "acceptance_passed": None}
+    return {"present": False, "still_open": None, "extra_pnl_position_count": None}
 
 
 def json_text(value):
@@ -146,6 +153,17 @@ def _limits(health):
     return reached
 
 
+def _limit_keys(rows):
+    # Measurements can change every poll while the same limit remains breached.
+    # Alert on the account/strategy/limit transition, retaining values in detail.
+    return {
+        json_text([row.get("account_id"), row.get("strategy"), hit.get("limit")])
+        for row in rows
+        for hit in _rows(row.get("limit_reached"))
+        if isinstance(hit, dict) and hit.get("limit")
+    }
+
+
 def events(previous, health, operations):
     """The four Telegram events. `previous` is the last watches() plus open fills and limits.
 
@@ -164,8 +182,8 @@ def events(previous, health, operations):
     elif not current["hash"]["mismatch"] and previous.get("hash", {}).get("mismatch"):
         out.append({"event": "hash_matched", "detail": current["hash"]})
 
-    prev_limits = {json_text(row) for row in previous.get("limits") or []}
-    curr_limits = {json_text(row) for row in current["limits"]}
+    prev_limits = _limit_keys(previous.get("limits") or [])
+    curr_limits = _limit_keys(current["limits"])
     if curr_limits != prev_limits and (curr_limits or prev_limits):
         out.append({
             "event": "limit_changed",

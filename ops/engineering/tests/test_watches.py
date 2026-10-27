@@ -4,7 +4,7 @@ import unittest
 import watches
 
 
-def health(file=watches.V3_FILE, digest="a" * 64, decisions=None, trades=None, limit=None):
+def health(file=watches.V3_FILE, digest=watches.V3_HASH, decisions=None, trades=None, limit=None):
     return {
         "status": "ok",
         "strategy3": [{
@@ -31,13 +31,30 @@ def operations(wins=6, count=20, payoff=0.4, diagnostics=None):
         }],
         "account_source_diagnostics": diagnostics if diagnostics is not None else [{
             "account_id": 47790949,
-            "acceptance_passed": False,
-            "note": "one unmatched extra P&L entry",
+            "pnl_coverage_diagnostics": {"extra_pnl_position_count": 1},
+            "pnl_coverage_complete": False,
+            "book_stable": True,
         }],
     }
 
 
 class WatchesTest(unittest.TestCase):
+    def test_same_length_wrong_hash_is_a_mismatch(self):
+        self.assertTrue(watches.hash_watch(health(digest="b"*64))["mismatch"])
+
+    def test_real_source_diagnostic_uses_counts_and_keeps_missing_evidence_unknown(self):
+        row={"account_id":47790949,"pnl_coverage_diagnostics":{"extra_pnl_position_count":1},"pnl_coverage_complete":False,"book_stable":True}
+        self.assertTrue(watches.account_47790949_watch(operations(diagnostics=[row]))["still_open"])
+        row={"account_id":47790949,"pnl_coverage_diagnostics":{}}
+        self.assertIsNone(watches.account_47790949_watch(operations(diagnostics=[row]))["still_open"])
+        row={"account_id":47790949,"pnl_coverage_diagnostics":{"extra_pnl_position_count":0},"pnl_coverage_complete":True,"book_stable":True}
+        self.assertFalse(watches.account_47790949_watch(operations(diagnostics=[row]))["still_open"])
+
+    def test_changed_measurement_does_not_repeat_a_limit_transition(self):
+        _,state=watches.events(None,health(limit=[{"limit":"drawdown_r","value":11.0}]),operations())
+        emitted,_=watches.events(state,health(limit=[{"limit":"drawdown_r","value":12.0}]),operations())
+        self.assertNotIn("limit_changed",[e["event"] for e in emitted])
+
     def test_hash_matches_v3_file_and_full_digest(self):
         reading = watches.hash_watch(health())
         self.assertFalse(reading["mismatch"])
