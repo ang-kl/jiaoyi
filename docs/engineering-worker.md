@@ -245,6 +245,14 @@ credential scope and actual release checks are still necessary.
    its PR. The model child cannot commit, push, merge or deploy. Preserve the
    required `check`, `docker` and `engineering` CI gates. CI failure is work to
    fix, not authority to remove assertions, weaken the gate or merge a different head.
+   After a successful push, checkpoint the exact published head and structured
+   report in `ci_wait` before PR API operations. PR-list projections can briefly
+   return the previous head after a repair. Resume publication/release through
+   read-only identity checks; do not repeat model work or overwrite the known
+   published head with that projection. A valid creation URL records its number;
+   a lost acknowledgement permits at most three branch lookups, with explicit
+   intervention if publication remains unconfirmed. Never create a duplicate
+   PR or bypass the authoritative REST identity and exact-head CI checks below.
 5. Under the owner's standing auto-merge authorization, the coordinator requires
    `check`, `docker` and `engineering` from GitHub Actions to finish successfully
    on that exact PR head before merging. Every returned occurrence of those
