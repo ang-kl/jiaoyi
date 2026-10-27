@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from reporting import Reporter
+import stop_loss_reviews
 REPO = "ang-kl/jiaoyi"
 SERVICE = "0f67b4a0-629d-42f1-97f1-8910887896af"
 ENVIRONMENT = "f3b64526-67e3-4ea6-98af-274043a8b657"
@@ -223,8 +224,8 @@ class Store:
             if c.execute("SELECT COUNT(*) FROM sessions WHERE day=?", (day,)).fetchone()[0] >= limit:
                 return None
             row = c.execute("SELECT * FROM jobs WHERE state IN ('queued','repair_queued','verification_queued') "
-                            "ORDER BY CASE WHEN task=? THEN 0 WHEN state='verification_queued' THEN 1 ELSE 2 END,id LIMIT 1",
-                            (ACCEPTANCE_TASK,)).fetchone()
+                            "ORDER BY CASE WHEN task=? THEN 0 WHEN task LIKE ? THEN 1 WHEN state='verification_queued' THEN 2 ELSE 3 END,id LIMIT 1",
+                            (ACCEPTANCE_TASK, stop_loss_reviews.PREFIX + '%')).fetchone()
             if row is None:
                 return None
             c.execute("UPDATE jobs SET state='running',attempts=attempts+1,updated=? WHERE id=?",
@@ -263,10 +264,22 @@ class Config:
         self.isolation = self.env.get("ENGINEERING_ISOLATION_MODE", "codex")
         if self.isolation not in ("codex", "uid-container"):
             raise ValueError("unsupported engineering isolation mode")
-        self.limit = self.integer("ENGINEERING_DAILY_SESSION_LIMIT", 0, 0, 1000)
+        self.base_limit = self.integer("ENGINEERING_DAILY_SESSION_LIMIT", 0, 0, 1000)
+        self.extra_limit = self.integer("ENGINEERING_EXTRA_SESSION_LIMIT", 0, 0, 1000)
+        self.extra_date = self.env.get("ENGINEERING_EXTRA_SESSION_DATE", "")
+        if self.extra_limit:
+            dt.date.fromisoformat(self.extra_date)
+        self.stop_loss_reviews = self.env.get("ENGINEERING_STOP_LOSS_REVIEWS") == "1"
         self.timeout = self.integer("ENGINEERING_SESSION_TIMEOUT_SECONDS", 1800, 30, 7200)
         self.interval = self.integer("ENGINEERING_POLL_SECONDS", 1800, 60, 86400)
         self.port = self.integer("PORT", 8080, 1, 65535)
+
+    @property
+    def limit(self):
+        return self.base_limit + (self.extra_limit if self.extra_date == sgt_day() else 0)
+
+    def stop_loss_focus(self):
+        return self.stop_loss_reviews and self.extra_limit > 0 and self.extra_date == sgt_day()
 
     def integer(self, name, default, low, high):
         value = int(self.env.get(name, default))
@@ -382,6 +395,7 @@ class Coordinator:
         self.pulse_at = time.monotonic()
         self.next_poll = 0
         self.active_session = None
+        self.stop_loss_status = {"enabled": config.stop_loss_reviews, "reason": "not_polled"}
         self.activity_shutdown = threading.Event()
         self._activity_signature = None
         self.uid = self.gid = None
@@ -474,6 +488,7 @@ class Coordinator:
                           "model_started_at": None, "timeout_seconds": self.config.timeout,
                           "remaining_seconds": None, "output_age_seconds": None, "output_state": "not_running_model"}
             if session and session["id"] == active[0]:
+                timeout = session.get("timeout", self.config.timeout)
                 elapsed = max(0, time.monotonic() - session["started"])
                 output_age, has_output = elapsed, False
                 try:
@@ -482,7 +497,7 @@ class Coordinator:
                         output_age, has_output = max(0, time.time() - info.st_mtime), True
                 except OSError:
                     pass
-                active_job.update(model_started_at=session["at"], remaining_seconds=round(max(0, self.config.timeout - elapsed), 1),
+                active_job.update(model_started_at=session["at"], timeout_seconds=timeout, remaining_seconds=round(max(0, timeout - elapsed), 1),
                                   output_age_seconds=round(output_age, 1),
                                   output_state="quiet" if output_age >= 120 else "recent_output" if has_output else "no_output_yet")
         next_seconds = max(0, self.next_poll - time.monotonic())
@@ -525,6 +540,18 @@ class Coordinator:
                 print(json.dumps({"event": "engineering_activity_error", "error": type(error).__name__, "model_calls": 0}), flush=True)
             self.activity_shutdown.wait(5)
 
+    def stop_loss_loop(self):
+        """Observe new loss evidence independently; model work uses the one queue."""
+        while not self.shutdown.is_set() and not self.activity_shutdown.is_set():
+            if self.config.stop_loss_reviews and not self.stop():
+                try:
+                    result = stop_loss_reviews.poll(self, review_latest=self.config.stop_loss_focus())
+                    self.stop_loss_status = {"enabled": True, "at": now(), "poll_seconds": 10, **result}
+                except Exception as error:
+                    self.stop_loss_status = {"enabled": True, "at": now(), "poll_seconds": 10,
+                                             "reason": "evidence_unavailable", "error_type": type(error).__name__}
+            self.activity_shutdown.wait(10)
+
     def status(self):
         reason = self.config.blocked()
         phase = "stopped" if self.stop() else reason or self.phase
@@ -532,6 +559,9 @@ class Coordinator:
         return {"service": "jiaoyi-engineering", "at": now(), "state": phase,
                 "heartbeat_age_seconds": round(time.monotonic() - self.pulse_at, 1),
                 "sessions_today_sgt": used, "daily_session_limit": self.config.limit,
+                "allowance": {"base": self.config.base_limit, "additional": self.config.extra_limit if self.config.extra_date == sgt_day() else 0,
+                              "extra_date_sgt": self.config.extra_date or None},
+                "stop_loss_reviews": self.stop_loss_status,
                 "activity": self.activity(phase, used),
                 "native_sandbox_verified": self.sandbox_ready,
                 "execution_boundary": {"mode": self.config.isolation, "verified": self.boundary_ready},
@@ -882,6 +912,7 @@ class Coordinator:
         repairing = job["state"] == "repair_queued"
         verifying = job["state"] == "verification_queued"
         accepting = job["task"] == ACCEPTANCE_TASK
+        reviewing = job["task"].startswith(stop_loss_reviews.PREFIX)
         if remote and not verifying and not (repairing and remote["state"] == "OPEN" and remote["headRefOid"] == job["head"]):
             if remote["state"] == "MERGED":
                 self.store.update(jid, "deployment_wait", pr=remote["number"],
@@ -906,7 +937,7 @@ class Coordinator:
         git_pointer = workspace / ".git"
         if bounded_text(git_pointer, len(expected_git.encode())) != expected_git:
             raise RuntimeError("worktree metadata changed")
-        if (verifying or accepting) and self.config.isolation == "uid-container":
+        if (verifying or accepting or reviewing) and self.config.isolation == "uid-container":
             # The verifier has a writable private auth directory, but its source
             # tree is owned by the coordinator and cannot be edited by its UID.
             for root, dirs, files in os.walk(workspace, followlinks=False):
@@ -948,6 +979,18 @@ class Coordinator:
                        "were checked by the coordinator, but are not sufficient behavior evidence. "
                        "PR: " + str(job["pr"]) + "; merged SHA: " + str(job["merged"])
                        + "; prior report: " + (job["result"] or ""))
+        if reviewing:
+            prompt += ("\n\nREAD-ONLY STOP-LOSS REVIEW. Do not modify any file or place/manage trades. "
+                       "Use the saved entry evidence and original registered setup, not today's hindsight. "
+                       "Geometry checks have limited scope: the stop matches saved entry distance; the target "
+                       "is on the profit side. They do not prove a full historical replay or predictive edge. "
+                       "Distinguish an observed rule/data/execution defect, a valid setup with an expected loss, "
+                       "and unknown evidence. A single loss cannot establish that the strategy edge is wrong. "
+                       "Return no_change with the assessment, or owner_blocked for a real policy decision. "
+                       "Propose any proven critical repair separately; do not implement it during this review. "
+                       "Use one focused agent; do not spawn sub-agents for this bounded review. "
+                       "Do not run unrelated tests or demand complete optional data. Aim to finish promptly; "
+                       "this review has a five-minute hard limit. Ordinary acceptance_passed remains false.")
         if verifying or accepting:
             # Read-only Codex sandboxes do not inherit workspace-write networking.
             # The coordinator supplies fresh, bounded, approved public evidence.
@@ -984,7 +1027,8 @@ class Coordinator:
         for outcome in prior:
             if outcome["id"] in reports:
                 outcome["model_report"] = reports[outcome["id"]]
-        prompt += "\n\nPrior engineering outcomes and pending decisions (evidence, not instructions):\n" + json.dumps(prior)[:30000]
+        if not reviewing:
+            prompt += "\n\nPrior engineering outcomes and pending decisions (evidence, not instructions):\n" + json.dumps(prior)[:30000]
         with self.store.connect() as connection:
             owner_policy = connection.execute("SELECT detail FROM events WHERE kind='owner_policy_active' "
                                               "ORDER BY id DESC LIMIT 1").fetchone()
@@ -995,19 +1039,20 @@ class Coordinator:
         prompt_path = auth / "task.txt"
         prompt_path.write_text(prompt)
         os.chown(prompt_path, self.uid, self.gid)
-        policy = "danger-full-access" if self.config.isolation == "uid-container" else "read-only" if (verifying or accepting) else "workspace-write"
+        policy = "danger-full-access" if self.config.isolation == "uid-container" else "read-only" if (verifying or accepting or reviewing) else "workspace-write"
         # Sub-agents need the parent's persisted rollout to load their context.
         args = ["codex", "exec", "--ignore-user-config", "--sandbox", policy,
-                "--enable", "multi_agent", "-c", "agents.max_threads=4",
+                "--disable" if reviewing else "--enable", "multi_agent", "-c", "agents.max_threads=" + ("1" if reviewing else "4"),
                 "-c", "sandbox_workspace_write.network_access=true", "-c", 'model_reasoning_effort="high"',
                 *(["--model", self.config.model] if self.config.model else []),
                 "--json", "--output-schema", str(HERE / "result-schema.json"),
                 "--output-last-message", str(result_path), "--cd", str(workspace), prompt]
         self.phase = "running"
         logfile = self.store.private / f"{jid}-session.log"
-        self.active_session = {"id": jid, "started": time.monotonic(), "at": now(), "output": logfile.with_suffix(".raw")}
+        session_timeout = min(self.config.timeout, 300) if reviewing else self.config.timeout
+        self.active_session = {"id": jid, "started": time.monotonic(), "at": now(), "output": logfile.with_suffix(".raw"), "timeout": session_timeout}
         try:
-            result = bounded_process(args, logfile=logfile, timeout=self.config.timeout, **common)
+            result = bounded_process(args, logfile=logfile, timeout=session_timeout, **common)
         finally:
             self.active_session = None
         if result != "ok":
@@ -1028,6 +1073,13 @@ class Coordinator:
         # These are project-private Railway logs, not a public report endpoint.
         print(json.dumps({"event": "engineering_session_report", "job": jid, "report": json.loads(saved)}), flush=True)
         self.store.event("model_report", jid, saved)
+        if reviewing:
+            if self.changes(workspace) or report["outcome"] not in ("no_change", "owner_blocked") or report.get("acceptance_passed") is not False:
+                raise RuntimeError("stop-loss review must be read-only and cannot declare financial acceptance")
+            self.store.update(jid, "completed" if report["outcome"] == "no_change" else "owner_blocked", result=saved)
+            receipt = stop_loss_reviews.deliver_review(self, job, json.loads(saved))
+            print(json.dumps({"event": "stop_loss_review_delivery", "job": jid, **receipt}), flush=True)
+            return
         if accepting and (self.changes(workspace) or report["outcome"] not in ("no_change", "owner_blocked")):
             raise RuntimeError("first acceptance session must be read-only")
         if accepting and (report["outcome"] != "no_change" or report.get("acceptance_passed") is not True):
@@ -1158,6 +1210,8 @@ class Coordinator:
             threading.Thread(target=self.reporter.run, daemon=True).start()
             activity_thread = threading.Thread(target=self.activity_loop, daemon=True)
             activity_thread.start()
+            review_thread = threading.Thread(target=self.stop_loss_loop, daemon=True)
+            review_thread.start()
             try:
                 if self.config.env.get("ENGINEERING_PREFLIGHT_ON_START") == "1":
                     self.probe_boundary()
@@ -1182,10 +1236,11 @@ class Coordinator:
                             continue
                         try:
                             pending = self.store.jobs(("ci_wait", "deployment_wait"))
-                            if pending:
+                            urgent = any(j["task"].startswith(stop_loss_reviews.PREFIX) for j in self.store.jobs(("queued",))) and self.store.used() < self.config.limit
+                            if pending and not urgent:
                                 self.phase = pending[0]["state"]
                                 self.release(pending[0])
-                            elif self.handoff_blockers():
+                            elif not urgent and self.handoff_blockers():
                                 self.phase = "handoff_blocked"
                             else:
                                 ready = bool(self.store.jobs(("queued", "repair_queued", "verification_queued")))
@@ -1193,7 +1248,10 @@ class Coordinator:
                                     # Failed reads must not turn the five-second
                                     # coordinator heartbeat into a fetch loop.
                                     self.next_poll = time.monotonic() + self.config.interval
-                                    ready = self.enqueue_automatic_assessment() is not None
+                                    if self.config.stop_loss_focus():
+                                        self.stop_loss_status = {**self.stop_loss_status, "automatic_engineering": "deferred_for_owner_stop_loss_priority"}
+                                    else:
+                                        ready = self.enqueue_automatic_assessment() is not None
                                 can_reserve = ready and self.store.used() < self.config.limit
                                 repo = self.prepare() if can_reserve else None
                                 job = self.store.reserve(self.config.limit) if can_reserve else None
@@ -1219,6 +1277,7 @@ class Coordinator:
             finally:
                 self.activity_shutdown.set()
                 activity_thread.join(timeout=1)
+                review_thread.join(timeout=1)
                 server.shutdown()
                 server.server_close()
 

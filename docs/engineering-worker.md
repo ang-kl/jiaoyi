@@ -70,6 +70,41 @@ failing artifact or make the model retry until it produces activity.
 
 ## Startup and operating controls
 
+The owner granted **28 additional sessions for 27 October 2026 SGT only**,
+on top of the ordinary 18-session ceiling. Configure the ordinary
+`ENGINEERING_DAILY_SESSION_LIMIT=18`, `ENGINEERING_EXTRA_SESSION_LIMIT=28` and
+`ENGINEERING_EXTRA_SESSION_DATE=2026-10-27`. The effective limit is 46 on that
+SGT date and automatically returns to 18 at midnight without restart. This is
+permission to use capacity when needed, never a target, token allowance or API
+spend cap. Existing ChatGPT-plan authentication and no paid fallback remain.
+
+With `ENGINEERING_STOP_LOSS_REVIEWS=1`, an independent ten-second observer
+reads `/operations/stop-loss-reviews`. Rust exposes bounded, owned, recorded
+SL evidence and checks the saved original setup against its registration;
+it does not call a model or change execution. The observer queues deduplicated
+reviews ahead of ordinary engineering and verification. Coincident exits for
+the same strategy/symbol are grouped while retaining separate account facts.
+The first owner-priority review seeds only the latest episode from the last
+24 hours; ordinary startup uses 30 minutes. It never replays the full backlog.
+Today's bonus period defers new routine automatic assessments so the extra
+capacity serves the requested stop-loss reviews.
+
+One existing model lane performs each review read-only, with no sub-agents and
+a five-minute timeout. It waits for any already-running bounded session to
+finish; ten seconds is an observation interval, **not an end-to-end SLA**.
+Broker stop/target execution continues independently. A saved inferred exit
+reason is labelled as inference, not broker-explicit evidence. Registered
+setup compliance, prediction quality, a normal losing trade and a proven
+software defect are separate findings. Absent original reasoning, session or
+complete-cost evidence stays unknown and does not delay the initial review.
+No loss authorizes retuning, new risk, amended stops or a strategy pause.
+
+The structured result is persisted as a completed review without a PR or
+separate verification session. Confirmed Telegram HTML delivery is recorded
+once; uncertain delivery is held rather than replaying inference. Newly
+available complete costs enrich an unstarted review or permit at most one
+cost follow-up per case. Unchanged evidence consumes no new model session.
+
 The implementation lives under `ops/engineering/`. Upload that directory as the
 new service's build root and set its service settings directly through Railway
 UI/API. Do not replace the trading service's root Dockerfile, command, health
