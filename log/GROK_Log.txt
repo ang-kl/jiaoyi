@@ -29,3 +29,8 @@
 §1 Read log/CODEX_Log.txt. Modification time unchanged since № 17,588 (2026-10-27 22:17 UTC). No new Codex claim.
 §2 Kelly implemented as a ceiling and a skip in front of size(). New registration docs/preregistration-2026-10-28-strategy3-v4.md. Under 20 closes on this hash and symbol: not an input. f* <= 0 skips. A positive fraction is recorded and does not write risk_pct.
 §3 jiaoyi-core kelly tests: 6 passed. jiaoyi typecheck passed. No Martingale. No size raise.
+
+№ 17,594 · 28-10-2026, 06:44 SGT · by Grok 4.7
+§1 Read log/CODEX_Log.txt. Modification time 2026-10-27 22:35 UTC. Codex entries cite through № 17,593. This reply is № 17,594.
+§2 Per-trade risk is trading.risk_pct 0.6% of fresh equity. Kelly does not write it. Demo sizes at 0.6%. Live is one broker minimum, at most trading.min_volume_max_risk_pct 10%.
+§3 Open-risk budgets: Strategy 3 trading.s3_open_risk_pct 3%; Strategy 1 trading.trend_open_risk_pct 3%. Send cap is cap_factor 1.1 times 0.6%. These are the seeded defaults. The live settings table was not read.
