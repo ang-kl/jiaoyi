@@ -606,7 +606,14 @@ impl<'a> Decisions<'a> {
         detail["strategy"] = json!(STRATEGY);
         detail["label"] = json!(LABEL);
         detail["prereg_hash"] = json!(self.hash);
-        tracing::info!(account = self.account_id, symbol = ?symbol, kind, reason, "strategy 3 decision");
+        tracing::info!(
+            account = self.account_id,
+            symbol = ?symbol,
+            kind,
+            reason,
+            prereg_hash = %self.hash,
+            "strategy 3 decision"
+        );
         if let Err(e) = ts::record_decision(
             self.pool,
             self.account_id,

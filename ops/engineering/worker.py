@@ -531,6 +531,7 @@ class Coordinator:
         active = activity["active_job"] or {}
         print(json.dumps({"event": "engineering_activity_heartbeat", "at": snapshot["at"], "state": snapshot["state"],
                           "reason": activity["reason"], "job": active.get("id"),
+                          "watches_running": snapshot["state"] != "stopped",
                           "heartbeat_age_seconds": snapshot["heartbeat_age_seconds"],
                           "coordinator_heartbeat_stale": activity["coordinator_heartbeat_stale"],
                           "model_output_state": active.get("output_state"),
