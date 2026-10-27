@@ -207,6 +207,48 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
 
 // ---------------------------------------------------------------- pure parts
 
+/// The Chandelier stop: best − R for a long, best + R for a short.
+/// Returns `None` when the inputs are not a price or R is not positive.
+/// This is an exit rule. It is not MAE and it is not MFE.
+pub fn chandelier_stop(side: Side, best: f64, r: f64) -> Option<f64> {
+    if !best.is_finite() || best <= 0.0 || !r.is_finite() || r <= 0.0 {
+        return None;
+    }
+    let stop = match side {
+        Side::Buy => best - r,
+        Side::Sell => best + r,
+    };
+    (stop.is_finite() && stop > 0.0).then_some(stop)
+}
+
+/// Maximum adverse and maximum favourable excursion, in price units from the
+/// entry. These are measurements. They do not move a stop and they do not
+/// close a position.
+pub fn update_excursions(side: Side, entry: f64, price: f64, mae: f64, mfe: f64) -> (f64, f64) {
+    if !entry.is_finite() || !price.is_finite() {
+        return (mae, mfe);
+    }
+    let adverse = match side {
+        Side::Buy => (entry - price).max(0.0),
+        Side::Sell => (price - entry).max(0.0),
+    };
+    let favourable = match side {
+        Side::Buy => (price - entry).max(0.0),
+        Side::Sell => (entry - price).max(0.0),
+    };
+    (mae.max(adverse), mfe.max(favourable))
+}
+
+/// The opposite side. The reverse strategy is this function and a separate
+/// label. It is not the primary signal and it does not share the primary
+/// hash's evidence.
+pub fn reverse_side(side: Dir) -> Dir {
+    match side {
+        Dir::Buy => Dir::Sell,
+        Dir::Sell => Dir::Buy,
+    }
+}
+
 /// The entry signal of a quote at `now`.
 ///
 /// v3 (27-10-2026): a decision only at a 30-minute mark, on the mid. A quote
@@ -617,6 +659,12 @@ pub struct Own {
     /// Best executable price since the position was seen (highest bid for a
     /// long, lowest ask for a short). The Chandelier hangs from this.
     pub best: Option<f64>,
+    /// Maximum adverse excursion from the entry, in price units. A measurement.
+    /// The Chandelier does not read it.
+    pub mae: f64,
+    /// Maximum favourable excursion from the entry, in price units. A measurement.
+    /// The Chandelier does not read it.
+    pub mfe: f64,
     /// When the last stop amend was sent, so a trail is not sent more often
     /// than once per [`TRAIL_AMEND_SECS`].
     pub last_amend: Option<DateTime<Utc>>,
@@ -1033,6 +1081,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                 end_attempts,
                 end_next_try: None,
                 best: None,
+                mae: 0.0,
+                mfe: 0.0,
                 last_amend: None,
             });
             // A plan recorded after the position was first seen fills what is
@@ -1505,6 +1555,11 @@ impl<'a, 'c> Trader<'a, 'c> {
         };
         if let Some(x) = self.own.get_mut(&position_id) {
             x.best = Some(best);
+            if let Some(entry) = x.entry {
+                let (mae, mfe) = update_excursions(x.side, entry, p, x.mae, x.mfe);
+                x.mae = mae;
+                x.mfe = mfe;
+            }
         }
         let new_stop = match o.side {
             Side::Buy => best - r,
@@ -3064,5 +3119,38 @@ mod tests {
         assert!((quote_to_deposit("JPY", "USD", &mids).unwrap() - 1.0 / 150.0).abs() < 1e-12);
         assert!((quote_to_deposit("EUR", "USD", &mids).unwrap() - 1.1).abs() < 1e-12);
         assert_eq!(quote_to_deposit("GBP", "USD", &mids), None);
+    }
+
+    #[test]
+    fn chandelier_mae_mfe_and_reverse_are_distinct() {
+        // Chandelier is an exit. It hangs from the best by R and never
+        // loosens. It does not read MAE or MFE.
+        let long = chandelier_stop(Side::Buy, 110.0, 5.0).unwrap();
+        assert_eq!(long, 105.0);
+        let short = chandelier_stop(Side::Sell, 90.0, 5.0).unwrap();
+        assert_eq!(short, 95.0);
+        assert!(chandelier_stop(Side::Buy, 110.0, 0.0).is_none());
+        assert!(chandelier_stop(Side::Buy, f64::NAN, 5.0).is_none());
+
+        // MAE and MFE are measurements. They grow, and they do not move a stop.
+        let (mae, mfe) = update_excursions(Side::Buy, 100.0, 97.0, 0.0, 0.0);
+        assert_eq!((mae, mfe), (3.0, 0.0));
+        let (mae, mfe) = update_excursions(Side::Buy, 100.0, 108.0, mae, mfe);
+        assert_eq!((mae, mfe), (3.0, 8.0));
+        // A later price inside the extremes does not shrink either.
+        let (mae, mfe) = update_excursions(Side::Buy, 100.0, 102.0, mae, mfe);
+        assert_eq!((mae, mfe), (3.0, 8.0));
+        // A short's adverse is up, its favourable is down.
+        let (mae, mfe) = update_excursions(Side::Sell, 100.0, 104.0, 0.0, 0.0);
+        assert_eq!((mae, mfe), (4.0, 0.0));
+        let (mae, mfe) = update_excursions(Side::Sell, 100.0, 93.0, mae, mfe);
+        assert_eq!((mae, mfe), (4.0, 7.0));
+        // The Chandelier stop is unchanged by these numbers.
+        assert_eq!(chandelier_stop(Side::Buy, 110.0, 5.0), Some(105.0));
+
+        // Reverse flips the side and is not the primary signal.
+        assert_eq!(reverse_side(Dir::Buy), Dir::Sell);
+        assert_eq!(reverse_side(Dir::Sell), Dir::Buy);
+        assert_ne!(reverse_side(Dir::Buy), Dir::Buy);
     }
 }

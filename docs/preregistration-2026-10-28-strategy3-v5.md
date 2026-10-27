@@ -6,7 +6,9 @@ This file supersedes the exit rule of `docs/preregistration-2026-10-28-strategy3
 
 ## What changes from the 28 Oct v4 registration
 
-- **Trailing stop.** For an owned Strategy 3 position, the program tracks the best executable price (highest bid for a long, lowest ask for a short). The new stop is best − R for a long and best + R for a short, where R is the original stop distance from the entry. The stop is amended only when the new stop is better than the broker’s current stop. The amend carries the position’s existing take-profit. An amend is not sent more often than once per 30 seconds per position. A refused or rejected amend is tried again on a later quote.
+- **Trailing stop (Chandelier).** For an owned Strategy 3 position, the program tracks the best executable price (highest bid for a long, lowest ask for a short). The new stop is best − R for a long and best + R for a short, where R is the original stop distance from the entry. The stop is amended only when the new stop is better than the broker’s current stop. The amend carries the position’s existing take-profit. An amend is not sent more often than once per 30 seconds per position. A refused or rejected amend is tried again on a later quote. The Chandelier is an exit. It does not read MAE or MFE.
+- **MAE and MFE.** While a position is open, the program records the maximum adverse excursion and the maximum favourable excursion from the entry, in price units. These are measurements. They do not move a stop and they do not close a position.
+- **Reverse.** `reverse_side` flips a side. It is a tested function and a separate book. It is not the primary signal and it does not share this hash’s evidence. It is not wired to the live entry.
 
 ## What does not change
 
