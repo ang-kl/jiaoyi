@@ -256,4 +256,56 @@ class Reporter:
                 self.tick()
             except Exception as error:
                 self.store.event("telegram_report_error", detail=type(error).__name__)
+            try:
+                self.cost_tick()
+            except Exception as error:
+                self.store.event("grok_cost_alert_error", detail=type(error).__name__)
             self.coordinator.shutdown.wait(30)
+
+    def record_usage(self, input_tokens, output_tokens, cached_tokens=0, now=None):
+        """Add one metered call and alert if a $10 step was crossed. № 17,635."""
+        from decimal import Decimal
+        from api_cost import SGT, estimate, notices
+        if not (self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")):
+            return
+        now = now or dt.datetime.now(SGT)
+        added = estimate(input_tokens, output_tokens, cached_tokens)
+        with self.store.connect() as db:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS grok_api_spend ("
+                "id INTEGER PRIMARY KEY CHECK(id=1), usd TEXT NOT NULL, "
+                "last_daily TEXT, notified_step INTEGER NOT NULL)")
+            db.execute("INSERT OR IGNORE INTO grok_api_spend(id,usd,notified_step) VALUES(1,'0',0)")
+            row = dict(db.execute("SELECT usd,last_daily FROM grok_api_spend WHERE id=1").fetchone())
+        before = Decimal(row["usd"])
+        after = before + added
+        pending = [line for line in notices(before, after, now, row["last_daily"]) if "crossed $" in line]
+        with self.store.connect() as db:
+            db.execute("UPDATE grok_api_spend SET usd=? WHERE id=1", (format(after, "f"),))
+        if pending:
+            send_message(self.env["TELEGRAM_BOT_TOKEN"], self.env["TELEGRAM_OWNER_CHAT_ID"], "\n".join(pending))
+            step = int(after // Decimal("10")) * 10
+            with self.store.connect() as db:
+                db.execute("UPDATE grok_api_spend SET notified_step=? WHERE id=1", (step,))
+
+    def cost_tick(self, now=None):
+        """11:00 SGT daily. A $10 step is sent by record_usage. № 17,635."""
+        from decimal import Decimal
+        from api_cost import SGT, notices
+        if not (self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")):
+            return
+        now = now or dt.datetime.now(SGT)
+        with self.store.connect() as db:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS grok_api_spend ("
+                "id INTEGER PRIMARY KEY CHECK(id=1), usd TEXT NOT NULL, "
+                "last_daily TEXT, notified_step INTEGER NOT NULL)")
+            db.execute("INSERT OR IGNORE INTO grok_api_spend(id,usd,notified_step) VALUES(1,'0',0)")
+            row = dict(db.execute("SELECT usd,last_daily,notified_step FROM grok_api_spend WHERE id=1").fetchone())
+        spent = Decimal(row["usd"])
+        pending = [line for line in notices(spent, spent, now, row["last_daily"]) if "daily cost" in line]
+        if not pending:
+            return
+        send_message(self.env["TELEGRAM_BOT_TOKEN"], self.env["TELEGRAM_OWNER_CHAT_ID"], "\n".join(pending))
+        with self.store.connect() as db:
+            db.execute("UPDATE grok_api_spend SET last_daily=? WHERE id=1", (now.astimezone(SGT).date().isoformat(),))
