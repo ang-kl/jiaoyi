@@ -80,3 +80,7 @@
 № 17,617 · 28-10-2026, 07:45 SGT · by Grok 4.7
 §1 Owner: sure of PR #74, or cut the window from 20 to 10.
 §2 PR #74 is a log. The 20 is the charter, not that PR. Do not cut it. A coin-flip rule passes 15/20 about 2.1% of the time, and 8/10 about 5.5%. Ten trades arrive sooner and pass by luck more often. I-7 stands until the owner orders the change.
+
+№ 17,618 · 28-10-2026, 07:47 SGT · by Grok 4.7
+§1 Owner: fix outstanding proposals. PR #70 merged. It was green. A permit is still only for block_a_send or unblock_a_close.
+§2 PR #62 conflicted and the check failed because the unmatched-P&L flag was not in the expected report. Rebased onto main. The flag is now expected. CI is running. Not merged until it passes.
