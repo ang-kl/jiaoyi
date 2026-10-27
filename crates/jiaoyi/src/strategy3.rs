@@ -2950,6 +2950,65 @@ pub async fn health(
     Ok(json!(out))
 }
 
+/// Recent Strategy 3 closes grouped as episodes. Accounts copying one signal
+/// (same symbol, side and session date) are one episode. The official
+/// latest-20 stays per account. № 17,596, 28-10-2026. Grok 4.7.
+pub async fn episodes(pool: &PgPool, accounts: &[i64]) -> jiaoyi_store::Result<Value> {
+    let rows = jiaoyi_store::sqlx::query(
+        "SELECT o.symbol, o.side, o.session_date::text AS session_date, f.account_id
+         FROM strategy3_fills f
+         JOIN strategy3_orders o ON o.entry_key = f.entry_key AND o.kind = 'open'
+         WHERE f.account_id = ANY($1)
+           AND f.kind IN ('tp1','session_end','broker_exit')
+           AND f.outcome IN ('filled','partly_filled')
+         ORDER BY COALESCE(f.answered_at, f.sent_at) DESC
+         LIMIT 80",
+    )
+    .bind(accounts)
+    .fetch_all(pool)
+    .await?;
+    let mut groups: std::collections::BTreeMap<String, Vec<i64>> =
+        std::collections::BTreeMap::new();
+    for row in &rows {
+        let symbol: String = row.get("symbol");
+        let side: Option<String> = row.get("side");
+        let session: Option<String> = row.get("session_date");
+        let account: i64 = row.get("account_id");
+        let key = format!(
+            "{}|{}|{}",
+            symbol,
+            side.unwrap_or_default(),
+            session.clone().unwrap_or_default()
+        );
+        let accounts = groups.entry(key).or_default();
+        if !accounts.contains(&account) {
+            accounts.push(account);
+        }
+    }
+    let episodes: Vec<Value> = groups
+        .into_iter()
+        .map(|(key, accounts)| {
+            let mut parts = key.split('|');
+            json!({
+                "symbol": parts.next(),
+                "side": parts.next(),
+                "session_date": parts.next(),
+                "accounts": accounts,
+                "copies": accounts.len(),
+            })
+        })
+        .collect();
+    let latest = episodes.iter().take(20).cloned().collect::<Vec<_>>();
+    Ok(json!({
+        "available": true,
+        "note": "one signal copied across accounts is one episode; official latest-20 stays per account",
+        "episodes": episodes.len(),
+        "latest20_episodes": latest.len(),
+        "copied": episodes.iter().filter(|e| e["copies"].as_u64().unwrap_or(1) > 1).count(),
+        "rows": latest,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

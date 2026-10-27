@@ -328,6 +328,11 @@ fn source_diagnostic(account: i64, observed_at: Option<DateTime<Utc>>, detail: &
         curated[field] = json!(relationships[field].as_u64());
     }
     result["extra_pnl_relationship_diagnostics"] = curated;
+    // Unmatched extra P&L is not an owned position. It stays out of the
+    // owned latest-20. № 17,596, 28-10-2026. The broker row is not closed
+    // from here; the measurement blocker is.
+    let extra = result["pnl_coverage_diagnostics"]["extra_pnl_position_count"].as_u64();
+    result["unmatched_excluded_from_owned_window"] = json!(extra.is_some_and(|n| n > 0));
     result
 }
 

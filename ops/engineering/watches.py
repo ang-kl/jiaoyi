@@ -79,12 +79,36 @@ def cost_gate_watch(health):
     return {"skips_by_symbol": tally}
 
 
-def recovery_watch():
-    """Same-session recovery is not on the public routes. Do not invent it."""
+def recovery_watch(health):
+    """Same-session later owned close after a stop, from /health. Not a quote path."""
+    recovery = (health or {}).get("recovery") or {}
+    if not recovery.get("available"):
+        return {
+            "available": False,
+            "reason": recovery.get("reason") or "recovery is not on /health",
+            "threshold_crossed": False,
+        }
     return {
-        "available": False,
-        "reason": "public /health and /operations/reports do not carry the post-stop path",
-        "threshold_crossed": False,
+        "available": True,
+        "path": recovery.get("path"),
+        "stops": recovery.get("stops"),
+        "same_session_later_close": recovery.get("same_session_later_close"),
+        "score": recovery.get("score"),
+        "threshold_crossed": bool(recovery.get("threshold_crossed")),
+    }
+
+
+def episode_watch(health):
+    """Copied accounts are one episode. Official latest-20 stays per account."""
+    episodes = (health or {}).get("episodes") or {}
+    if not episodes.get("available"):
+        return {"available": False}
+    return {
+        "available": True,
+        "episodes": episodes.get("episodes"),
+        "latest20_episodes": episodes.get("latest20_episodes"),
+        "copied": episodes.get("copied"),
+        "note": episodes.get("note"),
     }
 
 
@@ -95,14 +119,18 @@ def account_47790949_watch(operations):
             continue
         extra = (row.get("pnl_coverage_diagnostics") or {}).get("extra_pnl_position_count")
         count_known = isinstance(extra, int) and not isinstance(extra, bool) and extra >= 0
+        excluded = row.get("unmatched_excluded_from_owned_window") is True
         open_item = None
-        if count_known and extra > 0:
+        if excluded:
+            open_item = False
+        elif count_known and extra > 0:
             open_item = True
         elif count_known and row.get("pnl_coverage_complete") is True and row.get("book_stable") is True:
             open_item = False
         return {
             "present": True,
             "still_open": open_item,
+            "excluded_from_owned_window": excluded,
             "extra_pnl_position_count": extra if count_known else None,
         }
     return {"present": False, "still_open": None, "extra_pnl_position_count": None}
@@ -118,7 +146,8 @@ def watches(health, operations):
         "hash": hash_watch(health),
         "latest20": latest20_watch(operations),
         "cost_gate": cost_gate_watch(health),
-        "recovery": recovery_watch(),
+        "recovery": recovery_watch(health),
+        "episodes": episode_watch(health),
         "account_47790949": account_47790949_watch(operations),
     }
 

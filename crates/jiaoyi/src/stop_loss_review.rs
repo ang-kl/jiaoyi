@@ -309,6 +309,50 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
     Ok(json!({"schema_version":1,"as_of":now,"cases":cases}))
 }
 
+/// Same-session recovery from stored closes. A later owned close on the same
+/// account and symbol, on the same UTC date, after a stop. Not a quote path.
+/// № 17,596, 28-10-2026. Grok 4.7. Other models: do not invent a rate.
+pub async fn recovery(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Error> {
+    let rows = sqlx::query(
+        "WITH stops AS (
+           SELECT account_id, symbol, COALESCE(answered_at, sent_at) AS closed_at
+           FROM strategy3_fills
+           WHERE account_id = ANY($1) AND kind = 'broker_exit'
+             AND outcome IN ('filled','partly_filled')
+             AND detail->>'reason' = 'stop_loss'
+             AND COALESCE(answered_at, sent_at) >= now() - interval '14 days'
+         )
+         SELECT s.account_id, s.symbol, s.closed_at,
+           EXISTS (
+             SELECT 1 FROM strategy3_fills l
+             WHERE l.account_id = s.account_id AND l.symbol = s.symbol
+               AND l.kind IN ('tp1','session_end','broker_exit')
+               AND l.outcome IN ('filled','partly_filled')
+               AND COALESCE(l.answered_at, l.sent_at) > s.closed_at
+               AND COALESCE(l.answered_at, l.sent_at)::date = s.closed_at::date
+               AND l.detail->>'reason' IS DISTINCT FROM 'stop_loss'
+           ) AS later_close
+         FROM stops s",
+    )
+    .bind(accounts)
+    .fetch_all(pool)
+    .await?;
+    let stops = rows.len();
+    let later = rows
+        .iter()
+        .filter(|r| r.get::<bool, _>("later_close"))
+        .count();
+    let score = (stops > 0).then(|| later as f64 / stops as f64);
+    Ok(json!({
+        "available": true,
+        "path": "later owned close on the same UTC date, not a quote path",
+        "stops": stops,
+        "same_session_later_close": later,
+        "score": score,
+        "threshold_crossed": score.is_some_and(|s| stops >= 5 && s < 0.5),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -83,10 +83,32 @@ class WatchesTest(unittest.TestCase):
         tally = watches.cost_gate_watch(health(decisions=decisions))["skips_by_symbol"]
         self.assertEqual(tally, {"ETHUSD": 2})
 
-    def test_recovery_is_unavailable_and_does_not_cross(self):
-        reading = watches.recovery_watch()
-        self.assertFalse(reading["available"])
-        self.assertFalse(reading["threshold_crossed"])
+    def test_recovery_reads_health_and_does_not_invent_a_path(self):
+        missing = watches.recovery_watch({})
+        self.assertFalse(missing["available"])
+        self.assertFalse(missing["threshold_crossed"])
+        present = watches.recovery_watch({"recovery": {
+            "available": True, "stops": 6, "score": 0.2, "threshold_crossed": True,
+            "path": "later owned close on the same UTC date, not a quote path",
+        }})
+        self.assertTrue(present["available"])
+        self.assertTrue(present["threshold_crossed"])
+        self.assertIn("not a quote path", present["path"])
+
+    def test_47790949_closes_when_excluded_from_the_owned_window(self):
+        row = {"account_id": 47790949, "pnl_coverage_diagnostics": {"extra_pnl_position_count": 1},
+               "unmatched_excluded_from_owned_window": True}
+        reading = watches.account_47790949_watch(operations(diagnostics=[row]))
+        self.assertFalse(reading["still_open"])
+        self.assertTrue(reading["excluded_from_owned_window"])
+
+    def test_episode_watch_names_copies_and_leaves_the_account_window(self):
+        reading = watches.episode_watch({"episodes": {
+            "available": True, "episodes": 4, "latest20_episodes": 4, "copied": 2,
+            "note": "one signal copied across accounts is one episode",
+        }})
+        self.assertTrue(reading["available"])
+        self.assertEqual(reading["copied"], 2)
 
     def test_47790949_stays_open_when_unmatched_is_named(self):
         reading = watches.account_47790949_watch(operations())
