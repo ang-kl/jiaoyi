@@ -73,3 +73,6 @@
 № 17,615 · 28-10-2026, 07:34 SGT · by Grok 4.7
 §1 Owner: change to have edge, and do not spend the Grok API on meaningless time.
 §2 No code change creates the 15 of 20. PR #70 now refuses a permit unless the call can block a send or unblock a close. An affirmation spends nothing.
+
+№ 17,616 · 28-10-2026, 07:44 SGT · by Grok 4.7
+§1 Owner: explain the 15 of 20. 0.73 × 20 = 14.6, so the first passing count is 15 (75%). 14/20 = 70% fails. A net win is broker cash above zero. A flat stays in the 20. The 1.38 payoff is a second number, not part of the count.
