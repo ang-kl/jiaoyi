@@ -333,9 +333,9 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         sym["UKOIL"].verdict.decision,
         jiaoyi_core::verdict::Decision::Drop
     );
-    // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
-    // 47: migration 0015 seeds five settings (the limits and the owner's pause).
-    assert_eq!(r.settings_version, 47);
+    // 48: migration 0015 seeds five settings, 0018 drops three names, and the
+    // test changes spread.min_samples.
+    assert_eq!(r.settings_version, 48);
 
     // A second load stores nothing new and changes nothing.
     let (conn, _) = fake().spawn();
