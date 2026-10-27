@@ -255,11 +255,22 @@ credential scope and actual release checks are still necessary.
    merged SHA and retrieves service health. It then queues a read-only model
    verification of the specific affected behavior. The coordinator supplies
    bounded, freshly fetched `/health` and `/operations/reports` snapshots with
-   source and fetch times; direct network availability is not guaranteed. Other unavailable evidence leaves the result
-   `verification_pending` rather than permitting a guessed success. The result
-   remains pending unless the affected behavior is evidenced; successful
-   deployment and reachable health alone do not complete the task. The model
-   verifier's evidence still needs review before claiming a verified outcome.
+   source and fetch times; direct network availability is not guaranteed.
+   Verify failure-only behavior with existing focused regression tests against
+   the isolated worker PostgreSQL database, while the source worktree remains
+   immutable. Combine actual affected-path assertions on source identical to
+   the deployed revision with deployed positive evidence. Label a controlled
+   failure test as test-verified; do not claim a naturally observed production
+   failure, wait indefinitely for an outage/malformed broker event, or induce
+   one. Deployment and reachable health alone remain insufficient.
+   A post-deployment verifier uses one agent and a five-minute hard budget;
+   initial acceptance retains its required delegated boundary check. Missing
+   required private facts still mean `verification_pending`, with the exact
+   missing fact and one bounded coordinator action. The parent obtains a
+   sanitized read-back without giving production credentials to the model.
+   Preserve the prior report, attach the actual receipt and close only the
+   evidenced engineering scope. Do not rerun inference without changed
+   evidence or confuse software completion with financial acceptance.
 7. Append the SGT-date journal with changes, actual checks, receipt locations,
    remaining uncertainty and the next bounded task. Keep current queue/report
    state durable before ending the session.
