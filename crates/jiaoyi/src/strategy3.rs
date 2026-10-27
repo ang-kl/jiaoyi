@@ -241,6 +241,17 @@ pub fn update_excursions(side: Side, entry: f64, price: f64, mae: f64, mfe: f64)
     (mae.max(adverse), mfe.max(favourable))
 }
 
+/// Attach a Grok reading only when it can block a send or unblock a close.
+/// A measurement that nothing acts on is ignored. The side, stop, target and
+/// volume are not changed here. Grok 4.7 · № 17,615 28-Oct (ordered: owner
+/// "time is money"): do not store a reading that fills a slot.
+pub fn attach_sentiment(detail: &mut serde_json::Value, reading: &serde_json::Value) {
+    let effect = reading.get("effect").and_then(|v| v.as_str());
+    if matches!(effect, Some("block_a_send") | Some("unblock_a_close")) {
+        detail["grok"] = reading.clone();
+    }
+}
+
 /// The opposite side. The reverse strategy is this function and a separate
 /// label. It is not the primary signal and it does not share the primary
 /// hash's evidence.
@@ -3207,5 +3218,24 @@ mod tests {
         assert_eq!(reverse_side(Dir::Buy), Dir::Sell);
         assert_eq!(reverse_side(Dir::Sell), Dir::Buy);
         assert_ne!(reverse_side(Dir::Buy), Dir::Buy);
+    }
+
+    #[test]
+    fn a_grok_reading_is_kept_only_when_it_can_change_a_send() {
+        let mut detail = json!({"side": "buy", "band": {"sigma": 1.0}});
+        attach_sentiment(
+            &mut detail,
+            &json!({"effect": "block_a_send", "headline": "halt"}),
+        );
+        assert_eq!(detail["side"], "buy");
+        assert_eq!(detail["grok"]["effect"], "block_a_send");
+        let mut other = json!({"side": "sell"});
+        attach_sentiment(
+            &mut other,
+            &json!({"effect": "measurement", "sentiment": "neutral"}),
+        );
+        attach_sentiment(&mut other, &json!({"effect": "order", "side": "buy"}));
+        assert_eq!(other["side"], "sell");
+        assert!(other.get("grok").is_none());
     }
 }
