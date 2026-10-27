@@ -212,6 +212,15 @@ pub fn at_decision_mark(session: &Session, now: DateTime<Utc>) -> bool {
     (0..MARK_WINDOW_SECS).contains(&into_mark)
 }
 
+/// The exact mark belonging to an accepted quote; keep the quote's real
+/// timestamp separately when recording the decision.
+pub fn decision_mark(session: &Session, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    at_decision_mark(session, now).then(|| {
+        session.open
+            + Duration::minutes((now - session.open).num_minutes() / MARK_MINUTES * MARK_MINUTES)
+    })
+}
+
 /// The v3 side at a mark: the mid buys above the upper band and sells below
 /// the lower. Both sides are required. A mid inside the band, a one-sided
 /// quote, or a quote wider than the band (mid can sit inside while the
@@ -223,7 +232,7 @@ pub fn mark_decision(
 ) -> Option<super::targets::Dir> {
     use super::targets::Dir;
     let (bid, ask) = (bid?, ask?);
-    if !(bid.is_finite() && ask.is_finite() && ask >= bid) {
+    if !(bid.is_finite() && ask.is_finite() && ask >= bid) || ask - bid > band.upper - band.lower {
         return None;
     }
     let mid = (bid + ask) / 2.0;
@@ -261,6 +270,20 @@ mod tests {
     use super::*;
     use crate::universe::AssetClass;
     use chrono::NaiveDate;
+
+    #[test]
+    fn review_wide_quotes_do_not_create_a_mid_signal() {
+        let b = Band {
+            open: 100.0,
+            sigma: 0.02,
+            lower: 98.0,
+            upper: 102.0,
+            half_width: 2.0,
+            minutes: 30.0,
+        };
+        assert_eq!(mark_decision(&b, Some(97.0), Some(108.0)), None);
+        assert_eq!(mark_decision(&b, Some(92.0), Some(103.0)), None);
+    }
 
     fn at(s: &str) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
