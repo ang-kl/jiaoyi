@@ -209,11 +209,13 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
         .unwrap();
     assert_eq!(out.status, "ok", "{:?}", out.summary.errors);
     let s = &out.summary;
-    // 44 after the migrations (26, the 0007 seed, the 0008 SpotBrent change,
+    // 47 after the migrations (26, the 0007 seed, the 0008 SpotBrent change,
     // the 0012 trading settings: 10, the 0013 Strategy 3 budget, the 0015
-    // limits and the owner's pause: 5), plus the test's two changes.
+    // limits and the owner's pause: 5, the 0018 universe drop), plus the
+    // test's two changes.
     // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
-    assert_eq!(s.settings_version, Some(46));
+    // Grok 4.7 · № 17,596 28-10: universe drop is one more version.
+    assert_eq!(s.settings_version, Some(47));
     assert_eq!((s.symbols_resolved, s.symbols_unresolved), (1, 2));
     assert_eq!(s.bars_inserted, 4018, "every closed bar");
     assert_eq!(s.forming_bars_dropped, 1, "today's bar is not stored");
