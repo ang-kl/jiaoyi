@@ -59,8 +59,15 @@ lessons and their actual validation in `journal/YYYY-MM-DD.md` (SGT date).
 | I-7 | The agreed goals and measurement benchmark remain invariant until the owner explicitly changes them. A framework, a model run or a code change is not a substitute for measured trading evidence. | Per-strategy/account latest 20, authoritative broker net results, exact cohort/cost/freshness and unknowns; retain failed windows. |
 | I-8 | Owner-facing updates retain serial and paragraph numbering. Chat continues its existing serial sequence; generated reports carry stable document serials and numbered paragraphs/sections. | Check message/report references; retries and restarts do not silently change the evidence period or impersonate a new chat serial. |
 | I-9 | Owner-facing updates and reports include date and time in Asia/Singapore. Source/event cutoffs are distinguished from generation/delivery time. | Explicit SGT timestamp and dated report window; UTC may remain as separately labelled technical evidence. |
+| I-10 | **Time is essential: "Remember that Time is Money."** Deliver the smallest useful result promptly; the session allowance is never a quota. | Give each assignment a bounded outcome and time budget; reuse proven work and existing evidence. Fix demonstrated critical failures minimally; log noncritical issues and wait for real impact. Avoid repeated investigations, needless PRs, frameworks and style work. |
+| I-11 | **"It's not the will to win that matters—everyone has that. It's the will to prepare to win that matters."** Preparation must make the next goal-relevant action ready. | Read the current rules, proven lessons and necessary source evidence; check affected accounting, existing pre-orders/stops and required release gates when applicable. Verify money/risk claims; keep unavailable evidence explicit. Do not demand perfect optional data, fabricate readiness or build capabilities without a demonstrated need. |
 
 I-7–I-9 were added by the owner on 27 October 2026; they supplement I-1–I-6.
+I-10–I-11 were added later that day. These additions preserve every earlier
+invariant. Uncertainty limits the affected claim or engineering acceptance;
+it does not create a strategy-pause rule or block unrelated verified work.
+In particular, a report includes incomplete accounts with explicit unknowns
+rather than waiting for every account or optional metric to become complete.
 The 18-session daily allowance is a ceiling, never a consumption target. Do not
 invent fixes to spend it or rebuild an unreleased proposal repeatedly. Preserve
 proposal/test/release evidence and resolve its handoff blocker first. A normal
@@ -135,7 +142,7 @@ Every task is agreed as a contract before it starts, so its exit is defined:
 |---|---|
 | Intent | What the owner wants, in the owner's words. |
 | Interpretation | What the factory takes that to mean. |
-| Invariants | Which of I-1 to I-9 the task touches, and how each is checked. |
+| Invariants | Which of I-1 to I-11 the task touches, and how each is checked. |
 | Assumptions | What is treated as given, to be confirmed. |
 | Outcomes expected | What will be true when it is done, each checkable. |
 | Execution | The steps, and who does each. |
