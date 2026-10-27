@@ -177,8 +177,8 @@ async fn loaded(pool: &PgPool) {
 }
 
 /// M30 bars: 20 past days, each opening at 60,000.00; the bar ending at +30
-/// closes 0.5% from the open, the one ending at +60 1.0% (signs
-/// alternating), so σ(30) = 0.005, σ(60) = 0.010 and σ(45) = 0.0075. Today:
+/// and +60 both close 0.75% from the open (alternating signs). Thus
+/// σ = 0.0075 and R = 450 at both decision marks. Today:
 /// its first bar opens at 60,000.00 with `first_volume` ticks.
 fn bars(first_volume: i64, days: i64) -> Vec<jiaoyi_ctrader::messages::ProtoOaTrendbar> {
     let s = today();
@@ -186,8 +186,8 @@ fn bars(first_volume: i64, days: i64) -> Vec<jiaoyi_ctrader::messages::ProtoOaTr
     for i in 1..=days {
         let open = s.open - Duration::days(i);
         let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
-        let c30 = OPEN * (1.0 + sign * 0.005);
-        let c60 = OPEN * (1.0 + sign * 0.010);
+        let c30 = OPEN * (1.0 + sign * 0.0075);
+        let c60 = OPEN * (1.0 + sign * 0.0075);
         let (lo, hi) = (59_000.0, 61_000.0);
         v.push(m30_bar(open, e5(OPEN), e5(hi), e5(lo), e5(c30), 100));
         v.push(m30_bar(
@@ -286,19 +286,62 @@ fn at(min: i64) -> DateTime<Utc> {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn a_quote_beyond_the_band_between_marks_enters_at_that_quote(pool: PgPool) {
+async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60700.0, 60705.0)),
+        Environment::Demo,
+        |t, log| {
+            t.on_quote(BTC, Some(60000.0), Some(60005.0), at(60))
+                .await
+                .unwrap();
+            t.on_quote(
+                BTC,
+                Some(60700.0),
+                Some(60705.0),
+                at(60) + Duration::seconds(4),
+            )
+            .await
+            .unwrap();
+            assert!(
+                orders(&log).is_empty(),
+                "the inside decision must consume this mark"
+            );
+            let mut restarted =
+                strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+                    .await
+                    .unwrap();
+            restarted
+                .on_quote(
+                    BTC,
+                    Some(60700.0),
+                    Some(60705.0),
+                    at(60) + Duration::seconds(4),
+                )
+                .await
+                .unwrap();
+            assert!(
+                orders(&log).is_empty(),
+                "restart must not reconsider the consumed mark"
+            );
+        }
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_mark_quote_enters_then_takes_its_registered_tp1_and_session_end(pool: PgPool) {
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        // At 45 minutes σ is 0.0075 (between 0.005 at 30 and 0.010 at 60):
-        // the band is 59,550.00 – 60,450.00. An ask of 60,440.00 is above the
-        // band at the 30-minute mark (60,300.00) but inside it now: no entry.
-        t.on_quote(BTC, Some(60_435.0), Some(60_440.0), at(45))
+        // Before the first decision mark there is no entry. At +30 the
+        // fixture sigma is 0.0075 and the band is 59,550.00–60,450.00.
+        t.on_quote(BTC, Some(60_435.0), Some(60_440.0), at(29))
             .await
             .unwrap();
         assert!(orders(&log).is_empty(), "inside the band");
-        // The first ask above 60,450.00 buys, at that quote.
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        // The first mark quote has its mid above 60,450.00 and buys.
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let o = orders(&log);
@@ -309,9 +352,9 @@ async fn a_quote_beyond_the_band_between_marks_enters_at_that_quote(pool: PgPool
         // R = 60,000 × 0.0075 = 450.00 from the fill.
         assert_eq!(o.relative_stop_loss, Some(45_000_000));
         // C = 5.00 spread + 6.00 commission + 2 × 24 bps × 60,460 (290.208)
-        // = 301.208; TP1 = 3R + C = 1,651.21 (outward to a tick); TP2 =
-        // TP1 + R = 2,101.21, sent as the broker take-profit.
-        assert_eq!(o.relative_take_profit, Some(210_121_000));
+        // = 301.208; TP1 = 1.38R + C = 922.21 (outward to a tick); TP2 =
+        // TP1 + R = 1,372.21, sent as the broker take-profit.
+        assert_eq!(o.relative_take_profit, Some(137_221_000));
         // 0.6% of $10,000 = $60 at $4.50 a cent: 13 cents.
         assert_eq!(o.volume, 13);
         // The records: the order with the hash, the label, the quote and
@@ -329,7 +372,7 @@ async fn a_quote_beyond_the_band_between_marks_enters_at_that_quote(pool: PgPool
         assert!((detail["band"]["upper"].as_f64().unwrap() - 60_450.0).abs() < 1e-6);
         assert!((detail["sigma"].as_f64().unwrap() - 0.0075).abs() < 1e-12);
         assert!((detail["entry"]["cost"]["total"].as_f64().unwrap() - 301.208).abs() < 1e-6);
-        assert_eq!(detail["order"]["plan"]["close_volume"], 5);
+        assert_eq!(detail["order"]["plan"]["close_volume"], 8);
         assert_eq!(
             detail["volume_limits"],
             serde_json::to_value(t.syms[&BTC].limits.unwrap()).unwrap()
@@ -361,12 +404,12 @@ async fn a_quote_beyond_the_band_between_marks_enters_at_that_quote(pool: PgPool
             .unwrap();
         assert_eq!(orders(&log).len(), 1);
 
-        // TP1 at 60,462 + 1,651.21 = 62,113.21 on the bid: 5 of 13 close.
-        t.on_quote(BTC, Some(62_113.20), Some(62_118.0), at(60))
+        // TP1 at 60,462 + 922.21 = 61,384.21 on the bid: 8 of 13 close.
+        t.on_quote(BTC, Some(61_384.20), Some(62_118.0), at(60))
             .await
             .unwrap();
         assert!(log.lock().unwrap().closes.is_empty());
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), at(61))
             .await
             .unwrap();
         t.on_quote(BTC, Some(62_200.0), Some(62_205.0), at(62))
@@ -374,16 +417,16 @@ async fn a_quote_beyond_the_band_between_marks_enters_at_that_quote(pool: PgPool
             .unwrap();
         let closes = log.lock().unwrap().closes.clone();
         assert_eq!(closes.len(), 1, "once");
-        assert_eq!(closes[0].volume, 5);
+        assert_eq!(closes[0].volume, 8);
 
-        // The session end closes what is left (8 cents).
+        // The session end closes the remaining 5 cents.
         t.reconcile(Utc::now()).await.unwrap();
         t.session_end(at(23 * 60 + 59)).await.unwrap();
         assert_eq!(log.lock().unwrap().closes.len(), 1, "still in the session");
         t.session_end(at(24 * 60)).await.unwrap();
         let closes = log.lock().unwrap().closes.clone();
         assert_eq!(closes.len(), 2);
-        assert_eq!(closes[1].volume, 8);
+        assert_eq!(closes[1].volume, 5);
         t.session_end(at(24 * 60 + 1)).await.unwrap();
         assert_eq!(log.lock().unwrap().closes.len(), 2, "sent once");
     });
@@ -411,11 +454,11 @@ async fn a_sell_triggers_on_the_bid_below_the_band(pool: PgPool) {
         Environment::Demo,
         |t, log| {
             // A bid of 59,550.00 is on the band: inside.
-            t.on_quote(BTC, Some(59_550.0), Some(59_555.0), at(45))
+            t.on_quote(BTC, Some(59_550.0), Some(59_555.0), at(29))
                 .await
                 .unwrap();
             assert!(orders(&log).is_empty());
-            t.on_quote(BTC, Some(59_549.99), Some(59_555.0), at(45))
+            t.on_quote(BTC, Some(59_540.0), Some(59_545.0), at(30))
                 .await
                 .unwrap();
             assert_eq!(orders(&log)[0].trade_side, 2, "sell");
@@ -461,7 +504,7 @@ async fn the_budget_and_a_holiday_skip_with_the_reason(pool: PgPool) {
         fake((60_455.0, 60_460.0)),
         Environment::Demo,
         |t, log| {
-            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
                 .await
                 .unwrap();
             assert!(orders(&log).is_empty());
@@ -488,7 +531,7 @@ async fn the_budget_and_a_holiday_skip_with_the_reason(pool: PgPool) {
     .await
     .unwrap();
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
             .await
             .unwrap();
         assert!(orders(&log).is_empty());
@@ -507,7 +550,7 @@ async fn fewer_than_14_sessions_give_no_band(pool: PgPool) {
     let mut f = fake((60_455.0, 60_460.0));
     f.m30_bars = HashMap::from([(BTC, bars(10, 13))]);
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert!(orders(&log).is_empty());
@@ -539,7 +582,7 @@ async fn live_takes_one_minimum_trade_only_with_no_other_program_position(pool: 
         ..Default::default()
     });
     with_trader!(&pool, f, Environment::Live, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert!(orders(&log).is_empty());
@@ -556,14 +599,14 @@ async fn live_takes_one_minimum_trade_only_with_no_other_program_position(pool: 
         fake((60_455.0, 60_460.0)),
         Environment::Live,
         |t, log| {
-            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
                 .await
                 .unwrap();
             let o = orders(&log);
             assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
             assert_eq!(o[0].volume, 1);
-            // Unsplittable: the broker's take-profit is TP1, 1,651.21 from the fill.
-            assert_eq!(o[0].relative_take_profit, Some(165_121_000));
+            // Unsplittable: the broker's take-profit is TP1, 922.21 from the fill.
+            assert_eq!(o[0].relative_take_profit, Some(92_221_000));
         }
     );
 }
@@ -599,7 +642,7 @@ fn s3_position(id: i64, volume: i64, price: f64) -> ProtoOaPosition {
         swap: 0,
         price: Some(price),
         stop_loss: Some(price - 450.0),
-        take_profit: Some(price + 2_101.21),
+        take_profit: Some(price + 1_372.21),
         ..Default::default()
     }
 }
@@ -624,7 +667,7 @@ async fn an_unconfirmed_open_adopted_at_reconcile_takes_its_tp1_and_its_session_
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, silent, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1, "sent, no answer");
@@ -647,11 +690,11 @@ async fn an_unconfirmed_open_adopted_at_reconcile_takes_its_tp1_and_its_session_
     };
     with_trader!(&pool, answering, Environment::Demo, |t, log| {
         let o = t.own.get(&5001).cloned().expect("adopted");
-        assert!((o.tp1_distance.unwrap() - 1_651.21).abs() < 1e-9, "{o:?}");
-        assert_eq!(o.close_volume, Some(5));
+        assert!((o.tp1_distance.unwrap() - 922.21).abs() < 1e-9, "{o:?}");
+        assert_eq!(o.close_volume, Some(8));
         assert!(o.partial);
         assert_eq!(o.session_date, Some(today().date));
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), at(61))
             .await
             .unwrap();
         t.reconcile(Utc::now()).await.unwrap();
@@ -663,7 +706,7 @@ async fn an_unconfirmed_open_adopted_at_reconcile_takes_its_tp1_and_its_session_
             .iter()
             .map(|c| c.volume)
             .collect();
-        assert_eq!(closes, vec![5, 8]);
+        assert_eq!(closes, vec![8, 5]);
     });
 }
 
@@ -688,7 +731,7 @@ async fn a_rejected_session_end_close_is_retried_with_a_new_key(pool: PgPool) {
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let end = at(24 * 60);
@@ -715,7 +758,7 @@ async fn a_restart_after_a_rejected_session_end_close_retries_it(pool: PgPool) {
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         t.session_end(at(24 * 60)).await.unwrap();
@@ -754,7 +797,7 @@ async fn a_live_minimum_waits_for_a_strategy_1_trade_opened_since_the_last_recon
             swap: 0,
             ..Default::default()
         });
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert!(orders(&log).is_empty());
@@ -789,7 +832,7 @@ async fn a_live_minimum_waits_for_a_strategy_1_trade_opened_since_the_last_recon
     .await
     .unwrap();
     with_trader!(&pool, f, Environment::Live, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
             .await
             .unwrap();
         assert!(orders(&log).is_empty());
@@ -824,17 +867,17 @@ async fn a_rejected_tp1_close_is_retried_with_a_new_key(pool: PgPool) {
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let tp1 = at(61);
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), tp1)
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), tp1)
             .await
             .unwrap();
         assert_eq!(log.lock().unwrap().closes.len(), 1, "rejected");
         t.on_quote(
             BTC,
-            Some(62_113.21),
+            Some(61_384.21),
             Some(62_118.0),
             tp1 + Duration::seconds(5),
         )
@@ -843,7 +886,7 @@ async fn a_rejected_tp1_close_is_retried_with_a_new_key(pool: PgPool) {
         assert_eq!(log.lock().unwrap().closes.len(), 1, "waits 10 s");
         t.on_quote(
             BTC,
-            Some(62_113.21),
+            Some(61_384.21),
             Some(62_118.0),
             tp1 + Duration::seconds(11),
         )
@@ -856,7 +899,7 @@ async fn a_rejected_tp1_close_is_retried_with_a_new_key(pool: PgPool) {
             .iter()
             .map(|c| c.volume)
             .collect();
-        assert_eq!(closes, vec![5, 5], "retried for the same 5 cents");
+        assert_eq!(closes, vec![8, 8], "retried for the same 8 cents");
         t.on_quote(
             BTC,
             Some(62_200.0),
@@ -883,10 +926,10 @@ async fn a_restart_after_a_rejected_tp1_close_retries_it(pool: PgPool) {
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), at(61))
             .await
             .unwrap();
         assert_eq!(log.lock().unwrap().closes.len(), 1);
@@ -894,7 +937,7 @@ async fn a_restart_after_a_rejected_tp1_close_retries_it(pool: PgPool) {
     with_trader!(&pool, f, Environment::Demo, |t, log| {
         t.on_quote(
             BTC,
-            Some(62_113.21),
+            Some(61_384.21),
             Some(62_118.0),
             at(61) + Duration::seconds(1),
         )
@@ -926,7 +969,7 @@ async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1);
@@ -975,7 +1018,7 @@ async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
     assert!((rows[0].3 - 3.0).abs() < 1e-6, "adverse 3.00: {rows:?}");
     assert_eq!(rows[0].4, 13);
     assert_eq!(rows[1].0, "take_profit");
-    assert!((rows[1].2 - (60_000.0 + 2_101.21)).abs() < 1e-6, "{rows:?}");
+    assert!((rows[1].2 - (60_000.0 + 1_372.21)).abs() < 1e-6, "{rows:?}");
     assert!((rows[1].3 + 0.5).abs() < 1e-6, "favourable 0.50: {rows:?}");
     let c = store::trading::costs(&pool).await.unwrap();
     let row = &c["rows"][0];
@@ -999,7 +1042,7 @@ async fn dropped_owned_execution_is_preserved_without_changing_exit_rules(pool: 
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let mut p = f.positions.lock().unwrap()[0].clone();
@@ -1100,7 +1143,7 @@ async fn an_open_filled_in_two_deals_is_held_at_their_aggregate(pool: PgPool) {
     };
     let vwap = (6.0 * 60_462.0 + 7.0 * 60_470.0) / 13.0;
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1);
@@ -1108,7 +1151,7 @@ async fn an_open_filled_in_two_deals_is_held_at_their_aggregate(pool: PgPool) {
         let o = t.own.get(&1001).cloned().expect("held");
         assert_eq!(o.volume, 13, "{o:?}");
         assert!((o.entry.unwrap() - vwap).abs() < 1e-6, "{o:?}");
-        assert_eq!((o.close_volume, o.partial), (Some(5), true), "{o:?}");
+        assert_eq!((o.close_volume, o.partial), (Some(8), true), "{o:?}");
         assert_eq!(o.session_date, Some(today().date), "{o:?}");
     });
     let (outcome, pid, vol, price) = open_fill(&pool).await;
@@ -1131,7 +1174,7 @@ async fn a_partly_filled_open_keeps_its_plan(pool: PgPool) {
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1);
@@ -1173,7 +1216,7 @@ async fn an_unconfirmed_open_found_partly_filled_keeps_its_remainder_reserved(po
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, silent, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1, "sent, no answer");
@@ -1340,17 +1383,17 @@ fn closes(log: &Arc<Mutex<FakeLog>>) -> Vec<i64> {
         .collect()
 }
 
-/// Enter at 45 minutes on `f`, then quote at TP1 (fill 60,462.00 +
-/// 1,651.21): the TP1 closes sent.
+/// Enter at the 30-minute mark, then quote at TP1 (fill 60,462.00 +
+/// 922.21): the TP1 closes sent.
 async fn tp1_after(pool: &PgPool, f: FakeBroker) -> Vec<i64> {
     let out;
     with_trader!(pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1);
         assert_eq!(orders(&log)[0].volume, 13);
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), at(61))
             .await
             .unwrap();
         out = closes(&log);
@@ -1359,7 +1402,7 @@ async fn tp1_after(pool: &PgPool, f: FakeBroker) -> Vec<i64> {
 }
 
 /// Codex round-4 P2 on #15: a partial fill too small to split (1 of 13
-/// cents; the plan's close was 5) takes TP1 as a whole-position close, not
+/// cents; the plan's close was 8) takes TP1 as a whole-position close, not
 /// none.
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn an_unsplittable_partial_fill_closes_whole_at_tp1(pool: PgPool) {
@@ -1373,8 +1416,8 @@ async fn an_unsplittable_partial_fill_closes_whole_at_tp1(pool: PgPool) {
 }
 
 /// Codex round-4 P2 on #15: a partial fill of 4 of 13 cents re-plans its TP1
-/// close for 4: ceil(4 × (R + C) / (TP1 + R)) = ceil(4 × 751.208 / 2,101.21)
-/// = 2, a runner of 2 (self-derived from the planner's own formula).
+/// close for 4: ceil(4 × (R + C) / (TP1 + R)) = ceil(4 × 751.208 / 1,372.21)
+/// = 3, a runner of 1 (self-derived from the planner's own formula).
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_partial_fill_re_plans_its_tp1_close(pool: PgPool) {
     loaded(&pool).await;
@@ -1383,15 +1426,15 @@ async fn a_partial_fill_re_plans_its_tp1_close(pool: PgPool) {
         cancel_remainder: true,
         ..fake((60_455.0, 60_462.0))
     };
-    assert_eq!(tp1_after(&pool, f).await, vec![2]);
+    assert_eq!(tp1_after(&pool, f).await, vec![3]);
 }
 
-/// A full fill keeps the planned close of 5 of 13 (a guard: main already
+/// A full fill keeps the planned close of 8 of 13 (a guard: main already
 /// does this).
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_full_fill_keeps_its_planned_tp1_close(pool: PgPool) {
     loaded(&pool).await;
-    assert_eq!(tp1_after(&pool, fake((60_455.0, 60_462.0))).await, vec![5]);
+    assert_eq!(tp1_after(&pool, fake((60_455.0, 60_462.0))).await, vec![8]);
 }
 
 // ------------------------------------------------------------- the instrument
@@ -1428,7 +1471,7 @@ async fn a_strategy_3_open_in_two_deals_is_listed_at_their_vwap(pool: PgPool) {
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
     });
@@ -1471,7 +1514,7 @@ async fn a_strategy_3_partial_fill_then_cancel_is_listed_with_its_part(pool: PgP
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
     });
@@ -1506,7 +1549,7 @@ async fn an_unconfirmed_strategy_3_open_adopted_at_reconcile_is_listed(pool: PgP
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, silent, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
     });
@@ -1551,6 +1594,7 @@ fn second_prepared_crypto(t: &mut strategy3::Trader<'_, '_>) -> i64 {
     other.id = id;
     other.name = "ETHUSD".into();
     other.last_try = None;
+    other.last_decision_mark = None;
     t.syms.insert(id, other);
     id
 }
@@ -1563,7 +1607,7 @@ async fn account_funding_rejection_backs_off_other_symbols_then_retries(pool: Pg
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let other = second_prepared_crypto(&mut t);
@@ -1571,7 +1615,7 @@ async fn account_funding_rejection_backs_off_other_symbols_then_retries(pool: Pg
             other,
             Some(60_455.0),
             Some(60_460.0),
-            at(45) + Duration::seconds(1),
+            at(30) + Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -1584,7 +1628,7 @@ async fn account_funding_rejection_backs_off_other_symbols_then_retries(pool: Pg
             other,
             Some(60_500.0),
             Some(60_505.0),
-            at(46) + Duration::seconds(1),
+            at(60) + Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -1604,7 +1648,7 @@ async fn symbol_rejection_does_not_back_off_other_symbols(pool: PgPool) {
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let other = second_prepared_crypto(&mut t);
@@ -1612,7 +1656,7 @@ async fn symbol_rejection_does_not_back_off_other_symbols(pool: PgPool) {
             other,
             Some(60_455.0),
             Some(60_460.0),
-            at(45) + Duration::seconds(1),
+            at(30) + Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -1629,19 +1673,19 @@ async fn funding_backoff_keeps_the_open_positions_tp1(pool: PgPool) {
     loaded(&pool).await;
     let mut f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
     });
     f.reject_orders = Some("NOT_ENOUGH_MONEY".into());
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.prepare(BTC, today(), at(45)).await;
+        t.prepare(BTC, today(), at(30)).await;
         let other = second_prepared_crypto(&mut t);
         t.on_quote(
             other,
             Some(60_455.0),
             Some(60_460.0),
-            at(45) + Duration::seconds(1),
+            at(30) + Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -1652,9 +1696,9 @@ async fn funding_backoff_keeps_the_open_positions_tp1(pool: PgPool) {
         );
         t.on_quote(
             BTC,
-            Some(62_113.21),
+            Some(61_384.21),
             Some(62_118.0),
-            at(45) + Duration::seconds(2),
+            at(30) + Duration::seconds(2),
         )
         .await
         .unwrap();
@@ -1675,7 +1719,7 @@ async fn a_rejected_strategy_3_open_is_listed_with_nothing_filled(pool: PgPool) 
         ..fake((60_455.0, 60_462.0))
     };
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
     });
@@ -1696,7 +1740,7 @@ async fn a_strategy_3_stop_the_broker_executes_is_listed(pool: PgPool) {
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let p = f.positions.lock().unwrap()[0].clone();
@@ -1805,35 +1849,40 @@ async fn the_owners_pause_stops_new_entries_and_the_exits_still_run(pool: PgPool
     owner_sets_pause(&pool, 1).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        // σ(43) = 0.0071667, σ(44) = 0.0073333: the band tops at 60,430.00 and
-        // 60,440.00, so an ask of 60,460.00 breaks it both times.
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(43))
+        // A paused mark is consumed once. Lifting the owner pause allows
+        // the next mark; it does not reconsider the earlier decision.
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(44))
-            .await
-            .unwrap();
+        t.on_quote(
+            BTC,
+            Some(60_455.0),
+            Some(60_460.0),
+            at(30) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
         assert!(orders(&log).is_empty(), "paused: nothing sent");
         let d = decisions(&pool).await;
         let paused: Vec<&(String, String)> = d.iter().filter(|(k, _)| k == "s3_paused").collect();
         assert_eq!(paused.len(), 1, "recorded once: {d:?}");
         assert!(paused[0].1.contains("paused by the owner"), "{d:?}");
-        // Lifted by the owner: the next break (a minute on) enters.
+        // Lifted by the owner: the next 30-minute mark enters.
         owner_sets_pause(&pool, 0).await;
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1, "{:?}", decisions(&pool).await);
         assert_eq!(orders(&log)[0].volume, 13);
         // Paused again: the position keeps its exits.
         owner_sets_pause(&pool, 1).await;
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), at(61))
             .await
             .unwrap();
-        assert_eq!(closes(&log), vec![5], "TP1 while paused");
+        assert_eq!(closes(&log), vec![8], "TP1 while paused");
         t.reconcile(Utc::now()).await.unwrap();
         t.session_end(at(24 * 60)).await.unwrap();
-        assert_eq!(closes(&log), vec![5, 8], "the session end while paused");
+        assert_eq!(closes(&log), vec![8, 5], "the session end while paused");
         assert_eq!(orders(&log).len(), 1, "no new entry");
     });
     // Only the owner wrote the pause.
@@ -1865,7 +1914,7 @@ async fn a_limit_reached_is_flagged_and_strategy_3_keeps_trading(pool: PgPool) {
         assert_eq!(reached.len(), 1, "{d:?}");
         assert!(reached[0].1.contains("owner's decision needed"));
         t.reconcile(Utc::now()).await.unwrap();
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         assert_eq!(
@@ -1901,8 +1950,8 @@ async fn the_distance_to_the_trigger_is_shown_inside_outside_and_out_of_the_wind
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, log| {
         let read = |t: &strategy3::Trader| t.live.lock().unwrap()[&DEMO].triggers["BTCUSD"].clone();
-        // At 45 minutes the band is 59,550.00 – 60,450.00 (half-width 450.00).
-        t.on_quote(BTC, Some(60_435.0), Some(60_440.0), at(45))
+        // At the 30-minute mark the band is 59,550.00 – 60,450.00 (half-width 450.00).
+        t.on_quote(BTC, Some(60_435.0), Some(60_440.0), at(30))
             .await
             .unwrap();
         let x = read(&t);
@@ -1921,7 +1970,7 @@ async fn the_distance_to_the_trigger_is_shown_inside_outside_and_out_of_the_wind
         assert!((d - 10.0 / 450.0).abs() < 1e-9, "{x}");
         assert!(orders(&log).is_empty());
         // Through the upper edge: negative, and the order is sent.
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
             .await
             .unwrap();
         let x = read(&t);
@@ -1929,7 +1978,7 @@ async fn the_distance_to_the_trigger_is_shown_inside_outside_and_out_of_the_wind
         assert!((d + 10.0 / 450.0).abs() < 1e-9, "{x}");
         assert_eq!(orders(&log).len(), 1);
         // Near the lower edge: the bid's distance, the lower edge.
-        t.on_quote(BTC, Some(59_640.0), Some(59_645.0), at(45))
+        t.on_quote(BTC, Some(59_640.0), Some(59_645.0), at(30))
             .await
             .unwrap();
         let x = read(&t);
@@ -1971,7 +2020,7 @@ async fn correlated_broker_close_is_recorded_once_after_reconcile(pool: PgPool) 
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let p = f.positions.lock().unwrap()[0].clone();
@@ -2043,11 +2092,11 @@ async fn correlated_local_close_is_not_double_counted_as_broker_exit(pool: PgPoo
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let p = f.positions.lock().unwrap()[0].clone();
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), at(61))
             .await
             .unwrap();
         let wire: (Option<String>, i32, Vec<u8>, DateTime<Utc>) = sqlx::query_as(
@@ -2103,7 +2152,7 @@ async fn reconcile_recovers_a_stream_missed_close_from_history_once(pool: PgPool
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let p = f.positions.lock().unwrap()[0].clone();
@@ -2187,12 +2236,12 @@ async fn history_recovery_preserves_held_positions_and_excludes_local_fills(pool
     loaded(&pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(&pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let p = f.positions.lock().unwrap()[0].clone();
         // A TP1 filled by the existing gate already has its exact broker deal.
-        t.on_quote(BTC, Some(62_113.21), Some(62_118.0), at(61))
+        t.on_quote(BTC, Some(61_384.21), Some(62_118.0), at(61))
             .await
             .unwrap();
         let wire: (Option<String>, i32, Vec<u8>, DateTime<Utc>) = sqlx::query_as(
@@ -2221,11 +2270,11 @@ async fn history_recovery_preserves_held_positions_and_excludes_local_fills(pool
             filled_volume: 5,
             trade_side: 2,
             deal_status: ProtoOaDealStatus::Filled as i32,
-            execution_price: Some(62_113.21),
+            execution_price: Some(61_384.21),
             execution_timestamp: Utc::now().timestamp_millis(),
             close_position_detail: Some(ProtoOaClosePositionDetail {
                 entry_price: p.price.unwrap(),
-                closed_volume: Some(5),
+                closed_volume: Some(8),
                 ..Default::default()
             }),
             ..Default::default()
@@ -2233,17 +2282,17 @@ async fn history_recovery_preserves_held_positions_and_excludes_local_fills(pool
         store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&own_close)], Utc::now())
             .await
             .unwrap();
-        // The remaining 8 cents close at the broker. A stale/fresh position
+        // The remaining 5 cents close at the broker. A stale/fresh position
         // snapshot that still contains the position must defer recovery.
         own_close.deal_id = 99981;
         own_close.order_id = 99982;
-        own_close.volume = 8;
-        own_close.filled_volume = 8;
+        own_close.volume = 5;
+        own_close.filled_volume = 5;
         own_close
             .close_position_detail
             .as_mut()
             .unwrap()
-            .closed_volume = Some(8);
+            .closed_volume = Some(5);
         store::history::upsert_deals(&pool, DEMO, &[history::deal_row(&own_close)], Utc::now())
             .await
             .unwrap();
@@ -2290,7 +2339,7 @@ async fn history_recovery_preserves_held_positions_and_excludes_local_fills(pool
         .unwrap();
         assert_eq!(
             volumes,
-            vec![("broker_exit".into(), Some(8)), ("tp1".into(), Some(5))],
+            vec![("broker_exit".into(), Some(5)), ("tp1".into(), Some(8))],
             "account for each real closing part once"
         );
     });
@@ -2307,7 +2356,7 @@ async fn challenge_local_close_checkpoint(pool: &PgPool, case: LocalCloseCheckpo
     loaded(pool).await;
     let f = fake((60_455.0, 60_462.0));
     with_trader!(pool, f, Environment::Demo, |t, _log| {
-        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(45))
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
         let p = f.positions.lock().unwrap()[0].clone();
@@ -2366,7 +2415,7 @@ async fn challenge_local_close_checkpoint(pool: &PgPool, case: LocalCloseCheckpo
                 DEMO,
                 p.clone(),
                 local_deal,
-                62_113.21,
+                61_384.21,
                 volume,
                 true,
                 false,
@@ -2402,7 +2451,7 @@ async fn challenge_local_close_checkpoint(pool: &PgPool, case: LocalCloseCheckpo
                     answered_at: Some(Utc::now()),
                     latency_ms: None,
                     decision_price: None,
-                    fill_price: Some(62_113.21),
+                    fill_price: Some(61_384.21),
                     slippage: None,
                     spread: None,
                     volume: Some(5),
@@ -2460,7 +2509,7 @@ async fn challenge_local_close_checkpoint(pool: &PgPool, case: LocalCloseCheckpo
                 DEMO,
                 p.clone(),
                 candidate_id,
-                62_113.21,
+                61_384.21,
                 2,
                 true,
                 false,
