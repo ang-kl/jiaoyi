@@ -4,7 +4,7 @@ import unittest
 import watches
 
 
-def health(file=watches.V3_FILE, digest=watches.V3_HASH, decisions=None, trades=None, limit=None):
+def health(file=watches.V4_FILE, digest=watches.V4_HASH, decisions=None, trades=None, limit=None):
     return {
         "status": "ok",
         "strategy3": [{

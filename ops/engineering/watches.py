@@ -8,9 +8,9 @@ The live stop is not read as something to amend. Recovery is unavailable
 from these public routes; the watch records that and does not invent a rate.
 """
 
-V3_FILE = "docs/preregistration-2026-10-27-strategy3-v3.md"
+V4_FILE = "docs/preregistration-2026-10-28-strategy3-v4.md"
 # SHA256 of the registered file embedded by the trading image, not its length.
-V3_HASH = "f93a5de61bc7a44d0667da3376416adf2bb8414e41f1fa9895d344c7d5e0350b"
+V4_HASH = "a9a11e9df0f857ed111a8a89820c4ed535bdf5281348be9c32edaaecb61eb15b"
 GOAL_WINS = 15
 GOAL_PAYOFF = 1.38
 ACCOUNT_47790949 = 47790949
@@ -32,7 +32,7 @@ def hash_watch(health):
     for row in _rows(health.get("strategy3")):
         file = row.get("prereg_file")
         digest = row.get("prereg_hash")
-        ok = file == V3_FILE and digest == V3_HASH
+        ok = file == V4_FILE and digest == V4_HASH
         if not ok:
             mismatch = True
         rows.append({

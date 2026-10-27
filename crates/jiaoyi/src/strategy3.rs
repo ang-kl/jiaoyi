@@ -11,7 +11,7 @@
 //! - A symbol is skipped when the cost reserve C is at least R.
 //! - `REQUIRED_RR` is 1.38. Owner, 27-10-2026: target near 1.4R.
 //!
-//! The rules are `docs/preregistration-2026-10-27-strategy3-v3.md`, embedded
+//! The rules are `docs/preregistration-2026-10-28-strategy3-v4.md`, embedded
 //! here and hashed: every decision, intent and trade records that hash and
 //! the label `jiaoyi-s3`. The 25 Oct file remains the record of the rule
 //! that produced the statement losses. It is not the rule this loop trades.
@@ -77,12 +77,12 @@ pub const STRATEGY: &str = "Strategy 3: intraday momentum";
 /// The label on every position Strategy 3 opens.
 pub const LABEL: &str = "jiaoyi-s3";
 /// The pre-registration, relative to the repository root.
-/// v3 (27-10-2026): mark decision and cost gate. The 25 Oct file is the
-/// record of the rule that produced the statement losses.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-10-27-strategy3-v3.md";
+/// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
+/// record of the mark decision and the cost gate.
+pub const PREREG_FILE: &str = "docs/preregistration-2026-10-28-strategy3-v4.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-10-27-strategy3-v3.md");
+    include_str!("../../../docs/preregistration-2026-10-28-strategy3-v4.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -1926,6 +1926,45 @@ impl<'a, 'c> Trader<'a, 'c> {
         } else {
             self.program_positions + self.pending.len()
         };
+        // Kelly (№ 17,588–17,589, 28-10-2026). A ceiling and a skip in front of
+        // size(). It does not write risk_pct, the live minimum, or the budget.
+        // Under 20 closes on this hash and symbol: not an input. A non-positive
+        // fraction skips. A positive fraction is recorded and does not raise size.
+        // Grok 4.7. Other models: do not plug in the goal, and do not double
+        // after a loss.
+        let keys = s3s::open_keys_for_hash(self.pool, self.account_id(), symbol_id, &self.hash).await?;
+        let (closed, _) = ts::closed_trades(self.pool, self.account_id(), "s3:").await?;
+        let rs: Vec<f64> = closed
+            .iter()
+            .filter(|t| keys.iter().any(|k| k == &t.entry_key))
+            .map(|t| t.r)
+            .collect();
+        let kelly = jiaoyi_core::strategy3::kelly::read(&rs);
+        detail["kelly"] = json!({
+            "n": kelly.n,
+            "wins": kelly.wins,
+            "p": kelly.p,
+            "b": kelly.b,
+            "f_star": kelly.f_star,
+            "quarter": kelly.quarter,
+            "min_closes": jiaoyi_core::strategy3::kelly::MIN_CLOSES,
+            "writes_size": false,
+        });
+        if jiaoyi_core::strategy3::kelly::skip(&kelly) {
+            self.skip(
+                symbol_id,
+                &name,
+                &format!(
+                    "Kelly f* ({:.4}) is not positive on {} closes under this hash: skipped",
+                    kelly.f_star.unwrap_or(f64::NAN),
+                    kelly.n
+                ),
+                detail,
+                now,
+            )
+            .await;
+            return Ok(());
+        }
         let sized = match size(&r, equity, rel, rate, &limits, open_programs) {
             Ok(x) => x,
             Err(why) => {
@@ -2701,7 +2740,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-10-27-strategy3-v3.md"
+            "/../../docs/preregistration-2026-10-28-strategy3-v4.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)
@@ -2709,10 +2748,10 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect();
         assert_eq!(disk_hash, prereg_hash());
-        // v3: mark decision and cost gate. The tick rule is no longer the traded rule.
+        // v4: Kelly skip. The mark decision and the cost gate remain.
+        assert!(PREREG_TEXT.contains("Kelly"));
         assert!(PREREG_TEXT.contains("mark decision"));
         assert!(PREREG_TEXT.contains("C ≥ R"));
-        assert!(PREREG_TEXT.contains("REQUIRED_RR"));
         assert!(!PREREG_TEXT.contains("Tick-triggered only"));
     }
 

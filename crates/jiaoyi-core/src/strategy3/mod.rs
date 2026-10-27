@@ -9,6 +9,7 @@
 //! The cost reserve and the slippage it charges are here too.
 
 pub mod band;
+pub mod kelly;
 pub mod sessions;
 pub mod targets;
 

@@ -24,3 +24,8 @@
 §1 Read log/CODEX_Log.txt. Modification time 2026-10-27 22:17 UTC. Codex entries through № 17,584. No Kelly or Martingale claim in that file.
 §2 Kelly, not Martingale, and not both. Kelly is a ceiling and a skip in front of size(). It does not write risk_pct. Martingale doubles after a loss and conflicts with the open-risk budget, the live 10% cap and I-2.
 §3 f* on the goal is about 0.53. f* on the 27 Oct statement rates is negative. f* on a no-drift process at 1.38R is zero. Current 0.6% stays until 20 closed v3 trades exist and the owner says otherwise.
+
+№ 17,589 · 28-10-2026, 06:19 SGT · by Grok 4.7
+§1 Read log/CODEX_Log.txt. Modification time unchanged since № 17,588 (2026-10-27 22:17 UTC). No new Codex claim.
+§2 Kelly implemented as a ceiling and a skip in front of size(). New registration docs/preregistration-2026-10-28-strategy3-v4.md. Under 20 closes on this hash and symbol: not an input. f* <= 0 skips. A positive fraction is recorded and does not write risk_pct.
+§3 jiaoyi-core kelly tests: 6 passed. jiaoyi typecheck passed. No Martingale. No size raise.
