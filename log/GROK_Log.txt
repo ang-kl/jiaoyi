@@ -65,3 +65,7 @@
 № 17,613 · 28-10-2026, 07:31 SGT · by Grok 4.7
 §1 Owner: is the GROK_API an edge for pre-trade and live trade around the clock.
 §2 No. It is a source. An edge is 15 of 20 closed trades under the current hash at the realised payoff. A headline does not change that count. Around the clock does not either: the mark decision is 30 minutes, and the cost gate skips when C ≥ R.
+
+№ 17,614 · 28-10-2026, 07:32 SGT · by Grok 4.7
+§1 Owner: does "the API is not an edge" mean the program has no edge.
+§2 No edge has been shown. That is not the same as "cannot have one." The old 3R barrier made 73% nearly unreachable. The current geometry makes it reachable. The count is still missing: 15 of 20 closed trades under the current hash.
