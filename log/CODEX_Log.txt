@@ -108,3 +108,14 @@ watch defects and persisted PR №/§/SGT references for creation and repair.
 Current checks: fmt/workspace all-target check/clippy passed; watchdog5,
 S1 integration37, S3 integration44 and engineering101 passed. PR CI, deployment
 and worker resume remain pending at this entry. Financial delta unmeasured.
+
+ENTRY 28-10-2026 06:17:44 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,590 §§1–2; №17,591 §1; №17,592 §§1–2; №17,593 §1.
+[§LOG.12] Implementation PR57: https://github.com/ang-kl/jiaoyi/pull/57.
+First head996a03a passed image/engineering CI but failed two preexisting
+shutdown task-count assertions. Actual SIGTERM logs showed8/10 completed
+tasks, zero aborted; corrected stale7/9 expectations to include the new
+watchdog. Full-workspace and new-head CI checks are running. No merge or
+production monitor activation is claimed at this entry. Engineering remains
+stopped until the monitor release read-back passes.

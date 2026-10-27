@@ -100,9 +100,9 @@ async fn sigterm_stops_the_service_after_its_tasks_finish(pool: sqlx::PgPool) {
     assert!(text.contains("SIGTERM received"), "{text}");
     // One recorder, one history sync, the loader, the research runner,
     // Strategy 1's trader (0012), Strategy 3's (0013), and the assessment
-    // supervisor, all finished,
+    // supervisor and independent position watchdog, all finished,
     // none aborted.
-    assert!(text.contains("finished=7"), "{text}");
+    assert!(text.contains("finished=8"), "{text}");
     assert!(text.contains("aborted=0"), "{text}");
 }
 
@@ -193,8 +193,9 @@ async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
     assert!(text.contains("tick_history_off=[46130058]"), "{text}");
     assert!(!text.contains("do-not-read-me"), "{text}");
     // Two recorders, two history syncs, the loader, the research runner,
-    // Strategy 1's trader (0012), Strategy 3's (0013), and the supervisor.
-    assert!(text.contains("finished=9"), "{text}");
+    // Strategy 1's trader (0012), Strategy 3's (0013), the supervisor and
+    // independent position watchdog.
+    assert!(text.contains("finished=10"), "{text}");
     assert!(text.contains("aborted=0"), "{text}");
 }
 
