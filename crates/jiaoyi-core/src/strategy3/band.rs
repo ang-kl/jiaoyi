@@ -30,7 +30,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::sessions::{sessions_before, Session, SessionRule};
 
@@ -50,7 +50,7 @@ pub struct M30 {
 }
 
 /// σ at each 30-minute mark of one session, from the sessions before it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SigmaTable {
     /// Minutes after the open → σ, or why there is none.
     pub marks: BTreeMap<i64, Result<f64, String>>,
