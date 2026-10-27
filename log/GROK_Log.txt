@@ -92,3 +92,8 @@
 № 17,634 · 28-10-2026, 07:53 SGT · by Grok 4.7
 §1 PR #62 check failed. The provenance fixture still resolved EURUSD. Migration 0018 removed that name, so the recorder found no symbol.
 §2 The fixture now resolves GBPUSD, which the universe still contains. Pushed. Not merged until the check passes.
+
+№ 17,635 · 28-10-2026, 07:57 SGT · by Grok 4.7
+§1 Owner: what does refusing the API miss; assess a missed deadline; 15 or 30 minute sentiment; Telegram at 11:00 SGT and at $10 steps including $30, $50, $100.
+§2 Refusing misses a halt headline on a send that already passed the cost gate. None of the current setups are that send. AUS200, BTCUSD and ETHUSD missed the deadline with all four inputs empty. That assessment is the receipt. It spends nothing.
+§3 Neither 15 nor 30. PR #82 meters Grok 4.7 at the 27 Oct list ($2 / $0.50 / $6 per 1M) and alerts at 11:00 SGT and every $10. Not an invoice. Not merged until the check passes.
