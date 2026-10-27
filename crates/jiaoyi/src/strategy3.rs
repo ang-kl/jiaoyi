@@ -239,13 +239,14 @@ pub fn update_excursions(side: Side, entry: f64, price: f64, mae: f64, mfe: f64)
     (mae.max(adverse), mfe.max(favourable))
 }
 
-/// Attach a pre-trade sentiment reading to a decision detail. The reading is
-/// a measurement. It does not change the side, the stop, the target, or the
-/// volume. Grok 4.7 · № 17,612 28-Oct (ordered: owner "proceed"): the entry
-/// rule is unchanged.
+/// Attach a Grok reading only when it can block a send or unblock a close.
+/// A measurement that nothing acts on is ignored. The side, stop, target and
+/// volume are not changed here. Grok 4.7 · № 17,615 28-Oct (ordered: owner
+/// "time is money"): do not store a reading that fills a slot.
 pub fn attach_sentiment(detail: &mut serde_json::Value, reading: &serde_json::Value) {
-    if reading.get("effect").and_then(|v| v.as_str()) == Some("measurement") {
-        detail["sentiment"] = reading.clone();
+    let effect = reading.get("effect").and_then(|v| v.as_str());
+    if matches!(effect, Some("block_a_send") | Some("unblock_a_close")) {
+        detail["grok"] = reading.clone();
     }
 }
 
@@ -3165,16 +3166,21 @@ mod tests {
     }
 
     #[test]
-    fn a_sentiment_reading_is_attached_and_does_not_change_the_side() {
+    fn a_grok_reading_is_kept_only_when_it_can_change_a_send() {
         let mut detail = json!({"side": "buy", "band": {"sigma": 1.0}});
-        let reading = json!({"effect": "measurement", "sentiment": "neutral", "headline": "none"});
-        attach_sentiment(&mut detail, &reading);
+        attach_sentiment(
+            &mut detail,
+            &json!({"effect": "block_a_send", "headline": "halt"}),
+        );
         assert_eq!(detail["side"], "buy");
-        assert_eq!(detail["sentiment"]["effect"], "measurement");
-        // A reading that is not a measurement is ignored.
+        assert_eq!(detail["grok"]["effect"], "block_a_send");
         let mut other = json!({"side": "sell"});
+        attach_sentiment(
+            &mut other,
+            &json!({"effect": "measurement", "sentiment": "neutral"}),
+        );
         attach_sentiment(&mut other, &json!({"effect": "order", "side": "buy"}));
         assert_eq!(other["side"], "sell");
-        assert!(other.get("sentiment").is_none());
+        assert!(other.get("grok").is_none());
     }
 }

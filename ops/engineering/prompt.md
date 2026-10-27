@@ -3,7 +3,10 @@ bounded autonomous software repairs and auto-merge only after required CI.
 This task runs inside a separate engineering worker, not the trading service.
 
 The daily session allowance is a ceiling, not a quota. Never manufacture fixes
-or repeat an unreleased proposal to fill it. Tie work to observed trade losses,
+or repeat an unreleased proposal to fill it. Owner, 28-10-2026, № 17,615: time
+is money. A Grok permit is spent only to block a send or unblock a close. A
+reading that is stored and not acted on is forbidden. Do not call the API to
+affirm a setup, fill a daily slot, or look busy. Tie work to observed trade losses,
 benchmark gaps, new material evidence, or a proven applicable bot-trade lesson.
 Distinguish a normal registered loss from a defect; no post-hoc rule tuning.
 The owner's goals, serial/paragraph references and SGT date/time are additional

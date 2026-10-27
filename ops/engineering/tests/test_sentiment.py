@@ -1,24 +1,30 @@
-"""Sentiment is a measurement. It does not spend a permit twice, and it does not trade."""
+"""A permit is spent only to block a send or unblock a close."""
 
 from datetime import datetime, timezone
 
-from sentiment import Budget, record
+from sentiment import Budget, record, worth_a_permit
 
 
-def test_one_call_per_symbol_per_session_and_a_ceiling_of_ten():
+NOW = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
+
+
+def test_an_affirmation_spends_nothing():
     b = Budget(limit=10)
-    now = datetime(2026, 10, 28, 0, 0, tzinfo=timezone.utc)
-    assert b.spend("XAUUSD", "2026-10-28", now)
-    assert not b.spend("XAUUSD", "2026-10-28", now)
-    assert b.spend("EURUSD", "2026-10-28", now)
+    assert not worth_a_permit("affirm")
+    assert not worth_a_permit("sentiment")
+    assert not b.spend("XAUUSD", "2026-10-28", "affirm", NOW)
+    assert b.used == {}
+    assert record("XAUUSD", "2026-10-28", "affirm", "headline", "grok", "t") is None
+
+
+def test_a_real_reason_spends_once_and_stops_at_ten():
+    b = Budget(limit=10)
+    assert b.spend("XAUUSD", "2026-10-28", "block_a_send", NOW)
+    assert not b.spend("XAUUSD", "2026-10-28", "block_a_send", NOW)
+    assert b.spend("XAUUSD", "2026-10-28", "unblock_a_close", NOW)
     for i in range(8):
-        assert b.spend(f"S{i}", "2026-10-28", now)
-    assert not b.spend("NZDUSD", "2026-10-28", now)
-
-
-def test_a_reading_is_a_measurement_and_not_an_order():
-    r = record("XAUUSD", "2026-10-28", "neutral", "no headline", "grok", "2026-10-28T00:00:00Z")
-    assert r["effect"] == "measurement"
-    assert "side" not in r
-    assert "volume" not in r
-    assert "stop" not in r
+        assert b.spend(f"S{i}", "2026-10-28", "block_a_send", NOW)
+    assert not b.spend("NZDUSD", "2026-10-28", "block_a_send", NOW)
+    reading = record("XAUUSD", "2026-10-28", "block_a_send", "halt", "grok", "t")
+    assert reading["effect"] == "block_a_send"
+    assert "side" not in reading
