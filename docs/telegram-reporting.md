@@ -23,6 +23,15 @@ default. `ENGINEERING_TELEGRAM_INTERVAL_SECONDS` optionally changes that cadence
 the requested initial six-hour audit is delivered separately. Delivery status
 and the reporter source digest appear under `/status.telegram_reporting`.
 
+Owner27October2026: individual stop-loss reviews are internal learning evidence.
+They produce no Telegram message, including retries of historical delivery
+receipts. The scheduled engineering digest excludes their individual rows,
+summaries and tests before applying its job cap; only an aggregate review count
+appears. Normal engineering digests and the daily trading report retain their
+existing schedules and credentials. Internal reviews remain saved and available
+to subsequent assessments; this notification choice never disables trading or
+the loss observer.
+
 SQLite delivery state and HTML files stay under `/data/private`. Success is
 recorded only after a positive Telegram message receipt. Definitive rejections
 retry after15minutes; unknown POST outcomes/interrupted sends are held rather

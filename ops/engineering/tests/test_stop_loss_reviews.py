@@ -186,64 +186,26 @@ class StopLossReviewTests(unittest.TestCase):
                   "tests": "FULL TEST LOG MUST NOT APPEAR", "owner_decisions": "keep existing risk & stops"}
         return job, report
 
-    def test_review_delivery_confirms_once_escapes_redacts_and_preserves_completed_job(self):
+    def test_completed_reviews_remain_internal_even_with_telegram_configured(self):
         job, report = self.completed_review()
-        bodies = []
-        def send(token, chat, filename, body, caption):
-            self.assertEqual(token, "private-bot-token")
-            self.assertEqual(chat, "12345")
-            self.assertEqual(filename, "S-20261027-1.html")
-            bodies.append(body)
-            return 42
-        with patch.object(sl.reporting, "send_document", side_effect=send) as post:
-            result = sl.deliver_review(self.c, job, report)
-            duplicate = sl.deliver_review(self.c, job, report)
-        self.assertEqual(result["state"], "confirmed")
-        self.assertEqual(duplicate["message_id"], 42)
-        self.assertEqual(post.call_count, 1)
-        body = bodies[0]
-        self.assertIn("[§S-20261027-1.1]", body)
-        self.assertIn("27-10-2026 09:59:00 SGT", body)
-        self.assertIn("-1.02 R", body)
-        self.assertIn("not measurable from a single exit", body)
-        self.assertIn("≥73%", body)
-        self.assertIn("1.38", body)
-        self.assertIn("&lt;script&gt;", body)
-        for private in ("<script>", "private-bot-token", "private-github-token", "FULL TEST LOG MUST NOT APPEAR"):
-            self.assertNotIn(private, body)
-        self.assertEqual(self.c.store.jobs()[0]["state"], "completed")
-        with self.c.store.connect() as db:
-            receipts = " ".join(row[0] for row in db.execute("SELECT detail FROM events WHERE kind='stop_loss_review_delivery'"))
-        self.assertNotIn("private-bot-token", receipts)
-        self.assertIn('"message_id": 42', receipts)
-
-    def test_uncertain_delivery_is_held_without_resending_or_repeating_model_work(self):
-        job, report = self.completed_review()
-        with patch.object(sl.reporting, "send_document", side_effect=sl.reporting.DeliveryError("private-bot-token", uncertain=True)) as post:
-            self.assertEqual(sl.deliver_review(self.c, job, report)["state"], "uncertain")
-            self.c.store = w.Store(self.temp.name)
-            self.assertEqual(sl.deliver_review(self.c, job, report)["state"], "uncertain")
-        self.assertEqual(post.call_count, 1)
-        self.assertEqual(self.c.store.jobs()[0]["state"], "completed")
-        self.assertEqual(self.c.store.used(), 0)
-
-    def test_rejected_delivery_is_distinct_and_a_failed_model_is_never_delivered(self):
-        job, report = self.completed_review()
-        with patch.object(sl.reporting, "send_document", side_effect=sl.reporting.DeliveryError("rejected")) as post:
-            self.assertEqual(sl.deliver_review(self.c, job, report)["state"], "rejected")
-            self.assertEqual(sl.deliver_review(self.c, job, report)["state"], "rejected")
-        self.assertEqual(post.call_count, 1)
-        self.c.store.update(job["id"], "failed", result="model failed")
-        with patch.object(sl.reporting, "send_document") as post:
-            self.assertEqual(sl.deliver_review(self.c, job, report)["state"], "not_a_completed_review")
+        before = self.c.store.jobs()
+        with patch("reporting.send_document", side_effect=AssertionError("SL review must stay internal")) as post:
+            self.assertEqual(sl.deliver_review(self.c, job, report), {"state": "internal_only"})
+            self.assertEqual(sl.deliver_review(self.c, job, report), {"state": "internal_only"})
         post.assert_not_called()
+        self.assertEqual(self.c.store.jobs(), before)
+        self.assertEqual(self.c.store.used(), 0)
+        with self.c.store.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM events WHERE kind='stop_loss_review_delivery'").fetchone()[0], 0)
 
-    def test_crash_after_claim_is_an_uncertain_hold_not_a_second_post(self):
+    def test_restart_and_old_uncertain_receipt_do_not_reenable_review_delivery(self):
         job, report = self.completed_review()
         self.c.store.event("stop_loss_review_delivery", job["id"], '{"state":"sending"}')
-        with patch.object(sl.reporting, "send_document") as post:
-            self.assertEqual(sl.deliver_review(self.c, job, report)["state"], "uncertain")
+        self.c.store = w.Store(self.temp.name)
+        with patch("reporting.send_document", side_effect=AssertionError("no historical review replay")) as post:
+            self.assertEqual(sl.deliver_review(self.c, job, report)["state"], "internal_only")
         post.assert_not_called()
+        self.assertEqual(self.c.store.jobs()[0]["state"], "completed")
 
 
 if __name__ == "__main__":

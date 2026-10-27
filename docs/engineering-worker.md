@@ -99,11 +99,26 @@ software defect are separate findings. Absent original reasoning, session or
 complete-cost evidence stays unknown and does not delay the initial review.
 No loss authorizes retuning, new risk, amended stops or a strategy pause.
 
-The structured result is persisted as a completed review without a PR or
-separate verification session. Confirmed Telegram HTML delivery is recorded
-once; uncertain delivery is held rather than replaying inference. Newly
-available complete costs enrich an unstarted review or permit at most one
-cost follow-up per case. Unchanged evidence consumes no new model session.
+The structured result is persisted as a completed internal review without a
+PR, separate verification session or per-stop-loss Telegram message (owner,
+27October2026). Existing delivery receipts never trigger a resend. Scheduled
+engineering reports show only an aggregate internal-review count; individual
+SL summaries/tests stay internal. Trading and normal engineering reports keep
+their existing schedules.
+
+Each new review reuses at most three relevant prior assessments from the latest
+20 report events, capped at8000characters, from the existing SQLite store.
+Exact-case cost followups take priority, followed by the same account,
+strategy and broker symbol ID. Original account/case identities, source job/event
+references, checks and unknowns remain explicit. Model findings are evidence to
+recheck, not automatically proven trading rules. A new assessment states what
+changed or was confirmed/contradicted rather than repeating unchanged findings
+as new learning. No new store, inference call or strategy/risk change is added.
+Newly available complete costs enrich an unstarted review or permit at most
+one cost follow-up per case. Unchanged evidence consumes no new model session.
+The observer can continue after permits are exhausted; model reviews wait for
+the next SGT allowance. This is bounded evidence reuse, not continuous model
+weight training or demonstrated progress toward the trading goal.
 
 The implementation lives under `ops/engineering/`. Upload that directory as the
 new service's build root and set its service settings directly through Railway
