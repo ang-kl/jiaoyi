@@ -41,10 +41,12 @@ async fn prepared(pool: &PgPool) {
         .await
         .unwrap();
     let run = store::start_run(pool, ACCOUNT).await.unwrap();
+    // GBPUSD, not EURUSD. Migration 0018 drops EURUSD from the universe,
+    // and the recorder subscribes only to names still in it. Grok 4.7 · № 17,634.
     sqlx::query(
         "INSERT INTO universe_resolutions
             (load_run_id,account_id,name,asset_class,status,broker_symbol_id)
-         VALUES ($1,$2,'EURUSD','fx','resolved',1)",
+         VALUES ($1,$2,'GBPUSD','fx','resolved',1)",
     )
     .bind(run)
     .bind(ACCOUNT)
@@ -54,7 +56,7 @@ async fn prepared(pool: &PgPool) {
     sqlx::query(
         "INSERT INTO symbols
             (account_id,broker_symbol_id,name,asset_class,digits,pip_position,raw,read_at)
-         VALUES ($1,1,'EURUSD','fx',5,4,''::bytea,now())",
+         VALUES ($1,1,'GBPUSD','fx',5,4,''::bytea,now())",
     )
     .bind(ACCOUNT)
     .execute(pool)
