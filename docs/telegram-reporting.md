@@ -172,3 +172,35 @@ or delivery receipts. Protected runtime work is deferred to separate review;
 comparable financial movement and economic acceptance remain not verifiable.
 Owner-only pause/risk decisions, live limits, activation, sizing, stops/targets,
 broker ownership, the one order gate, existing exits and paused research remain.
+
+
+## Approved four-section account report (27 October 2026)
+
+The owner approved `daily-trading-report-proposal.md`. The new report separates
+whole-account accounting (all broker deals, including external/manual activity)
+from program-owned strategy attribution and the invariant latest-20 goal.
+Live/demo and currency totals remain separate; no guessed dollar labels or FX.
+Balance plus broker net unrealized P&L is explicitly derived equity, with
+unverified credit treatment and future closing commissions identified separately.
+
+The existing read-only history session captures account marks in a separately
+polled future; failures do not terminate history or alter execution. Only the
+latest mark and the first mark within 90 seconds after each NY17:00 are kept in
+`report_account_snapshots`; actual source times/delay are retained. This is a
+near-close observation, not an invented exact historical mark. Cash-flow reads
+cover the actual adjacent mark interval; missing baselines or unverified flows
+withhold returns. MTD/YTD need a complete valid linked return chain. Simple
+percentages are withheld when gross external flows occurred, even if net flows
+cancel. Existing records supply deal cash/closed positions and execution.
+
+Open/pending stop-price projections exclude unquoted future exit charges and
+gaps; they are distinct from complete-cost risk. Unknown costs/protection never
+become zero. Margin aggregation is numeric only when the broker's calculation
+mode and per-position precision support it. No new risk threshold is introduced.
+
+Four concise HTML sections replace raw exposure JSON and repeated empty execution
+rows. Supported benchmark gaps/deltas remain prominent, with no fabricated
+combined progress percentage. A delivered legacy layout can be edited in place
+once current marks exist, with a bounded attempt count and the same Telegram
+message/period. Confirmed revised HTML is retained only after the returned message
+ID matches. No duplicate daily document, new sender, paid feed or LLM call.

@@ -1058,6 +1058,69 @@ impl AccountSession<'_> {
         Ok((ticks, res.has_more))
     }
 
+    /// Read balance operations in the inclusive broker window. The protocol
+    /// limits this request to one week; no trading authority is involved.
+    pub async fn cash_flow_history(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<pb::ProtoOaDepositWithdraw>, ClientError> {
+        if from_ms < 0
+            || to_ms < from_ms
+            || to_ms - from_ms > 604_800_000
+            || to_ms > 2_147_483_646_000
+        {
+            return Err(ClientError::Broker {
+                code: "INVALID_CASH_FLOW_WINDOW".into(),
+                description: Some(
+                    "cash-flow windows must be ordered, nonnegative and at most seven days".into(),
+                ),
+                retry_after_secs: None,
+            });
+        }
+        let res = self
+            .historical(&pb::ProtoOaCashFlowHistoryListReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                from_timestamp: from_ms,
+                to_timestamp: to_ms,
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        let mut rows = res.deposit_withdraw;
+        if rows
+            .iter()
+            .any(|r| r.change_balance_timestamp < from_ms || r.change_balance_timestamp > to_ms)
+        {
+            return Err(ClientError::Broker {
+                code: "CASH_FLOW_OUTSIDE_WINDOW".into(),
+                description: Some(
+                    "broker cash-flow response includes an operation outside the requested window"
+                        .into(),
+                ),
+                retry_after_secs: None,
+            });
+        }
+        rows.sort_by_key(|r| (r.change_balance_timestamp, r.balance_history_id));
+        // Conflicting duplicate operations are not evidence of complete totals.
+        let mut seen = std::collections::HashMap::new();
+        for row in &rows {
+            if let Some(previous) = seen.insert(row.balance_history_id, row) {
+                if previous != row {
+                    return Err(ClientError::Broker {
+                        code: "CONFLICTING_CASH_FLOW".into(),
+                        description: Some(
+                            "broker returned conflicting revisions of a balance operation".into(),
+                        ),
+                        retry_after_secs: None,
+                    });
+                }
+            }
+        }
+        rows.dedup_by_key(|r| r.balance_history_id);
+        Ok(rows)
+    }
+
     /// Every deal of `[from_ms, to_ms]`. A window that reports `hasMore` is
     /// split in half until it does not.
     pub async fn deal_history(
@@ -1223,5 +1286,70 @@ mod tests {
         use tokio::io::AsyncReadExt;
         let n = b.read_to_end(&mut buf).await.unwrap();
         assert_eq!(n, 0, "bytes written: {buf:?}");
+    }
+
+    #[tokio::test]
+    async fn cash_flow_reads_refuse_wrong_accounts_outside_windows_and_conflicting_revisions() {
+        use crate::frame::{read_frame, write_frame};
+        use jiaoyi_core::allowlist::Allowlist;
+        let account = Allowlist::parse(Some("49236051"))
+            .unwrap()
+            .permit(49236051)
+            .unwrap();
+        let row = pb::ProtoOaDepositWithdraw {
+            balance_history_id: 1,
+            operation_type: 0,
+            change_balance_timestamp: 150,
+            delta: 100,
+            money_digits: Some(2),
+            ..Default::default()
+        };
+        let mut revised = row.clone();
+        revised.delta = 200;
+        let mut outside = row.clone();
+        outside.change_balance_timestamp = 201;
+        for (response_account, rows, expected) in [
+            (123, vec![row.clone()], "wrong account"),
+            (49236051, vec![outside], "CASH_FLOW_OUTSIDE_WINDOW"),
+            (49236051, vec![row, revised], "CONFLICTING_CASH_FLOW"),
+        ] {
+            let (client, mut server) = tokio::io::duplex(8192);
+            let conn = Connection::from_stream(client, Duration::from_secs(2));
+            let server_task = tokio::spawn(async move {
+                let request = read_frame(&mut server).await.unwrap();
+                assert_eq!(
+                    request.payload_type,
+                    Oa::ProtoOaCashFlowHistoryListReq as u32
+                );
+                write_frame(
+                    &mut server,
+                    &pb::ProtoMessage {
+                        payload_type: Oa::ProtoOaCashFlowHistoryListRes as u32,
+                        client_msg_id: request.client_msg_id,
+                        payload: Some(
+                            pb::ProtoOaCashFlowHistoryListRes {
+                                payload_type: None,
+                                ctid_trader_account_id: response_account,
+                                deposit_withdraw: rows,
+                            }
+                            .encode_to_vec(),
+                        ),
+                    },
+                )
+                .await
+                .unwrap();
+            });
+            let session = AccountSession {
+                conn: &conn,
+                account: account.clone(),
+            };
+            let error = session.cash_flow_history(100, 200).await.unwrap_err();
+            if expected == "wrong account" {
+                assert!(matches!(error, ClientError::WrongAccount { .. }));
+            } else {
+                assert!(error.to_string().contains(expected), "{error}");
+            }
+            server_task.await.unwrap();
+        }
     }
 }
