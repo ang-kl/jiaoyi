@@ -59,6 +59,12 @@ async fn main() -> anyhow::Result<()> {
         port = cfg.http_port,
         "serving /health, /operations/reports, /phase1/report and research views"
     );
+    tracing::info!(
+        prereg_file = jiaoyi::strategy3::PREREG_FILE,
+        prereg_hash = %jiaoyi::strategy3::prereg_hash(),
+        required_rr = jiaoyi_core::strategy3::targets::REQUIRED_RR,
+        "strategy 3 registration in this image"
+    );
 
     let (trigger, stop) = shutdown::channel();
     let trigger = Arc::new(trigger);
