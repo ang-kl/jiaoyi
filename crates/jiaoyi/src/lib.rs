@@ -18,6 +18,7 @@ pub mod research;
 pub mod service;
 pub mod shutdown;
 pub mod status_page;
+pub mod stock_preparation;
 pub mod stop_loss_review;
 pub mod strategy3;
 pub mod supervisor;
