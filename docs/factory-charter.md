@@ -68,7 +68,11 @@ invariant. Uncertainty limits the affected claim or engineering acceptance;
 it does not create a strategy-pause rule or block unrelated verified work.
 In particular, a report includes incomplete accounts with explicit unknowns
 rather than waiting for every account or optional metric to become complete.
-The 18-session daily allowance is a ceiling, never a consumption target. Do not
+The configured daily session allowance is a ceiling, never a consumption target.
+Owner update, 28-10-2026 (chat №17,631 §1; №17,632 §1): the ChatGPT
+engineering ceiling is **36 sessions per SGT calendar day**, superseding 18
+and the immediately corrected 35. The running service confirmed36 at07:48SGT.
+This does not increase a separate provider budget or authorize a paid fallback. Do not
 invent fixes to spend it or rebuild an unreleased proposal repeatedly. Preserve
 proposal/test/release evidence and resolve its handoff blocker first. A normal
 registered loss is not automatically a software defect. Adopt bot-trade lessons

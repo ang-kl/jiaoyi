@@ -80,3 +80,38 @@
 № 17,617 · 28-10-2026, 07:45 SGT · by Grok 4.7
 §1 Owner: sure of PR #74, or cut the window from 20 to 10.
 §2 PR #74 is a log. The 20 is the charter, not that PR. Do not cut it. A coin-flip rule passes 15/20 about 2.1% of the time, and 8/10 about 5.5%. Ten trades arrive sooner and pass by luck more often. I-7 stands until the owner orders the change.
+
+№ 17,618 · 28-10-2026, 07:47 SGT · by Grok 4.7
+§1 Owner: fix outstanding proposals. PR #70 merged. It was green. A permit is still only for block_a_send or unblock_a_close.
+§2 PR #62 conflicted and the check failed because the unmatched-P&L flag was not in the expected report. Rebased onto main. The flag is now expected. CI is running. Not merged until it passes.
+
+№ 17,633 · 28-10-2026, 07:50 SGT · by Grok 4.7
+§1 Owner: Codex is past № 17,632. The committed CODEX_Log.txt on main stops at № 17,624. This entry skips to № 17,633 so the two logs do not reuse a number.
+§2 Live health at 07:51 SGT: no open positions on the four accounts. Current sessions are AUS200, BTCUSD and ETHUSD, all deadline_missed. JPN225 is prepared for 08:00 SGT and is not yet a mark. No named halt. worth_a_permit refused affirm, pretrade and sentiment. No Grok API call. Used permits: 0.
+
+№ 17,634 · 28-10-2026, 07:53 SGT · by Grok 4.7
+§1 PR #62 check failed. The provenance fixture still resolved EURUSD. Migration 0018 removed that name, so the recorder found no symbol.
+§2 The fixture now resolves GBPUSD, which the universe still contains. Pushed. Not merged until the check passes.
+
+№ 17,635 · 28-10-2026, 07:57 SGT · by Grok 4.7
+§1 Owner: what does refusing the API miss; assess a missed deadline; 15 or 30 minute sentiment; Telegram at 11:00 SGT and at $10 steps including $30, $50, $100.
+§2 Refusing misses a halt headline on a send that already passed the cost gate. None of the current setups are that send. AUS200, BTCUSD and ETHUSD missed the deadline with all four inputs empty. That assessment is the receipt. It spends nothing.
+§3 Neither 15 nor 30. PR #82 meters Grok 4.7 at the 27 Oct list ($2 / $0.50 / $6 per 1M) and alerts at 11:00 SGT and every $10. Not an invoice. Not merged until the check passes.
+
+№ 17,636 · 28-10-2026, 07:59 SGT · by Grok 4.7
+§1 Owner: which Grok API model is sufficient and removes noise.
+§2 grok-4-1-fast-non-reasoning. After the 15 May 2026 retirement that slug is served as grok-4.3 with reasoning effort none. Structured JSON only: halt true or false, and the name or null. grok-4.7 writes, and the writing is the noise and the bill.
+
+№ 17,637 · 28-10-2026, 08:04 SGT · by Grok 4.7
+§1 Owner: fix it. An empty JIAOYI_GROK_MODEL now selects grok-4-1-fast-non-reasoning. The typo JIAOYU_GROK_MODEL is not read.
+§2 The halt request sets reasoning effort to none and accepts only halt and name. The meter prices the model the response returns. An unknown model is not given the 4.7 rate. Pushed on PR #82.
+
+№ 17,638 · 28-10-2026, 08:27 SGT · by Grok 4.7
+§1 Owner: JIAOYI_GROK_MODEL is grok-4.3. The typo JIAOYU_GROK_MODEL is removed.
+§2 The halt request sends grok-4.3 with reasoning effort none. The repair agent still uses ENGINEERING_MODEL. Official list is $1.25 input and $2.50 output per million. PR #82 was green, then this split was pushed, so the check runs again. Not merged yet.
+
+№ 17,639 · 28-10-2026, 08:33 SGT · by Grok 4.7
+§1 Owner: merge when green. PR #82 check, docker and engineering all passed. Merged. grok-4.3 with reasoning effort none is on main. The repair agent still uses ENGINEERING_MODEL.
+
+№ 17,640 · 28-10-2026, 08:36 SGT · by Grok 4.7
+§1 Owner: should #82 be merged. It already is. Merged at 08:34 SGT, commit acf4f16. Do not merge it again.
