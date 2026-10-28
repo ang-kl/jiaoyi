@@ -101,3 +101,7 @@
 № 17,636 · 28-10-2026, 07:59 SGT · by Grok 4.7
 §1 Owner: which Grok API model is sufficient and removes noise.
 §2 grok-4-1-fast-non-reasoning. After the 15 May 2026 retirement that slug is served as grok-4.3 with reasoning effort none. Structured JSON only: halt true or false, and the name or null. grok-4.7 writes, and the writing is the noise and the bill.
+
+№ 17,637 · 28-10-2026, 08:04 SGT · by Grok 4.7
+§1 Owner: fix it. An empty JIAOYI_GROK_MODEL now selects grok-4-1-fast-non-reasoning. The typo JIAOYU_GROK_MODEL is not read.
+§2 The halt request sets reasoning effort to none and accepts only halt and name. The meter prices the model the response returns. An unknown model is not given the 4.7 rate. Pushed on PR #82.
