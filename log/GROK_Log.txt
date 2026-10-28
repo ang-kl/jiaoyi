@@ -193,3 +193,6 @@
 
 № 17,690 · 29-10-2026, 03:51 SGT · by Grok 4.7
 §1 No further code change. The statements classify as fundamental on ETH, BTC, JPN225, the oils, NatGas and AUDUSD: both sides lost, so no reverse. 52 repeats were before v6, so no repair PR. SpotCrude buys on 46130058 and 49236051 still have a stop and a take-profit. The goal window is unchanged.
+
+№ 17,694 · 29-10-2026, 04:17 SGT · by Grok 4.7
+§1 Owner stopped the Grok permit for the jiaoyi-engineering service to fix bugs. Resume only when the owner says so. This is not a trading pause and not a pause of the running rule. No Grok permit is spent on a repair. № 17,693 was the download of the plan file and was not logged.
