@@ -223,6 +223,39 @@ pub fn chandelier_stop(side: Side, best: f64, r: f64) -> Option<f64> {
     (stop.is_finite() && stop > 0.0).then_some(stop)
 }
 
+/// A finished trade in original R. Profit is positive. A stop from the
+/// entry is -1. `banks_a_win` is true only when the fill is past the entry.
+/// The chandelier hangs one R behind the best price, so a favourable move
+/// that never exceeds one R still closes at a loss. The 28 Oct JPN225
+/// shorts did that: entry 64061.1, R 327.5, stop-out 64155.3, about -0.29R.
+/// That cuts a loss. It does not add a win to the 15 of 20.
+/// Grok 4.7 · № 17,659. This does not move a stop.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CloseResult {
+    pub result_r: f64,
+    pub banks_a_win: bool,
+}
+
+pub fn close_result(side: Side, entry: f64, r: f64, fill: f64) -> Option<CloseResult> {
+    if !entry.is_finite()
+        || entry <= 0.0
+        || !r.is_finite()
+        || r <= 0.0
+        || !fill.is_finite()
+        || fill <= 0.0
+    {
+        return None;
+    }
+    let result_r = match side {
+        Side::Buy => (fill - entry) / r,
+        Side::Sell => (entry - fill) / r,
+    };
+    result_r.is_finite().then_some(CloseResult {
+        result_r,
+        banks_a_win: result_r > 0.0,
+    })
+}
+
 /// Maximum adverse and maximum favourable excursion, in price units from the
 /// entry. These are measurements. They do not move a stop and they do not
 /// close a position.
@@ -2631,9 +2664,19 @@ impl<'a, 'c> Trader<'a, 'c> {
             "s3-broker:{account_id}:{}:{}",
             deal.position_id, deal.deal_id
         );
-        let detail = json!({"strategy": STRATEGY, "reason": reason, "deal_id": deal.deal_id,
+        let scored = (|| {
+            let o = own?;
+            let entry = o.entry.or_else(|| o.plan_basis.map(|b| b.entry))?;
+            let r = o.plan_basis.map(|b| b.r)?;
+            close_result(side, entry, r, fill?)
+        })();
+        let mut detail = json!({"strategy": STRATEGY, "reason": reason, "deal_id": deal.deal_id,
             "order_id": deal.order_id, "level": decision_price,
             "open_entry_key": own.and_then(|o| o.entry_key.clone())});
+        if let Some(s) = scored {
+            detail["result_r"] = json!(s.result_r);
+            detail["banks_a_win"] = json!(s.banks_a_win);
+        }
         let new = s3s::record_broker_exit(
             self.pool,
             &s3s::OrderRow {
@@ -2674,11 +2717,18 @@ impl<'a, 'c> Trader<'a, 'c> {
                     _ => None,
                 },
                 volume: Some(deal.volume),
-                detail,
+                detail: detail.clone(),
             },
         )
         .await?;
         if new {
+            let why = match scored {
+                Some(s) => format!("{reason} {:.2}R banks_a_win={}", s.result_r, s.banks_a_win),
+                None => reason.to_string(),
+            };
+            let mut d = Decisions::new(self.pool, account_id);
+            d.hash = self.hash.clone();
+            d.note(Some(&name), "close", &why, detail.clone()).await;
             tracing::info!(
                 account = account_id,
                 position = deal.position_id,
@@ -3327,6 +3377,16 @@ mod tests {
         assert_eq!((mae, mfe), (4.0, 7.0));
         // The Chandelier stop is unchanged by these numbers.
         assert_eq!(chandelier_stop(Side::Buy, 110.0, 5.0), Some(105.0));
+
+        // The 28 Oct JPN225 stop-out. R is the original stop distance.
+        // Fill 64155.3 is still a loss, so it does not bank a win.
+        let stopped = close_result(Side::Sell, 64061.1, 327.5, 64155.3).unwrap();
+        assert!((stopped.result_r - (64061.1 - 64155.3) / 327.5).abs() < 1e-12);
+        assert!(!stopped.banks_a_win);
+        assert!(stopped.result_r > -1.0 && stopped.result_r < 0.0);
+        let banked = close_result(Side::Sell, 64061.1, 327.5, 63700.0).unwrap();
+        assert!(banked.banks_a_win);
+        assert!(close_result(Side::Buy, 100.0, 0.0, 99.0).is_none());
 
         // Reverse flips the side and is not the primary signal.
         assert_eq!(reverse_side(Dir::Buy), Dir::Sell);
