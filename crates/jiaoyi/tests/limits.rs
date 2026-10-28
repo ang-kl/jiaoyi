@@ -149,6 +149,7 @@ async fn position(
         c.close_gross_profit = Some(net + 40);
         c.close_swap = Some(0);
         c.close_commission = Some(-40);
+        c.close_pnl_conversion_fee = Some(0);
         c.close_money_digits = Some(2);
         deals.push(c);
     }
@@ -270,6 +271,52 @@ async fn net_r_is_the_brokers_net_over_the_gates_risk_scaled_by_the_fill(pool: P
     assert_eq!(b.trades, 1);
     assert!(near(b.max_drawdown_r, 1.0));
     assert!(b.profit_factor.is_some_and(|pf| near(pf, 0.0)));
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn health_keeps_missing_closing_costs_unmeasured(pool: PgPool) {
+    position(
+        &pool,
+        A,
+        "s3:a:1",
+        101,
+        10,
+        10,
+        Some(6.0),
+        Some(1_200),
+        t0(),
+    )
+    .await;
+    for (column, original) in [
+        ("close_swap", 0_i64),
+        ("close_commission", -40),
+        ("close_pnl_conversion_fee", 0),
+    ] {
+        sqlx::query(&format!(
+            "UPDATE deals SET {column}=NULL WHERE account_id=$1 AND deal_id=1011"
+        ))
+        .bind(A)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let h = limits::health(&pool, A, &limits::S3).await.unwrap();
+        assert_eq!(h["closed_trades"], 0, "{column}");
+        assert_eq!(h["unmeasured"], 1, "{column}");
+        assert!(h["profit_factor"].is_null(), "{column}");
+        assert!(pause_writes(&pool).await.is_empty());
+        sqlx::query(&format!(
+            "UPDATE deals SET {column}=$2 WHERE account_id=$1 AND deal_id=1011"
+        ))
+        .bind(A)
+        .bind(original)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let h = limits::health(&pool, A, &limits::S3).await.unwrap();
+        assert_eq!(h["closed_trades"], 1, "{column}");
+        assert_eq!(h["unmeasured"], 0, "{column}");
+        assert_eq!(h["net_r"], 2.0, "{column}");
+    }
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]

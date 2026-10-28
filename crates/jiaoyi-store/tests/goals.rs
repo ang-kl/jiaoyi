@@ -242,6 +242,42 @@ async fn terminal_exit_waits_for_history_while_partial_exit_stays_open(pool: PgP
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
+async fn performance_does_not_price_missing_closing_costs_as_zero(pool: PgPool) {
+    position(&pool, A, "s3", 1, Some(2.0), 100).await;
+    for (column, original) in [
+        ("close_swap", 0_i64),
+        ("close_commission", -40),
+        ("close_pnl_conversion_fee", 0),
+    ] {
+        sqlx::query(&format!(
+            "UPDATE deals SET {column}=NULL WHERE account_id=$1 AND deal_id=11"
+        ))
+        .bind(A)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let (closed, unmeasured) = store::trading::closed_trades(&pool, A, "s3:")
+            .await
+            .unwrap();
+        assert!(closed.is_empty(), "{column}: unknown costs are not net R");
+        assert_eq!(unmeasured, 1, "{column}");
+        let p = store::trading::performance(&pool, A, "s3").await.unwrap();
+        assert_eq!((p.trades, p.unmeasured), (0, 1), "{column}");
+        sqlx::query(&format!(
+            "UPDATE deals SET {column}=$2 WHERE account_id=$1 AND deal_id=11"
+        ))
+        .bind(A)
+        .bind(original)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let p = store::trading::performance(&pool, A, "s3").await.unwrap();
+        assert_eq!((p.trades, p.unmeasured), (1, 0), "{column}");
+        assert!((p.net_r - 2.0).abs() < 1e-12, "{column}");
+    }
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
 async fn required_and_optional_missing_cost_evidence_cannot_pass(pool: PgPool) {
     passing(&pool, A, "s3").await;
     fetch(&pool, A, 0, true, false).await;
