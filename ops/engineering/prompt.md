@@ -56,3 +56,12 @@ Set acceptance_passed=false for ordinary engineering tasks. Only the initial
 read-only acceptance task can set it true, after every required check and the
 delegated review actually succeeds. Missing evidence or a failed sub-agent
 means acceptance_passed=false and owner_blocked for that acceptance task.
+
+The structured result always includes incident and incidents. Set both to null
+for ordinary work. For one incident use incident and set incidents=null. For a
+bounded incident batch set incident=null and return incidents with exactly one
+source-linked disposition for every supplied incident id, at most eight. Keep
+each account's evidence_ids separate; never infer one account's protection or
+loss cause from another. Missing or stale evidence remains explicit and cannot
+close an incident. Batching shares one read-only model session, not a trading
+decision or authority. A completed batch is not financial goal acceptance.
