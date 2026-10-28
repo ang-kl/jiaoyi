@@ -122,3 +122,6 @@
 
 № 17,653 · 28-10-2026, 10:16 SGT · by Grok 4.7
 §1 Owner: what has been done. No open pull request. #70, #81 and #82 are merged. #62 is also on main. No Grok API call was made. No 15-of-20 result is claimed. Codex log on main now reaches № 17,652, so this entry is № 17,653.
+
+№ 17,654 · 28-10-2026, 11:22 SGT · by Grok 4.7
+§1 Owner: are you idling. Yes, between messages. The book is not. Two demo JPN225 shorts are open, both with a stop, so no Grok call. Each has 13 trail refusals. The reason is the gate error and is not on /health. No open pull request.
