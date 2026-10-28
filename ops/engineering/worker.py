@@ -1148,8 +1148,11 @@ class Coordinator:
                        "Do not claim a defect from a normal loss or absent optional evidence.")
         if incident_reviewing:
             prompt += ("\n\nREAD-ONLY ABNORMALITY INCIDENT ANALYSIS. Do not modify files or manage trades. "
-                       "Return no_change with acceptance_passed=false and a structured incident object for the "
-                       "task's exact incident id. Choose disposition proven_defect, normal_loss, research, "
+                       "Return no_change with acceptance_passed=false. For a single review return a structured "
+                       "incident object for the task's exact id and incidents=null. For a bounded batch return "
+                       "incident=null and incidents=[one disposition per exact supplied id], with every id exactly "
+                       "once and each member's own evidence_ids. Never transfer evidence or conclusions between "
+                       "accounts. Choose disposition proven_defect, normal_loss, research, "
                        "missing_evidence or owner_policy; cite the supplied evidence_ids. A proven_defect must "
                        "include repair_proposal with a concrete summary, allowed source paths and acceptance_checks. "
                        "Never propose risk/SL/TP/sizing/activation changes as a software repair. Other dispositions "
@@ -1344,7 +1347,8 @@ class Coordinator:
         if record:
             self.store.event("model_report", job["id"], saved)
         applied = self.incidents.apply_review(job, report)
-        structured = isinstance(report.get("incident"), dict) or isinstance(report.get("repair_proposal"), dict)
+        structured = (isinstance(report.get("incident"), dict) or isinstance(report.get("incidents"), list)
+                      or isinstance(report.get("repair_proposal"), dict))
         if (job["task"].startswith(incidents.PREFIX) or structured) and not applied.get("applied"):
             pending = {**report, "outcome": "verification_pending",
                        "summary": "Incident analysis is unresolved: " + str(applied.get("reason", "invalid disposition"))}
@@ -1483,6 +1487,9 @@ class Coordinator:
                             self.shutdown.wait(5)
                             continue
                         try:
+                            # Fold only unattempted queued incident reviews into bounded contexts.
+                            # Each account keeps its own evidence, report and disposition.
+                            self.incidents.compact_pending_reviews()
                             pending = self.store.jobs(("ci_wait", "deployment_wait"))
                             urgent = any(j["task"].startswith((stop_loss_reviews.PREFIX, incidents.PREFIX)) for j in self.store.jobs(("queued",))) and self.store.used() < self.config.limit
                             if pending and not urgent:
