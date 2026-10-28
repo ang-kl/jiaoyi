@@ -145,3 +145,6 @@
 
 № 17,660 · 28-10-2026, 15:05 SGT · by Grok 4.7
 §1 PR #99 check, docker and engineering passed. Merged. The next stop-out records result_r and banks_a_win. The JPN225 close already stored is not rewritten.
+
+№ 17,661 · 28-10-2026, 15:37 SGT · by Grok 4.7
+§1 The JPN225 stop is measured. Last close 05:24 UTC. Demo net R is about -30 and -36. Drawdown limit is 10R and profit factor is below 0.8, so owner_decision_needed is true. Pause is still false, because only the owner can pause. The next step is that decision, not a new trail.
