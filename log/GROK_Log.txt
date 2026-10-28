@@ -184,3 +184,6 @@
 
 № 17,687 · 29-10-2026, 03:33 SGT · by Grok 4.7
 §1 Correction. v6 is already the running hash on all four accounts. Episode counts and the New York cutoff already exist. Kelly must not be pointed at older hashes; v6 says those closes are not an input. Engineering watches the book and is forbidden to tune it or to pause it. A standing loss does not send a second Telegram.
+
+№ 17,688 · 29-10-2026, 03:38 SGT · by Grok 4.7
+§1 Not a pause. PR #117. A copied one-sided loss is a trend. Both sides losing is the rule, so a reverse is refused. Close-before-stop and sentiment are not sent. A PR is allowed only for a repeat after v6 is already running. SpotCrude stays open. The stop is still its exit.
