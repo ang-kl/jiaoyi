@@ -650,3 +650,12 @@ openingR, saved trail arithmetic, the actual intent and a uniquely correlated ra
 ORDER_REPLACED stop/TP receipt. It exposes no raw event/account cash and sends no
 broker frame. Missing/mismatched evidence stays unknown/refused; a passed receipt
 is not a current-protection certificate, price-path maximum or profitability test.
+
+
+### Owner-requested 29 October 09:00 SGT validation
+
+Chat №17,743–17,747 §§1–2,29-10-2026 SGT, by <Codex (GPT-6), effort not exposed>. The optional one-off market validator runs on the existing Railway engineering service, independently of model quota and the mutation window. Set `ENGINEERING_VALIDATION_REPORT_AT=2026-10-29T09:00:00+08:00` and `ENGINEERING_VALIDATION_CHAT_REFERENCES` to the actual owner/chat references. The existing Telegram owner destination receives one private HTML report. The recurring engineering and New York-close trading schedules retain their existing delivery records.
+
+The validator samples existing read-only health/goal/preparation/trailing/SL-review views once a minute and keeps only baseline/latest, bounded event identities/counters and applicable preparation receipts. It uses `ENGINEERING_VALIDATION_DATABASE_URL` privately for fixed PostgreSQL read-only transactions against the existing generated account-report and execution ledgers. Railway may reference `${{Postgres.DATABASE_URL}}`; this value is excluded from every model process. No new broker connection, trading control, schema or paid model route is added.
+
+The report separates verified checks, failures, unknown evidence and behavior not exercised by the market. It covers each allowed account's known balance/float, original setup and entry receipts, intended versus recorded SL/TP, explicit-cost closing evidence and any proven close/reverse linkage. It does not infer a reverse from opposite trades or a loss, accept stale/partial valuations as zero, count old acknowledgements as new tests, reset the latest20 window or claim predictive improvement from software checks. Preparing/reporting after the07:30SGT engineering cutoff remains read-only. A persisted sending/delivered/uncertain receipt prevents blind replay after restart or lost acknowledgement; public status exposes schedule/coverage metadata only.

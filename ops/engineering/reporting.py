@@ -299,6 +299,8 @@ class Reporter:
         with self.store.connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS engineering_report_delivery (id INTEGER PRIMARY KEY CHECK(id=1), next_due REAL NOT NULL, state TEXT NOT NULL, path TEXT, message_id INTEGER, last_error TEXT, retry_at REAL)")
             db.execute("INSERT OR IGNORE INTO engineering_report_delivery(id,next_due,state) VALUES(1,?,'waiting')", (time.time() + self.interval,))
+        from market_validation import MarketValidation
+        self.market_validation = MarketValidation(coordinator)
 
     def publish_incident(self, incident):
         """Create a factual HTML report before optional receipt-backed delivery.
@@ -444,6 +446,7 @@ class Reporter:
             row = dict(db.execute("SELECT next_due,state,message_id,last_error FROM engineering_report_delivery WHERE id=1").fetchone())
         return {"configured": bool(self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")),
                 "interval_seconds": self.interval, "delivery": row,
+                "market_validation": self.market_validation.status(),
                 "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
     def tick(self):
@@ -485,6 +488,7 @@ class Reporter:
         # Transport may wait on Telegram; factual incident creation runs in the
         # independent observer and must never inherit this network latency.
         threading.Thread(target=self.incident_delivery_loop, daemon=True).start()
+        threading.Thread(target=self.market_validation.run, daemon=True).start()
         # Private read-only diagnostics explain retained failed proposals without
         # paying for another model attempt or exposing a public detail endpoint.
         for job in reversed(self.store.jobs(("failed",))[-10:]):
