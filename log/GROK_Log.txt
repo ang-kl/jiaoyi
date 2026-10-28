@@ -138,3 +138,7 @@
 
 № 17,658 · 28-10-2026, 12:20 SGT · by Grok 4.7
 §1 Two open trades, both demo JPN225 shorts. Live and the other demo are flat. Latest trail receipt on each is stop 64329.8, ORDER_REPLACED. Health still prints the opening stop until the next reconcile.
+
+№ 17,659 · 28-10-2026, 14:53 SGT · by Grok 4.7
+§1 Both demo JPN225 shorts are flat. Broker exit at 05:24 UTC, stop_loss, fill 64155.3, after the trail replaced the stop to 64155. Entry about 64061, original R about 327.5, result about -0.29R. The stop never crossed the entry, so it does not bank a win.
+§2 PR #99 records result_r and banks_a_win on the next close. This close is not rewritten. The trail distance is unchanged.
