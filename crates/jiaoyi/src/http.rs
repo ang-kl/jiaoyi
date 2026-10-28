@@ -44,6 +44,7 @@ pub fn router(state: AppState) -> Router {
         .route("/operations/reports", get(operations_reports))
         .route("/operations/stock-preparation", get(stock_preparation))
         .route("/operations/stop-loss-reviews", get(stop_loss_reviews))
+        .route("/operations/trailing-receipts", get(trailing_receipts))
         .route("/operations", get(operations_page))
         .with_state(state)
 }
@@ -107,6 +108,18 @@ async fn stop_loss_reviews(State(s): State<AppState>) -> Response {
     match crate::stop_loss_review::evidence(&s.pool, &accounts).await {
         Ok(evidence) => Json(evidence).into_response(),
         // Public failures must not expose database statements or stored facts.
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"status":"unavailable"})),
+        )
+            .into_response(),
+    }
+}
+
+async fn trailing_receipts(State(s): State<AppState>) -> Response {
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    match crate::trail_receipts::report(&s.pool, &accounts).await {
+        Ok(report) => Json(report).into_response(),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({"status":"unavailable"})),

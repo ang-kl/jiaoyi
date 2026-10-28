@@ -117,7 +117,8 @@ class StopLossWorkerTests(unittest.TestCase):
              patch.object(self.c, "handoff_blockers", side_effect=AssertionError("urgent review cannot wait for handoff diagnostics")) as scan, \
              patch.object(self.c, "release", side_effect=AssertionError("urgent review cannot wait for CI polling")) as release, \
              patch.object(self.c, "run_job", side_effect=reviewed) as model:
-            self.c.serve()
+            with patch.object(self.c, "incident_loop"):
+                self.c.serve()
         scan.assert_not_called()
         release.assert_not_called()
         self.assertEqual(model.call_count, 1)

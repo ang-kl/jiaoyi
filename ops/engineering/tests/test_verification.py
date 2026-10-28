@@ -52,6 +52,20 @@ class VerificationTests(unittest.TestCase):
                 "tests": "Existing focused isolated-DB regression and current deployed snapshot; financial acceptance unproved.",
                 "owner_decisions": "none", "acceptance_passed": accepted}
 
+    def test_closed_work_window_allows_receipt_inspection_but_forbids_new_test_builds(self):
+        repo, job = self.fixture()
+        self.config.work_until = w.dt.datetime(2000, 1, 1, tzinfo=w.dt.timezone.utc)
+        def inspect(args, options):
+            prompt = args[-1]
+            self.assertIn("OWNER WORK WINDOW CLOSED", prompt)
+            self.assertIn("Do not run tests, compilers, cargo, build tools", prompt)
+            self.assertIn("override any earlier permission", prompt)
+            self.assertIn("Inspect cached", prompt)
+            self.assertFalse(options["stop"](), "closed-window read-only inspection remains allowed")
+        self.execute(repo, job, self.report(outcome="verification_pending"), inspect)
+        self.assertEqual(self.c.store.jobs()[0]["state"], "verification_pending")
+        self.assertEqual(self.c.store.used(), 1)
+
     def test_controlled_negative_and_live_positive_can_complete_single_agent_verification(self):
         repo, job = self.fixture()
         baseline = self.git("rev-parse", "HEAD", cwd=repo)
@@ -60,6 +74,11 @@ class VerificationTests(unittest.TestCase):
             self.assertEqual(args[args.index("multi_agent") - 1], "--disable")
             self.assertIn("agents.max_threads=1", args)
             self.assertEqual(options["timeout"], 300)
+            self.assertFalse(options["stop"]())
+            prior = self.config.work_until
+            self.config.work_until = w.dt.datetime(2000, 1, 1, tzinfo=w.dt.timezone.utc)
+            self.assertTrue(options["stop"](), "a pre-cutoff verifier must stop when the window closes")
+            self.config.work_until = prior
             self.assertEqual(options["env"]["DATABASE_URL"], "postgres://engineering@127.0.0.1:15432/postgres")
             prompt = args[-1]
             self.assertIn("existing focused regression tests", prompt)

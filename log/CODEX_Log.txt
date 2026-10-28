@@ -263,3 +263,72 @@ Clippy/fmt/whitespace passed. Final-head CI and release read-back remain next.
 [§LOG.29] 28-10-2026 22:17:49 SGT, №17,681 §1: CI caught stale seed-count unit assertion
 (1 instead of2). Merge stopped. Repair pins both reviewed entries and
 preserves duplicate-ID rejection. Await exact final-head CI; not released.
+
+ENTRY 29-10-2026 03:30:09 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,691 §1; №17,692 §§1–2; owner29October four-statement plan-first request.
+[§LOG.30] Planning only: docs/loss-review-plan-2026-10-29.md, base122f41d.
+Read changed Grok log through№17,684; this chat already exceeds№17,690.
+Freeze4 input hashes; reconcile deal-vs-position/ownership and export overlap;
+audit historical rules by actual hash/deployment; compare shared loss episodes
+and feasible prevention, independent expert-source challenge, monitoring and
+blocker classification. All supplied closing rows predate new250%/v6 activation.
+Later open/pending risk is separate. No findings/PASS or financial improvement
+is claimed; no builds, code/policy changes, PR, deployment or new paid API.
+This local plan is not yet published to main; use it as the planning handover.
+Prior PR107 release receipt remains in its merged PR body and chat№17,690.
+
+[§LOG.31] 29-10-2026 03:31:52 SGT: read changed Grok log through№17,686 at main68a0193
+(logs-only since code122f41d); preserved it. Source №17,693 §§1–2 plus
+owner plan-first request. Plan includes independent verification of the other
+model's new claims; no cross-hash Kelly or instrument removal is adopted.
+
+ENTRY 29-10-2026 03:38:28 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,695 §1; №17,696 §§1–2; №17,697 §§1–2.
+[§LOG.32] Read-only worker-loop diagnosis: actual03:37SGTstatus idle6/36used,
+30remaining, queue0, live10secSLpoll; not quota/freeze. Source-matched
+worker records read-only SLreview and returns without automatic repair
+promotion; routine~30min fingerprint omits direct instrument-pattern and
+amendment triggers. Narrow memory/evidence propagation adds limitations.
+No new task, build/test, code/control change, PR or deployment. Specific
+job109reasoning not recovered from publicstatus/empty filteredlogs.
+See journal §ENG-20261029-WORKERAUDIT.1–4. No financial improvement claimed.
+
+ENTRY 29-10-2026 03:42:39 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,699 §1; №17,700 §§1–2; owner abnormality-response instruction.
+[§LOG.33] Required next behavior recorded in engineering contract/plan§P8:
+detect→incident/factualreport→boundedanalysis→disposition/linkedrepair→
+verifiedclosure. Target60sec factualreport/5min firstanalysis from evidence
+receipt; supported criticalsourcechecks10sec. Model/quota must not block the
+initial report; delays/escalation explicit. Targets not implemented/verified.
+Read changed Grok log through№17,687 at f175f3a and preserved it. No build,
+program/control change, executabletask, PR/deploy or notification. Hold stays.
+
+ENTRY 29-10-2026 04:19:21 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,702 §1; №17,703 §§1–2; №17,704 §§1–2.
+[§LOG.34] ReadGrokfindings/amendedplan§P9 and sanitizedcritique. Main3f02d19,
+Grokthrough№17,690 preserved. PR117merged/CIgreen butengworkerold48a84a90..
+(PR62image), notmain025b80d0... Tradingv6verified4accounts. Reproducedcounts,
+correctedminutevs10minbins,178oldrows/59new,4purehelpernegativeprobes.
+Noownership/cause inference orrepeat-onlypolicyadoption. Twoindependentreviewers
+acceptedplanscope;8questionsremain. No programedit/build/newunitsuite/PR/deploy/
+controlmutation/taskdispatch. No-buildhold andgoalsunchanged; release/report/
+actionacceptancepending. Seejournal §ENG-20261029-CRITIQUE.1–4.
+
+ENTRY 29-10-2026 04:47:00 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,706 §§1–2; №17,707 §§1–2; №17,708–17,711.
+[§LOG.35] Currentownerpermission:Codexbuild/fix/PR/mergegreenuntil29Oct07:30SGT
+(beforeTokyo08:00SGT). PriorCodexholdlifted;Grokrepairpermitnotresumed.
+Incident/report/actionimplementationand3acceptancejourneyslanded; fullPython113
+green atlastcheck. Reviewfound/fixedmeaningfuldedupe/lifecycle/transport/cutoff
+faults. ExactCI/merge/actualbundleactivation+oldinstanceretirementnext.
+Job92proofstillunderboundedreadbackinvestigation;no falseclosure/forcedtrade.
+NofinancialPASSclaimed. ReadotherAIchangesbeforefinalmerge.
+
+[§LOG.36] 29-10-2026 04:52:43 SGT, №17,712–17,713: finalPython113green. Addedbounded
+read-onlytrailreceiptproofwith3SQLxchecks/noorderlogicchange; productionproof
+notassumed. ExactCI→merge→bundleactivation→oldinstanceretirement next.
