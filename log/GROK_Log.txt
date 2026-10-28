@@ -129,3 +129,6 @@
 № 17,655 · 28-10-2026, 11:31 SGT · by Grok 4.7
 §1 The two JPN225 shorts recorded 13 amend intents and no outcomes. strategy3_orders rejects kind trail, so the row fails after the intent and the frame is never sent. The broker stop is unchanged.
 §2 PR #92 adds trail to the order and fill checks. It does not change R, size or the registration. Not merged until the check passes.
+
+№ 17,656 · 28-10-2026, 11:45 SGT · by Grok 4.7
+§1 PR #92 check, docker and engineering passed. Merged. A trail row can be stored, so the amend frame is sent. The two open shorts keep their current stops until the next favourable quote. No 15-of-20 claim.
