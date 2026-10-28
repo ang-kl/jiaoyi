@@ -6,6 +6,18 @@ use serde_json::Value;
 /// A complete saved session can establish a narrow entry-window check. It
 /// does not reconstruct historical bands, first triggers or predictive edge.
 pub(super) fn check(setup: &Value) -> Option<bool> {
+    let (session, decided_at) = snapshot(setup)?;
+    Some(band::entry_window(&session, decided_at).is_ok())
+}
+
+/// Separate from window eligibility: current S3 entry also requires a mark.
+/// Call only after identifying the applicable registered mark rule.
+pub(super) fn decision_mark_check(setup: &Value) -> Option<bool> {
+    let (session, decided_at) = snapshot(setup)?;
+    Some(band::at_decision_mark(&session, decided_at))
+}
+
+fn snapshot(setup: &Value) -> Option<(Session, DateTime<Utc>)> {
     let saved = setup.get("session")?;
     // Missing optional metadata is not proof that no lunch existed. Actual
     // Session serialization always writes either the tuple or explicit null.
@@ -23,7 +35,7 @@ pub(super) fn check(setup: &Value) -> Option<bool> {
     {
         return None;
     }
-    Some(band::entry_window(&session, decided_at).is_ok())
+    Some((session, decided_at))
 }
 
 #[cfg(test)]
@@ -62,6 +74,29 @@ mod tests {
         ] {
             assert_eq!(check(&saved(decision)), Some(expected), "{decision}");
         }
+    }
+
+    #[test]
+    fn saved_decision_mark_is_separate_from_entry_window_eligibility() {
+        for (decision, expected) in [
+            ("2026-10-27T00:30:00Z", true),
+            ("2026-10-27T00:30:04.999Z", true),
+            ("2026-10-27T00:30:05Z", false),
+            ("2026-10-27T00:59:59.999Z", false),
+            ("2026-10-27T01:15:00Z", false),
+        ] {
+            let value = saved(decision);
+            assert_eq!(check(&value), Some(true), "window {decision}");
+            assert_eq!(
+                decision_mark_check(&value),
+                Some(expected),
+                "mark {decision}"
+            );
+        }
+        assert_eq!(
+            decision_mark_check(&json!({"session_date":"2026-10-27"})),
+            None
+        );
     }
 
     #[test]

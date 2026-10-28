@@ -158,19 +158,21 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
                         && close(b.lower, b.open - b.half_width)
                         && close(b.upper, b.open + b.half_width),
                 );
-                // Use the execution strategy's exact strict boundary and
-                // dual-trigger rule, against its persisted original quotes.
-                if let Some(expected) = sign {
-                    let actual = jiaoyi_core::strategy3::band::triggered(
-                        &b,
-                        number(&setup, "bid"),
-                        number(&setup, "ask"),
-                    );
-                    trigger = Some(matches!(
-                        (expected, actual),
-                        (1.0, Some(jiaoyi_core::strategy3::targets::Dir::Buy))
-                            | (-1.0, Some(jiaoyi_core::strategy3::targets::Dir::Sell))
-                    ));
+                // Replay only the recognized current registration, using
+                // the same mid-price function as entry. Missing quote sides
+                // are unknown evidence, not a failed or passing trigger.
+                if registered == Some(true) {
+                    if let (Some(expected), Some(bid), Some(ask)) =
+                        (sign, number(&setup, "bid"), number(&setup, "ask"))
+                    {
+                        let actual =
+                            jiaoyi_core::strategy3::band::mark_decision(&b, Some(bid), Some(ask));
+                        trigger = Some(matches!(
+                            (expected, actual),
+                            (1.0, Some(jiaoyi_core::strategy3::targets::Dir::Buy))
+                                | (-1.0, Some(jiaoyi_core::strategy3::targets::Dir::Sell))
+                        ));
+                    }
                 }
             }
             if let (Some(r), Some(saved)) = (rel, setup["entry"]["relative_stop"].as_i64()) {
@@ -190,10 +192,14 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         let session = (strategy == "s3" && registered == Some(true))
             .then(|| session::check(&setup))
             .flatten();
+        let decision_mark = (strategy == "s3" && registered == Some(true))
+            .then(|| session::decision_mark_check(&setup))
+            .flatten();
         let checks = json!({"gate_risk_recorded":gate,"sizing_within_gate_cap":sizing,
             "preregistration_matches_current_reference":registered,"entry_direction_valid":direction,
             "entry_trigger_valid":trigger,"original_stop_geometry_valid":stop,
-            "original_target_geometry_valid":target,"original_session_valid":session,"original_band_valid":band});
+            "original_target_geometry_valid":target,"original_session_valid":session,
+            "original_decision_mark_valid":decision_mark,"original_band_valid":band});
         let created: DateTime<Utc> = row.get("created_at");
         let closed: DateTime<Utc> = row.get("closed_at");
         let key: String = row.get("entry_key");
@@ -272,6 +278,14 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
                 missing.push(code)
             }
         }
+        if strategy == "s3" {
+            if decision_mark.is_none() {
+                missing.push("original_decision_mark");
+            }
+            if registered != Some(true) {
+                missing.push("applicable_registered_rules");
+            }
+        }
         let setup_complete =
             direction.is_some() && trigger.is_some() && stop.is_some() && target.is_some();
         if !setup_complete {
@@ -297,14 +311,23 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         } else {
             None
         };
-        cases.push(json!({"case_id":format!("{strategy}:{account}:{deal}"),"reason":"stop_loss",
+        let registration = if strategy == "s1" {
+            Some("docs/preregistration-2026-10-24.md")
+        } else if registered == Some(true) {
+            Some(crate::strategy3::PREREG_FILE)
+        } else {
+            None
+        };
+        cases.push(
+            json!({"case_id":format!("{strategy}:{account}:{deal}"),"reason":"stop_loss",
             "account_id":account,"strategy":strategy,"deal_id":deal,"position_id":position,
             "symbol_id":row.get::<Option<i64>,_>("symbol_id"),"symbol":symbol,"closed_at":closed,
             "environment":row.get::<String,_>("environment"),"ownership_verified":true,
             "reason_evidence":"recorded_inference","net_costs_complete":costs,"net_r":net_r,
             "original_entry":{"recorded_at":created,"side":side,"setup_complete":setup_complete,
-                "rule_registration":if strategy=="s1"{"docs/preregistration-2026-10-24.md"}else{"docs/preregistration-2026-10-25-strategy3.md"}},
-            "checks":checks,"missing_evidence":missing}));
+                "rule_registration":registration},
+            "checks":checks,"missing_evidence":missing}),
+        );
     }
     Ok(json!({"schema_version":1,"as_of":now,"cases":cases}))
 }
@@ -568,45 +591,71 @@ mod tests {
             max: None,
             digits: 2,
         };
-        for (position, bid, ask) in [(1, 101.0, 102.0), (2, 100.0, 101.0), (3, 98.0, 102.0)] {
+        for position in 1..=13 {
+            let (side, bid, ask) = match position {
+                2 => (Dir::Buy, Some(100.0), Some(101.0)),
+                3 => (Dir::Buy, Some(98.0), Some(102.0)),
+                4 => (Dir::Buy, Some(100.0), Some(102.0)), // mid exactly on upper
+                5 => (Dir::Sell, Some(98.0), Some(99.0)),
+                6 => (Dir::Sell, Some(98.0), Some(100.0)), // mid exactly on lower
+                7 => (Dir::Buy, None, Some(102.0)),
+                8 => (Dir::Buy, Some(102.0), None),
+                11 => (Dir::Buy, Some(102.0), Some(101.0)), // crossed quote
+                _ => (Dir::Buy, Some(101.0), Some(102.0)),
+            };
+            let entry_price = if side == Dir::Buy { ask } else { bid }.unwrap_or(102.0);
             let now = Utc::now() - Duration::minutes(2);
             let entry = crate::strategy3::Entry {
-                side: Dir::Buy,
+                side,
                 band: b,
-                entry_price: ask,
+                entry_price,
                 relative_stop: crate::trading::relative_stop(b.half_width, limits.digits),
                 r: 1.0,
-                cost: cost_reserve(0.1, 0.1, 1.0, ask).unwrap(),
+                cost: cost_reserve(0.1, 0.1, 1.0, entry_price).unwrap(),
             };
             let plan = crate::strategy3::plan_order(&entry, &limits, 100).unwrap();
             // This is the same struct serialization and persistence used by
             // strategy3::on_spot/S3Ledger, including the nested target plan.
-            let detail = json!({"session_date":now.date_naive(),"decided_at":now,
-                "bid":bid,"ask":ask,"side":Dir::Buy,"band":b,"open":b.open,"sigma":b.sigma,
+            let mut detail = json!({"session_date":now.date_naive(),"decided_at":now,
+                "bid":bid,"ask":ask,"side":side,"band":b,"open":b.open,"sigma":b.sigma,
                 "entry":entry,"order":plan,
                 "session":jiaoyi_core::strategy3::sessions::Session {
                     date:now.date_naive(), open:now-Duration::hours(1),
                     close:now+Duration::hours(1),lunch:None },
                 "volume_limits":limits});
+            if position == 9 {
+                detail["session"]["open"] = json!(now - Duration::minutes(75));
+            }
+            if position == 12 {
+                detail["session"]["open"] =
+                    json!(now - Duration::minutes(60) - Duration::seconds(5));
+            }
+            if position == 13 {
+                detail.as_object_mut().unwrap().remove("decided_at");
+            }
             let key = format!("s3:1:1:case:{position}");
-            sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk,created_at) VALUES(1,$1,$1,'open',1,'buy',100,100000,10,11,$2)")
-                .bind(&key).bind(now).execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk,created_at) VALUES(1,$1,$1,'open',1,$3,100,100000,10,11,$2)")
+                .bind(&key).bind(now).bind(if side == Dir::Buy { "buy" } else { "sell" }).execute(&pool).await.unwrap();
             sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,position_id,deal_id,symbol_id,volume,received_at,raw) VALUES(1,$1,2126,'ORDER_FILLED',$2,$3,1,100,$4,''::bytea)")
                 .bind(&key).bind(position).bind(position*10).bind(now).execute(&pool).await.unwrap();
             let open = OrderRow {
                 account_id: 1,
                 entry_key: key,
                 label: crate::strategy3::LABEL.into(),
-                prereg_hash: crate::strategy3::prereg_hash(),
+                prereg_hash: if position == 10 {
+                    "unsupported-historical-hash".into()
+                } else {
+                    crate::strategy3::prereg_hash()
+                },
                 kind: "open".into(),
                 symbol: "XAUUSD".into(),
                 symbol_id: 1,
                 position_id: None,
-                side: Some("buy".into()),
+                side: Some(if side == Dir::Buy { "buy" } else { "sell" }.into()),
                 session_date: Some(now.date_naive()),
                 decided_at: now,
-                bid: Some(bid),
-                ask: Some(ask),
+                bid,
+                ask,
                 volume: Some(100),
                 detail,
             };
@@ -623,18 +672,67 @@ mod tests {
                 .bind(&exit.entry_key).bind(position).bind(&exit.detail).execute(&pool).await.unwrap();
         }
         let result = evidence(&pool, &[1]).await.unwrap();
-        assert_eq!(result["cases"].as_array().unwrap().len(), 3);
+        assert_eq!(result["cases"].as_array().unwrap().len(), 13);
+        let boundary = result["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["position_id"] == 4)
+            .unwrap();
+        assert_eq!(
+            boundary["checks"]["entry_trigger_valid"], false,
+            "mid on the upper band is not a registered buy"
+        );
         for c in result["cases"].as_array().unwrap() {
+            let position = c["position_id"].as_i64().unwrap();
             assert_eq!(c["checks"]["entry_direction_valid"], true);
             assert_eq!(c["checks"]["original_stop_geometry_valid"], true);
             assert_eq!(c["checks"]["original_target_geometry_valid"], true);
             assert_eq!(c["checks"]["original_band_valid"], true);
             assert_eq!(
                 c["checks"]["preregistration_matches_current_reference"],
-                true
+                position != 10
             );
-            assert_eq!(c["checks"]["entry_trigger_valid"], c["position_id"] == 1);
-            assert_eq!(c["checks"]["original_session_valid"], true);
+            let expected_trigger = if [7, 8, 10].contains(&position) {
+                Value::Null
+            } else {
+                json!([1, 5, 9, 12, 13].contains(&position))
+            };
+            assert_eq!(
+                c["checks"]["entry_trigger_valid"], expected_trigger,
+                "trigger position {position}"
+            );
+            let expected_mark = if [10, 13].contains(&position) {
+                Value::Null
+            } else {
+                json!(![9, 12].contains(&position))
+            };
+            assert_eq!(
+                c["checks"]["original_decision_mark_valid"], expected_mark,
+                "mark position {position}"
+            );
+            assert_eq!(
+                c["checks"]["original_session_valid"],
+                if [10, 13].contains(&position) {
+                    Value::Null
+                } else {
+                    json!(true)
+                }
+            );
+            assert_eq!(
+                c["original_entry"]["rule_registration"],
+                if position == 10 {
+                    Value::Null
+                } else {
+                    json!(crate::strategy3::PREREG_FILE)
+                }
+            );
+            if expected_mark.is_null() {
+                assert!(c["missing_evidence"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("original_decision_mark")));
+            }
         }
     }
 }
