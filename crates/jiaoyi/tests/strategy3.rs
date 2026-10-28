@@ -285,6 +285,127 @@ fn at(min: i64) -> DateTime<Utc> {
     today().open + Duration::minutes(min)
 }
 
+/// v5 hangs each stop from the best executable quote by the original R,
+/// including after broker reconciliation and restart at break-even.
+async fn trail_keeps_original_r(pool: &PgPool, buy: bool) {
+    loaded(pool).await;
+    let (bid, ask) = if buy {
+        (60_455.0, 60_462.0)
+    } else {
+        (59_538.0, 59_545.0)
+    };
+    with_trader!(pool, fake((bid, ask)), Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(bid), Some(ask), at(30)).await.unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        let own = t.own.values().next().unwrap();
+        let pid = own.position_id;
+        let entry = own.entry.unwrap();
+        let tp = own.take_profit;
+        let r = own.plan_basis.unwrap().r;
+        assert_eq!(r, 450.0);
+        let direction = if buy { 1.0 } else { -1.0 };
+        for (i, gain) in [200.0, 250.0, 450.0].into_iter().enumerate() {
+            let price = entry + direction * gain;
+            let (bid, ask) = if buy {
+                (price, price + 5.0)
+            } else {
+                (price - 5.0, price)
+            };
+            let now = at(31) + Duration::seconds(31 * i as i64);
+            t.on_quote(BTC, Some(bid), Some(ask), now).await.unwrap();
+            assert_eq!(log.lock().unwrap().amends.len(), i + 1);
+            assert_eq!(
+                t.own[&pid].stop,
+                Some(price - direction * r),
+                "each amendment must retain the original 450-point R"
+            );
+            t.reconcile(now).await.unwrap();
+        }
+        assert_eq!(t.own[&pid].stop, Some(entry));
+        let mut restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
+            .await
+            .unwrap();
+        restarted.reconcile(at(33)).await.unwrap();
+        assert_eq!(restarted.own[&pid].stop, Some(entry));
+        let price = entry + direction * 500.0;
+        let (bid, ask) = if buy {
+            (price, price + 5.0)
+        } else {
+            (price - 5.0, price)
+        };
+        restarted
+            .on_quote(BTC, Some(bid), Some(ask), at(34))
+            .await
+            .unwrap();
+        assert_eq!(
+            restarted.own[&pid].stop,
+            Some(price - direction * r),
+            "restart at break-even must not turn original R into zero"
+        );
+        let l = log.lock().unwrap();
+        assert_eq!(l.amends.len(), 4);
+        assert!(l.amends.iter().all(|a| a.take_profit == tp));
+        assert!(l.closes.is_empty());
+        assert_eq!(l.orders.len(), 1, "recovery must not open another position");
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn long_trail_retains_original_r_after_amends_and_restart(pool: PgPool) {
+    trail_keeps_original_r(&pool, true).await;
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn short_trail_retains_original_r_after_amends_and_restart(pool: PgPool) {
+    trail_keeps_original_r(&pool, false).await;
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn trail_requires_known_positive_original_r(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, log| {
+            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+                .await
+                .unwrap();
+            let own = t.own.values().next().unwrap();
+            let pid = own.position_id;
+            let basis = own.plan_basis.unwrap();
+            let stop = own.stop;
+            for (i, r) in [
+                None,
+                Some(0.0),
+                Some(-450.0),
+                Some(f64::NAN),
+                Some(f64::INFINITY),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                t.own.get_mut(&pid).unwrap().plan_basis =
+                    r.map(|r| strategy3::PlanBasis { r, ..basis });
+                t.on_quote(BTC, Some(60_700.0), Some(60_705.0), at(31 + i as i64))
+                    .await
+                    .unwrap();
+                assert!(
+                    log.lock().unwrap().amends.is_empty(),
+                    "unknown original R cannot use the current stop as a substitute"
+                );
+                assert_eq!(t.own[&pid].stop, stop);
+            }
+            t.own.get_mut(&pid).unwrap().plan_basis = Some(basis);
+            t.on_quote(BTC, Some(60_700.0), Some(60_705.0), at(37))
+                .await
+                .unwrap();
+            assert_eq!(log.lock().unwrap().amends.len(), 1);
+            assert_eq!(t.own[&pid].stop, Some(60_250.0));
+        }
+    );
+}
+
 /// A flat symbol's slow session preparation cannot delay an already owned
 /// symbol's TP1. The fake still answers quotes and trading requests.
 #[sqlx::test(migrator = "store::MIGRATOR")]
