@@ -1582,10 +1582,16 @@ impl<'a, 'c> Trader<'a, 'c> {
         let Some(o) = self.own.get(&position_id).cloned() else {
             return Ok(());
         };
-        let (Some(entry), Some(current_stop)) = (o.entry, o.stop) else {
+        let (Some(_), Some(current_stop)) = (o.entry, o.stop) else {
             return Ok(());
         };
-        let r = (entry - current_stop).abs();
+        // v5 uses the original opening-plan R, also restored on reconcile.
+        // The broker's current stop changes after each amend and can reach
+        // entry; it cannot establish the original distance when the plan is
+        // missing. Keep the existing protection in that case.
+        let Some(r) = o.plan_basis.map(|basis| basis.r) else {
+            return Ok(());
+        };
         if !r.is_finite() || r <= 0.0 {
             return Ok(());
         }
