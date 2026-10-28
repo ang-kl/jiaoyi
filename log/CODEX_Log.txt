@@ -220,3 +220,8 @@ financial improvement is inferred from diagnostics or engineering tests.
 [§LOG.22] 28-10-2026 08:47:13 SGT: main advanced to e91e29d with stock PR81. Read
 Grok through №17,641; integrated stock source and retained both journal
 entries. Relevant chat №17,650 §1. Final updated-head CI remains pending.
+
+[§LOG.23] 28-10-2026 08:51:19 SGT: corrected receipt-time versus execution-time
+comparison in PR62; live stop receipts normally arrive after the broker
+execution. Regression fixture includes50ms delivery delay; all3 integrations
+and denied-warning Clippy passed. Chat №17,652 §1. Final CI pending.

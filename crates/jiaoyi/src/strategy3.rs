@@ -2976,7 +2976,7 @@ pub(crate) async fn recent_closed_signals(
             WHERE f.account_id=o.account_id AND f.position_id=o.position_id
               AND f.kind='broker_exit' AND f.outcome IN ('filled','partly_filled')
               AND f.detail->>'reason'='stop_loss'
-              AND COALESCE(f.answered_at,f.sent_at)<=h.closed_at) AS stopped
+              AND COALESCE(f.answered_at,f.sent_at)<=now()) AS stopped
         FROM owned o
         JOIN LATERAL (
           SELECT COALESCE(SUM(d.filled_volume) FILTER(WHERE NOT d.is_closing),0) AS opened,

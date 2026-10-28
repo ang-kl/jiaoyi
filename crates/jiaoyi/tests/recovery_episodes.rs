@@ -46,7 +46,8 @@ async fn position(
     store::sqlx::query("INSERT INTO strategy3_orders(account_id,entry_key,label,prereg_hash,kind,symbol,symbol_id,position_id,side,session_date,decided_at,volume,detail) VALUES($1,$2,'jiaoyi-s3',$3,'broker_exit',$4,1,$5,'buy',$6,$7,$8,$9)")
         .bind(account).bind(&close).bind(hash).bind(symbol).bind(id).bind(day().date_naive()).bind(closed_at).bind(closed_volume)
         .bind(json!({"open_entry_key":key})).execute(pool).await.unwrap();
-    store::sqlx::query("INSERT INTO strategy3_fills(account_id,entry_key,label,prereg_hash,kind,symbol,position_id,outcome,sent_at,answered_at,volume,detail) VALUES($1,$2,'jiaoyi-s3',$3,'broker_exit',$4,$5,'filled',$6,$6,$7,$8)")
+    // Live execution receipts arrive after the broker's execution timestamp.
+    store::sqlx::query("INSERT INTO strategy3_fills(account_id,entry_key,label,prereg_hash,kind,symbol,position_id,outcome,sent_at,answered_at,volume,detail) VALUES($1,$2,'jiaoyi-s3',$3,'broker_exit',$4,$5,'filled',$6,$6+interval '50 milliseconds',$7,$8)")
         .bind(account).bind(&close).bind(hash).bind(symbol).bind(id).bind(closed_at).bind(closed_volume)
         .bind(json!({"reason":if stop {"stop_loss"} else {"take_profit"}})).execute(pool).await.unwrap();
     for (deal, volume, closing, at) in [
