@@ -13,7 +13,7 @@ pub struct OrderRow {
     pub entry_key: String,
     pub label: String,
     pub prereg_hash: String,
-    /// `open`, `tp1`, `session_end` or `broker_exit`.
+    /// `open`, `tp1`, `session_end`, `broker_exit` or `trail`.
     pub kind: String,
     pub symbol: String,
     pub symbol_id: i64,

@@ -1008,3 +1008,58 @@ async fn the_owner_adds_spot_brent_to_the_energy_class(pool: PgPool) {
         u
     );
 }
+
+/// Migration 0019. A trail order and its answer must be storable. The old
+/// check rejected kind 'trail' after the intent existed, so no amend was sent.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_strategy3_trail_order_and_its_answer_are_stored(pool: PgPool) {
+    use jiaoyi_store::strategy3;
+    let now = Utc::now();
+    strategy3::record_order(
+        &pool,
+        &strategy3::OrderRow {
+            account_id: 46130058,
+            entry_key: "s3-trail:46130058:1:6400000000".into(),
+            label: "jiaoyi-s3".into(),
+            prereg_hash: "test".into(),
+            kind: "trail".into(),
+            symbol: "JPN225".into(),
+            symbol_id: 1,
+            position_id: Some(1),
+            side: Some("sell".into()),
+            session_date: Some(now.date_naive()),
+            decided_at: now,
+            bid: None,
+            ask: None,
+            volume: Some(100),
+            detail: json!({"new_stop": 64000.0}),
+        },
+    )
+    .await
+    .unwrap();
+    strategy3::record_fill(
+        &pool,
+        &strategy3::FillRow {
+            account_id: 46130058,
+            entry_key: "s3-trail:46130058:1:6400000000".into(),
+            label: "jiaoyi-s3".into(),
+            prereg_hash: "test".into(),
+            kind: "trail".into(),
+            symbol: "JPN225".into(),
+            position_id: Some(1),
+            side: Some("sell".into()),
+            outcome: "amended".into(),
+            sent_at: now,
+            answered_at: Some(now),
+            latency_ms: Some(1),
+            decision_price: Some(64000.0),
+            fill_price: None,
+            slippage: None,
+            spread: None,
+            volume: Some(100),
+            detail: json!({}),
+        },
+    )
+    .await
+    .unwrap();
+}

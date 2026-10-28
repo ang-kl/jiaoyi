@@ -388,7 +388,9 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
         "owned TP1 must finish while the other history read is pending"
     );
     assert_eq!(l.closes[0].volume, 8);
-    assert!(l.amends.is_empty(), "S3 must never amend its stop");
+    // v5 trails a favourable move. The amend must carry the take-profit.
+    // Grok 4.7 · № 17,655. It is not a close.
+    assert!(l.amends.iter().all(|a| a.take_profit.is_some()));
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
@@ -423,7 +425,12 @@ async fn exit_timer_rejects_stale_or_future_quotes_and_does_not_repeat_tp1(pool:
             t.check_exits(now + Duration::seconds(1)).await.unwrap();
             t.check_exits(now + Duration::seconds(2)).await.unwrap();
             assert_eq!(closes(&log), vec![8]);
-            assert!(log.lock().unwrap().amends.is_empty());
+            assert!(log
+                .lock()
+                .unwrap()
+                .amends
+                .iter()
+                .all(|a| a.take_profit.is_some()));
         }
     );
 }
@@ -2260,7 +2267,7 @@ async fn correlated_local_close_is_not_double_counted_as_broker_exit(pool: PgPoo
         t.server_event(&message).await;
         t.server_event(&message).await;
         let counts: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT kind,count(*) FROM strategy3_fills WHERE kind <> 'open' GROUP BY kind",
+            "SELECT kind,count(*) FROM strategy3_fills WHERE kind NOT IN ('open','trail') GROUP BY kind",
         )
         .fetch_all(&pool)
         .await
@@ -2475,7 +2482,7 @@ async fn history_recovery_preserves_held_positions_and_excludes_local_fills(pool
         f.positions.lock().unwrap().clear();
         t.reconcile(at(70)).await.unwrap();
         let volumes: Vec<(String, Option<i64>)> = sqlx::query_as(
-            "SELECT kind,volume FROM strategy3_fills WHERE kind<>'open' ORDER BY kind",
+            "SELECT kind,volume FROM strategy3_fills WHERE kind NOT IN ('open','trail') ORDER BY kind",
         )
         .fetch_all(&pool)
         .await
