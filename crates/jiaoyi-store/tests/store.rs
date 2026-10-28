@@ -257,9 +257,9 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     // the owner's universe change (0005), the session-retry seed (0007), the
     // owner's SpotBrent change (0008), the 10 trading seeds (0012),
     // Strategy 3's open-risk budget (0013) and the limits and the owner's
-    // pause (0015: 5).
+    // pause (0015: 5), then the owner's three-name removal (0018).
     // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
-    assert_eq!(s.version, 44);
+    assert_eq!(s.version, 45);
     assert_eq!(s.integer("history.session_retry_secs").unwrap(), 5);
     assert_eq!(s.integer("history.tick_days_back").unwrap(), 7);
     assert_eq!(s.integer("spread.min_samples").unwrap(), 30);
@@ -284,18 +284,15 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     assert_eq!(
         names,
         vec![
-            "US500",
             "NAS100",
             "US30",
             "GER40",
             "UK100",
             "JPN225",
             "AUS200",
-            "EURUSD",
             "GBPUSD",
             "USDJPY",
             "AUDUSD",
-            "USDCAD",
             "NZDUSD",
             "XAUUSD",
             "XAGUSD",
@@ -306,15 +303,15 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
             "ETHUSD"
         ]
     );
-    for gone in ["USOIL", "UKOIL", "NATGAS"] {
+    for gone in ["USOIL", "UKOIL", "NATGAS", "US500", "USDCAD", "EURUSD"] {
         assert!(!names.contains(&gone), "{gone}");
     }
     assert!(u
         .iter()
         .filter(|(n, _)| *n == "SpotCrude" || *n == "NatGas" || *n == "SpotBrent")
         .all(|(_, c)| *c == jiaoyi_core::universe::AssetClass::Energy));
-    // h[0] is the SpotBrent change (its own test); h[1] the energy names.
-    let change = &h[1];
+    // Locate the historical energy change independently of later changes.
+    let change = h.iter().find(|c| c.version == 26).unwrap();
     assert_eq!(change.version, 26);
     assert_eq!(change.changed_by, "owner");
     assert_eq!(
@@ -333,10 +330,10 @@ async fn seeded_settings_are_the_rulebook_values_then_the_owners_energy_names(po
     // seeds of 0015).
     // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
     let h = settings::history(&pool, None).await.unwrap();
-    assert_eq!(h.len(), 44);
+    assert_eq!(h.len(), 45);
     assert!(h
         .iter()
-        .filter(|c| c.version != 26 && c.version != 28)
+        .filter(|c| c.version != 26 && c.version != 28 && c.version != 45)
         .all(|c| c.changed_by == "migration" && c.old_value.is_none()));
 }
 
@@ -373,7 +370,7 @@ async fn an_out_of_bounds_value_is_refused_and_nothing_changes(pool: PgPool) {
         30,
         "not clamped, not changed"
     );
-    assert_eq!(s.version, 44, "a refused change does not bump the version");
+    assert_eq!(s.version, 45, "a refused change does not bump the version");
     assert!(matches!(
         settings::change(
             &pool,
@@ -404,11 +401,11 @@ async fn a_change_is_logged_with_old_and_new_values_and_bumps_the_version(pool: 
     )
     .await
     .unwrap();
-    assert_eq!(v, 45);
+    assert_eq!(v, 46);
     let h = settings::history(&pool, Some("ticks.retention_days"))
         .await
         .unwrap();
-    assert_eq!(h[0].version, 45);
+    assert_eq!(h[0].version, 46);
     assert_eq!(h[0].old_value, Some(json!(30)));
     assert_eq!(h[0].new_value, Some(json!(14)));
     assert_eq!(h[0].changed_by, "owner");
@@ -969,13 +966,17 @@ async fn the_owner_adds_spot_brent_to_the_energy_class(pool: PgPool) {
     let h = settings::history(&pool, Some("universe.symbols"))
         .await
         .unwrap();
-    assert_eq!(h.len(), 3, "seed, energy names, SpotBrent");
-    let c = &h[0];
+    assert_eq!(
+        h.len(),
+        4,
+        "seed, energy names, SpotBrent, cost-gate removal"
+    );
+    let c = h.iter().find(|c| c.version == 28).unwrap();
     // The latest universe change: SpotBrent (0008) at version 28; the 0012
     // trading seeds come after it.
     assert_eq!(c.version, 28, "the latest universe change");
     assert_eq!(
-        h[1].version,
+        h.iter().find(|c| c.version == 26).unwrap().version,
         c.version - 2,
         "one settings seed between them (0007)"
     );
@@ -984,11 +985,26 @@ async fn the_owner_adds_spot_brent_to_the_energy_class(pool: PgPool) {
         c.reason,
         "owner 24-10: use the broker's names for energy; Brent is SpotBrent on the broker (energy_candidates, load run 6 on 43002148)"
     );
-    assert_eq!(c.old_value, h[1].new_value);
+    assert_eq!(
+        c.old_value,
+        h.iter().find(|c| c.version == 26).unwrap().new_value
+    );
     // Only SpotBrent was added; nothing else moved.
     let old = jiaoyi_core::universe::parse_universe(c.old_value.as_ref().unwrap()).unwrap();
     let mut expected = old.clone();
     let after_natgas = expected.iter().position(|(n, _)| n == "NatGas").unwrap() + 1;
     expected.insert(after_natgas, ("SpotBrent".to_string(), AssetClass::Energy));
+    let brent_universe =
+        jiaoyi_core::universe::parse_universe(c.new_value.as_ref().unwrap()).unwrap();
+    assert_eq!(brent_universe, expected);
+    expected.retain(|(n, _)| !["US500", "USDCAD", "EURUSD"].contains(&n.as_str()));
     assert_eq!(u, expected);
+    let drop = &h[0];
+    assert_eq!(drop.version, 45);
+    assert_eq!(drop.changed_by, "owner");
+    assert_eq!(drop.old_value, c.new_value);
+    assert_eq!(
+        jiaoyi_core::universe::parse_universe(drop.new_value.as_ref().unwrap()).unwrap(),
+        u
+    );
 }

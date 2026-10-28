@@ -200,3 +200,28 @@ Read latest status/PRs before claiming the stock build finished.
 PR70 merge notice. Base main f86c9b9 contains that work; this receipt change
 is documentation only. Existing runtime receipts above identify their own
 observed commit/time and do not certify every later main change.
+
+ENTRY 28-10-2026 08:46:20 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,644 §1; №17,646 §§1–2; №17,647 §§1–2; №17,648 §1; №17,649 §1.
+[§LOG.21] PR62 repair, preserving current main9ff9557/PR82 and v5 exits.
+Read changed Grok log through №17,640; other AI files remain theirs.
+Fixed closing-key ownership join, chronological/mark/hash episode identity,
+complete-volume owned-close diagnostics and unsupported P&L exclusion.
+Source-coverage issue stays open until source evidence resolves it.
+Owner's three-name universe removal remains in migration0018; corrected
+all4 reproduced store failures without weakening tests or CI.
+Local affected tests57 passed; workspace/all-target Clippy/fmt passed.
+All8 live loops observed flat with no unresolved opens before rollout.
+Required exact-head CI and merge/deployment verification remain pending;
+read PR62 status before claiming release. No trading-goal acceptance or
+financial improvement is inferred from diagnostics or engineering tests.
+
+[§LOG.22] 28-10-2026 08:47:13 SGT: main advanced to e91e29d with stock PR81. Read
+Grok through №17,641; integrated stock source and retained both journal
+entries. Relevant chat №17,650 §1. Final updated-head CI remains pending.
+
+[§LOG.23] 28-10-2026 08:51:19 SGT: corrected receipt-time versus execution-time
+comparison in PR62; live stop receipts normally arrive after the broker
+execution. Regression fixture includes50ms delivery delay; all3 integrations
+and denied-warning Clippy passed. Chat №17,652 §1. Final CI pending.

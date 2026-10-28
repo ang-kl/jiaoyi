@@ -328,6 +328,23 @@ fn source_diagnostic(account: i64, observed_at: Option<DateTime<Utc>>, detail: &
         curated[field] = json!(relationships[field].as_u64());
     }
     result["extra_pnl_relationship_diagnostics"] = curated;
+    // Exclusion describes attribution only. An extra row can still match an
+    // owned fill or pending order; its mere presence proves no exclusion and
+    // never repairs account-wide P&L coverage.
+    let extra = result["pnl_coverage_diagnostics"]["extra_pnl_position_count"].as_u64();
+    let no_owned_link = [
+        "pending_entry_position_match_count",
+        "pending_protection_position_match_count",
+        "pending_order_missing_position_ref_count",
+        "owned_fill_observed_count",
+    ]
+    .iter()
+    .all(|field| relationships[*field].as_u64() == Some(0));
+    result["unmatched_excluded_from_owned_window"] = json!(
+        extra.is_some_and(|n| n > 0)
+            && no_owned_link
+            && relationships["evidence_state"] == "stored_observations_only_closure_unknown"
+    );
     result
 }
 
@@ -454,4 +471,44 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
         "recent_events_limit": 100,
         "recent_events": recent_events,
     }))
+}
+
+#[cfg(test)]
+mod exclusion_tests {
+    use super::*;
+
+    #[test]
+    fn exclusion_requires_known_absence_of_owned_and_pending_links() {
+        let mut detail = json!({"pnl_coverage_complete":false,"source_complete":false,
+            "pnl_coverage_diagnostics":{"extra_pnl_position_count":1},
+            "extra_pnl_relationship_diagnostics":{
+                "evidence_state":"stored_observations_only_closure_unknown",
+                "pending_entry_position_match_count":0,"pending_protection_position_match_count":0,
+                "pending_order_missing_position_ref_count":0,"owned_fill_observed_count":0}});
+        let view = source_diagnostic(47790949, None, &detail);
+        assert_eq!(view["unmatched_excluded_from_owned_window"], true);
+        assert_eq!(view["pnl_coverage_complete"], false);
+        assert_eq!(view["source_complete"], false);
+        for field in [
+            "pending_entry_position_match_count",
+            "pending_protection_position_match_count",
+            "pending_order_missing_position_ref_count",
+            "owned_fill_observed_count",
+        ] {
+            for value in [json!(1), Value::Null, json!(-1)] {
+                let mut linked = detail.clone();
+                linked["extra_pnl_relationship_diagnostics"][field] = value;
+                assert_eq!(
+                    source_diagnostic(47790949, None, &linked)
+                        ["unmatched_excluded_from_owned_window"],
+                    false
+                );
+            }
+        }
+        detail["extra_pnl_relationship_diagnostics"]["evidence_state"] = json!("store_read_failed");
+        assert_eq!(
+            source_diagnostic(47790949, None, &detail)["unmatched_excluded_from_owned_window"],
+            false
+        );
+    }
 }

@@ -82,6 +82,12 @@ async fn health(State(s): State<AppState>) -> Response {
                 Err(_) => json!({"state": "unavailable", "reports_url": "/operations/reports"}),
             };
             crate::fast_monitor::attach(&mut v, &s.trading_loops, &s.strategy3_loops);
+            v["recovery"] = crate::stop_loss_review::recovery(&s.pool, &accounts)
+                .await
+                .unwrap_or(json!({"available": false, "reason": "unreadable"}));
+            v["episodes"] = crate::strategy3::episodes(&s.pool, &accounts)
+                .await
+                .unwrap_or(json!({"available": false}));
             Json(v).into_response()
         }
         Err(e) => unavailable(e),

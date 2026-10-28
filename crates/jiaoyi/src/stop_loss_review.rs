@@ -309,6 +309,39 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
     Ok(json!({"schema_version":1,"as_of":now,"cases":cases}))
 }
 
+/// A later complete owned close after a stopped position on the same UTC
+/// date, symbol and registration. This measures subsequent activity, not a
+/// quote-price recovery or a profitable result. Incomplete history is excluded.
+pub async fn recovery(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Error> {
+    let rows = crate::strategy3::recent_closed_signals(pool, accounts).await?;
+    let mut stops = 0;
+    let mut later = 0;
+    for stop in rows.iter().filter(|r| r.get::<bool, _>("stopped")) {
+        stops += 1;
+        let account: i64 = stop.get("account_id");
+        let symbol: String = stop.get("symbol");
+        let hash: String = stop.get("prereg_hash");
+        let at: DateTime<Utc> = stop.get("closed_at");
+        if rows.iter().any(|r| {
+            let closed: DateTime<Utc> = r.get("closed_at");
+            r.get::<i64, _>("account_id") == account
+                && r.get::<String, _>("symbol") == symbol
+                && r.get::<String, _>("prereg_hash") == hash
+                && closed > at
+                && closed.date_naive() == at.date_naive()
+                && !r.get::<bool, _>("stopped")
+        }) {
+            later += 1;
+        }
+    }
+    let score = (stops > 0).then(|| later as f64 / stops as f64);
+    Ok(json!({"available":true,
+        "path":"later complete owned close on the same UTC date and registration; not a quote path or profitable-recovery rate",
+        "scope":"stored complete-volume positions over 14 days; pending history excluded; not financial acceptance",
+        "stops":stops,"same_session_later_close":later,"score":score,
+        "threshold_crossed":score.is_some_and(|s| stops>=5 && s<0.5)}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
