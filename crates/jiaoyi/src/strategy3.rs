@@ -1642,6 +1642,9 @@ impl<'a, 'c> Trader<'a, 'c> {
         let ticks = (new_stop * 100_000.0).round() as i64;
         let key = format!("s3-trail:{account_id}:{}:{ticks}", o.position_id);
         let rules = rules(self.pool, account_id, self.env).await?;
+        // kind 'trail' is allowed by migration 0019. Before that the check
+        // rejected the row after the intent was stored, so the frame was
+        // never written. Grok 4.7 · № 17,655.
         let order = s3s::OrderRow {
             account_id,
             entry_key: key.clone(),
@@ -1715,7 +1718,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                         Some(&name),
                         "trail",
                         &format!("stop to {new_stop}: {:?}", sent.outcome),
-                        json!({"position_id": o.position_id, "from_stop": current_stop, "best": best}),
+                        json!({"position_id": o.position_id, "from_stop": current_stop, "best": best,
+                            "entry_key": key}),
                     )
                     .await;
             }
@@ -1728,7 +1732,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                         Some(&name),
                         "trail_refused",
                         &e.to_string(),
-                        json!({"position_id": o.position_id}),
+                        json!({"position_id": o.position_id, "entry_key": key}),
                     )
                     .await;
             }
