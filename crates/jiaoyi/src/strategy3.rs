@@ -11,10 +11,14 @@
 //! - A symbol is skipped when the cost reserve C is at least R.
 //! - `REQUIRED_RR` is 1.38. Owner, 27-10-2026: target near 1.4R.
 //!
-//! The rules are `docs/preregistration-2026-10-28-strategy3-v5.md`, embedded
+//! The rules are `docs/preregistration-2026-10-28-strategy3-v6.md`, embedded
 //! and hashed: every decision, intent and trade records that hash and the
 //! label `jiaoyi-s3`. The 25 Oct file remains the record of the rule that
 //! produced the statement losses. It is not the rule this loop trades.
+//!
+//! **Repeat, 28-10-2026 (v6).** Owner: “Proceed to fix.” One open per symbol
+//! per session. A cost skip is remembered for that session and not decided
+//! again. The band is not refit. Grok 4.7 · № 17,682.
 //!
 //! **Trailing, 28-10-2026 (v5).** Owner: “change the forbid.” The 25 Oct
 //! “no stop amends” sentence is retired. An owned position may trail its
@@ -86,10 +90,10 @@ pub const LABEL: &str = "jiaoyi-s3";
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-10-28-strategy3-v5.md";
+pub const PREREG_FILE: &str = "docs/preregistration-2026-10-28-strategy3-v6.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-10-28-strategy3-v5.md");
+    include_str!("../../../docs/preregistration-2026-10-28-strategy3-v6.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -221,6 +225,18 @@ pub fn chandelier_stop(side: Side, best: f64, r: f64) -> Option<f64> {
         Side::Sell => best + r,
     };
     (stop.is_finite() && stop > 0.0).then_some(stop)
+}
+
+/// True when this symbol already recorded an open in the session.
+/// A later signal is not a second entry. Grok 4.7 · № 17,682.
+pub fn session_already_entered(opens: i64) -> bool {
+    opens >= 1
+}
+
+/// True when a cost skip was already recorded for this session date.
+/// A later mark does not decide the cost again. Grok 4.7 · № 17,682.
+pub fn cost_skip_stands(remembered: Option<chrono::NaiveDate>, session: chrono::NaiveDate) -> bool {
+    remembered == Some(session)
 }
 
 /// A finished trade in original R. Profit is positive. A stop from the
@@ -701,6 +717,10 @@ pub struct Sym {
     /// The last entry attempt, so a refused trigger waits [`ENTRY_RETRY`].
     pub last_try: Option<DateTime<Utc>>,
     pub last_decision_mark: Option<DateTime<Utc>>,
+    /// Session date of a recorded open. Later marks do not send another.
+    pub entered_session: Option<chrono::NaiveDate>,
+    /// Session date of a cost skip. Later marks do not decide it again.
+    pub cost_skip_session: Option<chrono::NaiveDate>,
 }
 
 /// A Strategy 3 position as reconciled, with its plan when recorded.
@@ -927,6 +947,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                     preopen: None,
                     last_try: None,
                     last_decision_mark: None,
+                    entered_session: None,
+                    cost_skip_session: None,
                 },
             );
         }
@@ -2075,6 +2097,26 @@ impl<'a, 'c> Trader<'a, 'c> {
                 return Ok(());
             }
         }
+        if cost_skip_stands(sym.cost_skip_session, s.date) || sym.entered_session == Some(s.date) {
+            self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(mark);
+            return Ok(());
+        }
+        let prior = s3s::opens_in_session(self.pool, self.account_id(), symbol_id, s.date).await?;
+        if session_already_entered(prior) {
+            if let Some(x) = self.syms.get_mut(&symbol_id) {
+                x.entered_session = Some(s.date);
+                x.last_decision_mark = Some(mark);
+            }
+            self.skip(
+                symbol_id,
+                &name,
+                "one entry already recorded for this symbol in this session",
+                json!({"session_date": s.date, "opens": prior}),
+                now,
+            )
+            .await;
+            return Ok(());
+        }
         ts::record_decision(self.pool, self.account_id(), Some(&name), "s3_mark_decision",
             "first eligible quote consumed this decision mark",
             &json!({"strategy":STRATEGY,"label":LABEL,"prereg_hash":self.hash,"decision_mark":mark,"decided_at":now,"bid":bid,"ask":ask}),
@@ -2204,6 +2246,9 @@ impl<'a, 'c> Trader<'a, 'c> {
         // so TP1 sat near 5R and a no-drift process hit it ~16% of the time.
         // Skip when the reserve is at least the stop. This does not change Q.
         if !(r_price > 0.0) || cost.total >= r_price {
+            if let Some(x) = self.syms.get_mut(&symbol_id) {
+                x.cost_skip_session = Some(s.date);
+            }
             self.skip(
                 symbol_id,
                 &name,
@@ -3233,7 +3278,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-10-28-strategy3-v5.md"
+            "/../../docs/preregistration-2026-10-28-strategy3-v6.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)
@@ -3241,11 +3286,18 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect();
         assert_eq!(disk_hash, prereg_hash());
-        // v4: Kelly skip. The mark decision and the cost gate remain.
-        assert!(PREREG_TEXT.contains("Kelly"));
-        assert!(PREREG_TEXT.contains("mark decision"));
-        assert!(PREREG_TEXT.contains("C ≥ R"));
-        assert!(!PREREG_TEXT.contains("Tick-triggered only"));
+        assert!(PREREG_TEXT.contains("one entry"));
+        assert!(PREREG_TEXT.contains("cost skip"));
+        assert!(PREREG_TEXT.contains("Do not refit the band"));
+        assert!(session_already_entered(1));
+        assert!(!session_already_entered(0));
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
+        assert!(cost_skip_stands(Some(day), day));
+        assert!(!cost_skip_stands(None, day));
+        assert!(!cost_skip_stands(
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 10, 27).unwrap()),
+            day
+        ));
     }
 
     #[test]

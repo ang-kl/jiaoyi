@@ -8,9 +8,10 @@ The live stop is not read as something to amend. Recovery describes later
 owned closes, not a price path or a profitable-recovery rate.
 """
 
-V4_FILE = "docs/preregistration-2026-10-28-strategy3-v4.md"
+V4_FILE = "docs/preregistration-2026-10-28-strategy3-v6.md"
 # SHA256 of the registered file embedded by the trading image, not its length.
-V4_HASH = "a9a11e9df0f857ed111a8a89820c4ed535bdf5281348be9c32edaaecb61eb15b"
+# v6, 28-10-2026, № 17,682. One entry and one cost skip per symbol per session.
+V4_HASH = "d54344b9d463532c3b1e2d81bd07d671ed0d2fceae9ee923f1c8988b18b2ab32"
 GOAL_WINS = 15
 GOAL_PAYOFF = 1.38
 ACCOUNT_47790949 = 47790949
