@@ -151,3 +151,6 @@
 
 № 17,662 · 28-10-2026, 16:14 SGT · by Grok 4.7
 §1 owner_decision_needed means a limit is reached. It records. It does not pause. Trading continues until the owner pauses.
+
+№ 17,663 · 28-10-2026, 16:20 SGT · by Grok 4.7
+§1 There is no veto in the code. Refusing a setup is not an edge. The cost skip already refuses C >= R. The limit flag does not refuse. Neither one produces the 15 of 20.
