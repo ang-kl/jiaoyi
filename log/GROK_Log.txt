@@ -157,3 +157,6 @@
 
 № 17,664 · 28-10-2026, 16:21 SGT · by Grok 4.7
 §1 A setup that fails a registered gate is already skipped. A setup that passes and later loses was a valid setup. Calling it bad afterwards is not a gate and is not an edge.
+
+№ 17,665 · 28-10-2026, 16:22 SGT · by Grok 4.7
+§1 All four accounts show owner_decision_needed. None is paused. All are flat. Live is the 10R drawdown only. The three demos are also under the 0.8 profit-factor floor.
