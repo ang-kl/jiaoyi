@@ -4,8 +4,8 @@ Reads the snapshots the coordinator already fetches (`/health`,
 `/operations/reports`). Emits a Telegram event only when one of the four
 triggers changes. Unchanged evidence produces no event and no session.
 
-The live stop is not read as something to amend. Recovery is unavailable
-from these public routes; the watch records that and does not invent a rate.
+The live stop is not read as something to amend. Recovery describes later
+owned closes, not a price path or a profitable-recovery rate.
 """
 
 V4_FILE = "docs/preregistration-2026-10-28-strategy3-v4.md"
@@ -121,9 +121,8 @@ def account_47790949_watch(operations):
         count_known = isinstance(extra, int) and not isinstance(extra, bool) and extra >= 0
         excluded = row.get("unmatched_excluded_from_owned_window") is True
         open_item = None
-        if excluded:
-            open_item = False
-        elif count_known and extra > 0:
+        # Owned-window attribution does not resolve account source coverage.
+        if count_known and extra > 0:
             open_item = True
         elif count_known and row.get("pnl_coverage_complete") is True and row.get("book_stable") is True:
             open_item = False

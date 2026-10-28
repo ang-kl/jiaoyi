@@ -309,48 +309,37 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
     Ok(json!({"schema_version":1,"as_of":now,"cases":cases}))
 }
 
-/// Same-session recovery from stored closes. A later owned close on the same
-/// account and symbol, on the same UTC date, after a stop. Not a quote path.
-/// № 17,596, 28-10-2026. Grok 4.7. Other models: do not invent a rate.
+/// A later complete owned close after a stopped position on the same UTC
+/// date, symbol and registration. This measures subsequent activity, not a
+/// quote-price recovery or a profitable result. Incomplete history is excluded.
 pub async fn recovery(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Error> {
-    let rows = sqlx::query(
-        "WITH stops AS (
-           SELECT account_id, symbol, COALESCE(answered_at, sent_at) AS closed_at
-           FROM strategy3_fills
-           WHERE account_id = ANY($1) AND kind = 'broker_exit'
-             AND outcome IN ('filled','partly_filled')
-             AND detail->>'reason' = 'stop_loss'
-             AND COALESCE(answered_at, sent_at) >= now() - interval '14 days'
-         )
-         SELECT s.account_id, s.symbol, s.closed_at,
-           EXISTS (
-             SELECT 1 FROM strategy3_fills l
-             WHERE l.account_id = s.account_id AND l.symbol = s.symbol
-               AND l.kind IN ('tp1','session_end','broker_exit')
-               AND l.outcome IN ('filled','partly_filled')
-               AND COALESCE(l.answered_at, l.sent_at) > s.closed_at
-               AND COALESCE(l.answered_at, l.sent_at)::date = s.closed_at::date
-               AND l.detail->>'reason' IS DISTINCT FROM 'stop_loss'
-           ) AS later_close
-         FROM stops s",
-    )
-    .bind(accounts)
-    .fetch_all(pool)
-    .await?;
-    let stops = rows.len();
-    let later = rows
-        .iter()
-        .filter(|r| r.get::<bool, _>("later_close"))
-        .count();
+    let rows = crate::strategy3::recent_closed_signals(pool, accounts).await?;
+    let mut stops = 0;
+    let mut later = 0;
+    for stop in rows.iter().filter(|r| r.get::<bool, _>("stopped")) {
+        stops += 1;
+        let account: i64 = stop.get("account_id");
+        let symbol: String = stop.get("symbol");
+        let hash: String = stop.get("prereg_hash");
+        let at: DateTime<Utc> = stop.get("closed_at");
+        if rows.iter().any(|r| {
+            let closed: DateTime<Utc> = r.get("closed_at");
+            r.get::<i64, _>("account_id") == account
+                && r.get::<String, _>("symbol") == symbol
+                && r.get::<String, _>("prereg_hash") == hash
+                && closed > at
+                && closed.date_naive() == at.date_naive()
+                && !r.get::<bool, _>("stopped")
+        }) {
+            later += 1;
+        }
+    }
     let score = (stops > 0).then(|| later as f64 / stops as f64);
-    Ok(json!({
-        "available": true,
-        "path": "later owned close on the same UTC date, not a quote path",
-        "stops": stops,
-        "same_session_later_close": later,
-        "score": score,
-        "threshold_crossed": score.is_some_and(|s| stops >= 5 && s < 0.5),
-    }))
+    Ok(json!({"available":true,
+        "path":"later complete owned close on the same UTC date and registration; not a quote path or profitable-recovery rate",
+        "scope":"stored complete-volume positions over 14 days; pending history excluded; not financial acceptance",
+        "stops":stops,"same_session_later_close":later,"score":score,
+        "threshold_crossed":score.is_some_and(|s| stops>=5 && s<0.5)}))
 }
 
 #[cfg(test)]

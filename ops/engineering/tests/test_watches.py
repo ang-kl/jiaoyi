@@ -95,11 +95,11 @@ class WatchesTest(unittest.TestCase):
         self.assertTrue(present["threshold_crossed"])
         self.assertIn("not a quote path", present["path"])
 
-    def test_47790949_closes_when_excluded_from_the_owned_window(self):
+    def test_47790949_exclusion_does_not_close_the_source_coverage_issue(self):
         row = {"account_id": 47790949, "pnl_coverage_diagnostics": {"extra_pnl_position_count": 1},
                "unmatched_excluded_from_owned_window": True}
         reading = watches.account_47790949_watch(operations(diagnostics=[row]))
-        self.assertFalse(reading["still_open"])
+        self.assertTrue(reading["still_open"])
         self.assertTrue(reading["excluded_from_owned_window"])
 
     def test_episode_watch_names_copies_and_leaves_the_account_window(self):

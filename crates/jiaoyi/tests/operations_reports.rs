@@ -234,7 +234,7 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
         "book_stable":true,"balance_stable":true,"pnl_coverage_complete":false,"source_complete":false,
         "failure_reasons":["pnl_position_coverage_incomplete"],"pnl_coverage_diagnostics":counts,
         "extra_pnl_relationship_diagnostics":relationships,
-        "unmatched_excluded_from_owned_window":true})
+        "unmatched_excluded_from_owned_window":false})
     );
     let unknown_counts = json!({"missing_pnl_position_count":null,"extra_pnl_position_count":null,
         "duplicate_position_id_count":null,"duplicate_pnl_id_count":null,"non_open_position_count":null});

@@ -2950,63 +2950,108 @@ pub async fn health(
     Ok(json!(out))
 }
 
-/// Recent Strategy 3 closes grouped as episodes. Accounts copying one signal
-/// (same symbol, side and session date) are one episode. The official
-/// latest-20 stays per account. № 17,596, 28-10-2026. Grok 4.7.
-pub async fn episodes(pool: &PgPool, accounts: &[i64]) -> jiaoyi_store::Result<Value> {
-    let rows = jiaoyi_store::sqlx::query(
-        "SELECT o.symbol, o.side, o.session_date::text AS session_date, f.account_id
-         FROM strategy3_fills f
-         JOIN strategy3_orders o ON o.entry_key = f.entry_key AND o.kind = 'open'
-         WHERE f.account_id = ANY($1)
-           AND f.kind IN ('tp1','session_end','broker_exit')
-           AND f.outcome IN ('filled','partly_filled')
-         ORDER BY COALESCE(f.answered_at, f.sent_at) DESC
-         LIMIT 80",
+/// Read-only diagnostic input. Ownership comes from the opening intent and
+/// its confirmed fill, not a closing action's distinct entry key. Stored deal
+/// volumes must prove full closure; this is not the official net-R evaluator.
+pub(crate) async fn recent_closed_signals(
+    pool: &PgPool,
+    accounts: &[i64],
+) -> Result<Vec<jiaoyi_store::sqlx::postgres::PgRow>, jiaoyi_store::sqlx::Error> {
+    jiaoyi_store::sqlx::query(
+        r#"WITH owned AS (
+          SELECT o.account_id,o.entry_key,o.symbol,o.side,o.session_date,o.prereg_hash,
+            o.detail #>> '{band,minutes}' AS mark_minutes,e.position_id,
+            MAX(e.volume) AS observed_open
+          FROM strategy3_orders o
+          JOIN trading_intents i ON i.account_id=o.account_id AND i.entry_key=o.entry_key AND i.kind='open'
+          JOIN trading_events e ON e.account_id=i.account_id AND e.entry_key=i.entry_key
+          WHERE o.account_id=ANY($1) AND o.kind='open' AND o.label='jiaoyi-s3'
+            AND i.entry_key LIKE 's3:%' AND e.kind=ANY($2) AND e.volume>0
+            AND e.position_id IS NOT NULL AND e.received_at<=now()
+          GROUP BY o.account_id,o.entry_key,o.symbol,o.side,o.session_date,o.prereg_hash,
+            o.detail #>> '{band,minutes}',e.position_id
+        )
+        SELECT o.*,h.closed_at,
+          EXISTS(SELECT 1 FROM strategy3_fills f
+            WHERE f.account_id=o.account_id AND f.position_id=o.position_id
+              AND f.kind='broker_exit' AND f.outcome IN ('filled','partly_filled')
+              AND f.detail->>'reason'='stop_loss'
+              AND COALESCE(f.answered_at,f.sent_at)<=h.closed_at) AS stopped
+        FROM owned o
+        JOIN LATERAL (
+          SELECT COALESCE(SUM(d.filled_volume) FILTER(WHERE NOT d.is_closing),0) AS opened,
+            COALESCE(SUM(d.filled_volume) FILTER(WHERE d.is_closing),0) AS closed,
+            MAX(d.executed_at) FILTER(WHERE d.is_closing) AS closed_at,
+            BOOL_AND(d.deal_status IN ('FILLED','PARTIALLY_FILLED')) AS valid
+          FROM deals d WHERE d.account_id=o.account_id AND d.position_id=o.position_id
+            AND d.filled_volume>0 AND d.executed_at<=now()
+        ) h ON h.opened>0 AND h.opened=h.closed AND h.opened>=o.observed_open AND h.valid
+        WHERE h.closed_at>=now()-interval '14 days'
+          AND NOT EXISTS(SELECT 1 FROM owned other WHERE other.account_id=o.account_id
+            AND other.position_id=o.position_id AND other.entry_key<>o.entry_key)
+        ORDER BY h.closed_at DESC,o.account_id,o.position_id"#,
     )
     .bind(accounts)
+    .bind(jiaoyi_store::trading::FILL_KINDS)
     .fetch_all(pool)
-    .await?;
-    let mut groups: std::collections::BTreeMap<String, Vec<i64>> =
+    .await
+}
+
+/// Copied accounts are one signal episode, separated by registration and mark.
+/// Recent means latest actual broker close, rather than symbol alphabetic order.
+pub async fn episodes(pool: &PgPool, accounts: &[i64]) -> jiaoyi_store::Result<Value> {
+    let rows = recent_closed_signals(pool, accounts).await?;
+    let mut groups: std::collections::BTreeMap<String, (DateTime<Utc>, Value)> =
         std::collections::BTreeMap::new();
-    for row in &rows {
+    for row in rows {
+        let account: i64 = row.get("account_id");
         let symbol: String = row.get("symbol");
         let side: Option<String> = row.get("side");
-        let session: Option<String> = row.get("session_date");
-        let account: i64 = row.get("account_id");
-        let key = format!(
-            "{}|{}|{}",
-            symbol,
-            side.unwrap_or_default(),
-            session.clone().unwrap_or_default()
-        );
-        let accounts = groups.entry(key).or_default();
-        if !accounts.contains(&account) {
-            accounts.push(account);
+        let session: Option<chrono::NaiveDate> = row.get("session_date");
+        let mark: Option<String> = row.get("mark_minutes");
+        let hash: String = row.get("prereg_hash");
+        let at: DateTime<Utc> = row.get("closed_at");
+        // Missing signal identity cannot prove copies of one signal.
+        let identity = match (&side, session, &mark) {
+            (Some(side), Some(session), Some(mark)) => format!("{side}|{session}|{mark}"),
+            _ => format!(
+                "unclassified:{account}:{}",
+                row.get::<String, _>("entry_key")
+            ),
+        };
+        let key = format!("{hash}|{symbol}|{identity}");
+        let (closed_at, episode) = groups.entry(key).or_insert_with(|| {
+            (
+                at,
+                json!({"symbol":symbol,"side":side,"session_date":session,
+                "mark_minutes":mark,"prereg_hash":hash,"accounts":[],"copies":0}),
+            )
+        });
+        *closed_at = (*closed_at).max(at);
+        let accounts = episode["accounts"].as_array_mut().unwrap();
+        if !accounts.contains(&json!(account)) {
+            accounts.push(json!(account));
         }
     }
-    let episodes: Vec<Value> = groups
+    let mut ordered: Vec<_> = groups.into_iter().collect();
+    ordered.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(&b.0)));
+    let copied = ordered
+        .iter()
+        .filter(|(_, (_, e))| e["accounts"].as_array().unwrap().len() > 1)
+        .count();
+    let total = ordered.len();
+    let latest: Vec<Value> = ordered
         .into_iter()
-        .map(|(key, accounts)| {
-            let mut parts = key.split('|');
-            json!({
-                "symbol": parts.next(),
-                "side": parts.next(),
-                "session_date": parts.next(),
-                "accounts": accounts,
-                "copies": accounts.len(),
-            })
+        .take(20)
+        .map(|(_, (at, mut e))| {
+            e["copies"] = json!(e["accounts"].as_array().unwrap().len());
+            e["last_closed_at"] = json!(at);
+            e
         })
         .collect();
-    let latest = episodes.iter().take(20).cloned().collect::<Vec<_>>();
-    Ok(json!({
-        "available": true,
-        "note": "one signal copied across accounts is one episode; official latest-20 stays per account",
-        "episodes": episodes.len(),
-        "latest20_episodes": latest.len(),
-        "copied": episodes.iter().filter(|e| e["copies"].as_u64().unwrap_or(1) > 1).count(),
-        "rows": latest,
-    }))
+    Ok(json!({"available":true,
+        "note":"stored complete-volume owned positions over 14 days; pending history excluded; official net-R latest-20 stays per strategy/account",
+        "episodes":total,"latest20_episodes":latest.len(),"copied":copied,"rows":latest}))
 }
 
 #[cfg(test)]
