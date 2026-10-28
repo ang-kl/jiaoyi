@@ -135,3 +135,6 @@
 
 № 17,657 · 28-10-2026, 12:18 SGT · by Grok 4.7
 §1 Not watching continuously. One read at 12:18 SGT. Live account flat. Two demo JPN225 shorts remain. Trail receipts now say ORDER_REPLACED, stops toward 64370. A new entry was skipped because C 43.50 >= R 24.90. No discretionary trade.
+
+№ 17,658 · 28-10-2026, 12:20 SGT · by Grok 4.7
+§1 Two open trades, both demo JPN225 shorts. Live and the other demo are flat. Latest trail receipt on each is stop 64329.8, ORDER_REPLACED. Health still prints the opening stop until the next reconcile.
