@@ -403,7 +403,7 @@ class MarketValidation:
                 first = self._state.get("baseline") is None
                 self._apply(observation, errors, clock)
                 self._persist()
-            if first or clock >= self.due:
+            if first or clock >= self.due or (self._state.get("private_evidence") or {}).get("state") != "available":
                 evidence = self._evidence(clock)
                 with self.lock:
                     self._state["private_evidence"] = evidence
@@ -460,6 +460,7 @@ class MarketValidation:
                 "message_id": self._state.get("message_id"), "model_calls": 0, "sample_seconds": 60,
                 "private_evidence_state": evidence.get("state", "not_collected") if evidence.get("state", "not_collected") in
                     ("available", "partial", "unknown", "not_collected") else "unknown",
+                "private_source_error": evidence.get("reason") if re.fullmatch(r"private_readonly_[A-Za-z0-9_]{1,100}", str(evidence.get("reason", ""))) else None,
                 "account_snapshot_count": sum(bool(row.get("observed_at")) for row in accounts if isinstance(row, dict)) if isinstance(accounts, list) else 0,
                 "statement_report_available": statement.get("status") == "sent" and bool(statement.get("report_key")),
                 "statement_report_period": period}
