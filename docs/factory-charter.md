@@ -96,6 +96,8 @@ routing and LangGraph/CrewAI/AutoGen/TradingAgents/FinRL/QIB/RD-Agent/Pandas/Red
 are optional implementation choices, not mandatory installations or evidence of
 progress. Preserve the deterministic Rust execution and risk boundary.
 
+Owner № 17,684 (28-10-2026 22:35 SGT). LangChain is a connector library. LangGraph is a checkpointed workflow runtime. Neither is installed, and neither is required. The execution core — signal, size, stop, order — stays deterministic Rust with no model in the loop. A research draft does not change a parameter, a size, a stop, or an order unless the owner approves it and a new registration records the rule. An agent mistake is written into this charter or into a registration. It is not fixed by adding a framework. Grok 4.7.
+
 I-2 and I-5 are recorded as the owner amended them. The wording of I-1, I-3, I-4 and I-6 is recorded from the rules already in force; the coordinator checks it against № 17,104.
 
 ## The limits (alerts only)

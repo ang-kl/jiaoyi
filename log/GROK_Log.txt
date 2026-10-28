@@ -172,3 +172,6 @@
 
 № 17,683 · 28-10-2026, 22:35 SGT · by Grok 4.7
 §1 PR #110 and PR #111 were already green and already merged. No open pull request remained.
+
+№ 17,684 · 28-10-2026, 22:35 SGT · by Grok 4.7
+§1 LangChain and LangGraph are not installed. The order path stays deterministic Rust. The charter now says a research draft cannot change a size, a stop, or an order without the owner and a new registration.
