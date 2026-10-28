@@ -946,9 +946,18 @@ pub fn position_money(deals: &[DealMoney]) -> Result<(i64, DateTime<Utc>, f64), 
             let gross = d
                 .close_gross_profit
                 .ok_or("a closing deal has no gross profit")?;
-            net += (gross + d.close_swap.unwrap_or(0)) as f64 / unit;
-            net -= d.close_commission.unwrap_or(0).abs() as f64 / unit;
-            net -= d.close_pnl_conversion_fee.unwrap_or(0).abs() as f64 / unit;
+            // Absence is unknown, including an omitted optional broker fee.
+            // Only an explicit zero proves that a charge was zero.
+            let swap = d.close_swap.ok_or("a closing deal has no swap")?;
+            let commission = d
+                .close_commission
+                .ok_or("a closing deal has no commission")?;
+            let conversion_fee = d
+                .close_pnl_conversion_fee
+                .ok_or("a closing deal has no P&L conversion fee")?;
+            net += (gross + swap) as f64 / unit;
+            net -= commission.abs() as f64 / unit;
+            net -= conversion_fee.abs() as f64 / unit;
             closed_at = closed_at.max(Some(d.executed_at));
         }
     }

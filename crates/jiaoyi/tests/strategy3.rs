@@ -2105,11 +2105,12 @@ async fn closed_losses(pool: &PgPool, code: &str, n: i32) {
         "INSERT INTO deals (account_id, deal_id, order_id, position_id, broker_symbol_id, volume,
             filled_volume, trade_side, deal_status, created_at, executed_at, money_digits,
             is_closing, close_gross_profit, close_swap, close_commission, close_money_digits,
-            raw, fetched_at)
+            close_pnl_conversion_fee, raw, fetched_at)
          SELECT $1, 9000000 + 2 * n + c, 9000000 + 2 * n + c, 900000 + n, 99, 10, 10,
                 'BUY', 'FILLED', t, t, 2, c = 1,
                 CASE WHEN c = 1 THEN -560 END, CASE WHEN c = 1 THEN 0 END,
-                CASE WHEN c = 1 THEN -40 END, CASE WHEN c = 1 THEN 2 END, '\\x', now()
+                CASE WHEN c = 1 THEN -40 END, CASE WHEN c = 1 THEN 2 END,
+                CASE WHEN c = 1 THEN 0 END, '\\x', now()
          FROM generate_series(1, $2) n, generate_series(0, 1) c,
               LATERAL (SELECT now() - interval '2 days' + n * interval '1 minute' + c * interval '10 seconds' AS t) x",
     )
