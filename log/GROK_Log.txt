@@ -175,3 +175,6 @@
 
 № 17,684 · 28-10-2026, 22:35 SGT · by Grok 4.7
 §1 LangChain and LangGraph are not installed. The order path stays deterministic Rust. The charter now says a research draft cannot change a size, a stop, or an order without the owner and a new registration.
+
+№ 17,685 · 29-10-2026, 03:23 SGT · by Grok 4.7
+§1 Four statements dated 29 Oct, bot deals only. ETHUSD 0 wins of 61. BTCUSD 0 of 32. Closes under 30 minutes: 91, 0 wins. Session-flatten closes: 31 wins of 40. Latest 20 is 2/19, 1/20, 6/20 and 5/20. v6 was not live for these deals. Three non-bot deals on 47790949 are not the algorithm.
