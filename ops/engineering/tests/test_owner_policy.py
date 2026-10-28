@@ -72,7 +72,8 @@ class OwnerPolicyTests(unittest.TestCase):
             with patch.object(c.reporter, "run"), patch.object(c.store, "activate_scheduled", return_value=[]), \
                  patch.object(c, "enqueue_automatic_assessment") as automatic, patch.object(c, "prepare") as prepare, \
                  patch.object(c.store, "reserve") as reserve:
-                c.serve()
+                with patch.object(c, "incident_loop"):
+                    c.serve()
                 automatic.assert_not_called()
                 prepare.assert_not_called()
                 reserve.assert_not_called()

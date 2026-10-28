@@ -104,7 +104,8 @@ class AutomaticEvidenceTests(unittest.TestCase):
             with patch.object(c.reporter, "run"), patch.object(c, "prepare", return_value=Path(temp)) as prepare, \
                  patch.object(c, "run_job", side_effect=model) as run, patch.object(c.shutdown, "wait", side_effect=wait), \
                  patch.object(w.urllib.request, "urlopen", return_value=Response()) as fetch:
-                c.serve()
+                with patch.object(c, "incident_loop"):
+                    c.serve()
             self.assertEqual(fetch.call_count, 6)
             self.assertEqual(run.call_count, 2)
             self.assertEqual(prepare.call_count, 2)
@@ -123,7 +124,8 @@ class AutomaticEvidenceTests(unittest.TestCase):
             with patch.object(c.reporter, "run"), patch.object(c.shutdown, "wait", side_effect=wait), \
                  patch.object(w.urllib.request, "urlopen", side_effect=OSError("unavailable")) as fetch, \
                  patch.object(c, "prepare") as prepare, patch.object(c.store, "reserve") as reserve:
-                c.serve()
+                with patch.object(c, "incident_loop"):
+                    c.serve()
             self.assertEqual(fetch.call_count, 1)
             prepare.assert_not_called()
             reserve.assert_not_called()

@@ -4,9 +4,9 @@ Reads the snapshots the coordinator already fetches (`/health`,
 `/operations/reports`). Emits a Telegram event only when one of the triggers
 changes. Unchanged evidence produces no event and no session.
 
-The live stop is not read as something to amend. A day-review names a copied
-cluster or a two-sided name. It does not close, reverse, or call a model.
-Grok 4.7 · № 17,688.
+The live stop is not read as something to amend. Episode topology is retained
+as evidence, with absent P&L explicit. Material incident reporting has its own
+deduplicated path; a copied side alone does not send a second loss alert.
 """
 
 import day_review
@@ -231,20 +231,8 @@ def events(previous, health, operations):
     if current["recovery"]["threshold_crossed"] and not previous.get("recovery", {}).get("threshold_crossed"):
         out.append({"event": "recovery_threshold", "detail": current["recovery"]})
 
-    # № 17,688. The limit is already an alert. This adds the day's class once.
-    # It does not close, reverse, or pause.
-    review = day_review.episode_review(health)
-    current["day_review"] = review
-    if current["limits"] and review["kind"] != "none":
-        previous_signature = (previous.get("day_review") or {}).get("signature")
-        if review["signature"] != previous_signature:
-            out.append({"event": "day_review", "detail": {
-                "kind": review["kind"],
-                "fundamental": review["fundamental"],
-                "trend": review["trend"],
-                "close_or_reverse": review["close_or_reverse"],
-                "pr": review["pr"],
-                "reason": review["reason"],
-            }})
+    # Preserve truthful evidence for incident assessment; copies alone are not
+    # a loss or an economic cause, and must not trigger a duplicate owner alert.
+    current["day_review"] = day_review.episode_review(health)
 
     return out, current

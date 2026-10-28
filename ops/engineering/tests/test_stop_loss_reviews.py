@@ -130,8 +130,9 @@ class StopLossReviewTests(unittest.TestCase):
 
     def test_fixed_setup_checks_preserve_unknowns_and_reason_is_not_broker_confirmation(self):
         raw = case(reason_evidence="recorded_inference", checks={"entry_trigger_valid": False,
-                    "original_session_valid": True, "unknown_private_field": "secret"},
-                   missing_evidence=["complete_net_costs", "entry_trigger", "secret"],
+                    "original_session_valid": True, "original_decision_mark_valid": False,
+                    "unknown_private_field": "secret"},
+                   missing_evidence=["complete_net_costs", "entry_trigger", "original_decision_mark", "applicable_registered_rules", "secret"],
                    net_costs_complete=True, net_r=10 ** 1000)
         self.poll([raw])
         task = self.c.store.jobs()[0]["task"]
@@ -140,8 +141,24 @@ class StopLossReviewTests(unittest.TestCase):
         self.assertFalse(evidence["checks"]["entry_trigger_valid"])
         self.assertIsNone(evidence["checks"]["original_stop_geometry_valid"])
         self.assertIsNone(evidence["net_r"])
-        self.assertEqual(evidence["missing_evidence"], ["complete_net_costs", "entry_trigger"])
+        self.assertFalse(evidence["checks"]["original_decision_mark_valid"])
+        self.assertEqual(evidence["missing_evidence"], ["applicable_registered_rules", "complete_net_costs", "entry_trigger", "original_decision_mark"])
         self.assertNotIn("secret", task)
+
+    def test_corrected_original_rule_evidence_is_reconsidered_once_without_clock_churn(self):
+        first = case(checks={"entry_trigger_valid": True, "original_decision_mark_valid": None},
+                     missing_evidence=["original_decision_mark"])
+        initial = self.poll([first])["queued_job_ids"][0]
+        self.c.store.update(initial, "completed", result='{"outcome":"no_change"}')
+        corrected = case(checks={"entry_trigger_valid": True, "original_decision_mark_valid": False},
+                         missing_evidence=[])
+        followup = self.poll([corrected])["queued_job_ids"]
+        self.assertEqual(len(followup), 1)
+        self.assertNotEqual(initial, followup[0])
+        self.assertEqual(self.poll([corrected], at="2026-10-27T02:00:10+00:00")["queued_job_ids"], [])
+        self.assertEqual(self.c.store.used(), 0)
+        task = self.c.store.jobs()[0]["task"]
+        self.assertIn('"original_decision_mark_valid":false', task)
 
     def test_old_only_startup_does_not_consume_a_review(self):
         old = case(close="2026-10-27T00:00:00Z")

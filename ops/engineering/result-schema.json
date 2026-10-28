@@ -1,12 +1,118 @@
 {
   "type": "object",
   "properties": {
-    "outcome": {"type": "string", "enum": ["changes", "no_change", "owner_blocked", "verified", "verification_pending"]},
-    "summary": {"type": "string"},
-    "tests": {"type": "string"},
-    "owner_decisions": {"type": "string"},
-    "acceptance_passed": {"type": "boolean"}
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "changes",
+        "no_change",
+        "owner_blocked",
+        "verified",
+        "verification_pending"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "tests": {
+      "type": "string"
+    },
+    "owner_decisions": {
+      "type": "string"
+    },
+    "acceptance_passed": {
+      "type": "boolean"
+    },
+    "incident": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 128
+            },
+            "disposition": {
+              "type": "string",
+              "enum": [
+                "proven_defect",
+                "normal_loss",
+                "research",
+                "missing_evidence",
+                "owner_policy"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 180
+              },
+              "maxItems": 32
+            },
+            "repair_proposal": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 180
+                      },
+                      "maxItems": 16
+                    },
+                    "acceptance_checks": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 1200
+                      },
+                      "maxItems": 12
+                    }
+                  },
+                  "required": [
+                    "summary",
+                    "paths",
+                    "acceptance_checks"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "disposition",
+            "evidence_ids",
+            "repair_proposal"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
   },
-  "required": ["outcome", "summary", "tests", "owner_decisions", "acceptance_passed"],
+  "required": [
+    "outcome",
+    "summary",
+    "tests",
+    "owner_decisions",
+    "acceptance_passed",
+    "incident"
+  ],
   "additionalProperties": false
 }

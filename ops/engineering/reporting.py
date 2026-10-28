@@ -3,7 +3,9 @@ import datetime as dt
 import hashlib
 import html
 import json
+import math
 import re
+import threading
 from pathlib import Path
 import time
 import urllib.error
@@ -15,6 +17,94 @@ from zoneinfo import ZoneInfo
 from stop_loss_reviews import PREFIX as INTERNAL_REVIEW_PREFIX
 
 SGT = ZoneInfo("Asia/Singapore")
+
+
+def _incident_time(value):
+    """Unknown/naive source clocks must not inherit the host timezone."""
+    try:
+        if isinstance(value, str):
+            value = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if not isinstance(value, dt.datetime) or value.tzinfo is None:
+            return "unknown"
+        return value.astimezone(SGT).strftime("%d %b %Y %H:%M:%S SGT")
+    except (TypeError, ValueError, OverflowError):
+        return "unknown"
+
+
+def _incident_goal(context):
+    """Only qualified, supplied measurements support a numerical goal gap."""
+    if not isinstance(context, dict):
+        return "Goal progress unmeasured in this incident; no financial improvement is inferred."
+    window = context.get("window") if isinstance(context.get("window"), dict) else context
+    count, wins = window.get("count"), window.get("wins")
+    qualified = context.get("verified") is True or context.get("history_complete") is True
+    if not qualified or type(count) is not int or type(wins) is not int or not 0 <= wins <= count <= 20:
+        return "Goal progress unmeasured: qualified latest-20 evidence was not supplied."
+    if count < 20:
+        return f"{wins}/{count} measured net wins; {20 - count} more fully closed positions needed for a 20-position window."
+    gap = max(0, 15 - wins)
+    text = f"Latest20: {wins}/20 net wins ({100 * wins / 20:.1f}%); gap to 15/20: {gap} net wins."
+    payoff = window.get("realized_payoff")
+    if type(payoff) in (int, float) and math.isfinite(payoff) and payoff >= 0:
+        text += f" Realized payoff {payoff:.3f}; gap to 1.38: {max(0, 1.38 - payoff):.3f}."
+    else:
+        text += " Realized payoff unknown."
+    return text + " Change attributable to this incident is unmeasured; overlapping windows are not independent."
+
+
+def render_incident(incident, created_at=None):
+    """Small factual report; no model, raw logs or inferred trading diagnosis."""
+    created_at = created_at or dt.datetime.now(dt.timezone.utc).isoformat()
+    esc = lambda value, limit=1600: html.escape(str(value)[:limit], quote=True)
+    identity = str(incident.get("id", "unknown"))[:100]
+    version = str(incident.get("version", 1))[:32]
+    serial = "INC-" + identity + "-" + version
+    # A deadline/resolution report can share an incident version; the stable
+    # delivery key distinguishes those documents while retries keep one serial.
+    if incident.get("_report_key"):
+        serial += "-" + str(incident["_report_key"])[:8]
+    number = 0
+    def para(body):
+        nonlocal number
+        number += 1
+        return "<p>[§" + esc(serial) + "." + str(number) + "] " + body + "</p>"
+    evidence = incident.get("evidence")
+    facts = []
+    if isinstance(evidence, dict):
+        for name, value in list(evidence.items())[:16]:
+            if re.search(r"token|secret|password|balance|equity|money|cash|raw|stack|trace|log", str(name), re.I):
+                continue
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                facts.append("<li>" + esc(name, 100) + ": " + esc(value, 350) + "</li>")
+            elif isinstance(value, list):
+                facts.append("<li>" + esc(name, 100) + ": " + esc(", ".join(str(x)[:100] for x in value[:8]), 500) + "</li>")
+    elif isinstance(evidence, list):
+        facts = ["<li>" + esc(x, 500) + "</li>" for x in evidence[:12] if isinstance(x, str)]
+    clocks = [("Broker event", incident.get("event_at")), ("Source evidence", incident.get("source_at")),
+              ("Observer receipt", incident.get("received_at", incident.get("first_seen_at"))),
+              ("Report creation", created_at),
+              ("Analysis due", incident.get("analysis_due_at", incident.get("analysis_deadline", incident.get("deadline"))))]
+    rows = "".join("<tr><td>" + esc(name) + "</td><td>" + esc(_incident_time(value)) + "</td></tr>" for name, value in clocks)
+    document = ("<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                "<title>Jiaoyi incident report</title><style>body{font:15px/1.5 system-ui;color:#15243a;max-width:840px;margin:24px auto;padding:0 16px}"
+                "h1{font-size:22px}.goal{padding:12px;background:#edf4fc}table{border-collapse:collapse;width:100%}td{padding:6px;border-bottom:1px solid #ddd}p,li{overflow-wrap:anywhere}</style>"
+                "<h1>№" + esc(serial) + " · " + esc(incident.get("kind", "abnormality"), 120) + "</h1>"
+                + para("<b>" + esc(incident.get("severity", "unknown"), 30) + "</b> · Account "
+                       + esc(incident.get("account_id", incident.get("account", "unknown")), 60) + " · "
+                       + esc(incident.get("strategy", "unknown"), 60) + " · " + esc(incident.get("symbol", "unknown"), 80))
+                + "<div class=goal>" + para(esc(_incident_goal(incident.get("goal_context")))) + "</div>"
+                + para(esc(incident.get("summary", "A material change was observed; its cause is not yet established.")))
+                + "<ul>" + ("".join(facts) or "<li>Detailed evidence is unavailable; this is not a claim of absent risk.</li>") + "</ul>"
+                + para("<b>Analysis:</b> " + esc(incident.get("analysis_state", incident.get("state", "pending")), 120)
+                       + ". <b>Disposition:</b> " + esc(incident.get("disposition", "pending"), 200)
+                       + ". <b>Next action:</b> " + esc(incident.get("next_action", "Bounded analysis pending; preserve existing protections."), 1000))
+                + para("<b>Owner:</b> " + esc(incident.get("owner", "engineering coordinator"), 120)
+                       + ". <b>Analysis job:</b> " + esc(incident.get("analysis_job", "not yet dispatched"), 60)
+                       + ". <b>Repair job:</b> " + esc(incident.get("repair_job", "none"), 60))
+                + "<table>" + rows + "</table>"
+                + para("Source, receipt and delivery clocks differ. Missing evidence remains unknown. This report does not change orders, stops, sizing, account activation or owner-only policy.")
+                + "</html>")
+    return document
 
 
 class DeliveryError(RuntimeError):
@@ -199,6 +289,145 @@ class Reporter:
             db.execute("CREATE TABLE IF NOT EXISTS engineering_report_delivery (id INTEGER PRIMARY KEY CHECK(id=1), next_due REAL NOT NULL, state TEXT NOT NULL, path TEXT, message_id INTEGER, last_error TEXT, retry_at REAL)")
             db.execute("INSERT OR IGNORE INTO engineering_report_delivery(id,next_due,state) VALUES(1,?,'waiting')", (time.time() + self.interval,))
 
+    def publish_incident(self, incident):
+        """Create a factual HTML report before optional receipt-backed delivery.
+
+        The event ledger is the outbox. A persisted sending/uncertain state is
+        deliberately not replayed after a lost acknowledgement or restart.
+        """
+        if not isinstance(incident, dict) or not incident.get("id"):
+            raise ValueError("an incident identity is required")
+        material = next((incident[name] for name in ("material_signature", "signature", "fingerprint", "version")
+                         if incident.get(name) is not None), None)
+        if material is None:
+            material = {name: incident.get(name) for name in
+                        ("kind", "severity", "account_id", "strategy", "symbol", "summary", "evidence", "goal_context")}
+        identity = {"id": str(incident["id"])[:200], "material": material,
+                    "version": incident.get("version", 1),
+                    "phase": incident.get("report_phase", incident.get("phase", "initial")),
+                    "analysis_state": incident.get("analysis_state", incident.get("state")),
+                    "disposition": incident.get("disposition"), "repair_job": incident.get("repair_job")}
+        encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str, allow_nan=False)
+        if len(encoded) > 32768:
+            raise ValueError("incident material exceeds report bound")
+        key = hashlib.sha256(encoded.encode()).hexdigest()
+        created_at = dt.datetime.now(dt.timezone.utc).isoformat()
+        reports = self.store.private / "incident-reports"
+        reports.mkdir(mode=0o700, exist_ok=True)
+        if reports.is_symlink():
+            raise RuntimeError("incident report directory must not be a symlink")
+        reports.chmod(0o700)
+        path = reports / ("incident-" + key[:24] + ".html")
+        # Normal SL reviews remain internal even if a caller supplies a high
+        # severity. A failed protective action has its own incident kind.
+        internal = incident.get("internal_only") is True or incident.get("kind") in (
+            "stop_loss", "stop_loss_review", "normal_sl", "normal_loss")
+        notify = (str(incident.get("severity", "")).lower() in ("critical", "high") and not internal
+                  and self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID"))
+        deferred = bool(notify and incident.get("defer_delivery") is True)
+        receipt = {"key": key, "incident_id": str(incident["id"])[:200], "state": "pending",
+                   "path": str(path), "created_at": created_at, "message_id": None,
+                   "severity": str(incident.get("severity", "unknown"))[:30],
+                   "notification_pending": deferred}
+        with self.store.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT detail FROM events WHERE kind='incident_report_delivery' "
+                             "AND json_valid(detail) AND json_extract(detail,'$.key')=? ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+            if row:
+                return json.loads(row["detail"])
+            document = render_incident({**incident, "_report_key": key}, created_at)
+            if hasattr(self.coordinator, "safe_detail"):
+                document = self.coordinator.safe_detail(document, len(document))
+            path.write_text(document, encoding="utf-8")
+            path.chmod(0o600)
+            db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,NULL,'incident_report_delivery',?)",
+                       (created_at, json.dumps(receipt, sort_keys=True)))
+            receipt["state"] = "sending" if notify and not deferred else "created"
+            if not notify:
+                receipt["reason"] = "internal_only" if internal or str(incident.get("severity", "")).lower() not in ("critical", "high") else "telegram_not_configured"
+            db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,NULL,'incident_report_delivery',?)",
+                       (created_at, json.dumps(receipt, sort_keys=True)))
+        if notify and not deferred:
+            receipt = self._send_incident(receipt, document)
+        # Keep about50completed files. A pending/uncertain transport still needs
+        # its factual document and must not be silently evicted behind the lane.
+        for old in sorted(reports.glob("incident-*.html"), key=lambda item: item.stat().st_mtime)[:-50]:
+            with self.store.connect() as db:
+                row = db.execute("SELECT detail FROM events WHERE kind='incident_report_delivery' "
+                                 "AND json_valid(detail) AND json_extract(detail,'$.path')=? ORDER BY id DESC LIMIT 1",
+                                 (str(old),)).fetchone()
+            saved = json.loads(row["detail"]) if row else {}
+            if saved.get("notification_pending") or saved.get("state") in ("sending", "uncertain"):
+                continue
+            old.unlink()
+        return receipt
+
+    def incident_delivery_receipt(self, key):
+        """Private delivery evidence for the coordinator's whitelisted status."""
+        with self.store.connect() as db:
+            row = db.execute("SELECT detail FROM events WHERE kind='incident_report_delivery' "
+                             "AND json_valid(detail) AND json_extract(detail,'$.key')=? ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+        return json.loads(row["detail"]) if row else None
+
+    def _send_incident(self, receipt, document=None):
+        path = Path(receipt["path"])
+        # A receipt never grants access to arbitrary private files.
+        expected = self.store.private / "incident-reports" / ("incident-" + receipt["key"][:24] + ".html")
+        if path != expected or not path.is_file() or path.is_symlink():
+            receipt.update(state="failed", notification_pending=False, error="incident_report_missing")
+            self.store.event("incident_report_delivery", detail=json.dumps(receipt, sort_keys=True))
+            return receipt
+        try:
+            message = send_document(self.env["TELEGRAM_BOT_TOKEN"], self.env["TELEGRAM_OWNER_CHAT_ID"],
+                                    path.name, document if document is not None else path.read_text(),
+                                    "Jiaoyi engineering incident · " + receipt.get("severity", "unknown") + " · HTML report")
+            receipt.update(state="delivered", message_id=message,
+                           delivered_at=dt.datetime.now(dt.timezone.utc).isoformat())
+        except DeliveryError as error:
+            receipt.update(state="uncertain" if error.uncertain else "failed", error=str(error)[:120])
+        except Exception as error:
+            # A POST may already have reached Telegram. Never replay unknowns.
+            receipt.update(state="uncertain", error=type(error).__name__)
+        receipt["notification_pending"] = False
+        self.store.event("incident_report_delivery", detail=json.dumps(receipt, sort_keys=True))
+        return receipt
+
+    def incident_delivery_tick(self):
+        """Claim one safely queued file; observation/creation never waits here."""
+        if not (self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")):
+            return None
+        with self.store.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("""SELECT e.detail FROM events e JOIN (
+                SELECT MAX(id) AS id FROM events
+                WHERE kind='incident_report_delivery' AND json_valid(detail)
+                GROUP BY json_extract(detail,'$.key')
+              ) latest ON e.id=latest.id
+              WHERE json_extract(e.detail,'$.state')='created'
+                AND json_extract(e.detail,'$.notification_pending')=1
+              ORDER BY e.id LIMIT 1""").fetchone()
+            if row is None:
+                return None
+            receipt = json.loads(row["detail"])
+            receipt.update(state="sending", notification_pending=False)
+            db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,NULL,'incident_report_delivery',?)",
+                       (dt.datetime.now(dt.timezone.utc).isoformat(), json.dumps(receipt, sort_keys=True)))
+        return self._send_incident(receipt)
+
+    def incident_delivery_loop(self):
+        """One independent transport lane; no model session or observer lock."""
+        last_error = None
+        while not self.coordinator.shutdown.is_set():
+            try:
+                self.incident_delivery_tick()
+                last_error = None
+            except Exception as error:
+                code = type(error).__name__
+                if code != last_error:
+                    self.store.event("incident_report_delivery_error", detail=code)
+                    last_error = code
+            self.coordinator.shutdown.wait(1)
+
     def status(self):
         with self.store.connect() as db:
             row = dict(db.execute("SELECT next_due,state,message_id,last_error FROM engineering_report_delivery WHERE id=1").fetchone())
@@ -242,6 +471,9 @@ class Reporter:
             old.unlink()
 
     def run(self):
+        # Transport may wait on Telegram; factual incident creation runs in the
+        # independent observer and must never inherit this network latency.
+        threading.Thread(target=self.incident_delivery_loop, daemon=True).start()
         # Private read-only diagnostics explain retained failed proposals without
         # paying for another model attempt or exposing a public detail endpoint.
         for job in reversed(self.store.jobs(("failed",))[-10:]):

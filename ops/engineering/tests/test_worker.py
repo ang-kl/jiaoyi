@@ -283,7 +283,8 @@ class WorkerTests(Fixture, unittest.TestCase):
             c.store.update(job["id"], "completed", result="simulated acceptance")
             c.shutdown.set()
         with patch.object(c, "prepare", return_value=self.root), patch.object(c, "run_job", side_effect=model) as launch:
-            c.serve()
+            with patch.object(c, "incident_loop"):
+                c.serve()
         self.assertEqual(launch.call_count, 1)
         self.assertEqual(self.store.used(), 1)
 
@@ -298,7 +299,8 @@ class WorkerTests(Fixture, unittest.TestCase):
         timer.start()
         try:
             with patch.object(c, "prepare") as prepare, patch.object(c, "run_job") as model:
-                c.serve()
+                with patch.object(c, "incident_loop"):
+                    c.serve()
                 prepare.assert_not_called()
                 model.assert_not_called()
         finally:

@@ -37,6 +37,72 @@ bounded sessions with durable context. Model, hosting, GitHub and Railway
 availability still determine whether those sessions can progress. Neither the
 worker nor one passing latest-20 window guarantees the financial goal.
 
+## Owner amendment — abnormality response, 29 October 2026
+
+Owner: "engineering system should act on adnormalities and quickly generate
+report and analyse", acknowledged at chat №17,699 §1. This is a required outcome
+for the engineering change. Owner approval acknowledged at №17,706 §1 lifts
+the previous no-build hold for Codex, with the work window ending **29October2026
+07:30SGT** (№17,707 §§1–2),30minutes before Tokyo cash opens08:00SGT.
+Grok's separately stopped repair permit is not resumed; use existing ChatGPT/Codex
+authentication without a paid fallback. Source implementation, CI and actual
+Railway activation are separate receipts. No trading policy is changed.
+
+The response contract is:
+
+1. Detect material abnormalities from explicitly identified sources: failed or
+   unconfirmed protective actions, unresolved entries, stale/missing required
+   data, preparation deadline misses, release regressions, and meaningful
+   instrument/episode loss concentration or deterioration against existing goals.
+   Normal SLs alone are not defects; grouped accounts are not independent market
+   episodes. Use existing registered limits without adding a trading veto.
+2. Register one durable incident and produce a concise factual report immediately,
+   without waiting for an LLM, quota or an idle model lane. Include severity,
+   affected account/instrument/episode, observed versus expected behavior, exact
+   evidence times/IDs, known impact/unknowns, next action, owner and deadline.
+   Missing protection evidence means unverified protection, not proven absence.
+3. Prioritize bounded analysis and record a structured disposition: proven defect
+   with a linked repair; normal/false alarm with evidence; research hypothesis;
+   missing evidence with a scoped next step; or a specific owner policy decision.
+   A model's `no_change` must not discard a proven repair proposal. Keep each
+   incident open until its disposition and follow-through are evidenced.
+4. For proven authorized software defects, link a bounded repair task and carry
+   it through tests, exact-head CI, release and affected-behavior verification.
+   **After the owner work window closes, retain pending repairs without new
+   code/build/PR/deployment dispatch.** `ENGINEERING_WORK_UNTIL` enforces the
+   deadline across job dispatch, active mutating work and remote publication.
+   Read-only inspection uses receipts/source/HTTP after cutoff, without new
+   compiler/test invocations. Strategy/risk/SL/TP changes retain owner rules.
+
+Initial engineering targets, to be measured rather than claimed as live SLAs:
+
+- Lightweight critical-source checks every10seconds where the source supports
+  it; do not wait for the30-minute routine assessment or invoke an LLM per poll.
+- Initial factual incident report within60seconds of source-evidence receipt.
+- First bounded analysis/disposition target within5minutes of that receipt. If
+  source access, the model lane or allowance prevents this, report analysis
+  pending, the concrete reason, queue/wait state and next deadline; record and
+  escalate a missed target instead of silently resetting its clock.
+
+Record broker event time, source availability, observer receipt, report creation
+and delivery separately. These targets do not promise detection within10seconds
+of an event the broker/source has not exposed. Inventory source coverage before
+claiming an abnormality is monitored; an uncovered source is a scoped gap.
+
+Use the existing engineering HTML/reporting channel for material critical-incident
+summaries and meaningful escalation/resolution updates. Deduplicate by incident
+and material evidence changes. Individual SL reviews stay internal; unchanged
+alerts do not generate repeated messages or model sessions. Never expose account
+money on public endpoints. Existing allowance ceilings/no paid fallback remain.
+
+The three named acceptance journeys exercise actual failure-to-report and
+report-to-action paths, not only a healthy heartbeat: initial report with no model/quota, repeated
+incident deduplication, materially changed evidence, successful repair handoff,
+current no-build hold, missed analysis deadline, policy escalation and verified
+closure. Reuse the existing queue/event store; no new framework or telemetry
+schema is required merely to satisfy this contract. Planning shows no measured
+improvement toward the latest20/73% and1:1.38 financial goals.
+
 ## Auditable activity and waiting
 
 The engineering coordinator is Python; the trading and supervision loops are
@@ -556,3 +622,31 @@ not reuse that incomplete report. Codex runs without ephemeral mode so a child
 can load its parent's persisted rollout. This is ordinary CLI state under the
 worker's private CODEX_HOME, never a copied chat login. Actual corrected runtime
 proof is required before declaring delegation or full acceptance successful.
+
+## 29 October release implementation and verification boundary
+
+The incident observer reuses the existing event/queue store and publishes factual
+HTML without waiting for AI, allowance or Telegram. The reporter's independent
+outbox delivery handles network waits and uncertain acknowledgements. Material
+source identity includes session/hash/position/action evidence; unchanged repeats
+consume no new review. Repair links survive updates and older verification cannot
+close newer evidence. Failed or malformed analyses remain explicitly unresolved.
+
+PR117's direction/copy observations now stay neutral without measured outcomes.
+Its raw closing-deal helper cannot infer extra opens or ownership from channels.
+No outcome is manufactured for the current episode source, which does not expose
+complete daily P&L. That coverage limit is distinct from coordinator health.
+
+Three acceptance journeys are in `tests/test_incident_acceptance.py` under the
+engineering service: report/transport independence; material identity and loss
+grain; and proven-defect repair through exact CI/deployment/behavioral closure,
+including the work-window cutoff. Full required CI and deployed bundle hashes
+must still be checked for the final release. Old instance retirement is verified
+after the replacement is healthy; deployment history remains an audit trail.
+
+Read-only trailing verification uses `/operations/trailing-receipts`, bounded to
+five saved trail requests per allowlisted account over14days. It compares immutable
+openingR, saved trail arithmetic, the actual intent and a uniquely correlated raw
+ORDER_REPLACED stop/TP receipt. It exposes no raw event/account cash and sends no
+broker frame. Missing/mismatched evidence stays unknown/refused; a passed receipt
+is not a current-protection certificate, price-path maximum or profitability test.

@@ -64,7 +64,8 @@ class HandoffGuardTests(unittest.TestCase):
         timer = threading.Timer(0.2, self.c.shutdown.set)
         timer.start()
         try:
-            self.c.serve()
+            with patch.object(self.c, "incident_loop"):
+                self.c.serve()
         finally:
             timer.cancel()
 
@@ -106,7 +107,8 @@ class HandoffGuardTests(unittest.TestCase):
         with patch.object(self.c.reporter, "run"), patch.object(self.c, "release", side_effect=release) as poll, \
              patch.object(self.c, "handoff_blockers", side_effect=AssertionError("release polling blocked")), \
              patch.object(self.c, "prepare") as prepare, patch.object(self.c, "run_job") as model:
-            self.c.serve()
+            with patch.object(self.c, "incident_loop"):
+                self.c.serve()
             poll.assert_called_once()
             prepare.assert_not_called()
             model.assert_not_called()
