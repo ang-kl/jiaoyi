@@ -169,3 +169,6 @@
 
 № 17,682 · 28-10-2026, 22:23 SGT · by Grok 4.7
 §1 Owner: proceed to fix. Codex was through № 17,681. PR #110 merged. v6 remembers a cost skip for the session and allows one recorded open per symbol per session. The band is not refit. The margin buffer is unchanged. Kelly reads only this new hash, so v5 closes are not an input.
+
+№ 17,683 · 28-10-2026, 22:35 SGT · by Grok 4.7
+§1 PR #110 and PR #111 were already green and already merged. No open pull request remained.
