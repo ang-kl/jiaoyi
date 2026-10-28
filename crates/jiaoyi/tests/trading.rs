@@ -360,6 +360,70 @@ async fn a_reviewed_seed_change_is_applied_once_and_logged(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
+async fn released_margin_floor_reaches_all_accounts_once_and_preserves_overrides(pool: PgPool) {
+    let key = "trading.margin_level_floor_pct";
+    let seed_id = "2026-10-28-margin-buffer-entry-floor";
+    let applied = trading::apply_seed(&pool, trading::SEED_FILE)
+        .await
+        .unwrap();
+    assert!(applied.iter().any(|id| id == seed_id));
+    for account in [43002148, 46130058, 47790949, 49236051] {
+        assert_eq!(
+            settings::snapshot(&pool, Some(account))
+                .await
+                .unwrap()
+                .number(key),
+            Ok(250.0)
+        );
+    }
+    let audit: (String, String) = sqlx::query_as(
+        "SELECT changed_by, reason FROM settings_changes WHERE key = $1 AND account_id IS NULL",
+    )
+    .bind(key)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit.0, "owner");
+    assert!(audit.1.contains("Owner delegated selection and activation"));
+    assert!(audit.1.contains("№17,677 §3"));
+    // A later owner override must survive startup; the reviewed seed is not a
+    // recurring writer that silently resets subsequent policy decisions.
+    settings::change(
+        &pool,
+        key,
+        Some(LIVE),
+        Some(json!(300)),
+        "owner",
+        "synthetic later account override",
+    )
+    .await
+    .unwrap();
+    let version = settings::snapshot(&pool, None).await.unwrap().version;
+    assert!(trading::apply_seed(&pool, trading::SEED_FILE)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        settings::snapshot(&pool, None).await.unwrap().version,
+        version
+    );
+    assert_eq!(
+        settings::snapshot(&pool, Some(LIVE))
+            .await
+            .unwrap()
+            .number(key),
+        Ok(300.0)
+    );
+    assert_eq!(
+        settings::snapshot(&pool, Some(DEMO))
+            .await
+            .unwrap()
+            .number(key),
+        Ok(250.0)
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
     loaded(&pool).await;
     // No setting is changed: a demo account trades as soon as it runs.

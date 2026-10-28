@@ -6,5 +6,13 @@
     "value": 0,
     "changed_by": "owner",
     "reason": "owner 25-10-2026, in writing: \"Live too, from now\". Overrides the 24-10 rule that live trading waits for a demonstrated edge (the H1 held-out PASS). The gate stays in the code; only this value changes"
+  },
+  {
+    "id": "2026-10-28-margin-buffer-entry-floor",
+    "key": "trading.margin_level_floor_pct",
+    "account_id": null,
+    "value": 250,
+    "changed_by": "owner",
+    "reason": "Owner delegated selection and activation of the margin floor after chat №17,677 §3; acknowledged at №17,678 §§1–2, clock corrected at №17,679 §1 (28-10-2026 22:14 SGT). Codex selected 250% globally for all four accounts: projected used margin at most 40% of equity, with the separate stop-reserve/broker-warning check. New entries only; retain the one-position live rule until Strategy 2 has a tested basket-execution plan. This is an initial capacity constraint, not a measured optimum or a guarantee against margin call."
   }
 ]

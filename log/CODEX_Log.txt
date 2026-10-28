@@ -244,3 +244,18 @@ is tested/green. Do not deploy an unconfigured gate: it refuses entries.
 34 gate,49 S3,37 S1 and5 operations checks include the new coverage.
 Docs: docs/margin-buffer-entry-policy.md. No financial acceptance claimed.
 Broker-source verification and required image/remote CI remain pending.
+
+ENTRY 28-10-2026 22:14:40 SGT (Asia/Singapore)
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: owner reply to №17,677 §3; №17,678 §§1–2; №17,679 §§1–2.
+[§LOG.27] RESOLVED: owner delegated the floor selection and activation. Codex
+selected250% globally for all4 accounts, retaining the separate stop-reserve
+warning check and one-position live rule until testedS2 basket execution.
+The earlier pending-value entries describe history, not a current blocker.
+Reviewed startup seed applies once; later overrides must survive restarts.
+№17,678 used stale17:20; №17,679 corrects to current22:14SGT. Read unchanged
+Grok log through№17,665 before continuing. No additional risk delegation,
+financial improvement, merge/deployment or broker acceptance is yet claimed.
+
+[§LOG.28] 28-10-2026 22:14:57 SGT, №17,680 §§1–2: activation affected tests43/43, denied-warning
+Clippy/fmt/whitespace passed. Final-head CI and release read-back remain next.

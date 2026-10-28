@@ -7,14 +7,16 @@ in №17,665 §§1–4 (28-10-2026 16:21 SGT). By Codex (GPT-6), effort not expo
 
 The owner selected a margin buffer for new entries and retained the existing
 one-position live rule until Strategy 2 has a tested basket-execution plan.
-The minimum percentage was not specified. The implementation is prepared for
-review; **no live value, merge or deployment is authorized by test percentages**.
-The separately requested owner value is required before release. A missing
-policy value refuses an entry; consequently this change must not be deployed
-without the reviewed activation setting. Values 200% and 250% in tests are
-synthetic fixtures, not production defaults or measured account requirements.
+After chat №17,677 §3, the owner explicitly delegated selection and activation
+of the floor (acknowledged №17,678 §§1–2, clock corrected №17,679 §1,
+28-10-2026 22:14 SGT). Codex selected **250% globally for all four accounts**.
+The reviewed `config/settings-changes.json` entry applies this value once at
+startup and records the delegation; later owner overrides survive restarts.
+At this floor, projected used margin is at most 40% of cash equity. This is an
+initial capacity constraint, not a measured optimum. The separate stop-reserve
+condition below must also pass. A missing policy value refuses an entry.
 
-## Proposed entry rule
+## Entry rule
 
 A fresh, complete assessment must satisfy both conditions:
 
