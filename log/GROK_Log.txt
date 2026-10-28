@@ -178,3 +178,6 @@
 
 № 17,685 · 29-10-2026, 03:23 SGT · by Grok 4.7
 §1 Four statements dated 29 Oct, bot deals only. ETHUSD 0 wins of 61. BTCUSD 0 of 32. Closes under 30 minutes: 91, 0 wins. Session-flatten closes: 31 wins of 40. Latest 20 is 2/19, 1/20, 6/20 and 5/20. v6 was not live for these deals. Three non-bot deals on 47790949 are not the algorithm.
+
+№ 17,686 · 29-10-2026, 03:29 SGT · by Grok 4.7
+§1 No build. The fix list is: confirm v6 is the running hash; score copies as one episode; separate phone and TradingView from the bot; let Kelly see the same band across a hash change; do not refit the stop, Q, or the slippage reserve. ETH was already 0 for 53 on 27 Oct. Dropping it is an owner decision, not a calibration.
