@@ -132,3 +132,6 @@
 
 № 17,656 · 28-10-2026, 11:45 SGT · by Grok 4.7
 §1 PR #92 check, docker and engineering passed. Merged. A trail row can be stored, so the amend frame is sent. The two open shorts keep their current stops until the next favourable quote. No 15-of-20 claim.
+
+№ 17,657 · 28-10-2026, 12:18 SGT · by Grok 4.7
+§1 Not watching continuously. One read at 12:18 SGT. Live account flat. Two demo JPN225 shorts remain. Trail receipts now say ORDER_REPLACED, stops toward 64370. A new entry was skipped because C 43.50 >= R 24.90. No discretionary trade.
