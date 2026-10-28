@@ -58,6 +58,16 @@ async fn loaded(pool: &PgPool) {
 /// The same for these symbols: (id, name, class, quote asset id), each with
 /// digits 2 and a minimum and step of 1 cent. Assets: 1 USD, 3 JPY.
 async fn loaded_with(pool: &PgPool, syms: &[(i64, &str, AssetClass, i64)]) {
+    settings::change(
+        pool,
+        "trading.margin_level_floor_pct",
+        None,
+        Some(json!(200)),
+        "test",
+        "synthetic margin policy",
+    )
+    .await
+    .unwrap();
     store::upsert_account(pool, DEMO, Environment::Demo)
         .await
         .unwrap();
@@ -169,6 +179,15 @@ fn fake(quotes: Vec<(f64, f64)>) -> FakeBroker {
 fn fake_on(ids: &[i64], half: i64) -> FakeBroker {
     FakeBroker {
         account_id: DEMO,
+        light_symbols: ids
+            .iter()
+            .map(|id| jiaoyi_ctrader::messages::ProtoOaLightSymbol {
+                symbol_id: *id,
+                base_asset_id: Some(9),
+                quote_asset_id: Some(if *id == USDJPY || *id == JP225 { 3 } else { 1 }),
+                ..Default::default()
+            })
+            .collect(),
         bars: ids.iter().map(|id| (*id, bars(half))).collect(),
         trader: Some(ProtoOaTrader {
             ctid_trader_account_id: DEMO,
@@ -338,6 +357,70 @@ async fn a_reviewed_seed_change_is_applied_once_and_logged(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(n, 1);
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn released_margin_floor_reaches_all_accounts_once_and_preserves_overrides(pool: PgPool) {
+    let key = "trading.margin_level_floor_pct";
+    let seed_id = "2026-10-28-margin-buffer-entry-floor";
+    let applied = trading::apply_seed(&pool, trading::SEED_FILE)
+        .await
+        .unwrap();
+    assert!(applied.iter().any(|id| id == seed_id));
+    for account in [43002148, 46130058, 47790949, 49236051] {
+        assert_eq!(
+            settings::snapshot(&pool, Some(account))
+                .await
+                .unwrap()
+                .number(key),
+            Ok(250.0)
+        );
+    }
+    let audit: (String, String) = sqlx::query_as(
+        "SELECT changed_by, reason FROM settings_changes WHERE key = $1 AND account_id IS NULL",
+    )
+    .bind(key)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit.0, "owner");
+    assert!(audit.1.contains("Owner delegated selection and activation"));
+    assert!(audit.1.contains("№17,677 §3"));
+    // A later owner override must survive startup; the reviewed seed is not a
+    // recurring writer that silently resets subsequent policy decisions.
+    settings::change(
+        &pool,
+        key,
+        Some(LIVE),
+        Some(json!(300)),
+        "owner",
+        "synthetic later account override",
+    )
+    .await
+    .unwrap();
+    let version = settings::snapshot(&pool, None).await.unwrap().version;
+    assert!(trading::apply_seed(&pool, trading::SEED_FILE)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        settings::snapshot(&pool, None).await.unwrap().version,
+        version
+    );
+    assert_eq!(
+        settings::snapshot(&pool, Some(LIVE))
+            .await
+            .unwrap()
+            .number(key),
+        Ok(300.0)
+    );
+    assert_eq!(
+        settings::snapshot(&pool, Some(DEMO))
+            .await
+            .unwrap()
+            .number(key),
+        Ok(250.0)
+    );
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]

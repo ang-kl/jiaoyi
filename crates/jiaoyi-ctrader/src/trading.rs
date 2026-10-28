@@ -197,6 +197,24 @@ pub struct EventRecord {
 
 /// Where intents and events are kept (Postgres in the service).
 pub trait Ledger {
+    /// A shared logical account namespace (production uses the database).
+    fn admission_namespace(&self) -> String;
+    fn margin_floor_pct(&self, account_id: i64)
+        -> impl Future<Output = Result<f64, String>> + Send;
+    fn margin_has_unresolved_open(
+        &self,
+        _account_id: i64,
+    ) -> impl Future<Output = Result<bool, String>> + Send {
+        async { Ok(false) }
+    }
+    fn record_margin(
+        &self,
+        _account_id: i64,
+        _symbol_id: i64,
+        _receipt: &crate::margin::Receipt,
+    ) -> impl Future<Output = Result<(), String>> + Send {
+        async { Ok(()) }
+    }
     fn record_intent(&self, i: &Intent)
         -> impl Future<Output = Result<IntentWrite, String>> + Send;
     fn record_event(&self, e: &EventRecord) -> impl Future<Output = Result<(), String>> + Send;
@@ -672,6 +690,14 @@ pub async fn send<L: Ledger>(
 ) -> Result<Sent, SendError> {
     let account_id = session.account().id();
     let (risk, stop_price) = check(account_id, allowlist, ledger, policy, &cmd).await?;
+    let _margin_lock = if matches!(cmd, Command::Open { .. }) {
+        Some(
+            crate::margin::try_lock(ledger.admission_namespace(), account_id)
+                .map_err(|reason| Refused { reason })?,
+        )
+    } else {
+        None
+    };
     let mut take_profit = None;
     match &cmd {
         Command::Open {
@@ -682,7 +708,7 @@ pub async fn send<L: Ledger>(
             let trader = session.trader().await.map_err(|e| Refused {
                 reason: format!("the account type is unreadable ({e}): no entry"),
             })?;
-            let rec = session.reconcile().await.map_err(|e| Refused {
+            let rec = session.margin_book().await.map_err(|e| Refused {
                 reason: format!("the open positions are unreadable ({e}): no entry"),
             })?;
             let positions: Vec<(i64, Option<String>)> = rec
@@ -692,6 +718,29 @@ pub async fn send<L: Ledger>(
                 .collect();
             entry_allowed(trader.account_type, &positions, *symbol_id, label)
                 .map_err(|reason| Refused { reason })?;
+            let margin = async {
+                if ledger.margin_has_unresolved_open(account_id).await? {
+                    return Err("unresolved entry prevents a reliable margin reservation".into());
+                }
+                let floor = ledger.margin_floor_pct(account_id).await?;
+                crate::margin::check(session, &trader, &rec, &cmd, floor).await
+            };
+            let result = tokio::time::timeout(Duration::from_secs(5), margin)
+                .await
+                .unwrap_or_else(|_| Err("margin read timed out; no entry".into()));
+            let receipt = result
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|e| crate::margin::Receipt::unavailable(e.clone()));
+            ledger
+                .record_margin(account_id, *symbol_id, &receipt)
+                .await
+                .map_err(|reason| Refused {
+                    reason: format!("margin receipt could not be recorded: {reason}"),
+                })?;
+            result.map_err(|reason| Refused {
+                reason: format!("margin buffer: {reason}"),
+            })?;
         }
         Command::AmendStop {
             position_id,

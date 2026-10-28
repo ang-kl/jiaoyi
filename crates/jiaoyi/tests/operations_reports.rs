@@ -272,3 +272,80 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
         value["account_source_diagnostics"]
     );
 }
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn margin_admission_view_is_typed_account_scoped_and_distinguishes_unconfigured(
+    pool: PgPool,
+) {
+    let account = 49236051;
+    let foreign = 46130058;
+    let absent = 43002148;
+    for id in [account, foreign, absent] {
+        store::upsert_account(&pool, id, Environment::Demo)
+            .await
+            .unwrap();
+    }
+    store::settings::change(
+        &pool,
+        "trading.margin_level_floor_pct",
+        Some(account),
+        Some(json!(250)),
+        "test",
+        "synthetic owner policy",
+    )
+    .await
+    .unwrap();
+    let detail = json!({"state":"passed","projected_level_pct":300.0,"stressed_level_pct":200.0,
+        "warning_pct":150.0,"positions":0,"pending_entries":1,
+        "balance":1234567.89,"reason":"PRIVATE_MARGIN_REASON","secret":"PRIVATE_MARGIN_SECRET"});
+    store::trading::record_decision(
+        &pool,
+        account,
+        None,
+        "margin_admission",
+        "PRIVATE_REASON",
+        &detail,
+        None,
+    )
+    .await
+    .unwrap();
+    store::trading::record_decision(
+        &pool,
+        foreign,
+        None,
+        "margin_admission",
+        "FOREIGN_REASON",
+        &detail,
+        None,
+    )
+    .await
+    .unwrap();
+    let before: i64 = store::sqlx::query_scalar("SELECT count(*) FROM trading_decisions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let report = jiaoyi::supervisor::reports(&pool, &[account, absent])
+        .await
+        .unwrap();
+    let rows = report["margin_admission"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    let own = rows.iter().find(|r| r["account_id"] == account).unwrap();
+    assert_eq!(own["configured"], true);
+    assert_eq!(own["floor_pct"], 250.0);
+    assert_eq!(own["last_state"], "passed");
+    assert_eq!(own["pending_entries"], 1);
+    let unknown = rows.iter().find(|r| r["account_id"] == absent).unwrap();
+    assert_eq!(unknown["configured"], false);
+    assert!(unknown["floor_pct"].is_null());
+    assert!(unknown["last_checked_at"].is_null());
+    for forbidden in ["PRIVATE_", "1234567.89", "FOREIGN_REASON"] {
+        assert!(!report.to_string().contains(forbidden));
+    }
+    assert_eq!(
+        store::sqlx::query_scalar::<_, i64>("SELECT count(*) FROM trading_decisions")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        before
+    );
+}

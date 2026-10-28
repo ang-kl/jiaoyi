@@ -76,6 +76,9 @@ pub struct FakeBroker {
     pub max_deals_per_response: usize,
     /// The trader record; a default one when `None`.
     pub trader: Option<pb::ProtoOaTrader>,
+    /// Explicit margin replies; None gives a well-funded synthetic account.
+    pub margin_reply: Option<pb::ProtoOaExpectedMarginRes>,
+    pub margin_calls_reply: Option<pb::ProtoOaMarginCallListRes>,
     /// Ordered account-read replies; empty queues use the normal fake state.
     pub scripted_traders: Arc<Mutex<VecDeque<pb::ProtoOaTrader>>>,
     pub scripted_books: Arc<Mutex<VecDeque<pb::ProtoOaReconcileRes>>>,
@@ -170,6 +173,7 @@ fn token_invalidated(account_id: i64) -> ProtoMessage {
 /// What the fake saw.
 #[derive(Debug, Clone, Default)]
 pub struct FakeLog {
+    pub margin_requests: Vec<(i64, Vec<i64>)>,
     pub payload_types: Vec<u32>,
     pub trendbar_requests: Vec<(i64, i64, i64)>,
     pub tick_requests: Vec<(i64, i32, i64, i64)>,
@@ -699,6 +703,50 @@ impl FakeBroker {
                                 let _ = write_frame(&mut *writer.lock().await, &message).await;
                             });
                         }
+                    } else if pt == Oa::ProtoOaExpectedMarginReq as i32 {
+                        let request =
+                            pb::ProtoOaExpectedMarginReq::decode(body.as_slice()).unwrap();
+                        log2.lock()
+                            .unwrap()
+                            .margin_requests
+                            .push((request.symbol_id, request.volume.clone()));
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaExpectedMarginRes as i32,
+                            self.margin_reply
+                                .clone()
+                                .unwrap_or_else(|| pb::ProtoOaExpectedMarginRes {
+                                    payload_type: None,
+                                    ctid_trader_account_id: self.account_id,
+                                    money_digits: Some(2),
+                                    margin: request
+                                        .volume
+                                        .into_iter()
+                                        .map(|volume| pb::ProtoOaExpectedMargin {
+                                            volume,
+                                            buy_margin: volume,
+                                            sell_margin: volume,
+                                        })
+                                        .collect(),
+                                })
+                                .encode_to_vec(),
+                        ));
+                    } else if pt == Oa::ProtoOaMarginCallListReq as i32 {
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaMarginCallListRes as i32,
+                            self.margin_calls_reply
+                                .clone()
+                                .unwrap_or_else(|| pb::ProtoOaMarginCallListRes {
+                                    payload_type: None,
+                                    margin_call: vec![pb::ProtoOaMarginCall {
+                                        margin_call_type: 61,
+                                        margin_level_threshold: 150.0,
+                                        utc_last_update_timestamp: None,
+                                    }],
+                                })
+                                .encode_to_vec(),
+                        ));
                     } else if pt == Oa::ProtoOaTraderReq as i32 {
                         let trader = self
                             .scripted_traders
@@ -783,6 +831,8 @@ impl FakeBroker {
                                                     pb::ProtoOaPositionStatus::PositionStatusOpen
                                                         as i32,
                                                 swap: 0,
+                                                used_margin: Some(100),
+                                                money_digits: Some(2),
                                                 stop_loss: (rel > 0.0).then_some(if buy {
                                                     price - rel
                                                 } else {
@@ -879,6 +929,8 @@ impl FakeBroker {
                                 position_status: pb::ProtoOaPositionStatus::PositionStatusOpen
                                     as i32,
                                 swap: 0,
+                                used_margin: Some(100),
+                                money_digits: Some(2),
                                 price: Some(price),
                                 stop_loss: (rel > 0.0).then_some(if buy {
                                     price - rel

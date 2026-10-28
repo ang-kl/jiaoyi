@@ -160,3 +160,15 @@ Every task is agreed as a contract before it starts, so its exit is defined:
 | Execution | The steps, and who does each. |
 | Evidence | Tests (red before, green after), mutations, read-back after deploy; each claim Passed, Failed or Not Verifiable. |
 | Close | **Exits:** done (every outcome evidenced); stopped (the owner's word); blocked (a decision only the owner can make, put to the owner); failed (reported with the evidence). Not Verifiable stays open, never "done". |
+
+
+## Owner margin/basket decision — 28 October 2026
+
+Chat №17,666 §1: use a margin buffer for new entries; retain the existing
+one-position live rule until Strategy 2 has a tested basket-execution plan.
+No basket exception or Strategy 2 activation is granted. After №17,677 §3,
+the owner delegated floor selection and activation; Codex selected 250% globally
+for all four accounts, recorded at №17,678 §§1–2 and №17,679 §§1–2
+(28-10-2026 22:14 SGT, corrected clock). This bounded delegation resolves the
+missing value under I-2; it does not grant other risk or pause changes.
+See [the bounded policy](margin-buffer-entry-policy.md).

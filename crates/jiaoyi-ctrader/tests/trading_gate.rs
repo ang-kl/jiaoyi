@@ -26,9 +26,21 @@ struct MemLedger {
     events: Arc<Mutex<Vec<EventRecord>>>,
     owned: Arc<Mutex<Vec<i64>>>,
     fail: bool,
+    margin_unavailable: bool,
 }
 
 impl Ledger for MemLedger {
+    fn admission_namespace(&self) -> String {
+        format!("{:p}", Arc::as_ptr(&self.intents))
+    }
+    async fn margin_floor_pct(&self, _account_id: i64) -> Result<f64, String> {
+        if self.margin_unavailable {
+            Err("owner margin floor unavailable".into())
+        } else {
+            Ok(200.0)
+        }
+    }
+
     async fn record_intent(&self, i: &Intent) -> Result<IntentWrite, String> {
         if self.fail {
             return Err("database down".into());
@@ -68,6 +80,15 @@ fn trader(account_type: Option<i32>) -> pb::ProtoOaTrader {
 fn fake() -> FakeBroker {
     FakeBroker {
         account_id: ACCOUNT,
+        light_symbols: [ETH, 5]
+            .into_iter()
+            .map(|symbol_id| pb::ProtoOaLightSymbol {
+                symbol_id,
+                base_asset_id: Some(2),
+                quote_asset_id: Some(1),
+                ..Default::default()
+            })
+            .collect(),
         fill_quotes: HashMap::from([(ETH, (3000.0, 3001.0))]),
         trader: Some(trader(Some(HEDGED))),
         ..Default::default()
@@ -86,6 +107,10 @@ fn position(id: i64, symbol_id: i64, label: Option<&str>) -> pb::ProtoOaPosition
         },
         position_status: 1,
         swap: 0,
+        price: Some(100.0),
+        stop_loss: Some(90.0),
+        used_margin: Some(100),
+        money_digits: Some(2),
         ..Default::default()
     }
 }
@@ -839,4 +864,351 @@ async fn an_amend_carries_the_take_profit_and_passes_the_brokers_own_stop() {
         "{r:?}"
     );
     assert_eq!(log.lock().unwrap().amends.len(), 1);
+}
+
+fn margin_fake(volume: i64, raw: i64, digits: Option<u32>) -> FakeBroker {
+    FakeBroker {
+        margin_reply: Some(pb::ProtoOaExpectedMarginRes {
+            payload_type: None,
+            ctid_trader_account_id: ACCOUNT,
+            money_digits: digits,
+            margin: vec![pb::ProtoOaExpectedMargin {
+                volume,
+                buy_margin: raw,
+                sell_margin: raw,
+            }],
+        }),
+        ..fake()
+    }
+}
+async fn margin_send(
+    f: FakeBroker,
+    command: Command,
+    policy: Policy,
+) -> (
+    Result<jiaoyi_ctrader::trading::Sent, SendError>,
+    MemLedger,
+    Arc<Mutex<FakeLog>>,
+) {
+    let (conn, log) = f.spawn();
+    let session = session_on(&conn).await;
+    let ledger = MemLedger::default();
+    let result = send(
+        &session,
+        &allow(),
+        &ledger,
+        &policy,
+        command,
+        "margin-test",
+        Duration::from_millis(100),
+    )
+    .await;
+    (result, ledger, log)
+}
+
+#[tokio::test]
+async fn margin_buffer_refuses_capacity_only_entry_before_intent_or_frame() {
+    // $1,000 equity and $600 projected margin: affordable, but only 166.7%.
+    let (result, ledger, log) =
+        margin_send(margin_fake(1, 60_000, Some(2)), open(1, 28_457_000), on()).await;
+    assert!(
+        matches!(result,Err(SendError::Refused(ref r)) if r.reason.contains("below floor")),
+        "{result:?}"
+    );
+    assert!(ledger.intents.lock().unwrap().is_empty());
+    assert_eq!(orders(&log), 0);
+}
+
+#[tokio::test]
+async fn margin_precision_is_response_specific_and_floor_equality_passes() {
+    for (amount, digits) in [(50_000, 2), (5_000_000, 4)] {
+        let (result, _, log) = margin_send(
+            margin_fake(1, amount, Some(digits)),
+            open(1, 28_457_000),
+            on(),
+        )
+        .await;
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(orders(&log), 1);
+    }
+}
+
+#[tokio::test]
+async fn margin_stop_reserve_must_survive_the_account_warning() {
+    // Nominal margin 250% passes; a $400 stop loss leaves exactly 150%.
+    let (result, ledger, log) = margin_send(
+        margin_fake(100, 40_000, Some(2)),
+        open(100, 40_000_000),
+        Policy {
+            edge: Ok(()),
+            max_risk: 500.0,
+        },
+    )
+    .await;
+    assert!(
+        matches!(result,Err(SendError::Refused(ref r)) if r.reason.contains("after stop reserves")),
+        "{result:?}"
+    );
+    assert!(ledger.intents.lock().unwrap().is_empty());
+    assert_eq!(orders(&log), 0);
+}
+
+#[tokio::test]
+async fn margin_refuses_missing_precision_wrong_account_and_duplicate_estimates() {
+    let absent = margin_fake(1, 50_000, None);
+    let mut wrong = margin_fake(1, 50_000, Some(2));
+    wrong.margin_reply.as_mut().unwrap().ctid_trader_account_id += 1;
+    let mut duplicate = margin_fake(1, 50_000, Some(2));
+    let row = duplicate.margin_reply.as_ref().unwrap().margin[0];
+    duplicate.margin_reply.as_mut().unwrap().margin.push(row);
+    for f in [absent, wrong, duplicate] {
+        let (result, ledger, log) = margin_send(f, open(1, 28_457_000), on()).await;
+        assert!(matches!(result, Err(SendError::Refused(_))), "{result:?}");
+        assert!(ledger.intents.lock().unwrap().is_empty());
+        assert_eq!(orders(&log), 0);
+    }
+}
+
+#[tokio::test]
+async fn margin_refuses_changed_balance_and_incompatible_gsl_account() {
+    let f = fake();
+    let mut changed = trader(Some(HEDGED));
+    changed.balance += 1;
+    f.scripted_traders
+        .lock()
+        .unwrap()
+        .extend([trader(Some(HEDGED)), changed]);
+    let mut gsl = fake();
+    gsl.trader.as_mut().unwrap().is_limited_risk = Some(true);
+    for (f, reason) in [(f, "state changed"), (gsl, "GSL")] {
+        let (result, ledger, log) = margin_send(f, open(1, 28_457_000), on()).await;
+        assert!(
+            matches!(result,Err(SendError::Refused(ref r)) if r.reason.contains(reason)),
+            "{result:?}"
+        );
+        assert!(ledger.intents.lock().unwrap().is_empty());
+        assert_eq!(orders(&log), 0);
+    }
+}
+
+#[tokio::test]
+async fn margin_reserves_manual_pending_entry_and_does_not_cancel_it() {
+    let f = fake();
+    let pending = pb::ProtoOaOrder {
+        order_id: 7,
+        trade_data: pb::ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 100,
+            trade_side: 1,
+            ..Default::default()
+        },
+        order_type: 2,
+        order_status: 1,
+        executed_volume: Some(0),
+        limit_price: Some(3000.0),
+        stop_loss: Some(2900.0),
+        ..Default::default()
+    };
+    let book = pb::ProtoOaReconcileRes {
+        payload_type: None,
+        ctid_trader_account_id: ACCOUNT,
+        position: vec![],
+        order: vec![pending],
+    };
+    f.scripted_books
+        .lock()
+        .unwrap()
+        .extend([book.clone(), book]);
+    let (result, _, log) = margin_send(f, open(1, 28_457_000), on()).await;
+    assert!(result.is_ok(), "{result:?}");
+    assert!(log
+        .lock()
+        .unwrap()
+        .margin_requests
+        .iter()
+        .any(|(id, vol)| *id == ETH && vol.contains(&101)));
+    assert!(log.lock().unwrap().amends.is_empty());
+    assert!(log.lock().unwrap().closes.is_empty());
+}
+
+#[tokio::test]
+async fn margin_refuses_unprotected_manual_pending_entry_without_altering_it() {
+    let f = fake();
+    let book = pb::ProtoOaReconcileRes {
+        payload_type: None,
+        ctid_trader_account_id: ACCOUNT,
+        position: vec![],
+        order: vec![pb::ProtoOaOrder {
+            order_id: 7,
+            trade_data: pb::ProtoOaTradeData {
+                symbol_id: ETH,
+                volume: 100,
+                trade_side: 1,
+                ..Default::default()
+            },
+            order_type: 2,
+            order_status: 1,
+            executed_volume: Some(0),
+            limit_price: Some(3000.0),
+            ..Default::default()
+        }],
+    };
+    f.scripted_books.lock().unwrap().push_back(book);
+    let (result, ledger, log) = margin_send(f, open(1, 28_457_000), on()).await;
+    assert!(
+        matches!(result,Err(SendError::Refused(ref r)) if r.reason.contains("pending entry has no verified stop")),
+        "{result:?}"
+    );
+    assert!(ledger.intents.lock().unwrap().is_empty());
+    assert_eq!(orders(&log), 0);
+    assert!(log.lock().unwrap().amends.is_empty());
+    assert!(log.lock().unwrap().closes.is_empty());
+}
+
+#[tokio::test]
+async fn margin_unavailable_does_not_prevent_owned_amend_or_close() {
+    let f = fake();
+    let p = position(9, ETH, Some("jiaoyi-h1"));
+    f.positions.lock().unwrap().push(p);
+    let (conn, log) = f.spawn();
+    let session = session_on(&conn).await;
+    let ledger = MemLedger {
+        margin_unavailable: true,
+        ..Default::default()
+    };
+    ledger.owned.lock().unwrap().push(9);
+    for (key, command) in [
+        (
+            "amend",
+            Command::AmendStop {
+                position_id: 9,
+                side: Side::Buy,
+                current_stop: Some(90.0),
+                new_stop: 95.0,
+            },
+        ),
+        (
+            "close",
+            Command::Close {
+                position_id: 9,
+                volume: 100,
+            },
+        ),
+    ] {
+        assert!(send(
+            &session,
+            &allow(),
+            &ledger,
+            &on(),
+            command,
+            key,
+            Duration::from_millis(100)
+        )
+        .await
+        .is_ok());
+    }
+    assert!(log.lock().unwrap().margin_requests.is_empty());
+    assert_eq!(log.lock().unwrap().amends.len(), 1);
+    assert_eq!(log.lock().unwrap().closes.len(), 1);
+}
+
+#[tokio::test]
+async fn margin_accounts_for_pending_future_position_and_linked_protection_without_adoption() {
+    for net in [0, 1] {
+        let f = fake();
+        let entry = pb::ProtoOaOrder {
+            order_id: 7,
+            trade_data: pb::ProtoOaTradeData {
+                symbol_id: ETH,
+                volume: 100,
+                trade_side: 1,
+                ..Default::default()
+            },
+            order_type: 2,
+            order_status: 1,
+            executed_volume: Some(0),
+            position_id: Some(77),
+            limit_price: Some(3000.0),
+            stop_loss: Some(2900.0),
+            ..Default::default()
+        };
+        let protection = pb::ProtoOaOrder {
+            order_id: 8,
+            trade_data: pb::ProtoOaTradeData {
+                symbol_id: ETH,
+                volume: 100,
+                trade_side: 2,
+                ..Default::default()
+            },
+            order_type: 4,
+            order_status: 1,
+            closing_order: Some(true),
+            position_id: Some(77),
+            stop_loss: Some(2900.0),
+            take_profit: Some(3200.0),
+            ..Default::default()
+        };
+        let book = pb::ProtoOaReconcileRes {
+            payload_type: None,
+            ctid_trader_account_id: ACCOUNT,
+            position: vec![],
+            order: vec![entry, protection],
+        };
+        f.scripted_books
+            .lock()
+            .unwrap()
+            .extend([book.clone(), book]);
+        f.scripted_pnl
+            .lock()
+            .unwrap()
+            .push_back(pb::ProtoOaGetPositionUnrealizedPnLRes {
+                payload_type: None,
+                ctid_trader_account_id: ACCOUNT,
+                money_digits: 2,
+                position_unrealized_pn_l: vec![pb::ProtoOaPositionUnrealizedPnL {
+                    position_id: 77,
+                    gross_unrealized_pn_l: net,
+                    net_unrealized_pn_l: net,
+                }],
+            });
+        let (result, ledger, log) = margin_send(f, open(1, 28_457_000), on()).await;
+        if net == 0 {
+            assert!(result.is_ok(), "{result:?}");
+            assert_eq!(orders(&log), 1);
+            assert!(log
+                .lock()
+                .unwrap()
+                .margin_requests
+                .iter()
+                .any(|(_, v)| v.contains(&101)));
+        } else {
+            assert!(
+                matches!(result,Err(SendError::Refused(ref r)) if r.reason.contains("nonzero P&L")),
+                "{result:?}"
+            );
+            assert_eq!(orders(&log), 0);
+            assert!(ledger.intents.lock().unwrap().is_empty());
+        }
+        assert!(!ledger.owned.lock().unwrap().contains(&77));
+        assert!(log.lock().unwrap().amends.is_empty());
+        assert!(log.lock().unwrap().closes.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn margin_currency_identity_cannot_understate_the_gates_stop_risk() {
+    let mut command = open(1, 28_457_000);
+    if let Command::Open {
+        quote_to_deposit, ..
+    } = &mut command
+    {
+        *quote_to_deposit = Some(0.1);
+    }
+    let (result, ledger, log) = margin_send(fake(), command, on()).await;
+    assert!(
+        matches!(result,Err(SendError::Refused(ref r)) if r.reason.contains("currency identity")),
+        "{result:?}"
+    );
+    assert!(ledger.intents.lock().unwrap().is_empty());
+    assert_eq!(orders(&log), 0);
 }

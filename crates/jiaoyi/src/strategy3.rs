@@ -567,6 +567,26 @@ pub struct S3Ledger<'a> {
 }
 
 impl Ledger for S3Ledger<'_> {
+    fn admission_namespace(&self) -> String {
+        self.inner.admission_namespace()
+    }
+    async fn margin_floor_pct(&self, account_id: i64) -> Result<f64, String> {
+        self.inner.margin_floor_pct(account_id).await
+    }
+    async fn margin_has_unresolved_open(&self, account_id: i64) -> Result<bool, String> {
+        self.inner.margin_has_unresolved_open(account_id).await
+    }
+    async fn record_margin(
+        &self,
+        account_id: i64,
+        symbol_id: i64,
+        receipt: &jiaoyi_ctrader::margin::Receipt,
+    ) -> Result<(), String> {
+        self.inner
+            .record_margin(account_id, symbol_id, receipt)
+            .await
+    }
+
     async fn record_intent(&self, i: &Intent) -> Result<IntentWrite, String> {
         let w = self.inner.record_intent(i).await?;
         if w == IntentWrite::Recorded {

@@ -66,6 +66,17 @@ fn e5(p: f64) -> i64 {
 /// cent), the universe of one symbol, the deposit (USD), one deal with a $3
 /// commission per BTC, and recorded quotes 5.00 wide.
 async fn loaded(pool: &PgPool) {
+    settings::change(
+        pool,
+        "trading.margin_level_floor_pct",
+        None,
+        Some(json!(200)),
+        "test",
+        "synthetic margin policy",
+    )
+    .await
+    .unwrap();
+
     store::upsert_account(pool, DEMO, Environment::Demo)
         .await
         .unwrap();
@@ -213,6 +224,15 @@ fn bars(first_volume: i64, days: i64) -> Vec<jiaoyi_ctrader::messages::ProtoOaTr
 fn fake(fill: (f64, f64)) -> FakeBroker {
     FakeBroker {
         account_id: DEMO,
+        light_symbols: [BTC, 23]
+            .into_iter()
+            .map(|symbol_id| jiaoyi_ctrader::messages::ProtoOaLightSymbol {
+                symbol_id,
+                base_asset_id: Some(2),
+                quote_asset_id: Some(1),
+                ..Default::default()
+            })
+            .collect(),
         m30_bars: HashMap::from([(BTC, bars(10, 20))]),
         fill_quotes: HashMap::from([(BTC, fill)]),
         trader: Some(ProtoOaTrader {
@@ -911,6 +931,8 @@ fn s3_position(id: i64, volume: i64, price: f64) -> ProtoOaPosition {
         },
         position_status: 1,
         swap: 0,
+        used_margin: Some(100),
+        money_digits: Some(2),
         price: Some(price),
         stop_loss: Some(price - 450.0),
         take_profit: Some(price + 1_372.21),

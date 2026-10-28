@@ -57,6 +57,9 @@ pub mod messages {
         ProtoOaDepositWithdraw,
         ProtoOaErrorRes,
         ProtoOaExecutionType,
+        ProtoOaExpectedMargin,
+        ProtoOaExpectedMarginReq,
+        ProtoOaExpectedMarginRes,
         ProtoOaGetPositionUnrealizedPnLRes,
         ProtoOaGetTickDataReq,
         ProtoOaGetTickDataRes,
@@ -64,6 +67,9 @@ pub mod messages {
         ProtoOaGetTrendbarsRes,
         ProtoOaInterval,
         ProtoOaLightSymbol,
+        ProtoOaMarginCall,
+        ProtoOaMarginCallListReq,
+        ProtoOaMarginCallListRes,
         ProtoOaMinCommissionType,
         ProtoOaOrder,
         ProtoOaPayloadType,
@@ -101,5 +107,6 @@ pub use client::{
     AccountSession, Asset, ClientError, Connection, GrantedAccount, ReceivedExecution,
     ReceivedSpot, RefreshedToken, SessionEnd, TokenGrant,
 };
+pub mod margin;
 pub use payload::{check_sendable, NotSendable};
 pub use trendbar::{closed_daily_bars, decode_bar, decode_trendbar, DailyBar, TrendbarError};
