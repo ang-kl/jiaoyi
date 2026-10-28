@@ -190,3 +190,6 @@
 
 № 17,689 · 29-10-2026, 03:49 SGT · by Grok 4.7
 §1 The 31 wins are 31 of 40 bot deals closed at 04:00, 13:00 or 00:30 SGT. They are the session flatten, copied. USDJPY, AUS200 and GER40 are most of the dollars. Nine deals at those same clocks lost. Five other bot wins were not on those clocks.
+
+№ 17,690 · 29-10-2026, 03:51 SGT · by Grok 4.7
+§1 No further code change. The statements classify as fundamental on ETH, BTC, JPN225, the oils, NatGas and AUDUSD: both sides lost, so no reverse. 52 repeats were before v6, so no repair PR. SpotCrude buys on 46130058 and 49236051 still have a stop and a take-profit. The goal window is unchanged.
