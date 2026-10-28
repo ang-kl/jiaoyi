@@ -6,6 +6,7 @@ tests do not place orders or use a production account/database.
 import copy
 import contextlib
 import datetime as dt
+import html
 import importlib.util
 import io
 import json
@@ -309,8 +310,16 @@ class IncidentAcceptanceTests(unittest.TestCase):
             incident = self.full_incident()
             review = self.job(incident["analysis_job"])
             report = self.proven_report(incident)
+            report["summary"] = "MODEL-ANALYSIS: <script>alert('unsafe')</script> evidence adapter mismatch."
             result = self.c.finish_review(review, report)
             self.c.finish_review(review, report)
+        analysis_html = "\n".join(path.read_text() for path in
+            (self.c.store.private / "incident-reports").glob("*.html"))
+        self.assertIn(html.escape(report["summary"], quote=True), analysis_html)
+        self.assertIn("model-reported", analysis_html.lower())
+        self.assertNotIn(report["summary"], analysis_html)
+        self.assertNotIn(report["summary"], json.dumps(self.c.status()))
+        self.assertNotIn(html.escape(report["summary"], quote=True), json.dumps(self.c.status()))
         repair_jobs = [j for j in self.c.store.jobs() if j["task"].startswith(incidents.REPAIR_PREFIX)]
         self.assertEqual(len(repair_jobs), 1, "a review must dispatch one evidenced non-repeat repair")
         repair = repair_jobs[0]
@@ -408,6 +417,31 @@ class IncidentAcceptanceTests(unittest.TestCase):
             self.assertFalse(result.get("applied"))
             self.assertEqual(self.job(item["analysis_job"])["state"], "verification_pending")
             self.assertNotEqual(self.full_incident(symbol="MALFORMED")["state"], "closed")
+
+        with self.subTest("normal execution does not close an unresolved economic goal"):
+            current = self.health(digest="b" * 64)
+            current["strategy3"][0]["open_positions"][0]["stop"] = 100
+            operations = self.operations()
+            operations["reports"] = [{"account_id": 49236051, "strategy": "s3", "report": {
+                "assessment": {"state": "below_target", "history_complete": True, "window": {
+                    "position_ids": list(range(101, 121)), "count": 20, "wins": 1,
+                    "win_rate": 0.05, "net_r": -16, "realized_payoff": 0.25,
+                    "last_closed_at": "2026-10-27T13:00:00Z"}}}}]
+            self.c.incidents.observe(current, operations)
+            state = json.loads(self.c.store.last_event("incident_state"))
+            goal = next(item for item in state.values() if item["kind"] == "goal_below_target")
+            self.assertEqual(goal["evidence"]["current_prereg_hash"], "b" * 64)
+            self.assertNotIn("prereg_hash", goal["evidence"],
+                "the running hash is not the historical position cohort")
+            self.assertIn("not supplied", goal["evidence"]["cohort_registration_scope"])
+            assessment = self.proven_report(goal, disposition="normal_loss")
+            assessment["summary"] = "Original executions followed their rules; the mixed historical window remains below target."
+            assessment["incident"]["repair_proposal"] = None
+            outcome = self.c.finish_review(self.job(goal["analysis_job"]), assessment)
+            goal_after = json.loads(self.c.store.last_event("incident_state"))[goal["id"]]
+            self.assertNotEqual(goal_after["state"], "closed")
+            self.assertTrue(goal_after["next_action"])
+            self.assertIsNone(outcome.get("repair_job"))
 
         cutoff = w.Config(dict(self.env, ENGINEERING_WORK_UNTIL="2026-10-29T07:30:00+08:00"))
         self.assertTrue(cutoff.mutation_allowed("2026-10-29T07:29:59+08:00"))

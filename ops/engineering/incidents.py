@@ -506,6 +506,18 @@ class IncidentManager:
                 incident["delivery_state"] = "pending"
                 self._save(db, state, at.isoformat())
                 return {"applied": False, "reason": "invalid_disposition"}
+            # Keep the actual explanation with the accepted, source-linked
+            # disposition. These are private model claims, not verified facts;
+            # status() deliberately excludes all three prose fields.
+            for target, source, limit in (("analysis_summary", "summary", 1200),
+                                          ("analysis_checks", "tests", 600),
+                                          ("owner_decision_summary", "owner_decisions", 400)):
+                value = report.get(source)
+                value = value if isinstance(value, str) else ""
+                value = "".join(char for char in value if char in "\n\t" or ord(char) >= 32)
+                sanitizer = getattr(self.c, "safe_detail", None)
+                sanitized = sanitizer(value, limit) if callable(sanitizer) else value
+                incident[target] = sanitized[:limit] if isinstance(sanitized, str) else value[:limit]
             incident["disposition"] = disposition
             incident["review_applied_job"] = job["id"]
             incident["reviewed_at"] = at.isoformat()

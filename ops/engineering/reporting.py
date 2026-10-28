@@ -68,6 +68,16 @@ def render_incident(incident, created_at=None):
         nonlocal number
         number += 1
         return "<p>[§" + esc(serial) + "." + str(number) + "] " + body + "</p>"
+    def model_findings():
+        fields = (("Model-reported analysis", "analysis_summary", 1200),
+                  ("Model-reported checks", "analysis_checks", 600),
+                  ("Model-reported owner decision", "owner_decision_summary", 400))
+        findings = [(label, incident.get(key), limit) for label, key, limit in fields
+                    if isinstance(incident.get(key), str) and incident[key].strip()]
+        if not findings:
+            return ""
+        return (para("<b>Model-reported findings:</b> validation claims require independent test, CI and deployment receipts.")
+                + "".join(para("<b>" + label + ":</b> " + esc(value, limit)) for label, value, limit in findings))
     evidence = incident.get("evidence")
     facts = []
     if isinstance(evidence, dict):
@@ -98,6 +108,7 @@ def render_incident(incident, created_at=None):
                 + para("<b>Analysis:</b> " + esc(incident.get("analysis_state", incident.get("state", "pending")), 120)
                        + ". <b>Disposition:</b> " + esc(incident.get("disposition", "pending"), 200)
                        + ". <b>Next action:</b> " + esc(incident.get("next_action", "Bounded analysis pending; preserve existing protections."), 1000))
+                + model_findings()
                 + para("<b>Owner:</b> " + esc(incident.get("owner", "engineering coordinator"), 120)
                        + ". <b>Analysis job:</b> " + esc(incident.get("analysis_job", "not yet dispatched"), 60)
                        + ". <b>Repair job:</b> " + esc(incident.get("repair_job", "none"), 60))
