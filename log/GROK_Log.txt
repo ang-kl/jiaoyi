@@ -125,3 +125,7 @@
 
 № 17,654 · 28-10-2026, 11:22 SGT · by Grok 4.7
 §1 Owner: are you idling. Yes, between messages. The book is not. Two demo JPN225 shorts are open, both with a stop, so no Grok call. Each has 13 trail refusals. The reason is the gate error and is not on /health. No open pull request.
+
+№ 17,655 · 28-10-2026, 11:31 SGT · by Grok 4.7
+§1 The two JPN225 shorts recorded 13 amend intents and no outcomes. strategy3_orders rejects kind trail, so the row fails after the intent and the frame is never sent. The broker stop is unchanged.
+§2 PR #92 adds trail to the order and fill checks. It does not change R, size or the registration. Not merged until the check passes.
