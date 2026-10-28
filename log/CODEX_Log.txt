@@ -342,3 +342,14 @@ original-Rreceipts/4ownedmultisteppositions+controlledregressions,0newmodelcalls
 Actualfirstscan17warningHTMLandvalidliveanalyses. Found17sessionsfor17copied
 warningscostdefect; bounded8-memberreviewbatchfixunderway. No financialPASS.
 Grokthrough№17,694checked/preserved;Grokrepairpermitstillstopped.
+
+ENTRY 29-10-2026 06:34:23 SGT
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: №17,743–17,745 §§1–2,29-10-2026SGT.
+[§LOG.38] Ownerrequests29Oct09:00SGTmarket/reportvalidationusinggenerated
+accountstatements andownsetup/open/SL/TP/close/reverse. OneoffdurableRailway
+readonlyreport, notappsessionwait; previous07:30SGTmutationcutoffunchanged.
+Read/preservedmain7604fcc(PR124completeclosingcosts),Grokthrough№17,694.
+Baseline/receiptsandcostqualitymatter; noeconomicPASSfromdeploymentorcopied
+accounts. PrivatefixedSQL/HTMLandpublicmetadataseparate. Schedule/testing/
+actualactivationfollow inPRreceipt; no newpaidmodelroute/SLspam/tradepolicy.
