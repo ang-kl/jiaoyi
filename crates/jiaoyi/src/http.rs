@@ -42,6 +42,7 @@ pub fn router(state: AppState) -> Router {
         .route("/trading/orders", get(trading_orders))
         .route("/trading/executions", get(trading_executions))
         .route("/operations/reports", get(operations_reports))
+        .route("/operations/stock-preparation", get(stock_preparation))
         .route("/operations/stop-loss-reviews", get(stop_loss_reviews))
         .route("/operations", get(operations_page))
         .with_state(state)
@@ -106,6 +107,18 @@ async fn stop_loss_reviews(State(s): State<AppState>) -> Response {
     match crate::stop_loss_review::evidence(&s.pool, &accounts).await {
         Ok(evidence) => Json(evidence).into_response(),
         // Public failures must not expose database statements or stored facts.
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"status":"unavailable"})),
+        )
+            .into_response(),
+    }
+}
+
+async fn stock_preparation(State(s): State<AppState>) -> Response {
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    match crate::stock_preparation::report(&s.pool, &accounts, chrono::Utc::now()).await {
+        Ok(report) => Json(report).into_response(),
         Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({"status":"unavailable"})),
