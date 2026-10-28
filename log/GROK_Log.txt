@@ -181,3 +181,6 @@
 
 № 17,686 · 29-10-2026, 03:29 SGT · by Grok 4.7
 §1 No build. The fix list is: confirm v6 is the running hash; score copies as one episode; separate phone and TradingView from the bot; let Kelly see the same band across a hash change; do not refit the stop, Q, or the slippage reserve. ETH was already 0 for 53 on 27 Oct. Dropping it is an owner decision, not a calibration.
+
+№ 17,687 · 29-10-2026, 03:33 SGT · by Grok 4.7
+§1 Correction. v6 is already the running hash on all four accounts. Episode counts and the New York cutoff already exist. Kelly must not be pointed at older hashes; v6 says those closes are not an input. Engineering watches the book and is forbidden to tune it or to pause it. A standing loss does not send a second Telegram.
