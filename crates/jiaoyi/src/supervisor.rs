@@ -449,6 +449,26 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
             }
         })
         .collect();
+    let policy_rows = sqlx::query("SELECT account_id,value FROM settings WHERE key='trading.margin_level_floor_pct' AND (account_id IS NULL OR account_id=ANY($1))")
+        .bind(&allowed).fetch_all(pool).await?;
+    let margin_rows = sqlx::query("SELECT DISTINCT ON (account_id) account_id,at,detail FROM trading_decisions WHERE account_id=ANY($1) AND kind='margin_admission' ORDER BY account_id,id DESC")
+        .bind(&allowed).fetch_all(pool).await?;
+    let margin_admission: Vec<Value> = allowed.iter().map(|account| {
+        let configured=policy_rows.iter().find(|r|r.get::<Option<i64>,_>("account_id")==Some(*account))
+            .or_else(||policy_rows.iter().find(|r|r.get::<Option<i64>,_>("account_id").is_none()))
+            .and_then(|r|r.get::<Value,_>("value").as_f64()).filter(|v|v.is_finite()&&*v>=100.0);
+        let row=margin_rows.iter().find(|r|r.get::<i64,_>("account_id")==*account);
+        let detail=row.map(|r|r.get::<Value,_>("detail")).unwrap_or(Value::Null);
+        let number=|field:&str|detail[field].as_f64().filter(|v|v.is_finite());
+        json!({"account_id":account,"floor_pct":configured,"configured":configured.is_some(),
+            "scope":"new entries only; existing exits bypass margin admission; live one-position rule retained",
+            "last_checked_at":row.map(|r|r.get::<DateTime<Utc>,_>("at")),
+            "last_state":detail["state"].as_str().filter(|s|matches!(*s,"passed"|"unavailable"|"refused")),
+            "projected_level_pct":number("projected_level_pct"),"stressed_level_pct":number("stressed_level_pct"),
+            "warning_pct":number("warning_pct"),"positions":detail["positions"].as_u64(),
+            "pending_entries":detail["pending_entries"].as_u64(),
+            "evidence_scope":"last candidate assessment, not a current balance or margin guarantee"})
+    }).collect();
     Ok(json!({
         "service": "railway_assessment_supervisor",
         "as_of": now,
@@ -468,6 +488,7 @@ pub async fn reports(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Err
         "consistency": "no single window establishes sustained goal achievement",
         "reports": reports,
         "account_source_diagnostics": account_source_diagnostics,
+        "margin_admission": margin_admission,
         "recent_events_limit": 100,
         "recent_events": recent_events,
     }))

@@ -69,7 +69,7 @@ lessons from bot-trade are carried forward, with their source and check.
 | M1 — trustworthy goal measurement | In progress | Correct ordered latest-20 results on each account/strategy; 15/20 threshold, cost/ownership/partial-fill controls, explicit missing/stale states, actual executed regression results. |
 | M2 — persistent supervision and reports | In progress | The existing service assesses without an active chat turn, records window/status milestones durably, survives restart without duplicate milestones, and exposes report age/failure through a read-only operations view. Exact deployed revision and real read-back required. |
 | M3 — fresh broker history | In progress | New authoritative closing deals reach assessment promptly through the existing worker; long tick/probe work does not silently starve deal freshness. Confirm actual new-deal storage, replay/dedup and recovery, not merely a healthy process. |
-| M4 — margin admission with existing pre-order/SL checks | Review prepared; owner policy pending | Preserve the existing decided order/SL/TP and account rules. Establish broker margin precision, account aggregation and GSL compatibility. Owner selects the margin floor or capacity-only policy before applying a new rule. Verify refusals and exits under delayed/unknown inputs; no silent resizing. |
+| M4 — margin admission with existing pre-order/SL checks | Margin buffer selected; numeric floor pending (28 Oct, №17,666) | Preserve the existing decided order/SL/TP and account rules. Establish broker margin precision, account aggregation and GSL compatibility. Owner selects the margin floor or capacity-only policy before applying a new rule. Verify refusals and exits under delayed/unknown inputs; no silent resizing. |
 | M5 — remaining handover contracts | Open/deferred | Natural Strategy 1 first-fill audit; measured-cost-based, pre-registered C4 blackout; C5 Strategy 2 only after the owner resolves basket admission and its bounded trial is registered. Never force a trade or resume paused research to fill a checklist. |
 | M6 — goal evidence and closure | Open | Current, cost-complete evidence for every required strategy/account, retained successive-window results and the applicable registered acceptance gates. State gaps and owner decisions explicitly. No guarantee of economic success or automatic trading pause when a numeric window passes. |
 
@@ -119,3 +119,13 @@ Strategy 1 fill and O-5/C4 remain open; O-6/C5 is not built; O-7's 50-trade
 size review is conditional and not permission to increase size; O-8 research
 R1/R2 remains owner-paused. The margin incident is not declared resolved by
 backoff alone. The whole handover and financial goal remain open.
+
+
+## 28 October 2026 margin/basket disposition
+
+Owner source №17,666 §1 supersedes the earlier open choice between capacity-only
+and margin-buffer admission: use a margin buffer for new entries. The percentage
+is pending the owner's answer; implementation/test percentages do not activate it.
+Retain the current one-position live rule until Strategy 2 has a tested
+basket-execution plan. There is no present basket exception or S2 activation.
+Routine engineering continues independently. See docs/margin-buffer-entry-policy.md.

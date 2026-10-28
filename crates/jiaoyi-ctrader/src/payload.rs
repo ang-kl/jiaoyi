@@ -20,6 +20,14 @@ use crate::pb::{self, ProtoOaPayloadType as Oa, ProtoPayloadType as Common};
 
 /// Every payload type this program may send, with the reason it is needed.
 pub const SENDABLE: &[(i32, &str)] = &[
+    (
+        Oa::ProtoOaExpectedMarginReq as i32,
+        "estimate margin before a new entry",
+    ),
+    (
+        Oa::ProtoOaMarginCallListReq as i32,
+        "read account margin warning thresholds",
+    ),
     (Common::HeartbeatEvent as i32, "keep the connection open"),
     (
         Oa::ProtoOaApplicationAuthReq as i32,
@@ -195,6 +203,10 @@ request!(pb::ProtoOaDealListReq => Oa::ProtoOaDealListReq,
          pb::ProtoOaDealListRes => Oa::ProtoOaDealListRes);
 request!(pb::ProtoOaTraderReq => Oa::ProtoOaTraderReq,
          pb::ProtoOaTraderRes => Oa::ProtoOaTraderRes);
+request!(pb::ProtoOaExpectedMarginReq => Oa::ProtoOaExpectedMarginReq,
+         pb::ProtoOaExpectedMarginRes => Oa::ProtoOaExpectedMarginRes);
+request!(pb::ProtoOaMarginCallListReq => Oa::ProtoOaMarginCallListReq,
+         pb::ProtoOaMarginCallListRes => Oa::ProtoOaMarginCallListRes);
 request!(pb::ProtoOaGetAccountListByAccessTokenReq => Oa::ProtoOaGetAccountsByAccessTokenReq,
          pb::ProtoOaGetAccountListByAccessTokenRes => Oa::ProtoOaGetAccountsByAccessTokenRes);
 request!(pb::ProtoOaAssetListReq => Oa::ProtoOaAssetListReq,
@@ -222,7 +234,9 @@ mod tests {
     assert_not_impl_any!(pb::ProtoOaMarginCallUpdateReq: Request);
 
     /// The read requests, and nothing else.
-    const EXPECTED_SENDABLE: [i32; 17] = [
+    const EXPECTED_SENDABLE: [i32; 19] = [
+        Oa::ProtoOaExpectedMarginReq as i32,
+        Oa::ProtoOaMarginCallListReq as i32,
         Common::HeartbeatEvent as i32,
         Oa::ProtoOaApplicationAuthReq as i32,
         Oa::ProtoOaAccountAuthReq as i32,
@@ -312,6 +326,8 @@ mod tests {
             R::PAYLOAD_TYPE
         }
         for t in [
+            pt::<pb::ProtoOaExpectedMarginReq>(),
+            pt::<pb::ProtoOaMarginCallListReq>(),
             pt::<pb::ProtoOaApplicationAuthReq>(),
             pt::<pb::ProtoOaAccountAuthReq>(),
             pt::<pb::ProtoOaRefreshTokenReq>(),

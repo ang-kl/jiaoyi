@@ -680,6 +680,20 @@ impl AccountSession<'_> {
         Ok(res)
     }
 
+    /// Whole-account book including broker-held protection, for admission.
+    pub async fn margin_book(&self) -> Result<pb::ProtoOaReconcileRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaReconcileReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                return_protection_orders: Some(true),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
     /// The open positions' unrealized P&L in the deposit currency, as the
     /// broker states it (`ProtoOAGetPositionUnrealizedPnLReq`, read-only).
     pub async fn unrealized_pnl(
@@ -978,6 +992,39 @@ impl AccountSession<'_> {
                 other => return other,
             }
         }
+    }
+
+    /// The account's trader record (balance, deposit asset, registration time).
+    pub async fn expected_margin(
+        &self,
+        symbol_id: i64,
+        volume: Vec<i64>,
+    ) -> Result<pb::ProtoOaExpectedMarginRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaExpectedMarginReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                symbol_id,
+                volume,
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
+    /// Read existing warnings only. This never changes a broker threshold.
+    pub async fn margin_calls(&self) -> Result<pb::ProtoOaMarginCallListRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaMarginCallListReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        // This protobuf has no account-ID field. Connection::request matches
+        // its unique clientMsgId to this account-scoped request.
+        Ok(res)
     }
 
     /// The account's trader record (balance, deposit asset, registration time).

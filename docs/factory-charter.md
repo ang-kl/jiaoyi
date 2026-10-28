@@ -160,3 +160,12 @@ Every task is agreed as a contract before it starts, so its exit is defined:
 | Execution | The steps, and who does each. |
 | Evidence | Tests (red before, green after), mutations, read-back after deploy; each claim Passed, Failed or Not Verifiable. |
 | Close | **Exits:** done (every outcome evidenced); stopped (the owner's word); blocked (a decision only the owner can make, put to the owner); failed (reported with the evidence). Not Verifiable stays open, never "done". |
+
+
+## Owner margin/basket decision — 28 October 2026
+
+Chat №17,666 §1: use a margin buffer for new entries; retain the existing
+one-position live rule until Strategy 2 has a tested basket-execution plan.
+No basket exception or Strategy 2 activation is granted. The margin percentage
+remains to be supplied by the owner under I-2; synthetic test values are not
+live defaults. See [the bounded policy](margin-buffer-entry-policy.md).

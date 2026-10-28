@@ -58,6 +58,16 @@ async fn loaded(pool: &PgPool) {
 /// The same for these symbols: (id, name, class, quote asset id), each with
 /// digits 2 and a minimum and step of 1 cent. Assets: 1 USD, 3 JPY.
 async fn loaded_with(pool: &PgPool, syms: &[(i64, &str, AssetClass, i64)]) {
+    settings::change(
+        pool,
+        "trading.margin_level_floor_pct",
+        None,
+        Some(json!(200)),
+        "test",
+        "synthetic margin policy",
+    )
+    .await
+    .unwrap();
     store::upsert_account(pool, DEMO, Environment::Demo)
         .await
         .unwrap();
@@ -169,6 +179,15 @@ fn fake(quotes: Vec<(f64, f64)>) -> FakeBroker {
 fn fake_on(ids: &[i64], half: i64) -> FakeBroker {
     FakeBroker {
         account_id: DEMO,
+        light_symbols: ids
+            .iter()
+            .map(|id| jiaoyi_ctrader::messages::ProtoOaLightSymbol {
+                symbol_id: *id,
+                base_asset_id: Some(9),
+                quote_asset_id: Some(if *id == USDJPY || *id == JP225 { 3 } else { 1 }),
+                ..Default::default()
+            })
+            .collect(),
         bars: ids.iter().map(|id| (*id, bars(half))).collect(),
         trader: Some(ProtoOaTrader {
             ctid_trader_account_id: DEMO,

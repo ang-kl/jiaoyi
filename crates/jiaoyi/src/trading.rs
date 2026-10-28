@@ -498,6 +498,55 @@ pub fn event_row(e: &EventRecord) -> ts::EventRow {
 }
 
 impl Ledger for PgLedger<'_> {
+    fn admission_namespace(&self) -> String {
+        self.pool
+            .connect_options()
+            .get_database()
+            .unwrap_or("postgres")
+            .to_string()
+    }
+    async fn margin_floor_pct(&self, account_id: i64) -> Result<f64, String> {
+        let snapshot = jiaoyi_store::settings::snapshot(self.pool, Some(account_id))
+            .await
+            .map_err(|e| e.to_string())?;
+        snapshot
+            .number("trading.margin_level_floor_pct")
+            .map_err(|e| e.to_string())
+    }
+    async fn margin_has_unresolved_open(&self, account_id: i64) -> Result<bool, String> {
+        ts::open_intents_unresolved(self.pool, account_id)
+            .await
+            .map(|v| !v.is_empty())
+            .map_err(|e| e.to_string())
+    }
+    async fn record_margin(
+        &self,
+        account_id: i64,
+        symbol_id: i64,
+        receipt: &jiaoyi_ctrader::margin::Receipt,
+    ) -> Result<(), String> {
+        let symbol: Option<String> = jiaoyi_store::sqlx::query_scalar(
+            "SELECT name FROM symbols WHERE account_id=$1 AND broker_symbol_id=$2",
+        )
+        .bind(account_id)
+        .bind(symbol_id)
+        .fetch_optional(self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        ts::record_decision(
+            self.pool,
+            account_id,
+            symbol.as_deref(),
+            "margin_admission",
+            receipt.reason.as_deref().unwrap_or("margin buffer passed"),
+            &serde_json::to_value(receipt).map_err(|e| e.to_string())?,
+            self.settings_version,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    }
+
     async fn record_intent(&self, i: &Intent) -> Result<IntentWrite, String> {
         let row = ts::IntentRow {
             account_id: i.account_id,
@@ -562,6 +611,26 @@ impl<'a> TimedLedger<'a> {
 }
 
 impl Ledger for TimedLedger<'_> {
+    fn admission_namespace(&self) -> String {
+        self.inner.admission_namespace()
+    }
+    async fn margin_floor_pct(&self, account_id: i64) -> Result<f64, String> {
+        self.inner.margin_floor_pct(account_id).await
+    }
+    async fn margin_has_unresolved_open(&self, account_id: i64) -> Result<bool, String> {
+        self.inner.margin_has_unresolved_open(account_id).await
+    }
+    async fn record_margin(
+        &self,
+        account_id: i64,
+        symbol_id: i64,
+        receipt: &jiaoyi_ctrader::margin::Receipt,
+    ) -> Result<(), String> {
+        self.inner
+            .record_margin(account_id, symbol_id, receipt)
+            .await
+    }
+
     async fn record_intent(&self, i: &Intent) -> Result<IntentWrite, String> {
         let w = self.inner.record_intent(i).await?;
         if w == IntentWrite::Recorded {
