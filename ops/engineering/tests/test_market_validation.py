@@ -132,6 +132,28 @@ class MarketValidationTests(unittest.TestCase):
         self.assertEqual(self.c.store.used(), 0)
         self.assertEqual(self.c.store.jobs(), [])
 
+        # A recoverable private-source failure is retried on the minute lane,
+        # without resetting the observation baseline or waiting until09:00.
+        recovering = mv.MarketValidation(self.coordinator(self.root / "recovering"))
+        healthy = {"state": "available", "accounts": [{"observed_at": self.start.isoformat()}] * 4,
+                   "statement_report": {"status": "sent", "report_key": "ny:2026-10-28",
+                                        "period_to": "2026-10-28T21:00:00Z"}}
+        with patch.object(recovering, "_fetch", side_effect=self.fetch), \
+             patch.object(recovering, "_evidence", side_effect=[
+                 {"state": "unknown", "reason": "private_readonly_source_CalledProcessError"}, healthy]) as evidence:
+            recovering.tick(clock=self.start)
+            self.assertEqual(recovering.status()["private_source_error"], "private_readonly_source_CalledProcessError")
+            baseline = recovering.status()["baseline_at"]
+            recovering.tick(clock=self.start + dt.timedelta(seconds=30))
+            self.assertEqual(evidence.call_count, 1)
+            recovering.tick(clock=self.start + dt.timedelta(seconds=60))
+            self.assertEqual(evidence.call_count, 2)
+            self.assertEqual(recovering.status()["baseline_at"], baseline)
+            self.assertEqual(recovering.status()["private_evidence_state"], "available")
+            self.assertIsNone(recovering.status()["private_source_error"])
+            recovering.tick(clock=self.start + dt.timedelta(seconds=120))
+            self.assertEqual(evidence.call_count, 2)
+
     def test_report_uses_deadline_receipts_and_new_broker_evidence_not_old_samples(self):
         with patch.object(self.v, "_fetch", side_effect=lambda route: copy.deepcopy(self.packets()[route])):
             self.v.tick(clock=self.clock)

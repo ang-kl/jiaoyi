@@ -7,12 +7,19 @@ import json
 import math
 import os
 import subprocess
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 ACCOUNTS = (43002148, 46130058, 47790949, 49236051)
 # Only the reviewed v6 registration is replayed with this midpoint rule.
 # Historical side-quote rules and future registrations remain unknown here.
 MIDPOINT_REGISTRATION = 'd54344b9d463532c3b1e2d81bd07d671ed0d2fceae9ee923f1c8988b18b2ab32'
 MAX_OUTPUT = 2 * 1024 * 1024
+SSL_ENV = {
+    'sslmode': 'PGSSLMODE', 'sslrootcert': 'PGSSLROOTCERT', 'sslcert': 'PGSSLCERT',
+    'sslkey': 'PGSSLKEY', 'sslcrl': 'PGSSLCRL', 'sslcrldir': 'PGSSLCRLDIR',
+    'ssl_min_protocol_version': 'PGSSLMINPROTOCOLVERSION',
+    'ssl_max_protocol_version': 'PGSSLMAXPROTOCOLVERSION', 'channel_binding': 'PGCHANNELBINDING',
+}
 SQL = r"""
 BEGIN READ ONLY;
 SET LOCAL statement_timeout='8000ms';
@@ -116,6 +123,29 @@ def _clock(value):
 
 def _finite(value):
     return type(value) in (int, float) and math.isfinite(value)
+
+
+def _psql_environment(connection):
+    """libpq does not expand a connection URI supplied through PGDATABASE."""
+    parsed = urlsplit(connection)
+    database = unquote(parsed.path[1:]) if parsed.path.startswith('/') else ''
+    if parsed.scheme not in ('postgres', 'postgresql') or not parsed.hostname or not parsed.username or not database:
+        raise ValueError('invalid PostgreSQL connection URI')
+    options = parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True)
+    if any(key not in SSL_ENV for key, _ in options) or len({key for key, _ in options}) != len(options):
+        raise ValueError('unsupported PostgreSQL connection option')
+    # Never inherit a service/host-address/password-file selector that could
+    # override this explicitly configured connection. Do not read those files.
+    environment = {key: value for key, value in os.environ.items() if key not in (
+        'PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGDATABASE',
+        'PGSERVICE', 'PGSERVICEFILE', 'PGPASSFILE', *SSL_ENV.values())}
+    environment.update(PGHOST=unquote(parsed.hostname), PGPORT=str(parsed.port or 5432),
+        PGUSER=unquote(parsed.username), PGDATABASE=database, PGCONNECT_TIMEOUT='2',
+        PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=8000')
+    if parsed.password is not None:
+        environment['PGPASSWORD'] = unquote(parsed.password)
+    environment.update({SSL_ENV[key]: value for key, value in options})
+    return environment
 
 
 def _setup_checks(position):
@@ -245,9 +275,13 @@ def collect(coordinator, since, until):
     if not connection:
         return {'state': 'unknown', 'as_of': until.isoformat(), 'scope': 'private statement/lifecycle',
                 'reason': 'private_readonly_database_not_configured', 'accounts': [], 'lifecycle': [], 'checks': [], 'statement_report': {}}
-    environment = os.environ.copy()
-    environment.update(PGDATABASE=connection, PGCONNECT_TIMEOUT='2',
-                       PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=8000')
+    def unavailable(reason):
+        return {'state': 'unknown', 'as_of': until.isoformat(), 'scope': 'private statement/lifecycle',
+                'reason': reason, 'accounts': [], 'lifecycle': [], 'checks': [], 'statement_report': {}}
+    try:
+        environment = _psql_environment(connection)
+    except (ValueError, TypeError):
+        return unavailable('private_readonly_configuration_invalid')
     try:
         result = subprocess.run(['psql', '-X', '-q', '-A', '-t', '--set=ON_ERROR_STOP=1',
             '--set=since=' + since.isoformat(), '--set=until=' + until.isoformat()], input=SQL,
@@ -256,9 +290,16 @@ def collect(coordinator, since, until):
         data = json.loads(result.stdout)
         if not isinstance(data, dict): raise ValueError('expected object')
         return _assess(data, since, until)
-    except (OSError, ValueError, subprocess.SubprocessError, TypeError) as error:
-        return {'state': 'unknown', 'as_of': until.isoformat(), 'scope': 'private statement/lifecycle',
-                'reason': 'private_readonly_source_' + type(error).__name__, 'accounts': [], 'lifecycle': [], 'checks': [], 'statement_report': {}}
+    except subprocess.CalledProcessError as error:
+        # Fixed categories only: stderr can contain a connection credential.
+        category = 'connection_failed' if error.returncode == 2 else 'query_failed' if error.returncode == 3 else 'process_failed'
+        return unavailable('private_readonly_' + category)
+    except subprocess.TimeoutExpired:
+        return unavailable('private_readonly_timeout')
+    except FileNotFoundError:
+        return unavailable('private_readonly_psql_missing')
+    except (OSError, ValueError, subprocess.SubprocessError, TypeError):
+        return unavailable('private_readonly_invalid_response')
 
 
 def render(evidence):

@@ -68,6 +68,10 @@ class MarketEvidenceTests(unittest.TestCase):
         self.assertEqual(result['state'], 'available')
         args, kwargs = run.call_args
         self.assertNotIn('SECRET-PASSWORD', str(args))
+        self.assertEqual(kwargs['env']['PGHOST'], 'example')
+        self.assertEqual(kwargs['env']['PGDATABASE'], 'test')
+        self.assertEqual(kwargs['env']['PGUSER'], 'SECRET-PASSWORD')
+        self.assertNotIn('postgres://', kwargs['env']['PGDATABASE'])
         self.assertIn('BEGIN READ ONLY;', kwargs['input'])
         self.assertIn('ROLLBACK;', kwargs['input'])
         self.assertIn('default_transaction_read_only=on', kwargs['env']['PGOPTIONS'])
@@ -76,6 +80,23 @@ class MarketEvidenceTests(unittest.TestCase):
             failed = m.collect(coordinator, self.since, self.now)
         self.assertEqual(failed['state'], 'unknown')
         self.assertNotIn('SECRET-PASSWORD', json.dumps(failed))
+
+    def test_connection_uri_decodes_credentials_and_preserves_only_explicit_ssl_options(self):
+        with patch.dict(m.os.environ, {'PGHOSTADDR': 'bad-address', 'PGSERVICE': 'bad-service',
+                                     'PGPASSWORD': 'old-password', 'PGSSLMODE': 'disable'}):
+            env = m._psql_environment('postgresql://report%20reader:p%40ss%2F%3A%25word@db.internal:5433/trade%20db'
+                '?sslmode=require&sslrootcert=%2Frun%2Fca.pem')
+        self.assertEqual((env['PGHOST'], env['PGPORT'], env['PGUSER'], env['PGDATABASE']),
+                         ('db.internal', '5433', 'report reader', 'trade db'))
+        self.assertEqual(env['PGPASSWORD'], 'p@ss/:%word')
+        self.assertEqual((env['PGSSLMODE'], env['PGSSLROOTCERT']), ('require', '/run/ca.pem'))
+        self.assertNotIn('PGHOSTADDR', env); self.assertNotIn('PGSERVICE', env)
+        with self.assertRaises(ValueError):
+            m._psql_environment('postgres://user:password@db/database?options=-c+default_transaction_read_only%3Doff')
+        with self.assertRaises(ValueError):
+            m._psql_environment('https://user:password@db/database')
+        with self.assertRaises(ValueError):
+            m._psql_environment('postgres://user@db/database?sslmode=require&sslmode=disable')
 
     def test_saved_setup_arithmetic_is_assessed_without_claiming_registration_or_edge(self):
         position = {'ownership_state': 'PASS', 'strategy': 's3', 'side': 'buy', 'relative_stop': 100000,
