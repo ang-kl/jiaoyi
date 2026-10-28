@@ -1,14 +1,15 @@
 """List-price meter for the Grok API, and when to tell the owner.
 
-Owner, 28-10-2026, № 17,635. Prices checked 27 Oct 2026 for Grok 4.7:
-$2 per 1M input tokens, $0.50 per 1M cached input, $6 per 1M output.
-This is not an xAI invoice. A standing 15-minute or 30-minute sentiment
-poll is not a reason to call. The mark stays 30 minutes, and a permit is
-still only block_a_send or unblock_a_close.
+Owner, 28-10-2026, № 17,637. The halt call uses grok-4-1-fast-non-reasoning
+with reasoning effort none. After 15 May 2026 that slug is served as
+grok-4.3 at effort none. The bill uses the model the response returns,
+not the slug that was sent. List prices, not an xAI invoice:
+fast $0.20 / $0.05 cached / $0.50 per 1M (xAI card);
+grok-4.3 $1.25 / $0.20 / $2.50 (27 Oct 2026 list);
+grok-4.7 $2 / $0.50 / $6. An unknown model is not priced.
 
-Telegram: one message a day at 11:00 SGT, and one message each time the
-running estimate crosses a $10 step. $30, $50 and $100 are those steps,
-named as such.
+A standing 15- or 30-minute sentiment poll is not a reason to call.
+Telegram: 11:00 SGT daily, and every $10, with $30, $50 and $100 named.
 """
 
 from __future__ import annotations
@@ -17,11 +18,55 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 SGT = timezone(timedelta(hours=8))
-INPUT_PER_MILLION = Decimal("2")
-CACHED_PER_MILLION = Decimal("0.50")
-OUTPUT_PER_MILLION = Decimal("6")
 STEP = Decimal("10")
 NAMED = {Decimal("30"), Decimal("50"), Decimal("100")}
+HALT_MODEL = "grok-4-1-fast-non-reasoning"
+
+# input, cached input, output, per million tokens.
+RATES = {
+    "grok-4-1-fast-non-reasoning": (Decimal("0.20"), Decimal("0.05"), Decimal("0.50")),
+    "grok-4-1-fast": (Decimal("0.20"), Decimal("0.05"), Decimal("0.50")),
+    "grok-4-1-fast-reasoning": (Decimal("0.20"), Decimal("0.05"), Decimal("0.50")),
+    "grok-4.3": (Decimal("1.25"), Decimal("0.20"), Decimal("2.50")),
+    "grok-4.7": (Decimal("2"), Decimal("0.50"), Decimal("6")),
+}
+
+
+def halt_model(env: dict | None = None) -> str:
+    """Empty JIAOYI_GROK_MODEL means the fast non-reasoning slug.
+    JIAOYU_GROK_MODEL is a typo and is not read."""
+    chosen = (env or {}).get("JIAOYI_GROK_MODEL") or HALT_MODEL
+    return chosen.strip() or HALT_MODEL
+
+
+def halt_request(symbol: str, session: str, env: dict | None = None) -> dict:
+    """One closed question. No sentiment and no reasoning trace."""
+    return {
+        "model": halt_model(env),
+        "reasoning_effort": "none",
+        "max_output_tokens": 40,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "halt",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["halt", "name"],
+                    "properties": {
+                        "halt": {"type": "boolean"},
+                        "name": {"type": ["string", "null"]},
+                    },
+                },
+            },
+        },
+        "input": (
+            f"Symbol {symbol}, session {session}. "
+            "Reply with the schema only. halt is true only for a named halt or holiday. "
+            "No sentiment and no outlook."
+        ),
+    }
 
 
 def standing_poll_allowed(minutes: int) -> bool:
@@ -29,16 +74,19 @@ def standing_poll_allowed(minutes: int) -> bool:
     return False
 
 
-def estimate(input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> Decimal:
+def estimate(model: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> Decimal:
+    if model not in RATES:
+        raise ValueError("no list price for the model the response returned: " + model)
     if min(input_tokens, output_tokens, cached_tokens) < 0:
         raise ValueError("token counts are not negative")
     if cached_tokens > input_tokens:
         raise ValueError("cached tokens are part of the input")
+    fresh_rate, cached_rate, output_rate = RATES[model]
     fresh = Decimal(input_tokens - cached_tokens)
     cost = (
-        fresh * INPUT_PER_MILLION
-        + Decimal(cached_tokens) * CACHED_PER_MILLION
-        + Decimal(output_tokens) * OUTPUT_PER_MILLION
+        fresh * fresh_rate
+        + Decimal(cached_tokens) * cached_rate
+        + Decimal(output_tokens) * output_rate
     ) / Decimal(1_000_000)
     return cost.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 

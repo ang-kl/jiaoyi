@@ -3,17 +3,33 @@
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 
-from api_cost import assess_missed_deadline, daily_due, estimate, notices, standing_poll_allowed, steps_crossed
+from api_cost import (
+    assess_missed_deadline, daily_due, estimate, halt_model, halt_request,
+    notices, standing_poll_allowed, steps_crossed,
+)
 
 SGT = timezone(timedelta(hours=8))
 
 
-def test_a_clock_is_not_a_reason_and_the_rate_is_the_published_one():
+def test_a_clock_is_not_a_reason_and_the_rate_is_the_model_that_answered():
     assert standing_poll_allowed(15) is False
     assert standing_poll_allowed(30) is False
-    # 1,000 fresh input and 200 output: 0.002 + 0.0012.
-    assert estimate(1000, 200) == Decimal("0.003200")
-    assert estimate(1000, 0, cached_tokens=1000) == Decimal("0.000500")
+    # Fast non-reasoning: 1,000 input at $0.20 and 200 output at $0.50.
+    assert estimate("grok-4-1-fast-non-reasoning", 1000, 200) == Decimal("0.000300")
+    # A redirect that answers as grok-4.3 is billed as grok-4.3, not as the slug.
+    assert estimate("grok-4.3", 1000, 200) == Decimal("0.001750")
+    try:
+        estimate("grok-unknown", 1000, 200)
+    except ValueError as error:
+        assert "no list price" in str(error)
+    else:
+        raise AssertionError("an unknown model was priced")
+    request = halt_request("XAUUSD", "2026-10-28", {})
+    assert request["model"] == "grok-4-1-fast-non-reasoning"
+    assert request["reasoning_effort"] == "none"
+    assert request["response_format"]["json_schema"]["schema"]["required"] == ["halt", "name"]
+    assert halt_model({"JIAOYU_GROK_MODEL": "grok-4.7"}) == "grok-4-1-fast-non-reasoning"
+    assert halt_model({"JIAOYI_GROK_MODEL": "grok-4.3"}) == "grok-4.3"
 
 
 def test_ten_dollar_steps_name_30_50_and_100_and_eleven_is_once_a_day():

@@ -262,14 +262,14 @@ class Reporter:
                 self.store.event("grok_cost_alert_error", detail=type(error).__name__)
             self.coordinator.shutdown.wait(30)
 
-    def record_usage(self, input_tokens, output_tokens, cached_tokens=0, now=None):
-        """Add one metered call and alert if a $10 step was crossed. № 17,635."""
+    def record_usage(self, model, input_tokens, output_tokens, cached_tokens=0, now=None):
+        """Add one metered call. Price the model the response returned. № 17,637."""
         from decimal import Decimal
         from api_cost import SGT, estimate, notices
         if not (self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")):
             return
         now = now or dt.datetime.now(SGT)
-        added = estimate(input_tokens, output_tokens, cached_tokens)
+        added = estimate(model, input_tokens, output_tokens, cached_tokens)
         with self.store.connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS grok_api_spend ("
