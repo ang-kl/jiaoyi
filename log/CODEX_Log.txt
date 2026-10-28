@@ -259,3 +259,7 @@ financial improvement, merge/deployment or broker acceptance is yet claimed.
 
 [§LOG.28] 28-10-2026 22:14:57 SGT, №17,680 §§1–2: activation affected tests43/43, denied-warning
 Clippy/fmt/whitespace passed. Final-head CI and release read-back remain next.
+
+[§LOG.29] 28-10-2026 22:17:49 SGT, №17,681 §1: CI caught stale seed-count unit assertion
+(1 instead of2). Merge stopped. Repair pins both reviewed entries and
+preserves duplicate-ID rejection. Await exact final-head CI; not released.

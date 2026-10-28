@@ -2424,14 +2424,22 @@ mod tests {
 
     #[test]
     fn the_seed_file_parses_and_refuses_duplicate_ids() {
-        // The shipped seed: the owner's 25-10 "Live too, from now".
+        // The reviewed edge override and owner-delegated margin floor.
         let seed = parse_seed(SEED_FILE).unwrap();
-        assert_eq!(seed.len(), 1);
+        assert_eq!(seed.len(), 2);
         assert_eq!(seed[0].key, "trading.live_requires_edge_pass");
         assert_eq!(seed[0].value, json!(0));
         assert_eq!(seed[0].account_id, None);
         assert_eq!(seed[0].changed_by, "owner");
         assert!(seed[0].reason.contains("Live too, from now"));
+        assert_eq!(seed[1].id, "2026-10-28-margin-buffer-entry-floor");
+        assert_eq!(seed[1].key, "trading.margin_level_floor_pct");
+        assert_eq!(seed[1].value, json!(250));
+        assert_eq!(seed[1].account_id, None);
+        assert_eq!(seed[1].changed_by, "owner");
+        assert!(seed[1]
+            .reason
+            .contains("Owner delegated selection and activation"));
         let dup = r#"[{"id":"a","key":"trading.risk_pct","account_id":1,"value":0.6,"changed_by":"x","reason":"y"},
                      {"id":"a","key":"trading.risk_pct","account_id":2,"value":0.6,"changed_by":"x","reason":"y"}]"#;
         assert!(parse_seed(dup).unwrap_err().contains("twice"));
