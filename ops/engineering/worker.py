@@ -270,7 +270,10 @@ class Config:
         self.env = dict(os.environ if env is None else env)
         self.root = Path(self.env.get("ENGINEERING_STATE_DIR", "/data"))
         self.enabled = self.env.get("ENGINEERING_ENABLED") == "1"
-        self.model = self.env.get("ENGINEERING_MODEL") or self.env.get("JIAOYI_GROK_MODEL", "")
+        self.model = self.env.get("ENGINEERING_MODEL", "")
+        # JIAOYI_GROK_MODEL is the halt call only (owner set grok-4.3,
+        # 28-10-2026). It does not replace the repair agent. The typo
+        # JIAOYU_GROK_MODEL is not read. Grok 4.7 · № 17,638.
         self.auth_mode = self.env.get("ENGINEERING_AUTH_MODE", "api-key")
         if self.auth_mode not in ("api-key", "chatgpt"):
             raise ValueError("unsupported engineering authentication mode")

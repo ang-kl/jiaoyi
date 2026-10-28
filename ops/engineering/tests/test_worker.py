@@ -44,6 +44,12 @@ class WorkerTests(Fixture, unittest.TestCase):
                              ENGINEERING_DAILY_SESSION_LIMIT="2",
                              ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap")
         self.assertIsNone(config.blocked())
+        self.assertEqual(config.model, "owner-selected-model")
+        halt = self.config(ENGINEERING_ENABLED="1", OPENAI_API_KEY="secret", GH_TOKEN="secret2",
+                           RAILWAY_TOKEN="secret3", ENGINEERING_MODEL="owner-selected-model",
+                           JIAOYI_GROK_MODEL="grok-4.3", ENGINEERING_DAILY_SESSION_LIMIT="2",
+                           ENGINEERING_BUDGET_ACK="session-limits-are-not-a-dollar-cap")
+        self.assertEqual(halt.model, "owner-selected-model")
         with self.assertRaises(ValueError):
             self.config(ENGINEERING_SESSION_TIMEOUT_SECONDS="99999")
         with self.assertRaises(ValueError):
