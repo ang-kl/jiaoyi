@@ -144,6 +144,8 @@ fn operations_page_reports_qualified_benchmark_gaps_and_unknown_comparisons() {
     assert!(page.contains("§2"));
     assert!(page.contains("29-10-2026 06:49:36 SGT"));
     assert!(page.contains("29-10-2026 06:47:08 SGT"));
+    assert!(page.contains("Assessment computed"));
+    assert!(!page.contains("Assessment source cutoff"));
     assert!(page.contains("Comparable cohort deltas: unknown"));
     assert!(page.contains("Engineering-attributable financial movement: unknown"));
 
