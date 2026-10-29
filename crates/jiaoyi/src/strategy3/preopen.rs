@@ -288,37 +288,92 @@ async fn run_attempt(
     }
 }
 
+/// Read the same newest receipt as `stored` for each requested symbol/session,
+/// preserving request order while using one fresh database round trip.
+async fn stored_many(
+    pool: &PgPool,
+    account: i64,
+    requests: &[(String, Session)],
+) -> anyhow::Result<Vec<Option<Prepared>>> {
+    if requests.is_empty() {
+        return Ok(vec![]);
+    }
+    let symbols: Vec<_> = requests.iter().map(|(symbol, _)| symbol.as_str()).collect();
+    let opens: Vec<_> = requests
+        .iter()
+        .map(|(_, session)| {
+            session
+                .open
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        })
+        .collect();
+    let values: Vec<Option<Value>> = jiaoyi_store::sqlx::query_scalar(
+        "SELECT latest.detail
+         FROM unnest($2::text[], $3::text[]) WITH ORDINALITY AS requested(symbol, session_open, ordinal)
+         LEFT JOIN LATERAL (
+           SELECT detail FROM trading_decisions
+           WHERE account_id=$1 AND symbol=requested.symbol AND kind='s3_preopen'
+             AND detail->>'prereg_hash'=$4 AND detail->'session'->>'open'=requested.session_open
+           ORDER BY id DESC LIMIT 1
+         ) latest ON true ORDER BY requested.ordinal",
+    ).bind(account).bind(symbols).bind(opens).bind(prereg_hash()).fetch_all(pool).await?;
+    Ok(values
+        .into_iter()
+        .zip(requests)
+        .map(|(value, (symbol, session))| {
+            value
+                .and_then(|v| serde_json::from_value::<Prepared>(v).ok())
+                .filter(|p| {
+                    p.session == *session && p.symbol == *symbol && p.prereg_hash == prereg_hash()
+                })
+        })
+        .collect())
+}
+
 /// Compact evidence for every configured symbol, including unresolved ones.
 pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::Result<Value> {
     let settings = jiaoyi_store::settings::snapshot(pool, Some(account)).await?;
     let universe = settings
         .universe("universe.symbols")
         .map_err(anyhow::Error::msg)?;
-    let mut rows = Vec::new();
+    let mut planned = Vec::new();
+    let mut requests = Vec::new();
     for (symbol, class) in universe {
         let Some(rule) = sessions::rule_for(&symbol, class) else {
-            rows.push(json!({"symbol":symbol,"state":"no_registered_session"}));
+            planned.push((symbol, None));
             continue;
         };
         for session in sessions::session_at(&rule, now)
             .into_iter()
             .chain(sessions::next_session(&rule, now))
         {
-            let p = stored(pool, account, &symbol, session)
-                .await?
-                .filter(|p| p.completed_at <= now && p.source_cutoff_at <= p.completed_at);
-            let deadline = session.open - chrono::Duration::minutes(LEAD_MINUTES);
-            let state = match &p {
-                Some(p) if p.on_time() => "prepared_on_time",
-                Some(p) if p.ready() => "prepared_late",
-                Some(_) => "incomplete",
-                None if now > deadline => "deadline_missed",
-                None if now >= session.open - chrono::Duration::minutes(START_MINUTES) => {
-                    "awaiting_preparation"
-                }
-                None => "scheduled",
-            };
-            rows.push(json!({"symbol":symbol,"session_open":session.open,"session_close":session.close,
+            requests.push((symbol.clone(), session));
+            planned.push((symbol.clone(), Some(session)));
+        }
+    }
+    let mut receipts = stored_many(pool, account, &requests).await?.into_iter();
+    let mut rows = Vec::new();
+    for (symbol, session) in planned {
+        let Some(session) = session else {
+            rows.push(json!({"symbol":symbol,"state":"no_registered_session"}));
+            continue;
+        };
+        let p = receipts
+            .next()
+            .flatten()
+            .filter(|p| p.completed_at <= now && p.source_cutoff_at <= p.completed_at);
+        let deadline = session.open - chrono::Duration::minutes(LEAD_MINUTES);
+        let state = match &p {
+            Some(p) if p.on_time() => "prepared_on_time",
+            Some(p) if p.ready() => "prepared_late",
+            Some(_) => "incomplete",
+            None if now > deadline => "deadline_missed",
+            None if now >= session.open - chrono::Duration::minutes(START_MINUTES) => {
+                "awaiting_preparation"
+            }
+            None => "scheduled",
+        };
+        rows.push(json!({"symbol":symbol,"session_open":session.open,"session_close":session.close,
                 "session_relation":if now>=session.open {"current"}else{"upcoming"},
                 "preparation_starts_at":session.open-chrono::Duration::minutes(START_MINUTES),"deadline_at":deadline,
                 "state":state,"completed_at":p.as_ref().map(|p|p.completed_at),
@@ -327,7 +382,6 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
                 "spread_ready":p.as_ref().map(|p|p.spread_ready),"commission_ready":p.as_ref().map(|p|p.commission_ready),
                 "metadata_ready":p.as_ref().map(|p|p.metadata_ready),"missing_marks":p.as_ref().and_then(|p|p.table.as_ref().map(|_|p.missing_marks)),
                 "source_cutoff_at":p.as_ref().map(|p|p.source_cutoff_at)}));
-        }
     }
     Ok(
         json!({"start_minutes_before_open":START_MINUTES,"deadline_minutes_before_open":LEAD_MINUTES,
@@ -372,6 +426,153 @@ mod tests {
             metadata_ready: true,
             source_error: false,
         }
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn health_batches_session_reads_and_preserves_latest_receipt_validation(pool: PgPool) {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        const ACCOUNT: i64 = 49236051;
+        let now = session().open + chrono::Duration::hours(12);
+        let names = ["BTCUSD", "ETHUSD", "SOLUSD", "ADAUSD", "DOGEUSD"];
+        let mut universe: Vec<Value> = names
+            .iter()
+            .map(|name| json!({"name":name,"class":"crypto"}))
+            .collect();
+        universe.push(json!({"name":"UNREGISTERED","class":"equity_index"}));
+        jiaoyi_store::upsert_account(&pool, ACCOUNT, Environment::Demo)
+            .await
+            .unwrap();
+        jiaoyi_store::sqlx::query(
+            "INSERT INTO settings(key,account_id,value,version) VALUES('universe.symbols',$1,$2,1)",
+        )
+        .bind(ACCOUNT)
+        .bind(json!(universe))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut requests = Vec::new();
+        for name in names {
+            for session in [
+                session(),
+                sessions::next_session(&sessions::rule_for(name, AssetClass::Crypto).unwrap(), now)
+                    .unwrap(),
+            ] {
+                requests.push((name.to_string(), session));
+            }
+        }
+        async fn record(pool: &PgPool, account: i64, symbol: &str, detail: Value) {
+            jiaoyi_store::trading::record_decision(
+                pool,
+                account,
+                Some(symbol),
+                "s3_preopen",
+                "test",
+                &detail,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+        // BTC's newest matching receipt is malformed: an older valid receipt must not win.
+        record(&pool, ACCOUNT, "BTCUSD", json!(complete())).await;
+        record(
+            &pool,
+            ACCOUNT,
+            "BTCUSD",
+            json!({"session":session(),"prereg_hash":prereg_hash()}),
+        )
+        .await;
+        let mut p = complete();
+        p.symbol = "ETHUSD".into();
+        record(&pool, ACCOUNT, "ETHUSD", json!(p)).await;
+        // Later other-hash and other-account receipts do not replace ETH's valid one.
+        let mut other = p.clone();
+        other.prereg_hash = "foreign".into();
+        record(&pool, ACCOUNT, "ETHUSD", json!(other)).await;
+        jiaoyi_store::upsert_account(&pool, 43002148, Environment::Live)
+            .await
+            .unwrap();
+        record(
+            &pool,
+            43002148,
+            "ETHUSD",
+            json!({"session":session(),"prereg_hash":prereg_hash()}),
+        )
+        .await;
+        p.symbol = "SOLUSD".into();
+        p.completed_at = now + chrono::Duration::seconds(1);
+        record(&pool, ACCOUNT, "SOLUSD", json!(p)).await;
+        p.symbol = "ADAUSD".into();
+        p.completed_at = now - chrono::Duration::seconds(1);
+        p.source_cutoff_at = p.completed_at + chrono::Duration::seconds(1);
+        record(&pool, ACCOUNT, "ADAUSD", json!(p)).await;
+        p = complete();
+        p.symbol = "DOGEUSD".into();
+        p.session.close += chrono::Duration::seconds(1);
+        record(&pool, ACCOUNT, "DOGEUSD", json!(p)).await;
+        let mut expected = Vec::new();
+        for (symbol, session) in &requests {
+            expected.push(
+                stored(&pool, ACCOUNT, symbol, *session)
+                    .await
+                    .unwrap()
+                    .map(|p| json!(p)),
+            );
+        }
+        assert!(expected[0].is_none());
+        assert!(expected[2].is_some());
+        assert!(expected[4].is_some());
+        assert!(expected[6].is_some());
+        assert!(expected[8].is_none());
+        let batched = stored_many(&pool, ACCOUNT, &requests)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|p| p.map(|p| json!(p)))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            batched, expected,
+            "batch matches standalone latest-receipt reads"
+        );
+        let acquisitions = Arc::new(AtomicUsize::new(0));
+        let count = acquisitions.clone();
+        let measured = jiaoyi_store::sqlx::postgres::PgPoolOptions::new()
+            .min_connections(1)
+            .max_connections(1)
+            .idle_timeout(None)
+            .max_lifetime(None)
+            .before_acquire(move |_, _| {
+                count.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async { Ok(true) })
+            })
+            .connect_with((*pool.connect_options()).clone())
+            .await
+            .unwrap();
+        drop(measured.acquire().await.unwrap());
+        acquisitions.store(0, Ordering::SeqCst);
+        let report = health(&measured, ACCOUNT, now).await.unwrap();
+        assert_eq!(
+            acquisitions.load(Ordering::SeqCst),
+            2,
+            "one settings snapshot and one session batch regardless of universe size"
+        );
+        let rows = report["symbols"].as_array().unwrap();
+        assert_eq!(rows.len(), 11);
+        assert_eq!(rows[0]["symbol"], "BTCUSD");
+        assert_eq!(rows[0]["state"], "deadline_missed");
+        assert_eq!(rows[2]["symbol"], "ETHUSD");
+        assert_eq!(rows[2]["state"], "prepared_on_time");
+        for i in [4, 6, 8] {
+            assert_eq!(rows[i]["state"], "deadline_missed");
+        }
+        assert_eq!(
+            rows[10],
+            json!({"symbol":"UNREGISTERED","state":"no_registered_session"})
+        );
+        measured.close().await;
     }
     #[test]
     fn completion_after_deadline_is_late_even_when_the_read_started_early() {
