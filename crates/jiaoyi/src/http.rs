@@ -6,6 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
@@ -58,6 +59,7 @@ fn unavailable(e: impl std::fmt::Display) -> Response {
 }
 
 async fn health(State(s): State<AppState>) -> Response {
+    let started = Instant::now();
     let recorders = s.recorders.lock().unwrap().clone();
     let history = s.history.lock().unwrap().clone();
     let loops = s.trading_loops.lock().unwrap().clone();
@@ -72,6 +74,7 @@ async fn health(State(s): State<AppState>) -> Response {
     .await
     {
         Ok(mut v) => {
+            let base_at = Instant::now();
             v["history_sync"] = serde_json::to_value(history).unwrap_or_default();
             let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
             v["supervision"] = match crate::supervisor::reports(&s.pool, &accounts).await {
@@ -82,14 +85,35 @@ async fn health(State(s): State<AppState>) -> Response {
                 }
                 Err(_) => json!({"state": "unavailable", "reports_url": "/operations/reports"}),
             };
+            let supervision_at = Instant::now();
             crate::fast_monitor::attach(&mut v, &s.trading_loops, &s.strategy3_loops);
-            v["recovery"] = crate::stop_loss_review::recovery(&s.pool, &accounts)
-                .await
-                .unwrap_or(json!({"available": false, "reason": "unreadable"}));
-            v["episodes"] = crate::strategy3::episodes(&s.pool, &accounts)
-                .await
-                .unwrap_or(json!({"available": false}));
-            Json(v).into_response()
+            let attached_at = Instant::now();
+            // Both diagnostics require exactly the same fresh owned-close
+            // rows. Share this request's read, rather than querying twice.
+            let rows = crate::strategy3::recent_closed_signals(&s.pool, &accounts).await;
+            let signals_at = Instant::now();
+            let (recovery, episodes) = match rows {
+                Ok(rows) => (
+                    crate::stop_loss_review::recovery_from_rows(&rows),
+                    crate::strategy3::episodes_from_rows(&rows),
+                ),
+                Err(_) => (
+                    json!({"available":false,"reason":"unreadable"}),
+                    json!({"available":false}),
+                ),
+            };
+            v["recovery"] = recovery;
+            v["episodes"] = episodes;
+            let projected_at = Instant::now();
+            let ms = |later: Instant, earlier: Instant| {
+                later.duration_since(earlier).as_secs_f64() * 1000.0
+            };
+            let timing = format!("base_health;dur={:.3},supervision;dur={:.3},fast_attach;dur={:.3},recent_signals;dur={:.3},projection;dur={:.3}", ms(base_at, started), ms(supervision_at, base_at), ms(attached_at, supervision_at), ms(signals_at, attached_at), ms(projected_at, signals_at));
+            let mut response = Json(v).into_response();
+            if let Ok(value) = timing.parse() {
+                response.headers_mut().insert("server-timing", value);
+            }
+            response
         }
         Err(e) => unavailable(e),
     }

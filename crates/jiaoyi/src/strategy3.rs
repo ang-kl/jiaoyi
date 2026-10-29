@@ -3152,6 +3152,11 @@ pub(crate) async fn recent_closed_signals(
 /// Recent means latest actual broker close, rather than symbol alphabetic order.
 pub async fn episodes(pool: &PgPool, accounts: &[i64]) -> jiaoyi_store::Result<Value> {
     let rows = recent_closed_signals(pool, accounts).await?;
+    Ok(episodes_from_rows(&rows))
+}
+
+/// Project the same fresh request snapshot used by recovery diagnostics.
+pub(crate) fn episodes_from_rows(rows: &[jiaoyi_store::sqlx::postgres::PgRow]) -> Value {
     let mut groups: std::collections::BTreeMap<String, (DateTime<Utc>, Value)> =
         std::collections::BTreeMap::new();
     for row in rows {
@@ -3200,9 +3205,9 @@ pub async fn episodes(pool: &PgPool, accounts: &[i64]) -> jiaoyi_store::Result<V
             e
         })
         .collect();
-    Ok(json!({"available":true,
+    json!({"available":true,
         "note":"stored complete-volume owned positions over 14 days; pending history excluded; official net-R latest-20 stays per strategy/account",
-        "episodes":total,"latest20_episodes":latest.len(),"copied":copied,"rows":latest}))
+        "episodes":total,"latest20_episodes":latest.len(),"copied":copied,"rows":latest})
 }
 
 #[cfg(test)]

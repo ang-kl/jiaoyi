@@ -1,11 +1,132 @@
 //! Regression coverage for PR62 using real ownership events and broker deals.
+use std::collections::BTreeSet;
+use std::sync::{atomic::AtomicBool, Arc};
+
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
 use chrono::{DateTime, Duration, Utc};
+use http_body_util::BodyExt;
+use jiaoyi::http::{router, AppState};
 use jiaoyi_core::allowlist::Environment;
 use jiaoyi_store::{self as store, sqlx::PgPool};
 use serde_json::json;
+use tower::ServiceExt;
 
 const A: i64 = 47790949;
 const B: i64 = 49236051;
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn health_shares_fresh_diagnostics_without_changing_ownership_or_episode_grain(pool: PgPool) {
+    position(&pool, A, 101, "BTCUSD", 30, day(), true, 100, true, "v6").await;
+    position(
+        &pool,
+        B,
+        102,
+        "BTCUSD",
+        30,
+        day() + Duration::seconds(1),
+        true,
+        100,
+        true,
+        "v6",
+    )
+    .await;
+    position(
+        &pool,
+        A,
+        103,
+        "BTCUSD",
+        60,
+        day() + Duration::hours(1),
+        false,
+        100,
+        true,
+        "v6",
+    )
+    .await;
+    position(&pool, A, 104, "PARTIAL", 30, day(), true, 40, true, "v6").await;
+    position(&pool, A, 105, "UNOWNED", 30, day(), true, 100, false, "v6").await;
+    position(
+        &pool,
+        43002148,
+        106,
+        "FOREIGN",
+        30,
+        day(),
+        true,
+        100,
+        true,
+        "v6",
+    )
+    .await;
+    let recovery = jiaoyi::stop_loss_review::recovery(&pool, &[A, B])
+        .await
+        .unwrap();
+    let episodes = jiaoyi::strategy3::episodes(&pool, &[A, B]).await.unwrap();
+    assert_eq!(recovery["stops"], 2);
+    assert_eq!(recovery["same_session_later_close"], 1);
+    assert_eq!(recovery["score"], 0.5);
+    assert_eq!(episodes["episodes"], 2);
+    assert_eq!(episodes["copied"], 1);
+    let app = router(AppState {
+        pool,
+        loading: Arc::new(AtomicBool::new(false)),
+        recorders: Default::default(),
+        history: Default::default(),
+        trading_loops: Default::default(),
+        strategy3_loops: Default::default(),
+        allowed_accounts: Arc::new(BTreeSet::from([A, B])),
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let timing = response
+        .headers()
+        .get("server-timing")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let phases = timing
+        .split(',')
+        .map(|entry| {
+            let (name, duration) = entry.split_once(";dur=").unwrap();
+            let ms: f64 = duration.parse().unwrap();
+            assert!(ms.is_finite() && ms >= 0.0);
+            name
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        phases,
+        BTreeSet::from([
+            "base_health",
+            "supervision",
+            "fast_attach",
+            "recent_signals",
+            "projection"
+        ])
+    );
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["recovery"], recovery);
+    assert_eq!(value["episodes"], episodes);
+    let diagnostics =
+        serde_json::to_string(&json!([value["recovery"], value["episodes"]])).unwrap();
+    assert!(
+        !diagnostics.contains("PARTIAL")
+            && !diagnostics.contains("UNOWNED")
+            && !diagnostics.contains("FOREIGN")
+    );
+}
 
 fn day() -> DateTime<Utc> {
     (Utc::now() - Duration::days(2))
