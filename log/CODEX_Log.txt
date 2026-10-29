@@ -397,3 +397,14 @@ CI/deployment/recovery receipts follow inPR/chat; nofinancialPASS or forcedtrade
 andGROK_Log№17,703. Preserve sixconsecutivegoodreads beforesource recovery
 anditsregression; rebase diagnostics/reportcleanup onit. Brief-flapcounts
 reuseexistinganalysis; aftersustainedrecovery a newfailureisnewoccurrence.
+
+ENTRY 30-10-2026 05:28:27 SGT
+by <Codex (GPT-6), effort:not exposed>
+Source: №17,805–17,808 §§1–2,30Oct2026SGT; owner “fixes done?” within ASAP repair.
+[§LOG.42] Notfullydone: PR131's diagnostics/readbudget live, but new05:20
+sourceincident and11.7–12s healthybaselines provehealthlatencystillopen.
+Completeunderlyingquerywork: account-owneddealbatch (71→2PGacquisitions
+withsamefinancialoutputs), onefreshdiagnosticrowset sharedbyrecovery and
+episodes, fixed Server-Timing phases. No risk/trading/math/cost/cache/index
+change; currentmainf4f7f9/Grokthrough№17,703preserved. Independent review
+andlivebefore/aftermeasurements required; do notclaimallfixedfrom CI alone.
