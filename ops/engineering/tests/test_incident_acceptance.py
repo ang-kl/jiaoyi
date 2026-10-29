@@ -25,6 +25,7 @@ spec.loader.exec_module(w)
 import day_review
 import incidents
 import reporting
+import source_snapshots
 
 
 class IncidentAcceptanceTests(unittest.TestCase):
@@ -90,8 +91,11 @@ class IncidentAcceptanceTests(unittest.TestCase):
             {"position_id": 20 + n, "symbol": "BURST" + str(n), "stop": None}
             for n in range(3)]
         snapshots = [burst, self.operations()]
-        replies = [io.BytesIO(json.dumps(value).encode()) for value in snapshots]
-        with patch.object(incidents.urllib.request, "urlopen", side_effect=replies), \
+        replies = {route: value for route, value in zip(source_snapshots.ROUTES, snapshots)}
+        def reply(request, **_):
+            route = next(route for route in source_snapshots.ROUTES if request.full_url.endswith(route))
+            return io.BytesIO(json.dumps(replies[route]).encode())
+        with patch.object(incidents.urllib.request, "urlopen", side_effect=reply), \
              patch.object(w, "bounded_process", side_effect=AssertionError("report cannot call a model")), \
              patch.object(reporting, "send_document", side_effect=AssertionError(
                  "slow Telegram transport must not block the observer")) as send:
@@ -184,6 +188,88 @@ class IncidentAcceptanceTests(unittest.TestCase):
     def source_incident(self):
         state = json.loads(self.c.store.last_event("incident_state") or "{}")
         return next(row for row in state.values() if row.get("kind") == "sources_unavailable")
+    def source_receipts(self, failed=None, code="timeout", at="2026-10-29T20:00:00+00:00"):
+        return {route: {"route": route, "ok": route != failed,
+                "http_status": 503 if route == failed and code == "http" else None if route == failed else 200,
+                "error_code": code if route == failed else None, "observed_at": at,
+                "bytes": 0 if route == failed else 100, "elapsed_ms": 8000 if route == failed else 50}
+                for route in source_snapshots.ROUTES}
+
+    def test_stopped_observer_does_not_write_a_shutdown_error(self):
+        def interrupted():
+            self.c.activity_shutdown.set()
+            raise OSError("request ended during shutdown")
+        with patch.object(self.c.incidents, "poll", side_effect=interrupted), \
+             patch.object(self.c.store, "event") as event:
+            self.c.incident_loop()
+        event.assert_not_called()
+
+    def test_source_partial_failure_preserves_other_route_and_actionable_receipts(self):
+        at = dt.datetime(2026, 10, 29, 20, tzinfo=dt.timezone.utc)
+        healthy = {"status": "ok", "strategy3": []}
+        with patch.object(source_snapshots, "fetch", return_value=(healthy, self.operations(at), self.source_receipts())) as fetch:
+            self.c.incidents.poll()
+        fetch.assert_called_once_with("https://jiaoyi.up.railway.app", timeout=12)
+        failure = self.source_receipts("/operations/reports", at=(at + dt.timedelta(seconds=10)).isoformat())
+        with patch.object(source_snapshots, "fetch", return_value=(self.health(), None, failure)):
+            state = self.c.incidents.poll()
+        self.assertEqual(state["source_status"], "partial")
+        self.assertEqual(state["source_receipts"]["/operations/reports"]["error_code"], "timeout")
+        self.assertEqual(state["source_receipts"]["/operations/reports"]["last_success_at"], at.isoformat())
+        records = json.loads(self.c.store.last_event("incident_state"))
+        self.assertEqual({r["kind"] for r in records.values()}, {"sources_unavailable", "protection_unverified"})
+        source = next(r for r in records.values() if r["kind"] == "sources_unavailable")
+        task = self.job(source["analysis_job"])["task"]
+        self.assertIn("/operations/reports", task)
+        self.assertIn("timeout", task)
+        self.assertIn("last_success_at", task)
+        self.assertEqual(self.c.store.used(), 0)
+        goals = {"reports": [{"account_id": 49236051, "strategy": "s3", "report": {
+            "assessment": {"state": "below_target", "history_complete": True, "window": {"count": 20}}}}]}
+        partial = incidents.candidates(None, goals, at, self.source_receipts("/health"))
+        self.assertEqual([row["kind"] for row in partial], ["sources_unavailable"],
+            "an unavailable registration hash is not changed goal evidence")
+
+    def test_identical_source_recurrence_reuses_analysis_but_changed_failure_is_material(self):
+        at = dt.datetime(2026, 10, 29, 20, tzinfo=dt.timezone.utc)
+        health = {"status": "ok", "strategy3": []}
+        operations = self.operations(at)
+        failure = self.source_receipts("/health")
+        self.c.incidents.observe(None, operations, clock=at, source_receipts=failure)
+        original = next(iter(json.loads(self.c.store.last_event("incident_state")).values()))
+        for i in range(60):
+            clock = at + dt.timedelta(seconds=i * 2 + 1)
+            self.c.incidents.observe(health, operations, clock=clock, source_receipts=self.source_receipts())
+            self.c.incidents.observe(None, operations, clock=clock, source_receipts=failure)
+        current = next(iter(json.loads(self.c.store.last_event("incident_state")).values()))
+        self.assertEqual(current["analysis_job"], original["analysis_job"])
+        self.assertEqual(current["version"], original["version"])
+        self.assertEqual(current["source_recurrences"], 60)
+        self.assertTrue(current["condition_present"])
+        self.assertEqual(len(self.c.store.jobs()), 1)
+        self.assertEqual(len(list((self.c.store.private / "incident-reports").glob("*.html"))), 1)
+        restarted = w.Coordinator(self.c.config)
+        for _ in range(incidents.SOURCE_RECOVERY_POLLS):
+            restarted.incidents.observe(health, operations, clock=at, source_receipts=self.source_receipts())
+        recovered = next(iter(json.loads(self.c.store.last_event("incident_state")).values()))
+        self.assertFalse(recovered["condition_present"])
+        self.assertEqual(recovered["source_recovery"]["observed_at"], at.isoformat())
+        self.assertNotEqual(recovered["state"], "closed", "a source recovery is not verified software repair")
+        restarted.incidents.observe(None, operations, clock=at, source_receipts=self.source_receipts("/health", code="http"))
+        changed = next(iter(json.loads(self.c.store.last_event("incident_state")).values()))
+        self.assertGreater(changed["version"], original["version"])
+        self.assertNotEqual(changed["analysis_job"], original["analysis_job"])
+        self.assertEqual(len(self.c.store.jobs()), 2)
+        self.assertEqual(self.c.store.used(), 0)
+        with restarted.store.connect() as db:
+            state = restarted.incidents._load(db)
+            state[changed["id"]]["state"] = "closed"
+            restarted.incidents._save(db, state, at.isoformat())
+        restarted.incidents.observe(None, operations, clock=at, source_receipts=self.source_receipts("/health", code="http"))
+        recurrence = next(iter(json.loads(self.c.store.last_event("incident_state")).values()))
+        self.assertGreater(recurrence["version"], changed["version"])
+        self.assertNotEqual(recurrence["state"], "closed")
+        self.assertEqual(len(self.c.store.jobs()), 3, "a fault after verified repair requires new analysis")
 
     def test_material_identity_and_loss_grain_are_preserved_without_hindsight_inference(self):
         # This is shaped like the real /health episode serializer: dates/hash/
@@ -210,6 +296,7 @@ class IncidentAcceptanceTests(unittest.TestCase):
         reading = day_review.episode_review(measured)
         self.assertEqual(reading["copied_losses"], ["TEST"])
         self.assertEqual(reading["two_sided_losses"], [])
+
         uncopied = copy.deepcopy(measured)
         for item, account in zip(uncopied["episodes"]["rows"], row["accounts"]):
             item["accounts"] = [account]

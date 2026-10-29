@@ -90,6 +90,31 @@ def render_incident(incident, created_at=None):
                 facts.append("<li>" + esc(name, 100) + ": " + esc(", ".join(str(x)[:100] for x in value[:8]), 500) + "</li>")
     elif isinstance(evidence, list):
         facts = ["<li>" + esc(x, 500) + "</li>" for x in evidence[:12] if isinstance(x, str)]
+    source_incident = incident.get("kind") == "sources_unavailable"
+    source_rows = []
+    receipts = incident.get("source_receipts")
+    if source_incident and isinstance(receipts, dict):
+        for route in ("/health", "/operations/reports"):
+            receipt = receipts.get(route)
+            if not isinstance(receipt, dict):
+                continue
+            state = "available" if receipt.get("ok") is True else "failed" if receipt.get("ok") is False else "unknown"
+            status = receipt.get("http_status")
+            result = "HTTP " + str(status) if type(status) is int and 100 <= status <= 599 else "HTTP unknown"
+            error = receipt.get("error_code")
+            if error in ("oversize", "invalid_json", "invalid_shape", "http", "timeout", "transport"):
+                result += " · " + error
+            elapsed = receipt.get("elapsed_ms")
+            latency = str(elapsed) + "ms" if type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0 else "unknown"
+            cells = (route, state, result, _incident_time(receipt.get("observed_at")),
+                     _incident_time(receipt.get("last_success_at")), latency)
+            source_rows.append("<tr>" + "".join("<td>" + esc(value) + "</td>" for value in cells) + "</tr>")
+    source_table = ("<h2>Source fetch receipts</h2><table><tr><th>Route</th><th>State</th><th>HTTP/error</th>"
+                    "<th>Observed</th><th>Last success</th><th>Latency</th></tr>"
+                    + "".join(source_rows) + "</table>") if source_rows else ""
+    scope = ("Service: jiaoyi public snapshots" if source_incident else "Account "
+             + esc(incident.get("account_id", incident.get("account", "unknown")), 60) + " · "
+             + esc(incident.get("strategy", "unknown"), 60) + " · " + esc(incident.get("symbol", "unknown"), 80))
     clocks = [("Broker event", incident.get("event_at")), ("Source evidence", incident.get("source_at")),
               ("Observer receipt", incident.get("received_at", incident.get("first_seen_at"))),
               ("Report creation", created_at),
@@ -99,12 +124,11 @@ def render_incident(incident, created_at=None):
                 "<title>Jiaoyi incident report</title><style>body{font:15px/1.5 system-ui;color:#15243a;max-width:840px;margin:24px auto;padding:0 16px}"
                 "h1{font-size:22px}.goal{padding:12px;background:#edf4fc}table{border-collapse:collapse;width:100%}td{padding:6px;border-bottom:1px solid #ddd}p,li{overflow-wrap:anywhere}</style>"
                 "<h1>№" + esc(serial) + " · " + esc(incident.get("kind", "abnormality"), 120) + "</h1>"
-                + para("<b>" + esc(incident.get("severity", "unknown"), 30) + "</b> · Account "
-                       + esc(incident.get("account_id", incident.get("account", "unknown")), 60) + " · "
-                       + esc(incident.get("strategy", "unknown"), 60) + " · " + esc(incident.get("symbol", "unknown"), 80))
+                + para("<b>" + esc(incident.get("severity", "unknown"), 30) + "</b> · " + scope)
                 + "<div class=goal>" + para(esc(_incident_goal(incident.get("goal_context")))) + "</div>"
                 + para(esc(incident.get("summary", "A material change was observed; its cause is not yet established.")))
                 + "<ul>" + ("".join(facts) or "<li>Detailed evidence is unavailable; this is not a claim of absent risk.</li>") + "</ul>"
+                + source_table
                 + para("<b>Analysis:</b> " + esc(incident.get("analysis_state", incident.get("state", "pending")), 120)
                        + ". <b>Disposition:</b> " + esc(incident.get("disposition", "pending"), 200)
                        + ". <b>Next action:</b> " + esc(incident.get("next_action", "Bounded analysis pending; preserve existing protections."), 1000))
@@ -136,16 +160,32 @@ def render(data):
     esc = lambda value: html.escape(str(value), quote=True)
     cutoff = dt.datetime.fromisoformat(data["until"].replace("Z", "+00:00")).astimezone(SGT)
     serial = esc(data.get("serial", "E-" + cutoff.strftime("%Y%m%d-%H%M%S")))
+    def validation(job):
+        value = job.get("tests")
+        if not isinstance(value, str) or not value.strip() or value.strip() in (
+                "No preserved test receipt", "No independently verified test receipt"):
+            return None
+        return value
+    visible_jobs, superseded = [], 0
+    for job in data.get("jobs", []):
+        if (job.get("state") == "superseded" and not job.get("attempts", 0)
+                and not any(job.get(key) for key in ("head", "pr", "merged"))
+                and validation(job) is None):
+            superseded += 1
+        else:
+            visible_jobs.append(job)
+    housekeeping = ("<p>" + str(superseded) + " unattempted superseded queue records grouped; "
+                    "detailed history remains in the worker queue.</p>") if superseded else ""
     jobs = "".join(
         "<tr><td>" + esc(j["id"]) + "</td><td>" + esc(j["state"]) + "</td><td>"
         + esc(j.get("summary", "No preserved model summary")) + "</td><td>"
-        + esc(j.get("diagnostic", "")) + "</td></tr>" for j in data.get("jobs", []))
+        + esc(j.get("diagnostic", "")) + "</td></tr>" for j in visible_jobs)
     commits = "".join("<li><code>" + esc(c["sha"]) + "</code> " + esc(c["subject"]) + "</li>"
                       for c in data.get("commits", [])) or "<li>No merged commit observed in this window.</li>"
     notes = "".join("<li>" + esc(n) + "</li>" for n in data.get("notes", []))
     tests = "".join("<details><summary>Job " + esc(j["id"]) + " — reported validation</summary><p>"
-                    + esc(j.get("tests", "No preserved test receipt")) + "</p></details>"
-                    for j in data.get("jobs", []))
+                    + esc(validation(j)) + "</p></details>"
+                    for j in visible_jobs if validation(j) is not None)
     document = ("<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
             "<title>Jiaoyi engineering report</title><style>body{font:15px/1.55 system-ui;margin:24px auto;max-width:960px;padding:0 16px;color:#15243a}"
             "h1{font-size:24px}h2{font-size:18px;margin-top:28px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:9px;border-bottom:1px solid #ccd5df;text-align:left;vertical-align:top}"
@@ -160,7 +200,7 @@ def render(data):
             "Fewer than20 is insufficient evidence; one passing overlapping window is not consistency.</p>"
             "<h2>Delivered changes on main</h2><ul>" + commits + "</ul>"
             "<h2>Worker attempts and unreleased candidates</h2><table><tr><th>Job</th><th>State</th><th>Candidate/result</th><th>Release diagnostic</th></tr>"
-            + jobs + "</table>" + tests + "<h2>Changes added in this request / pending facts</h2><ul>" + notes + "</ul>"
+            + jobs + "</table>" + housekeeping + tests + "<h2>Changes added in this request / pending facts</h2><ul>" + notes + "</ul>"
             "<h2>AI engineering: how this works</h2><div class=flow>Persistent coordinator + SQLite queue → unprivileged Codex main agent → bounded sub-agents → scope checks + Git PR → exact-head CI → merge → Railway revision + behavior check</div>"
             "<p>The coordinator schedules work and holds release credentials. Model processes receive no GitHub, Railway, Telegram or broker credentials. "
             "Sub-agents need a persisted parent rollout; ephemeral execution broke that context. Explicit acceptance evidence now prevents a partial check from unlocking work. "

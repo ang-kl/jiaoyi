@@ -377,3 +377,23 @@ trailing SQLx/fake-broker tests pass after. Actual CI/release receipts belong
 in PR/chat; no synthetic production order or economic PASS. No quota/auth
 or global worker-window change. Resolve existing PR127 next, preserving
 both journal sections and replacing its old CI evidence with new-head CI.
+
+ENTRY 30-10-2026 04:42:31 SGT
+by <Codex (GPT-6), effort:not exposed>
+Source: №17,787–17,792 §§1–2; owner12HTMLreports/resolveASAP/lot-management question.
+[§LOG.41] Repair repeated sources_unavailable family versions55–60. Reproduced
+8shealth timeout + successful operations response; old observer erased route
+anderror and requeued identical failures after brief recovery. Bounded parallel
+reads/typed receipts + source-only recurrence reuse and truthful recovery;
+real actor recurrence and postverified-repair faults remain actionable. Group
+supersededreportnoise, preserve materialevidence and explicitunknowns.
+Read/preserved main6ff991d/Grokthrough№17,696. No trading/risk/lot/costpolicy,
+quota/auth/Grokpermit change. Currentpostfixtrades and10demo S3accepted
+originalR/TP amendments verified; livecapital/contract/session/cost gates
+explainquietentries. Inherited24bps/side isnot measured jiaoyi fillcalibration.
+CI/deployment/recovery receipts follow inPR/chat; nofinancialPASS or forcedtrade.
+
+[§LOG.41a] №17,794 §§1–2,30Oct04:44SGT: read concurrent GrokPR130/mainab9722d
+andGROK_Log№17,703. Preserve sixconsecutivegoodreads beforesource recovery
+anditsregression; rebase diagnostics/reportcleanup onit. Brief-flapcounts
+reuseexistinganalysis; aftersustainedrecovery a newfailureisnewoccurrence.

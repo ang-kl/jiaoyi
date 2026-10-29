@@ -643,6 +643,8 @@ class Coordinator:
                         self.store.event("incident_observer_recovered")
                     self._incident_error_type = None
                 except Exception as error:
+                    if self.shutdown.is_set() or self.activity_shutdown.is_set():
+                        break
                     kind = type(error).__name__
                     if kind != self._incident_error_type:
                         self.store.event("incident_observer_error", detail=kind)
