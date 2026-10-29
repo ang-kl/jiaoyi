@@ -46,30 +46,31 @@ pub async fn definitions(pool: &PgPool) -> Result<Vec<Definition>, sqlx::Error> 
 /// The settings in force for `account_id` (global values plus its overrides),
 /// or the global values alone for `None`, with the version, read in one snapshot.
 pub async fn snapshot(pool: &PgPool, account_id: Option<i64>) -> Result<Snapshot, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-        .execute(&mut *tx)
-        .await?;
-    let version: i64 = sqlx::query_scalar("SELECT version FROM settings_version")
-        .fetch_one(&mut *tx)
-        .await?;
-    let global = sqlx::query("SELECT key, value FROM settings WHERE account_id IS NULL")
-        .fetch_all(&mut *tx)
-        .await?
-        .into_iter()
-        .map(|r| (r.get("key"), r.get("value")))
-        .collect();
-    let account = match account_id {
-        None => vec![],
-        Some(id) => sqlx::query("SELECT key, value FROM settings WHERE account_id = $1")
-            .bind(id)
-            .fetch_all(&mut *tx)
-            .await?
-            .into_iter()
-            .map(|r| (r.get("key"), r.get("value"), id))
-            .collect(),
-    };
-    tx.commit().await?;
+    // A single PostgreSQL statement sees one MVCC snapshot, including the
+    // version. This retains the old repeatable-read view without six serial
+    // commands for every account snapshot. The left join retains an empty
+    // settings map; an absent singleton still returns RowNotFound.
+    let rows = sqlx::query(
+        "SELECT v.version, s.key, s.value, s.account_id
+         FROM settings_version v LEFT JOIN settings s
+           ON s.account_id IS NULL OR s.account_id = $1",
+    )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?;
+    let version = rows.first().ok_or(sqlx::Error::RowNotFound)?.get("version");
+    let mut global = Vec::new();
+    let mut account = Vec::new();
+    for row in rows {
+        let Some(key) = row.get::<Option<String>, _>("key") else {
+            continue;
+        };
+        let value = row.get("value");
+        match row.get::<Option<i64>, _>("account_id") {
+            Some(id) => account.push((key, value, id)),
+            None => global.push((key, value)),
+        }
+    }
     Ok(Snapshot::merge(version, global, account))
 }
 
