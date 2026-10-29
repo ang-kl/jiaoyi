@@ -15,6 +15,10 @@ PREFIX = "ABNORMALITY INCIDENT REVIEW\n"
 REPAIR_PREFIX = "INCIDENT VERIFIED REPAIR\n"
 MAX_INCIDENTS = 32
 MAX_ANALYSIS_BATCH = 8
+# One good poll is not recovery. At a 10-second poll, six reads is one minute
+# of continuous public snapshots. A flap must not mint versions 39 through 47.
+# Grok 4.7 · № 17,703. Other models: do not clear sources_unavailable sooner.
+SOURCE_RECOVERY_POLLS = 6
 STATE_EVENT = "incident_state"
 COVERAGE = {
     "actor_progress": "public liveness and fast-monitor observations",
@@ -393,6 +397,12 @@ class IncidentManager:
                         if assessment.get("history_complete") is not True or assessment.get("state") != "window_meets_numeric_reference":
                             # Unknown/shorter history is not recovery of an unmet goal.
                             continue
+                if prior.get("kind") == "sources_unavailable":
+                    streak = int(prior.get("available_streak") or 0) + 1
+                    prior["available_streak"] = streak
+                    changed = True
+                    if streak < SOURCE_RECOVERY_POLLS:
+                        continue
                 prior["condition_present"] = False
                 prior["last_absent_at"] = stamp
                 changed = True
@@ -402,6 +412,9 @@ class IncidentManager:
                 identity = _fingerprint({"key": item["key"]})[:24]
                 fingerprint = _fingerprint(item)
                 old = state.get(identity)
+                if old and item["kind"] == "sources_unavailable" and old.get("available_streak"):
+                    old["available_streak"] = 0
+                    changed = True
                 if old and old.get("fingerprint") == fingerprint and old.get("condition_present", True):
                     continue
                 if old is None and len(state) >= MAX_INCIDENTS:
