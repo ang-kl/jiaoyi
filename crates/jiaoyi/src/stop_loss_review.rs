@@ -337,6 +337,11 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
 /// quote-price recovery or a profitable result. Incomplete history is excluded.
 pub async fn recovery(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Error> {
     let rows = crate::strategy3::recent_closed_signals(pool, accounts).await?;
+    Ok(recovery_from_rows(&rows))
+}
+
+/// Project the request's fresh diagnostic rows without reading them again.
+pub(crate) fn recovery_from_rows(rows: &[sqlx::postgres::PgRow]) -> Value {
     let mut stops = 0;
     let mut later = 0;
     for stop in rows.iter().filter(|r| r.get::<bool, _>("stopped")) {
@@ -358,11 +363,11 @@ pub async fn recovery(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         }
     }
     let score = (stops > 0).then(|| later as f64 / stops as f64);
-    Ok(json!({"available":true,
+    json!({"available":true,
         "path":"later complete owned close on the same UTC date and registration; not a quote path or profitable-recovery rate",
         "scope":"stored complete-volume positions over 14 days; pending history excluded; not financial acceptance",
         "stops":stops,"same_session_later_close":later,"score":score,
-        "threshold_crossed":score.is_some_and(|s| stops>=5 && s<0.5)}))
+        "threshold_crossed":score.is_some_and(|s| stops>=5 && s<0.5)})
 }
 
 #[cfg(test)]

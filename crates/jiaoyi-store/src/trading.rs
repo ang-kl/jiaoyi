@@ -988,34 +988,47 @@ pub async fn closed_trades(
     .bind(FILL_KINDS)
     .fetch_all(pool)
     .await?;
+    if opens.is_empty() {
+        return Ok((Vec::new(), 0));
+    }
+    let position_ids: Vec<i64> = opens.iter().map(|o| o.get("position_id")).collect();
+    // Read this account's owned positions together. Fetching once per
+    // position made every /health request repeat an account-deal scan and
+    // a network round trip for the entire closed-trade history.
+    let rows = sqlx::query(
+        "SELECT position_id, is_closing, filled_volume, executed_at, money_digits,
+                close_gross_profit, close_swap, close_commission, close_pnl_conversion_fee,
+                close_money_digits
+         FROM deals WHERE account_id = $1 AND position_id = ANY($2) AND filled_volume > 0
+         ORDER BY position_id, executed_at, deal_id",
+    )
+    .bind(account_id)
+    .bind(&position_ids)
+    .fetch_all(pool)
+    .await?;
+    let mut by_position: std::collections::HashMap<i64, Vec<DealMoney>> =
+        std::collections::HashMap::new();
+    for d in rows {
+        by_position
+            .entry(d.get("position_id"))
+            .or_default()
+            .push(DealMoney {
+                is_closing: d.get("is_closing"),
+                filled_volume: d.get("filled_volume"),
+                executed_at: d.get("executed_at"),
+                money_digits: d.get("money_digits"),
+                close_gross_profit: d.get("close_gross_profit"),
+                close_swap: d.get("close_swap"),
+                close_commission: d.get("close_commission"),
+                close_pnl_conversion_fee: d.get("close_pnl_conversion_fee"),
+                close_money_digits: d.get("close_money_digits"),
+            });
+    }
     let mut out = Vec::new();
     let mut unmeasured = 0;
     for o in opens {
         let position_id: i64 = o.get("position_id");
-        let deals: Vec<DealMoney> = sqlx::query(
-            "SELECT is_closing, filled_volume, executed_at, money_digits,
-                    close_gross_profit, close_swap, close_commission, close_pnl_conversion_fee,
-                    close_money_digits
-             FROM deals WHERE account_id = $1 AND position_id = $2 AND filled_volume > 0
-             ORDER BY executed_at, deal_id",
-        )
-        .bind(account_id)
-        .bind(position_id)
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(|d| DealMoney {
-            is_closing: d.get("is_closing"),
-            filled_volume: d.get("filled_volume"),
-            executed_at: d.get("executed_at"),
-            money_digits: d.get("money_digits"),
-            close_gross_profit: d.get("close_gross_profit"),
-            close_swap: d.get("close_swap"),
-            close_commission: d.get("close_commission"),
-            close_pnl_conversion_fee: d.get("close_pnl_conversion_fee"),
-            close_money_digits: d.get("close_money_digits"),
-        })
-        .collect();
+        let deals = by_position.remove(&position_id).unwrap_or_default();
         let (opened, closed_at, net) = match position_money(&deals) {
             Ok(x) => x,
             Err(why) if why == "still open" || why == "no opening deal stored yet" => continue,

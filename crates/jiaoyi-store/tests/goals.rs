@@ -278,6 +278,113 @@ async fn performance_does_not_price_missing_closing_costs_as_zero(pool: PgPool) 
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
+async fn closed_performance_batches_history_without_changing_position_semantics(pool: PgPool) {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    for id in 1..=64 {
+        position(
+            &pool,
+            A,
+            "s3",
+            id,
+            Some(if id % 2 == 0 { 2.0 } else { -1.0 }),
+            100,
+        )
+        .await;
+    }
+    // Same broker position id on another account and a different strategy
+    // must not leak into the selected owned cohort.
+    position(&pool, B, "s3", 1, Some(99.0), 100).await;
+    position(&pool, A, "s1", 1000, Some(99.0), 100).await;
+    deal(&pool, A, 1001, 10010, 100, false, None, t0()).await;
+    deal(&pool, A, 1001, 10011, 100, true, Some(9900), t0()).await;
+    // An additional intent claiming an existing position keeps the earliest
+    // original intent/risk rather than duplicating that position.
+    sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk) VALUES($1,'s3:later','s3:later','open',1,'buy',100,100000,99,99)")
+        .bind(A).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO trading_events(account_id,entry_key,client_msg_id,payload_type,kind,position_id,symbol_id,volume,raw,received_at) VALUES($1,'s3:later','s3:later',2126,'ORDER_FILLED',1,1,100,''::bytea,now())")
+        .bind(A).execute(&pool).await.unwrap();
+    position(&pool, A, "s3", 90, None, 100).await; // still open
+    position(&pool, A, "s3", 91, Some(1.0), 0).await; // no positive opening history
+    position(&pool, A, "s3", 92, Some(1.0), 100).await;
+    sqlx::query("UPDATE deals SET close_commission=NULL WHERE account_id=$1 AND deal_id=921")
+        .bind(A)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let missing_risk_key = format!("s3:{A}:1:93");
+    sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk) VALUES($1,$2,$2,'open',1,'buy',100,100000,NULL,1)")
+        .bind(A).bind(&missing_risk_key).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO trading_events(account_id,entry_key,client_msg_id,payload_type,kind,position_id,deal_id,symbol_id,volume,raw,received_at) VALUES($1,$2,$2,2126,'ORDER_FILLED',93,930,1,100,''::bytea,now())")
+        .bind(A).bind(&missing_risk_key).execute(&pool).await.unwrap();
+    deal(&pool, A, 93, 930, 100, false, None, t0()).await;
+    deal(&pool, A, 93, 931, 100, true, Some(100), t0()).await;
+    position_with_requested_volume(&pool, A, "s3", 94, Some(2.0), 100, Some(200)).await;
+    position_with_requested_volume(&pool, A, "s3", 95, Some(2.0), 100, None).await;
+
+    let acquisitions = Arc::new(AtomicUsize::new(0));
+    let counter = acquisitions.clone();
+    let measured = sqlx::postgres::PgPoolOptions::new()
+        .min_connections(1)
+        .max_connections(1)
+        .idle_timeout(None)
+        .max_lifetime(None)
+        .before_acquire(move |_, _| {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Ok(true) })
+        })
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+    drop(measured.acquire().await.unwrap());
+    acquisitions.store(0, Ordering::SeqCst);
+    let (closed, unmeasured) = store::trading::closed_trades(&measured, A, "s3:")
+        .await
+        .unwrap();
+    assert_eq!(closed.len(), 66);
+    assert_eq!(unmeasured, 2);
+    assert_eq!(
+        closed.iter().map(|t| t.position_id).collect::<Vec<_>>(),
+        (1..=64).chain([94, 95]).collect::<Vec<_>>()
+    );
+    for trade in &closed[..64] {
+        assert_eq!(
+            trade.r,
+            if trade.position_id % 2 == 0 {
+                2.0
+            } else {
+                -1.0
+            }
+        );
+        assert_eq!(trade.entry_key, format!("s3:{A}:1:{}", trade.position_id));
+    }
+    assert_eq!(
+        closed[64].r, 4.0,
+        "original risk is scaled by the filled share"
+    );
+    assert_eq!(
+        closed[65].r, 2.0,
+        "legacy performance fallback for missing request is preserved"
+    );
+    assert_eq!(
+        acquisitions.load(Ordering::SeqCst),
+        2,
+        "owned-open and deal-history reads must not grow with position count"
+    );
+    acquisitions.store(0, Ordering::SeqCst);
+    let empty = store::trading::closed_trades(&measured, B, "s1:")
+        .await
+        .unwrap();
+    assert!(empty.0.is_empty());
+    assert_eq!(empty.1, 0);
+    assert_eq!(acquisitions.load(Ordering::SeqCst), 1);
+    measured.close().await;
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
 async fn required_and_optional_missing_cost_evidence_cannot_pass(pool: PgPool) {
     passing(&pool, A, "s3").await;
     fetch(&pool, A, 0, true, false).await;
