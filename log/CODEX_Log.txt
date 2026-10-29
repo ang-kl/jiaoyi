@@ -424,3 +424,8 @@ withoutcache: settingsversion/global/override onestatementatomicMVCCview
 (3SELECTshapes→1;4newPG+21existingpass), preopenhealthonebatchwithsame
 latestreceiptvalidation/order(11→2acquisitions;4testspass). Independent
 reviewsaccept; settingsvalues andentry/restorelookupbehaviorunchanged.
+
+[§LOG.43b] №17,823–17,824 §1,30Oct05:48–05:49SGT: firstPR133CIcaught
+inlineunitfixtureSQLunderproduction-srcsettings-writerinvariant. MoveSQL
+toexplicitcfg-testfixture; gateunchanged. Independentreviewaccepts; all9
+limits+4preopentests passafterward. Freshnew-headall3CIstillrequired.

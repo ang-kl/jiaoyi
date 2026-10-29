@@ -445,9 +445,9 @@ mod tests {
         jiaoyi_store::upsert_account(&pool, ACCOUNT, Environment::Demo)
             .await
             .unwrap();
-        jiaoyi_store::sqlx::query(
-            "INSERT INTO settings(key,account_id,value,version) VALUES('universe.symbols',$1,$2,1)",
-        )
+        jiaoyi_store::sqlx::query(include_str!(
+            "../../tests/fixtures/preopen_health_universe.sql"
+        ))
         .bind(ACCOUNT)
         .bind(json!(universe))
         .execute(&pool)
