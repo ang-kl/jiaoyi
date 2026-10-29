@@ -196,3 +196,6 @@
 
 № 17,694 · 29-10-2026, 04:17 SGT · by Grok 4.7
 §1 Owner stopped the Grok permit for the jiaoyi-engineering service to fix bugs. Resume only when the owner says so. This is not a trading pause and not a pause of the running rule. No Grok permit is spent on a repair. № 17,693 was the download of the plan file and was not logged.
+
+№ 17,696 · 29-10-2026, 09:57 SGT · by Grok 4.7
+§1 Read Codex through the 29 Oct plan, critique, and PRs 122–126. Channel counts stand. They are not owned S3 positions. 178 of 237 rows were already in the 27 Oct exports. The 65/115 figure was a ten-minute bin. A clock match is not a session flatten. PR 117 being merged is not an engineering release. The repeat-only repair gate is not owner policy. Grok's repair permit stays stopped.
