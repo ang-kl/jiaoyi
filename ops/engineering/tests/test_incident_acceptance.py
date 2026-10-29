@@ -153,6 +153,38 @@ class IncidentAcceptanceTests(unittest.TestCase):
             restarted.incidents.observe(safe, self.operations(), clock=received)
         self.assertEqual(len(restarted.store.jobs()), 4)
 
+    def test_one_unavailable_snapshot_is_not_a_new_critical_file_every_poll(self):
+        # № 17,703. Versions 39–47 were one missed public read, paged again
+        # after each brief success. A minute of continuous reads may clear it.
+        quiet = {"status": "ok", "trading": [], "strategy3": []}
+        ops = {"as_of": "2026-10-30T20:29:00+00:00", "reports": []}
+        with patch.object(reporting, "send_document", return_value=70):
+            self.c.incidents.observe(None, None)
+            first = self.source_incident()
+            reports = lambda: list((self.c.store.private / "incident-reports").glob("*.html"))
+            for _ in range(8):
+                self.c.incidents.observe(None, None)
+            self.assertEqual(self.source_incident()["version"], first["version"])
+            self.assertEqual(len(reports()), 1)
+            self.c.incidents.observe(quiet, ops)
+            self.c.incidents.observe(None, None)
+            self.assertEqual(self.source_incident()["version"], first["version"])
+            self.assertTrue(self.source_incident()["condition_present"])
+            self.assertEqual(len(reports()), 1)
+            for _ in range(incidents.SOURCE_RECOVERY_POLLS - 1):
+                self.c.incidents.observe(quiet, ops)
+            self.assertTrue(self.source_incident()["condition_present"])
+            self.c.incidents.observe(quiet, ops)
+            self.assertFalse(self.source_incident()["condition_present"])
+            self.assertEqual(len(reports()), 1)
+            self.c.incidents.observe(None, None)
+            self.assertGreater(self.source_incident()["version"], first["version"])
+            self.assertEqual(len(reports()), 2)
+
+    def source_incident(self):
+        state = json.loads(self.c.store.last_event("incident_state") or "{}")
+        return next(row for row in state.values() if row.get("kind") == "sources_unavailable")
+
     def test_material_identity_and_loss_grain_are_preserved_without_hindsight_inference(self):
         # This is shaped like the real /health episode serializer: dates/hash/
         # decision mark/accounts, but no P&L. Copies must not become losses.

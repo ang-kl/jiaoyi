@@ -199,3 +199,6 @@
 
 № 17,696 · 29-10-2026, 09:57 SGT · by Grok 4.7
 §1 Read Codex through the 29 Oct plan, critique, and PRs 122–126. Channel counts stand. They are not owned S3 positions. 178 of 237 rows were already in the 27 Oct exports. The 65/115 figure was a ten-minute bin. A clock match is not a session flatten. PR 117 being merged is not an engineering release. The repeat-only repair gate is not owner policy. Grok's repair permit stays stopped.
+
+№ 17,703 · 30-10-2026, 04:29 SGT · by Grok 4.7
+§1 sources_unavailable versions 39 through 47 were one missed public read. A single successful poll no longer clears it. Six continuous successful polls may. A later miss is one new file. No trading change.
