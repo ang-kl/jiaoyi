@@ -90,6 +90,31 @@ def render_incident(incident, created_at=None):
                 facts.append("<li>" + esc(name, 100) + ": " + esc(", ".join(str(x)[:100] for x in value[:8]), 500) + "</li>")
     elif isinstance(evidence, list):
         facts = ["<li>" + esc(x, 500) + "</li>" for x in evidence[:12] if isinstance(x, str)]
+    source_incident = incident.get("kind") == "sources_unavailable"
+    source_rows = []
+    receipts = incident.get("source_receipts")
+    if source_incident and isinstance(receipts, dict):
+        for route in ("/health", "/operations/reports"):
+            receipt = receipts.get(route)
+            if not isinstance(receipt, dict):
+                continue
+            state = "available" if receipt.get("ok") is True else "failed" if receipt.get("ok") is False else "unknown"
+            status = receipt.get("http_status")
+            result = "HTTP " + str(status) if type(status) is int and 100 <= status <= 599 else "HTTP unknown"
+            error = receipt.get("error_code")
+            if error in ("oversize", "invalid_json", "invalid_shape", "http", "timeout", "transport"):
+                result += " · " + error
+            elapsed = receipt.get("elapsed_ms")
+            latency = str(elapsed) + "ms" if type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0 else "unknown"
+            cells = (route, state, result, _incident_time(receipt.get("observed_at")),
+                     _incident_time(receipt.get("last_success_at")), latency)
+            source_rows.append("<tr>" + "".join("<td>" + esc(value) + "</td>" for value in cells) + "</tr>")
+    source_table = ("<h2>Source fetch receipts</h2><table><tr><th>Route</th><th>State</th><th>HTTP/error</th>"
+                    "<th>Observed</th><th>Last success</th><th>Latency</th></tr>"
+                    + "".join(source_rows) + "</table>") if source_rows else ""
+    scope = ("Service: jiaoyi public snapshots" if source_incident else "Account "
+             + esc(incident.get("account_id", incident.get("account", "unknown")), 60) + " · "
+             + esc(incident.get("strategy", "unknown"), 60) + " · " + esc(incident.get("symbol", "unknown"), 80))
     clocks = [("Broker event", incident.get("event_at")), ("Source evidence", incident.get("source_at")),
               ("Observer receipt", incident.get("received_at", incident.get("first_seen_at"))),
               ("Report creation", created_at),
@@ -99,12 +124,11 @@ def render_incident(incident, created_at=None):
                 "<title>Jiaoyi incident report</title><style>body{font:15px/1.5 system-ui;color:#15243a;max-width:840px;margin:24px auto;padding:0 16px}"
                 "h1{font-size:22px}.goal{padding:12px;background:#edf4fc}table{border-collapse:collapse;width:100%}td{padding:6px;border-bottom:1px solid #ddd}p,li{overflow-wrap:anywhere}</style>"
                 "<h1>№" + esc(serial) + " · " + esc(incident.get("kind", "abnormality"), 120) + "</h1>"
-                + para("<b>" + esc(incident.get("severity", "unknown"), 30) + "</b> · Account "
-                       + esc(incident.get("account_id", incident.get("account", "unknown")), 60) + " · "
-                       + esc(incident.get("strategy", "unknown"), 60) + " · " + esc(incident.get("symbol", "unknown"), 80))
+                + para("<b>" + esc(incident.get("severity", "unknown"), 30) + "</b> · " + scope)
                 + "<div class=goal>" + para(esc(_incident_goal(incident.get("goal_context")))) + "</div>"
                 + para(esc(incident.get("summary", "A material change was observed; its cause is not yet established.")))
                 + "<ul>" + ("".join(facts) or "<li>Detailed evidence is unavailable; this is not a claim of absent risk.</li>") + "</ul>"
+                + source_table
                 + para("<b>Analysis:</b> " + esc(incident.get("analysis_state", incident.get("state", "pending")), 120)
                        + ". <b>Disposition:</b> " + esc(incident.get("disposition", "pending"), 200)
                        + ". <b>Next action:</b> " + esc(incident.get("next_action", "Bounded analysis pending; preserve existing protections."), 1000))

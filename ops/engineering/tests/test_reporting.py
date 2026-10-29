@@ -17,6 +17,34 @@ def data():
 
 
 class ReportTests(Fixture, unittest.TestCase):
+    def test_source_incident_names_service_and_safe_per_route_receipts(self):
+        incident = {"id": "source-1", "kind": "sources_unavailable", "severity": "critical",
+                    "account_id": None, "strategy": None, "symbol": None,
+                    "summary": "Source <unavailable>", "source_receipts": {
+                        "/health": {"route": "https://private.invalid/?token=PRIVATE_ROUTE_SECRET",
+                            "ok": False, "http_status": 503, "error_code": "http",
+                            "observed_at": "2026-10-29T20:13:13Z", "last_success_at": "2026-10-29T20:12:03Z",
+                            "elapsed_ms": 8123, "error_body": "PRIVATE_ERROR_BODY"},
+                        "/operations/reports": {"route": "/operations/reports", "ok": True,
+                            "http_status": 200, "error_code": "<script>PRIVATE_ERROR_SECRET</script>",
+                            "observed_at": "2026-10-29T20:13:14Z", "last_success_at": "2026-10-29T20:13:14Z",
+                            "elapsed_ms": 74},
+                        "https://private.invalid/PRIVATE_EXTRA_ROUTE": {"ok": False},
+                    }}
+        body = r.render_incident(incident, "2026-10-29T20:13:15Z")
+        self.assertIn("Service: jiaoyi public snapshots", body)
+        self.assertNotIn("Account None", body)
+        for text in ("Source fetch receipts", "/health", "/operations/reports", "failed", "available",
+                     "HTTP 503", "http", "30 Oct 2026 04:13:13 SGT", "30 Oct 2026 04:12:03 SGT", "8123ms"):
+            self.assertIn(text, body)
+        self.assertIn("Source &lt;unavailable&gt;", body)
+        for text in ("PRIVATE_ROUTE_SECRET", "PRIVATE_ERROR_BODY", "PRIVATE_ERROR_SECRET", "PRIVATE_EXTRA_ROUTE", "<script>"):
+            self.assertNotIn(text, body)
+        ordinary = r.render_incident({"id": "position-1", "kind": "protection_unverified",
+                                      "account_id": 49236051, "strategy": "s3", "symbol": "BTCUSD"})
+        self.assertIn("Account 49236051", ordinary)
+        self.assertNotIn("Source fetch receipts", ordinary)
+
     def test_html_escapes_untrusted_reports_and_keeps_release_distinction(self):
         body = r.render(data())
         self.assertIn("&lt;script&gt;", body)
