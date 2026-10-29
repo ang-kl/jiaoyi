@@ -20,6 +20,7 @@ MAX_ANALYSIS_BATCH = 8
 # of continuous public snapshots. A flap must not mint versions 39 through 47.
 # Grok 4.7 · № 17,703. Other models: do not clear sources_unavailable sooner.
 SOURCE_RECOVERY_POLLS = 6
+SOURCE_TIMEOUT_SECONDS = 12
 STATE_EVENT = "incident_state"
 COVERAGE = {
     "actor_progress": "public liveness and fast-monitor observations",
@@ -492,7 +493,7 @@ class IncidentManager:
         return self.status()
 
     def poll(self):
-        health, operations, receipts = source_snapshots.fetch("https://jiaoyi.up.railway.app")
+        health, operations, receipts = source_snapshots.fetch("https://jiaoyi.up.railway.app", timeout=SOURCE_TIMEOUT_SECONDS)
         return self.observe(health, operations, source_receipts=receipts)
 
     def _repair(self, incident, details):
@@ -819,6 +820,7 @@ class IncidentManager:
         except (AttributeError, TypeError):
             pending_reason = "queued_for_bounded_analysis"
         return {"enabled": True, "poll_seconds": 10, "source_status": self.source_status,
+            "source_timeout_seconds": SOURCE_TIMEOUT_SECONDS,
             "source_receipts": self.source_receipts,
             "pending_analysis_reason": pending_reason,
             "last_observed_at": self.last_observed_at, "counts": counts, "coverage": dict(COVERAGE),

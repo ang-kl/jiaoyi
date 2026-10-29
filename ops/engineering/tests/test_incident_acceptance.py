@@ -195,11 +195,21 @@ class IncidentAcceptanceTests(unittest.TestCase):
                 "bytes": 0 if route == failed else 100, "elapsed_ms": 8000 if route == failed else 50}
                 for route in source_snapshots.ROUTES}
 
+    def test_stopped_observer_does_not_write_a_shutdown_error(self):
+        def interrupted():
+            self.c.activity_shutdown.set()
+            raise OSError("request ended during shutdown")
+        with patch.object(self.c.incidents, "poll", side_effect=interrupted), \
+             patch.object(self.c.store, "event") as event:
+            self.c.incident_loop()
+        event.assert_not_called()
+
     def test_source_partial_failure_preserves_other_route_and_actionable_receipts(self):
         at = dt.datetime(2026, 10, 29, 20, tzinfo=dt.timezone.utc)
         healthy = {"status": "ok", "strategy3": []}
-        with patch.object(source_snapshots, "fetch", return_value=(healthy, self.operations(at), self.source_receipts())):
+        with patch.object(source_snapshots, "fetch", return_value=(healthy, self.operations(at), self.source_receipts())) as fetch:
             self.c.incidents.poll()
+        fetch.assert_called_once_with("https://jiaoyi.up.railway.app", timeout=12)
         failure = self.source_receipts("/operations/reports", at=(at + dt.timedelta(seconds=10)).isoformat())
         with patch.object(source_snapshots, "fetch", return_value=(self.health(), None, failure)):
             state = self.c.incidents.poll()
