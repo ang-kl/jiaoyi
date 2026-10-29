@@ -243,6 +243,31 @@ pub async fn opens_in_session(
     .await
 }
 
+/// The registered session cost veto survives reconnects and process restarts.
+/// Legacy v6 decisions have the same scope but predate the typed skip code.
+pub async fn cost_skipped_in_session(
+    pool: &PgPool,
+    account_id: i64,
+    symbol: &str,
+    session_date: NaiveDate,
+    prereg_hash: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM trading_decisions
+         WHERE account_id=$1 AND symbol=$2 AND kind='s3_skip'
+           AND detail->>'session_date'=$3 AND detail->>'prereg_hash'=$4
+           AND detail->>'label'='jiaoyi-s3'
+           AND (detail->>'skip_code'='cost_ge_r'
+                OR reason LIKE 'cost reserve C (%) >= R (%): barrier too far for a no-drift process; skipped'))",
+    )
+    .bind(account_id)
+    .bind(symbol)
+    .bind(session_date.to_string())
+    .bind(prereg_hash)
+    .fetch_one(pool)
+    .await
+}
+
 /// How many recorded quotes the median spread reads, at most.
 pub const SPREAD_QUOTES: i64 = 50_000;
 

@@ -429,3 +429,22 @@ reviewsaccept; settingsvalues andentry/restorelookupbehaviorunchanged.
 inlineunitfixtureSQLunderproduction-srcsettings-writerinvariant. MoveSQL
 toexplicitcfg-testfixture; gateunchanged. Independentreviewaccepts; all9
 limits+4preopentests passafterward. Freshnew-headall3CIstillrequired.
+
+ENTRY 30-10-2026 07:02 SGT
+by <Codex (GPT-6), effort:not exposed>
+Source: №17,837–17,840 §§1–2; owner “how fix it?” about S3 performance alert.
+[§LOG.44] Main029e9d9/GROK_Log№17,703read. PR133runtimeverified11.733→3.0855s,
+all8loopsadvanced/6healthyobserverpolls; receiptsinPR133. Freshlatest20S3wins
+3/5/4/1of20, stillbelowgoal. HistoricalmaxDDbadgeisintentionallysticky.
+Foundv6costskiponlyinSymmemory/resetonnewTrader; actualliveBTCcostskip
+29Oct15:30SGT thenentry30Oct05:30sameUTCsession/hash afterdeployments.
+Close+.079760R, so no prevented-lossclaim. Restoreexistingdecisionveto,
+falliblecriticalwrite, scopedreconnecttests; no risk/tradingrule/globalworker
+window/quota/auth/Grokpermit change. ExactCIandreleaseproofrequired.
+
+[§LOG.44a] №17,842–17,844 §§1–2,30Oct07:04–07:07SGT: owner“fixbug”.
+Durablesessioncostveto5PG/fakebrokerchecks pass; meaningfulredremovesonly
+hydrationandobservesunintendedlaterorder, finalsourcegreen. Scope/date/hash
+isolation andread/writefailure/oneentryguardsverified; exit/riskunchanged.
+One restorationlogpernewcache, no per-ticktelemetry. ExactCI/release+monitor
+readbacknext; naturalpostreleaseveto eventnotassumed andnoforcedliveorder.
