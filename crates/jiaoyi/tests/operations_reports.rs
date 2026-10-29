@@ -129,6 +129,63 @@ fn operations_page_escapes_report_text() {
 }
 
 #[test]
+fn operations_page_reports_qualified_benchmark_gaps_and_unknown_comparisons() {
+    let row = json!({"account_id":46130058,"strategy":"s3","monitor_state":"alive",
+        "report":{"assessment":{"state":"below_target","history_complete":true,
+        "missing_reasons":[],"assessed_at":"2026-10-28T22:47:08Z",
+        "window":{"count":20,"wins":5,"win_rate":0.25,"realized_payoff":2.978904,
+        "realized_payoff_state":"defined"}}}});
+    let snapshot = json!({"as_of":"2026-10-28T22:49:36Z","reports":[row.clone()]});
+    let page = jiaoyi::operations::page(&snapshot);
+    assert!(page.contains("48.00 pp below 73%; 10 net wins below 15/20"));
+    assert!(page.contains("1.598904 above or equal to 1.38"));
+    assert!(page.contains("№OPS-CONTINUOUS"));
+    assert!(page.contains("§1"));
+    assert!(page.contains("§2"));
+    assert!(page.contains("29-10-2026 06:49:36 SGT"));
+    assert!(page.contains("29-10-2026 06:47:08 SGT"));
+    assert!(page.contains("Assessment computed"));
+    assert!(!page.contains("Assessment source cutoff"));
+    assert!(page.contains("Comparable cohort deltas: unknown"));
+    assert!(page.contains("Engineering-attributable financial movement: unknown"));
+
+    // Keep the attractive raw metrics while varying the qualifying evidence.
+    // Unknown/stale sources must not acquire a supported benchmark verdict.
+    for (field, value) in [
+        ("monitor_state", json!("stale")),
+        ("state", json!("unknown")),
+        ("history_complete", json!(false)),
+        (
+            "missing_reasons",
+            json!(["history changed during assessment"]),
+        ),
+    ] {
+        let mut invalid = row.clone();
+        if field == "monitor_state" {
+            invalid[field] = value;
+        } else {
+            invalid["report"]["assessment"][field] = value;
+        }
+        let page = jiaoyi::operations::page(&json!({"reports":[invalid]}));
+        assert!(!page.contains("48.00 pp below"), "{field}");
+        assert!(!page.contains("1.598904 above"), "{field}");
+        assert!(
+            page.contains("unknown (incomplete or stale evidence)"),
+            "{field}"
+        );
+        assert!(page.contains("not recorded"));
+        assert!(page.contains("№OPS-CONTINUOUS"));
+    }
+    let mut partial = row;
+    partial["report"]["assessment"]["state"] = json!("insufficient_evidence");
+    partial["report"]["assessment"]["window"]["count"] = json!(19);
+    let page = jiaoyi::operations::page(&json!({"reports":[partial]}));
+    assert!(page.contains("1 measured closes short of 20; win gap unknown"));
+    assert!(page.contains("unknown (insufficient evidence)"));
+    assert!(!page.contains("1.598904 above"));
+}
+
+#[test]
 fn operations_page_shows_last_success_separately_from_failure_time() {
     let page = jiaoyi::operations::page(&json!({
         "reports":[{"account_id":1,"strategy":"s3","monitor_state":"alive",
