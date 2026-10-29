@@ -46,6 +46,37 @@ class ReportTests(Fixture, unittest.TestCase):
         self.assertNotIn("PRIVATE-SL-CHECK", body)
         self.assertEqual(c.store.used(), 0)
 
+    def test_digest_groups_queue_housekeeping_but_retains_material_attempts_and_receipts(self):
+        report = data()
+        housekeeping = [{"id": i, "state": "superseded", "attempts": 0,
+                         "summary": "No preserved model summary; state is superseded",
+                         "tests": "No independently verified test receipt"}
+                        for i in range(170, 208)]
+        report["jobs"] = [
+            {"id": 148, "state": "completed", "attempts": 1,
+             "summary": "Observed source failure remains unresolved", "tests": "Read-only source inspection; no behavioral verification"},
+            {"id": 149, "state": "failed", "attempts": 1,
+             "summary": "Repair failed", "diagnostic": "CI check failed", "tests": "No independently verified test receipt"},
+            {"id": 150, "state": "ci_wait", "attempts": 1,
+             "summary": "Candidate waiting for CI", "tests": "Regression passed; deployment pending"},
+            {"id": 151, "state": "superseded", "attempts": 1,
+             "summary": "Attempt with preserved evidence", "tests": "A real attempted validation"},
+            *housekeeping,
+        ]
+        body = r.render(report)
+        self.assertEqual(body.count("38 unattempted superseded queue records"), 1)
+        self.assertNotIn("No preserved model summary; state is superseded", body)
+        self.assertNotIn("No independently verified test receipt", body)
+        self.assertNotIn("Job 170", body)
+        for job in report["jobs"][:4]:
+            self.assertIn("<td>" + str(job["id"]) + "</td>", body)
+            self.assertIn(job["summary"], body)
+        self.assertIn("CI check failed", body)
+        self.assertIn("Read-only source inspection; no behavioral verification", body)
+        self.assertIn("Regression passed; deployment pending", body)
+        self.assertIn("A real attempted validation", body)
+        self.assertEqual(body.count("— reported validation"), 3)
+
     def test_real_multipart_format_and_positive_telegram_receipt(self):
         class Reply(io.BytesIO):
             pass
