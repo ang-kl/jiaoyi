@@ -380,6 +380,186 @@ async fn short_trail_retains_original_r_after_amends_and_restart(pool: PgPool) {
     trail_keeps_original_r(&pool, false).await;
 }
 
+/// Replay one-decimal prices like the rejected JPN225 amendment through the
+/// existing continuous-session fixture, including the decoded wire request.
+async fn fractional_trail_precision(pool: &PgPool, buy: bool) {
+    loaded(pool).await;
+    sqlx::query("UPDATE symbols SET digits=1 WHERE account_id=$1 AND broker_symbol_id=$2")
+        .bind(DEMO)
+        .bind(BTC)
+        .execute(pool)
+        .await
+        .unwrap();
+    let (bid, ask) = if buy {
+        (65_354.1, 65_361.1)
+    } else {
+        (63_831.9, 63_838.9)
+    };
+    let mut f = fake((bid, ask));
+    let session = today();
+    let mut history = Vec::new();
+    for day in 1..=20 {
+        let open = session.open - Duration::days(day);
+        let close = 64_600.0 + if day % 2 == 0 { 343.1 } else { -343.1 };
+        for minute in [0, 30] {
+            history.push(m30_bar(
+                open + Duration::minutes(minute),
+                e5(64_600.0),
+                e5(66_000.0),
+                e5(63_000.0),
+                e5(close),
+                100,
+            ));
+        }
+    }
+    history.push(m30_bar(
+        session.open,
+        e5(64_600.0),
+        e5(64_600.0),
+        e5(64_600.0),
+        e5(64_600.0),
+        10,
+    ));
+    f.m30_bars.insert(BTC, history);
+    with_trader!(pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(bid), Some(ask), at(30)).await.unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        let pid = t.own.values().next().unwrap().position_id;
+        let basis = t.own[&pid].plan_basis.unwrap();
+        assert_eq!(basis.r, 343.1);
+        let tp = t.own[&pid].take_profit;
+        let quotes = if buy {
+            [65_477.4, 65_491.9]
+        } else {
+            [63_791.2, 63_777.7]
+        };
+        let stops = if buy {
+            [65_134.3, 65_148.8]
+        } else {
+            [64_134.3, 64_120.8]
+        };
+        for (i, (price, stop)) in quotes.into_iter().zip(stops).enumerate() {
+            let (b, a) = if buy {
+                (price, price + 5.0)
+            } else {
+                (price - 5.0, price)
+            };
+            t.on_quote(
+                BTC,
+                Some(b),
+                Some(a),
+                at(31) + Duration::seconds(i as i64 * 31),
+            )
+            .await
+            .unwrap();
+            {
+                let wire = log.lock().unwrap();
+                assert_eq!(wire.amends.len(), i + 1);
+                assert_eq!(
+                    wire.amends[i].stop_loss,
+                    Some(stop),
+                    "wire stop must have canonical symbol precision"
+                );
+                assert_eq!(wire.amends[i].take_profit, tp);
+            }
+            assert_eq!(t.own[&pid].stop, Some(stop));
+            assert_eq!(t.own[&pid].plan_basis.unwrap().r, basis.r);
+            let saved: (f64, serde_json::Value) = sqlx::query_as(
+                "SELECT i.stop_price,o.detail FROM trading_intents i JOIN strategy3_orders o USING(account_id,entry_key) WHERE i.account_id=$1 AND i.position_id=$2 ORDER BY i.created_at DESC LIMIT 1")
+                .bind(DEMO).bind(pid).fetch_one(pool).await.unwrap();
+            assert_eq!(saved.0, stop);
+            assert_eq!(saved.1["new_stop"], stop);
+            assert_eq!(saved.1["r"], basis.r);
+            t.reconcile(at(33)).await.unwrap();
+        }
+        let mut restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
+            .await
+            .unwrap();
+        restarted.reconcile(at(34)).await.unwrap();
+        assert_eq!(restarted.own[&pid].plan_basis.unwrap().r, basis.r);
+        let (b, a, stop) = if buy {
+            (65_500.1, 65_505.1, 65_157.0)
+        } else {
+            (63_770.5, 63_775.5, 64_118.6)
+        };
+        restarted
+            .on_quote(BTC, Some(b), Some(a), at(35))
+            .await
+            .unwrap();
+        let wire = log.lock().unwrap();
+        assert_eq!(wire.amends.len(), 3);
+        assert_eq!(wire.amends[2].stop_loss, Some(stop));
+        assert!(wire.amends.iter().all(|x| x.take_profit == tp));
+        assert_eq!(wire.orders.len(), 1);
+        assert!(wire.closes.is_empty());
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn fractional_long_trail_has_canonical_wire_price_and_original_r(pool: PgPool) {
+    fractional_trail_precision(&pool, true).await;
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn fractional_short_trail_has_canonical_wire_price_and_original_r(pool: PgPool) {
+    fractional_trail_precision(&pool, false).await;
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn trail_requires_price_grid_and_one_tick_improvement(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, log| {
+            t.on_quote(BTC, Some(60_455.0), Some(60_462.0), at(30))
+                .await
+                .unwrap();
+            let pid = t.own.values().next().unwrap().position_id;
+            let basis = t.own[&pid].plan_basis.unwrap();
+            let stop = t.own[&pid].stop;
+            let limits = t.syms[&BTC].limits.unwrap();
+            for (i, digits) in [None, Some(-1), Some(6)].into_iter().enumerate() {
+                t.syms.get_mut(&BTC).unwrap().limits =
+                    digits.map(|digits| jiaoyi_ctrader::trading::VolumeLimits { digits, ..limits });
+                t.on_quote(BTC, Some(60_700.0), Some(60_705.0), at(31 + i as i64))
+                    .await
+                    .unwrap();
+                assert!(log.lock().unwrap().amends.is_empty());
+                assert_eq!(t.own[&pid].stop, stop);
+            }
+            t.syms.get_mut(&BTC).unwrap().limits = Some(limits);
+            t.own.get_mut(&pid).unwrap().plan_basis = Some(strategy3::PlanBasis {
+                r: 450.001,
+                ..basis
+            });
+            t.on_quote(BTC, Some(60_700.0), Some(60_705.0), at(35))
+                .await
+                .unwrap();
+            assert!(
+                log.lock().unwrap().amends.is_empty(),
+                "off-grid R must not be silently changed"
+            );
+            t.own.get_mut(&pid).unwrap().plan_basis = Some(basis);
+            t.own.get_mut(&pid).unwrap().stop = Some(60_250.0);
+            t.on_quote(BTC, Some(60_700.0 + 1e-10), Some(60_705.0), at(36))
+                .await
+                .unwrap();
+            assert!(
+                log.lock().unwrap().amends.is_empty(),
+                "float residue is not a one-tick improvement"
+            );
+            assert_eq!(t.own[&pid].stop, Some(60_250.0));
+            t.on_quote(BTC, Some(60_700.01), Some(60_705.01), at(37))
+                .await
+                .unwrap();
+            assert_eq!(log.lock().unwrap().amends.len(), 1);
+            assert_eq!(t.own[&pid].stop, Some(60_250.01));
+        }
+    );
+}
+
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn trail_requires_known_positive_original_r(pool: PgPool) {
     loaded(&pool).await;

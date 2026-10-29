@@ -391,7 +391,10 @@ async fn recent_deals_are_not_starved_by_an_active_tick_download(pool: PgPool) {
     .await;
     // A long, multi-page tick window remains active while the new deal
     // becomes visible. Both kinds of reads use the same historical limiter.
-    f.max_ticks_per_response = 1;
+    // Pagination includes the oldest timestamp again. A one-tick page
+    // contains only that overlap and fails with NoProgress rather than
+    // keeping a valid download active. Leave room for the next older tick.
+    f.max_ticks_per_response = 2;
     let mut closing = f.deals[1];
     closing.deal_id = 4;
     closing.position_id = 99;
@@ -433,6 +436,11 @@ async fn recent_deals_are_not_starved_by_an_active_tick_download(pool: PgPool) {
         })
         .await
         .expect("recent deal polling must progress while tick history is active");
+        assert_eq!(
+            status.lock().unwrap().get(&A).unwrap().tick_windows_failed,
+            0,
+            "the active tick download must paginate successfully"
+        );
         assert!(status
             .lock()
             .unwrap()
