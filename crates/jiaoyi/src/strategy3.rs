@@ -2108,6 +2108,20 @@ impl<'a, 'c> Trader<'a, 'c> {
         if sym.last_decision_mark.is_some_and(|at| at >= mark) {
             return Ok(());
         }
+        // The session veto is durable, unlike the per-connection symbol cache.
+        // A failed read must not consume this mark or permit a new entry.
+        if cost_skip_stands(sym.cost_skip_session, s.date) {
+            return Ok(());
+        }
+        if s3s::cost_skipped_in_session(self.pool, self.account_id(), &name, s.date, &self.hash)
+            .await?
+        {
+            self.syms.get_mut(&symbol_id).unwrap().cost_skip_session = Some(s.date);
+            tracing::info!(account = self.account_id(), symbol = %name,
+                session_date = %s.date, prereg_hash = %self.hash,
+                "strategy 3 restored durable session cost veto");
+            return Ok(());
+        }
         // Persist the first eligible quote before any preparation or entry
         // gate. An inside/no-band/refused decision must not be retried on a
         // later crossing within this mark, including after reconnect.
@@ -2123,7 +2137,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 return Ok(());
             }
         }
-        if cost_skip_stands(sym.cost_skip_session, s.date) || sym.entered_session == Some(s.date) {
+        if sym.entered_session == Some(s.date) {
             self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(mark);
             return Ok(());
         }
@@ -2272,20 +2286,32 @@ impl<'a, 'c> Trader<'a, 'c> {
         // so TP1 sat near 5R and a no-drift process hit it ~16% of the time.
         // Skip when the reserve is at least the stop. This does not change Q.
         if !(r_price > 0.0) || cost.total >= r_price {
+            detail["strategy"] = json!(STRATEGY);
+            detail["label"] = json!(LABEL);
+            detail["prereg_hash"] = json!(self.hash);
+            detail["skip_code"] = json!("cost_ge_r");
+            let reason = format!(
+                "cost reserve C ({:.6}) >= R ({:.6}): barrier too far for a no-drift process; skipped",
+                cost.total, r_price
+            );
+            // This is execution state, not best-effort reporting. Persist it
+            // before the cache suppresses subsequent quotes for this session.
+            ts::record_decision(
+                self.pool,
+                self.account_id(),
+                Some(&name),
+                "s3_skip",
+                &reason,
+                &detail,
+                self.d.version,
+            )
+            .await?;
             if let Some(x) = self.syms.get_mut(&symbol_id) {
                 x.cost_skip_session = Some(s.date);
+                x.last_try = Some(now);
             }
-            self.skip(
-                symbol_id,
-                &name,
-                &format!(
-                    "cost reserve C ({:.6}) >= R ({:.6}): barrier too far for a no-drift process; skipped",
-                    cost.total, r_price
-                ),
-                detail,
-                now,
-            )
-            .await;
+            tracing::info!(account = self.account_id(), symbol = %name,
+                kind = "skip", reason, prereg_hash = %self.hash, "strategy 3 decision");
             return Ok(());
         }
         let e = Entry {

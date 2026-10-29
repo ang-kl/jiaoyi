@@ -800,6 +800,309 @@ async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: 
     );
 }
 
+/// The registered C >= R veto is execution state across fresh Trader instances,
+/// even when a later mark's quote would make the cost acceptable.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, log| {
+            t.on_quote(BTC, Some(100_000.0), Some(100_005.0), at(30))
+                .await
+                .unwrap();
+            assert!(orders(&log).is_empty());
+            assert_eq!(t.syms[&BTC].cost_skip_session, Some(today().date));
+            let detail: serde_json::Value = sqlx::query_scalar(
+                "SELECT detail FROM trading_decisions WHERE kind='s3_skip' ORDER BY id DESC LIMIT 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(detail["skip_code"], "cost_ge_r");
+            assert_eq!(detail["label"], "jiaoyi-s3");
+            assert_eq!(detail["prereg_hash"], strategy3::prereg_hash());
+
+            let mut restarted =
+                strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+                    .await
+                    .unwrap();
+            assert_eq!(restarted.syms[&BTC].cost_skip_session, None);
+            restarted
+                .on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
+                .await
+                .unwrap();
+            assert!(
+                orders(&log).is_empty(),
+                "a tighter quote cannot reopen the session"
+            );
+            assert_eq!(restarted.syms[&BTC].cost_skip_session, Some(today().date));
+            let marks: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM trading_decisions WHERE kind='s3_mark_decision'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(marks, 1, "the later mark must not be reconsidered");
+        }
+    );
+    assert!(pause_writes(&pool).await.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn durable_cost_veto_is_scoped_and_ordinary_skips_do_not_latch(pool: PgPool) {
+    loaded(&pool).await;
+    let hash = strategy3::prereg_hash();
+    let previous = today().date - Duration::days(1);
+    let legacy = json!({"label":"jiaoyi-s3", "prereg_hash":hash, "session_date":previous});
+    store::trading::record_decision(
+        &pool,
+        DEMO,
+        Some("BTCUSD"),
+        "s3_skip",
+        "cost reserve C (500.000000) >= R (450.000000): barrier too far for a no-drift process; skipped",
+        &legacy,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(
+        store::strategy3::cost_skipped_in_session(&pool, DEMO, "BTCUSD", previous, &hash)
+            .await
+            .unwrap(),
+        "legacy receipts remain authoritative"
+    );
+    for (account, symbol, date, registration) in [
+        (DEMO, "BTCUSD", today().date, hash.as_str()),
+        (DEMO + 1, "BTCUSD", previous, hash.as_str()),
+        (DEMO, "ETHUSD", previous, hash.as_str()),
+        (DEMO, "BTCUSD", previous, "another-registration"),
+    ] {
+        assert!(!store::strategy3::cost_skipped_in_session(
+            &pool,
+            account,
+            symbol,
+            date,
+            registration,
+        )
+        .await
+        .unwrap());
+    }
+    store::upsert_account(&pool, DEMO + 1, Environment::Demo)
+        .await
+        .unwrap();
+    // Each near-match must leave today's BTC entry eligible. An ordinary
+    // budget skip is deliberately identical in scope to the real entry.
+    for (account, symbol, registration, label, kind, reason, code) in [
+        (
+            DEMO + 1,
+            "BTCUSD",
+            hash.as_str(),
+            "jiaoyi-s3",
+            "s3_skip",
+            "typed cost veto",
+            "cost_ge_r",
+        ),
+        (
+            DEMO,
+            "ETHUSD",
+            hash.as_str(),
+            "jiaoyi-s3",
+            "s3_skip",
+            "typed cost veto",
+            "cost_ge_r",
+        ),
+        (
+            DEMO,
+            "BTCUSD",
+            "another-registration",
+            "jiaoyi-s3",
+            "s3_skip",
+            "typed cost veto",
+            "cost_ge_r",
+        ),
+        (
+            DEMO,
+            "BTCUSD",
+            hash.as_str(),
+            "another-strategy",
+            "s3_skip",
+            "typed cost veto",
+            "cost_ge_r",
+        ),
+        (
+            DEMO,
+            "BTCUSD",
+            hash.as_str(),
+            "jiaoyi-s3",
+            "s3_other",
+            "typed cost veto",
+            "cost_ge_r",
+        ),
+        (
+            DEMO,
+            "BTCUSD",
+            hash.as_str(),
+            "jiaoyi-s3",
+            "s3_skip",
+            "open risk would exceed its budget",
+            "budget",
+        ),
+    ] {
+        store::trading::record_decision(
+            &pool,
+            account,
+            Some(symbol),
+            kind,
+            reason,
+            &json!({"label":label, "prereg_hash":registration,
+                "session_date":today().date, "skip_code":code}),
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(!store::strategy3::cost_skipped_in_session(
+            &pool,
+            DEMO,
+            "BTCUSD",
+            today().date,
+            &hash,
+        )
+        .await
+        .unwrap());
+    }
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, log| {
+            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+                .await
+                .unwrap();
+            assert_eq!(
+                orders(&log).len(),
+                1,
+                "unrelated skips must permit the valid entry"
+            );
+        }
+    );
+    assert!(pause_writes(&pool).await.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn durable_cost_veto_keeps_one_entry_per_session_after_restart(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        // Simulate a broker-flat restart; the durable open receipt, rather
+        // than the former in-memory ownership cache, must block re-entry.
+        f.positions.lock().unwrap().clear();
+        let mut restarted =
+            strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+                .await
+                .unwrap();
+        assert!(restarted.own.is_empty());
+        assert_eq!(restarted.syms[&BTC].entered_session, None);
+        restarted
+            .on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        assert_eq!(restarted.syms[&BTC].entered_session, Some(today().date));
+        assert_eq!(
+            store::strategy3::opens_in_session(&pool, DEMO, BTC, today().date)
+                .await
+                .unwrap(),
+            1
+        );
+    });
+    assert!(pause_writes(&pool).await.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn durable_cost_veto_read_failure_does_not_consume_the_mark(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, log| {
+            sqlx::query(
+                "ALTER TABLE trading_decisions RENAME TO decisions_temporarily_unavailable",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let result = t
+                .on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+                .await;
+            sqlx::query(
+                "ALTER TABLE decisions_temporarily_unavailable RENAME TO trading_decisions",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            assert!(result.is_err(), "unreadable veto state must fail closed");
+            assert!(orders(&log).is_empty());
+            assert_eq!(t.syms[&BTC].last_decision_mark, None);
+            assert_eq!(t.syms[&BTC].cost_skip_session, None);
+            t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+                .await
+                .unwrap();
+            assert_eq!(
+                orders(&log).len(),
+                1,
+                "the same mark can retry after recovery"
+            );
+        }
+    );
+    assert!(pause_writes(&pool).await.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn durable_cost_veto_persistence_failure_never_latches_unstored_state(pool: PgPool) {
+    loaded(&pool).await;
+    sqlx::raw_sql(
+        "CREATE FUNCTION reject_test_cost_veto() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN IF NEW.kind='s3_skip' AND NEW.detail->>'skip_code'='cost_ge_r' THEN
+           RAISE EXCEPTION 'test cost receipt unavailable'; END IF; RETURN NEW; END $$;
+         CREATE TRIGGER reject_test_cost_veto BEFORE INSERT ON trading_decisions
+           FOR EACH ROW EXECUTE FUNCTION reject_test_cost_veto();",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, log| {
+            let result = t
+                .on_quote(BTC, Some(100_000.0), Some(100_005.0), at(30))
+                .await;
+            assert!(
+                result.is_err(),
+                "the critical receipt must not be best effort"
+            );
+            assert!(orders(&log).is_empty());
+            assert_eq!(t.syms[&BTC].cost_skip_session, None);
+            let persisted: i64 =
+                sqlx::query_scalar("SELECT count(*) FROM trading_decisions WHERE kind='s3_skip'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(persisted, 0);
+        }
+    );
+    assert!(pause_writes(&pool).await.is_empty());
+}
+
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_mark_quote_enters_then_takes_its_registered_tp1_and_session_end(pool: PgPool) {
     loaded(&pool).await;
