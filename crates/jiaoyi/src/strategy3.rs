@@ -547,6 +547,32 @@ pub fn tp1_reached(
     }
 }
 
+/// Canonical broker price for the registered best ± original R trail.
+/// Work in whole symbol ticks: floating subtraction/addition alone can send
+/// e.g. 64134.299999999996 where the broker permits only one decimal.
+/// Unknown precision or genuinely off-grid evidence keeps the existing stop.
+fn trail_price(side: Side, best: f64, r: f64, current: f64, digits: i32) -> Option<f64> {
+    let factor = 10f64.powi(digits);
+    let grid = |price: f64| {
+        let ticks = targets::price_ticks(price, digits)?;
+        // Same float-residue convention as the original target planner.
+        (price > 0.0 && (price * factor - ticks as f64).abs() < 1e-6).then_some(ticks)
+    };
+    let (best, r, current) = (grid(best)?, grid(r)?, grid(current)?);
+    if r <= 0 {
+        return None;
+    }
+    let stop = match side {
+        Side::Buy => best.checked_sub(r)?,
+        Side::Sell => best.checked_add(r)?,
+    };
+    let improves = match side {
+        Side::Buy => stop > current,
+        Side::Sell => stop < current,
+    };
+    (stop > 0 && improves).then_some(stop as f64 / factor)
+}
+
 /// The open-risk budget: Strategy 3's open risk at its stops plus a new
 /// entry's must stay within `pct` of equity.
 pub fn within_budget(open_risk: f64, new_risk: f64, equity: f64, pct: f64) -> Result<(), String> {
@@ -1690,17 +1716,17 @@ impl<'a, 'c> Trader<'a, 'c> {
                 x.mfe = mfe;
             }
         }
-        let new_stop = match o.side {
-            Side::Buy => best - r,
-            Side::Sell => best + r,
-        };
-        let better = match o.side {
-            Side::Buy => new_stop > current_stop,
-            Side::Sell => new_stop < current_stop,
-        };
-        if !better || !new_stop.is_finite() || new_stop <= 0.0 {
+        let Some(digits) = self
+            .syms
+            .get(&o.symbol_id)
+            .and_then(|s| s.limits)
+            .map(|l| l.digits)
+        else {
             return Ok(());
-        }
+        };
+        let Some(new_stop) = trail_price(o.side, best, r, current_stop, digits) else {
+            return Ok(());
+        };
         if o.last_amend
             .is_some_and(|t| now.signed_duration_since(t).num_seconds() < TRAIL_AMEND_SECS)
         {

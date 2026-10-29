@@ -362,3 +362,18 @@ PrivateevidenceUNKNOWNcaughtatreadback;localPG16provedfullURIinPGDATABASE
 notexpanded. Correctinglibpqenv/retrybeforeclaimingstatementaccess. Market
 baseline06:48:59retained; cutoff07:30SGT/readonlyreport09:00unchanged.
 AUS2004accountsprepcompleted06:40:12before06:50deadline; nofinancialPASS.
+
+ENTRY 29-10-2026 14:27 SGT
+by <Codex (GPT-6), effort: not exposed by this session>
+Source: owner “continue with №17,768 §3 fix?”; №17,769 §1; №17,770–17,772 §§1–2.
+[§LOG.40] Focused Codex repair window resumed for trailing-price precision,
+then PR127 conflict/reporting and deployment verification. Read/preserved
+main e4e432f and GROK_Log through№17,696; Grok permit remains stopped.
+Confirmed JPN225 excess-digit broker rejects; old stop retained and later
+amendment accepted. Loss causation unproved. Canonical integer-tick best±R
+preserves originalR/TP/ownership/rules and uses one request/intent/cache price.
+Short wire residue and missing-precision probes fail before repair; all6
+trailing SQLx/fake-broker tests pass after. Actual CI/release receipts belong
+in PR/chat; no synthetic production order or economic PASS. No quota/auth
+or global worker-window change. Resolve existing PR127 next, preserving
+both journal sections and replacing its old CI evidence with new-head CI.
