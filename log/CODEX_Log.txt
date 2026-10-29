@@ -408,3 +408,19 @@ withsamefinancialoutputs), onefreshdiagnosticrowset sharedbyrecovery and
 episodes, fixed Server-Timing phases. No risk/trading/math/cost/cache/index
 change; currentmainf4f7f9/Grokthrough№17,703preserved. Independent review
 andlivebefore/aftermeasurements required; do notclaimallfixedfrom CI alone.
+
+ENTRY 30-10-2026 05:40 SGT
+by <Codex (GPT-6), effort:not exposed>
+Source: №17,814–17,816 §§1–2; owner ASAP repair and “fixes done?” follow-up.
+[§LOG.43] PR132merged6e8914f/deployedSUCCESS/all3CIgreen, but six actual
+healthreads still10.138–11.325s (median10.8315vs11.733,7.68%observedgain).
+RuntimeacceptanceFAILED; base_health9.70–10.86s dominates. Continue one
+groupedtick-healthread, exactoutputcomparison/PGplan/livechecks required.
+All8monitorsalive; no inventedfinancialgain, pause, threshold, risk, quota,
+auth or globalworkerwindowchange. Main6e8914f/GROK_Log№17,703preserved.
+
+[§LOG.43a] №17,817–17,819 §§1–2,30Oct05:42–05:44SGT: fix serialreadcosts
+withoutcache: settingsversion/global/override onestatementatomicMVCCview
+(3SELECTshapes→1;4newPG+21existingpass), preopenhealthonebatchwithsame
+latestreceiptvalidation/order(11→2acquisitions;4testspass). Independent
+reviewsaccept; settingsvalues andentry/restorelookupbehaviorunchanged.
