@@ -580,6 +580,11 @@ class IncidentAcceptanceTests(unittest.TestCase):
                 return json.dumps({"state": "open", "merged": False, "base": {"ref": "main"},
                     "head": {"sha": head, "ref": "engineering/job-" + str(repair["id"]),
                              "repo": {"full_name": w.REPO}}})
+            if args[-1].endswith("/git/ref/heads/main"):
+                return json.dumps({"object": {"sha": "b" * 40}})
+            if "/compare/" in args[-1]:
+                return json.dumps({"base_commit": {"sha": "b" * 40},
+                    "merge_base_commit": {"sha": "b" * 40}, "status": "ahead", "behind_by": 0})
             self.assertIn("check-runs", args[-1])
             return json.dumps({"check_runs": [{"name": name,
                 "status": "completed" if all_green or name != "docker" else "in_progress",

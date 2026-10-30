@@ -107,6 +107,12 @@ pub struct FakeBroker {
     /// ProtoOAAccountsTokenInvalidatedEvent for its account on all of them, as
     /// a refresh does to every session using the old token.
     pub token_events: Option<tokio::sync::broadcast::Sender<()>>,
+    /// Test-controlled spots use the real wire path after an observable
+    /// barrier, instead of relying on wall-clock quote schedules.
+    pub spot_events: Option<tokio::sync::broadcast::Sender<pb::ProtoOaSpotEvent>>,
+    /// Hold a logged close before replying, so tests can exercise a
+    /// busy actor without timing assumptions. Closing the gate ends the fake.
+    pub close_reply_gate: Option<Arc<tokio::sync::Semaphore>>,
     /// Count requests of this payload type down (the counter is shared by
     /// clones, so it spans connections); the request that reaches 0 gets
     /// ProtoOAAccountsTokenInvalidatedEvent and ACCOUNT_NOT_AUTHORIZED, and
@@ -266,6 +272,18 @@ impl FakeBroker {
                         .is_err()
                     {
                         break;
+                    }
+                }
+            })
+        });
+        let spots_task = self.spot_events.as_ref().map(|tx| {
+            let mut rx = tx.subscribe();
+            let wr = wr.clone();
+            tokio::spawn(async move {
+                while let Ok(event) = rx.recv().await {
+                    let message = reply(None, Oa::ProtoOaSpotEvent as i32, event.encode_to_vec());
+                    if write_frame(&mut *wr.lock().await, &message).await.is_err() {
+                        return;
                     }
                 }
             })
@@ -1022,6 +1040,12 @@ impl FakeBroker {
                         let req = pb::ProtoOaClosePositionReq::decode(body.as_slice())
                             .unwrap_or_default();
                         log2.lock().unwrap().closes.push(req);
+                        if let Some(gate) = &self.close_reply_gate {
+                            match gate.acquire().await {
+                                Ok(permit) => permit.forget(),
+                                Err(_) => return,
+                            }
+                        }
                         let rejected = self
                             .reject_closes
                             .fetch_update(
@@ -1192,6 +1216,9 @@ impl FakeBroker {
             };
             serve.await;
             if let Some(t) = events_task {
+                t.abort();
+            }
+            if let Some(t) = spots_task {
                 t.abort();
             }
             drop(wr);

@@ -1482,6 +1482,39 @@ class Coordinator:
             if not required <= {c["name"] for c in relevant} or any(
                     c["status"] != "completed" or c["conclusion"] != "success" for c in relevant):
                 return
+            # Green branch CI does not cover another agent's intervening main
+            # changes. Compare immutable commits, without executing Git against
+            # model-owned metadata or launching another model to redo the work.
+            def current_main():
+                ref = json.loads(self.gh("api", "-H", "Cache-Control: no-cache",
+                                         f"repos/{REPO}/git/ref/heads/main"))
+                sha = (ref.get("object") or {}).get("sha")
+                if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+                    raise RuntimeError("current main identity unavailable; no merge")
+                return sha
+
+            base = current_main()
+            comparison = json.loads(self.gh("api", "-H", "Cache-Control: no-cache",
+                f"repos/{REPO}/compare/{base}...{job['head']}"))
+            included = (comparison.get("status") in ("ahead", "identical")
+                        and type(comparison.get("behind_by")) is int
+                        and comparison.get("behind_by") == 0
+                        and (comparison.get("base_commit") or {}).get("sha") == base
+                        and (comparison.get("merge_base_commit") or {}).get("sha") == base)
+            latest = current_main() if included else base
+            if not included or latest != base:
+                self.store.update(jid, "owner_blocked", result=(
+                    "Published PR/head retained: current main is outside the tested head or changed during release. "
+                    "Operational integration and fresh exact-head CI are required, not a new owner-policy decision; "
+                    "no automatic rebase or model retry."))
+                self.store.event("release_base_changed", jid,
+                                 json.dumps({"head": job["head"], "compared_main": base,
+                                             "latest_main": latest, "included": included}))
+                return
+            # The merge API fences the head, not main. Server-side up-to-date
+            # branch protection/merge queue is still needed to close the final
+            # read-to-merge race with independent writers.
+            self.store.event("release_base_verified", jid, json.dumps({"head": job["head"], "main": base}))
             receipt = json.loads(self.gh("api", "--method", "PUT", f"repos/{REPO}/pulls/{number}/merge",
                                          "-f", "sha=" + job["head"], "-f", "merge_method=squash", write=True))
             if not receipt.get("merged"):

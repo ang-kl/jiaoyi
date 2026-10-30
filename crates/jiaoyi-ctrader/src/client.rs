@@ -25,7 +25,7 @@ use prost::Message;
 use rust_decimal::Decimal;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{broadcast, oneshot, Mutex};
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 use tokio::time::Instant;
 
 use crate::frame::{read_frame, write_frame, FrameError};
@@ -66,6 +66,8 @@ pub enum ClientError {
     Decode(#[from] prost::DecodeError),
     #[error("no response within {0:?}")]
     Timeout(Duration),
+    #[error("socket write not completed within {0:?}")]
+    WriteTimeout(Duration),
     #[error("connection closed: {0}")]
     Disconnected(String),
     #[error("response is for account {got}, asked for {asked}")]
@@ -84,10 +86,25 @@ impl ClientError {
 
 type Pending = Arc<StdMutex<HashMap<String, oneshot::Sender<ProtoMessage>>>>;
 
+/// Normal request/reply correlation only; order intents and execution events
+/// have their own durable/broadcast paths. An outer timeout may drop a request
+/// before its response timer runs, so cleanup must follow the future's lifetime.
+struct RequestWaiter {
+    pending: Pending,
+    id: String,
+}
+
+impl Drop for RequestWaiter {
+    fn drop(&mut self) {
+        self.pending.lock().unwrap().remove(&self.id);
+    }
+}
+
 /// The broker ended one or more account sessions on a socket that stays open
 /// (`ProtoOAAccountsTokenInvalidatedEvent`, `ProtoOAAccountDisconnectEvent`,
 /// or `ProtoOAClientDisconnectEvent` for every account). A session for an
-/// affected account must re-authorise before it can be used again.
+/// affected account must re-authorise before it can be used again. A local
+/// interrupted frame write ends all accounts and requires a fresh connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionEnd {
     /// Empty: every account on this connection.
@@ -120,9 +137,86 @@ pub struct ReceivedSpot {
 }
 type Writer = Box<dyn AsyncWrite + Send + Unpin>;
 
+/// Every writer (requests, trading and heartbeat) shares the same deadline and
+/// interruption fence. A cancelled/failed partial frame makes this byte stream
+/// unusable; it is never safe to append another frame or retry an order on it.
+struct TransportWriter {
+    stream: Mutex<Writer>,
+    closed: Arc<StdMutex<Option<String>>>,
+    pending: Pending,
+    spots: Arc<StdMutex<Option<broadcast::Sender<ReceivedSpot>>>>,
+    session_ends: Arc<StdMutex<Vec<SessionEnd>>>,
+    session_end_tx: broadcast::Sender<SessionEnd>,
+    tasks: StdMutex<Vec<AbortHandle>>,
+}
+
+impl TransportWriter {
+    fn interrupted(&self) {
+        let reason =
+            "socket frame write interrupted; reconnect and reconcile before further actions";
+        let first = {
+            let mut closed = self.closed.lock().unwrap();
+            if closed.is_some() {
+                false
+            } else {
+                *closed = Some(reason.into());
+                true
+            }
+        };
+        self.pending.lock().unwrap().clear();
+        self.spots.lock().unwrap().take();
+        for task in self.tasks.lock().unwrap().iter() {
+            task.abort();
+        }
+        if first {
+            let ended = SessionEnd {
+                account_ids: Vec::new(),
+                reason: reason.into(),
+            };
+            self.session_ends.lock().unwrap().push(ended.clone());
+            let _ = self.session_end_tx.send(ended);
+            tracing::warn!(reason, "cTrader connection invalidated");
+        }
+    }
+
+    async fn send(&self, msg: &ProtoMessage, budget: Duration) -> Result<(), ClientError> {
+        let deadline = Instant::now() + budget;
+        // A cancelled waiter has written no bytes and must not invalidate the
+        // other operation holding the stream. Arm only after taking the lock.
+        let mut stream = tokio::time::timeout_at(deadline, self.stream.lock())
+            .await
+            .map_err(|_| ClientError::WriteTimeout(budget))?;
+        if let Some(reason) = self.closed.lock().unwrap().clone() {
+            return Err(ClientError::Disconnected(reason));
+        }
+        let mut attempt = WriteAttempt {
+            transport: self,
+            completed: false,
+        };
+        tokio::time::timeout_at(deadline, write_frame(&mut *stream, msg))
+            .await
+            .map_err(|_| ClientError::WriteTimeout(budget))??;
+        attempt.completed = true;
+        Ok(())
+    }
+}
+
+struct WriteAttempt<'a> {
+    transport: &'a TransportWriter,
+    completed: bool,
+}
+
+impl Drop for WriteAttempt<'_> {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.transport.interrupted();
+        }
+    }
+}
+
 /// A connection to one cTrader proxy (demo or live).
 pub struct Connection {
-    writer: Arc<Mutex<Writer>>,
+    writer: Arc<TransportWriter>,
     pending: Pending,
     next_id: AtomicU64,
     /// The spot broadcast. Taken (set to `None`) when the connection closes, so
@@ -222,7 +316,7 @@ impl Connection {
         S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         let (mut reader, writer) = tokio::io::split(stream);
-        let writer: Arc<Mutex<Writer>> = Arc::new(Mutex::new(Box::new(writer) as Writer));
+        let stream: Writer = Box::new(writer);
         let pending: Pending = Arc::default();
         let (spots_tx, _) = broadcast::channel(4096);
         let spots = Arc::new(StdMutex::new(Some(spots_tx.clone())));
@@ -231,6 +325,15 @@ impl Connection {
         let (session_end_tx, _) = broadcast::channel(64);
         let (executions_tx, _) = broadcast::channel(1024);
         let closed: Arc<StdMutex<Option<String>>> = Arc::default();
+        let writer = Arc::new(TransportWriter {
+            stream: Mutex::new(stream),
+            closed: closed.clone(),
+            pending: pending.clone(),
+            spots: spots.clone(),
+            session_ends: session_ends.clone(),
+            session_end_tx: session_end_tx.clone(),
+            tasks: StdMutex::new(Vec::new()),
+        });
 
         let read_task = {
             let pending = pending.clone();
@@ -255,6 +358,7 @@ impl Connection {
                 drop(spots_tx);
             })
         };
+        writer.tasks.lock().unwrap().push(read_task.abort_handle());
 
         let mut conn = Connection {
             writer,
@@ -279,15 +383,26 @@ impl Connection {
                 loop {
                     tick.tick().await;
                     let hb = pb::ProtoHeartbeatEvent::default().encode_to_vec();
-                    if send_checked(&writer, Common::HeartbeatEvent as u32, hb, None)
-                        .await
-                        .is_err()
+                    if send_checked(
+                        &writer,
+                        Common::HeartbeatEvent as u32,
+                        hb,
+                        None,
+                        request_timeout,
+                    )
+                    .await
+                    .is_err()
                     {
                         break;
                     }
                 }
             })
         };
+        conn.writer
+            .tasks
+            .lock()
+            .unwrap()
+            .push(heartbeat_task.abort_handle());
         conn.tasks.push(heartbeat_task);
         conn
     }
@@ -299,7 +414,14 @@ impl Connection {
         payload: Vec<u8>,
         client_msg_id: Option<String>,
     ) -> Result<(), ClientError> {
-        send_checked(&self.writer, payload_type, payload, client_msg_id).await
+        send_checked(
+            &self.writer,
+            payload_type,
+            payload,
+            client_msg_id,
+            self.request_timeout,
+        )
+        .await
     }
 
     /// The trading write path: only a payload type on `TRADING`, only from the
@@ -320,9 +442,7 @@ impl Connection {
             payload: Some(payload),
             client_msg_id: Some(client_msg_id),
         };
-        let mut w = self.writer.lock().await;
-        write_frame(&mut *w, &msg).await?;
-        Ok(())
+        self.writer.send(&msg, self.request_timeout).await
     }
 
     /// A receiver of execution events and order errors. Subscribe before
@@ -336,7 +456,8 @@ impl Connection {
         format!("t{}", self.next_id.fetch_add(1, Ordering::Relaxed))
     }
 
-    /// Send a request and wait for its response.
+    /// Send a request and wait for its response. The write and response phases
+    /// each use the existing request budget; this is not an end-to-end SLA.
     pub(crate) async fn request<R: Request>(&self, req: &R) -> Result<R::Response, ClientError> {
         if let Some(reason) = self.closed.lock().unwrap().clone() {
             return Err(ClientError::Disconnected(reason));
@@ -344,13 +465,12 @@ impl Connection {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id.clone(), tx);
-        if let Err(e) = self
-            .send_message(R::PAYLOAD_TYPE, req.encode_to_vec(), Some(id.clone()))
-            .await
-        {
-            self.pending.lock().unwrap().remove(&id);
-            return Err(e);
-        }
+        let _waiter = RequestWaiter {
+            pending: self.pending.clone(),
+            id: id.clone(),
+        };
+        self.send_message(R::PAYLOAD_TYPE, req.encode_to_vec(), Some(id))
+            .await?;
         let msg = match tokio::time::timeout(self.request_timeout, rx).await {
             Ok(Ok(msg)) => msg,
             Ok(Err(_)) => {
@@ -360,7 +480,6 @@ impl Connection {
                 ));
             }
             Err(_) => {
-                self.pending.lock().unwrap().remove(&id);
                 return Err(ClientError::Timeout(self.request_timeout));
             }
         };
@@ -501,10 +620,11 @@ impl Connection {
 }
 
 async fn send_checked(
-    writer: &Mutex<Writer>,
+    writer: &TransportWriter,
     payload_type: u32,
     payload: Vec<u8>,
     client_msg_id: Option<String>,
+    budget: Duration,
 ) -> Result<(), ClientError> {
     // The allowlist gate. Nothing reaches the socket without passing it.
     check_sendable(payload_type)?;
@@ -513,9 +633,7 @@ async fn send_checked(
         payload: Some(payload),
         client_msg_id,
     };
-    let mut w = writer.lock().await;
-    write_frame(&mut *w, &msg).await?;
-    Ok(())
+    writer.send(&msg, budget).await
 }
 
 fn route(
@@ -1333,6 +1451,256 @@ mod tests {
         use tokio::io::AsyncReadExt;
         let n = b.read_to_end(&mut buf).await.unwrap();
         assert_eq!(n, 0, "bytes written: {buf:?}");
+    }
+
+    #[tokio::test]
+    async fn cancelled_requests_release_waiters_without_stealing_late_replies_or_executions() {
+        let (client, mut server) = tokio::io::duplex(8192);
+        let conn = Connection::from_stream(client, Duration::from_secs(30));
+        let req = pb::ProtoOaApplicationAuthReq {
+            client_id: "test-client".into(),
+            client_secret: "test-secret".into(),
+            ..Default::default()
+        };
+        let mut executions = conn.executions();
+        let mut abandoned = Vec::new();
+        for _ in 0..16 {
+            let mut request = Box::pin(conn.request(&req));
+            let frame = tokio::select! {
+                result = &mut request => panic!("request completed without its reply: {result:?}"),
+                frame = read_frame(&mut server) => frame.unwrap(),
+            };
+            assert_eq!(conn.pending.lock().unwrap().len(), 1);
+            abandoned.push(frame.client_msg_id.unwrap());
+            drop(request);
+            assert!(
+                conn.pending.lock().unwrap().is_empty(),
+                "an outer timeout/cancellation must not retain an unanswered waiter"
+            );
+        }
+
+        let mut current = Box::pin(conn.request(&req));
+        let current_id = tokio::select! {
+            result = &mut current => panic!("request completed without its reply: {result:?}"),
+            frame = read_frame(&mut server) => frame.unwrap().client_msg_id.unwrap(),
+        };
+        assert!(!abandoned.contains(&current_id));
+        for id in abandoned {
+            write_frame(
+                &mut server,
+                &ProtoMessage {
+                    payload_type: Oa::ProtoOaApplicationAuthRes as u32,
+                    payload: Some(pb::ProtoOaApplicationAuthRes::default().encode_to_vec()),
+                    client_msg_id: Some(id),
+                },
+            )
+            .await
+            .unwrap();
+        }
+        let execution = ProtoMessage {
+            payload_type: Oa::ProtoOaExecutionEvent as u32,
+            payload: Some(pb::ProtoOaExecutionEvent::default().encode_to_vec()),
+            client_msg_id: Some("t-existing-order".into()),
+        };
+        write_frame(&mut server, &execution).await.unwrap();
+        let received = tokio::time::timeout(Duration::from_secs(1), executions.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(received.client_msg_id, execution.client_msg_id);
+        assert_eq!(received.payload_type, execution.payload_type);
+        assert_eq!(conn.pending.lock().unwrap().len(), 1);
+        assert!(conn.pending.lock().unwrap().contains_key(&current_id));
+
+        write_frame(
+            &mut server,
+            &ProtoMessage {
+                payload_type: Oa::ProtoOaApplicationAuthRes as u32,
+                payload: Some(pb::ProtoOaApplicationAuthRes::default().encode_to_vec()),
+                client_msg_id: Some(current_id),
+            },
+        )
+        .await
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), current)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(conn.pending.lock().unwrap().is_empty());
+        assert!(
+            executions.try_recv().is_err(),
+            "ordinary late replies are not executions"
+        );
+    }
+
+    fn auth_request() -> pb::ProtoOaApplicationAuthReq {
+        pb::ProtoOaApplicationAuthReq {
+            client_id: "test-client".into(),
+            client_secret: "test-secret".into(),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn blocked_write_times_out_and_wakes_requests_and_session_consumers() {
+        let (client, mut server) = tokio::io::duplex(64);
+        let conn = Connection::from_stream(client, Duration::from_millis(30));
+        let req = auth_request();
+        let mut waiting = Box::pin(conn.request(&req));
+        tokio::select! {
+            result = &mut waiting => panic!("request completed without reply: {result:?}"),
+            frame = read_frame(&mut server) => { frame.unwrap(); },
+        }
+        let mut ended = conn.session_ends();
+        let mut spots = conn.spot_events();
+        let blocked = pb::ProtoOaApplicationAuthReq {
+            client_secret: "x".repeat(256),
+            ..req.clone()
+        };
+        let result = tokio::time::timeout(Duration::from_secs(1), conn.request(&blocked))
+            .await
+            .expect("the socket write itself must be bounded");
+        assert!(matches!(result, Err(ClientError::WriteTimeout(_))));
+        assert!(conn.closed_reason().is_some());
+        assert!(conn.pending.lock().unwrap().is_empty());
+        // The first request's response timer also elapsed; its closed oneshot
+        // is ready and takes priority, so the transport reason is retained.
+        assert!(matches!(waiting.await, Err(ClientError::Disconnected(_))));
+        let event = ended.try_recv().unwrap();
+        assert!(event.affects(49236051));
+        assert!(event.reason.contains("reconcile"));
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), spots.recv())
+                .await
+                .unwrap(),
+            Err(broadcast::error::RecvError::Closed)
+        ));
+        assert!(matches!(
+            conn.request(&auth_request()).await,
+            Err(ClientError::Disconnected(_))
+        ));
+        assert!(matches!(
+            conn.send_trading_frame(Oa::ProtoOaNewOrderReq as u32, vec![], "t-retry".into())
+                .await,
+            Err(ClientError::Disconnected(_))
+        ));
+        assert!(ended.try_recv().is_err(), "invalidation must be idempotent");
+        assert_eq!(conn.session_ends.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn cancelled_partial_frame_fences_the_old_stream_and_fresh_connection_recovers() {
+        use tokio::io::AsyncReadExt;
+        let (client, mut server) = tokio::io::duplex(2);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), conn.request(&auth_request()))
+                .await
+                .is_err()
+        );
+        assert!(
+            conn.closed_reason().is_some(),
+            "a partial frame cannot be reused"
+        );
+        assert!(conn.pending.lock().unwrap().is_empty());
+        let mut prefix = [0; 2];
+        server.read_exact(&mut prefix).await.unwrap();
+        assert!(matches!(
+            conn.request(&auth_request()).await,
+            Err(ClientError::Disconnected(_))
+        ));
+        let mut extra = [0; 1];
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), server.read(&mut extra))
+                .await
+                .is_err(),
+            "no following frame may append to the abandoned prefix"
+        );
+
+        let (client, mut fresh_server) = tokio::io::duplex(1024);
+        let fresh = Connection::from_stream(client, Duration::from_secs(1));
+        let broker = async {
+            let request = read_frame(&mut fresh_server).await.unwrap();
+            write_frame(
+                &mut fresh_server,
+                &ProtoMessage {
+                    payload_type: Oa::ProtoOaApplicationAuthRes as u32,
+                    payload: Some(pb::ProtoOaApplicationAuthRes::default().encode_to_vec()),
+                    client_msg_id: request.client_msg_id,
+                },
+            )
+            .await
+            .unwrap();
+        };
+        let req = auth_request();
+        let (result, ()) = tokio::join!(fresh.request(&req), broker);
+        result.unwrap();
+        assert!(fresh.closed_reason().is_none());
+    }
+
+    #[tokio::test]
+    async fn cancelled_or_timed_out_lock_waiter_does_not_poison_active_frame() {
+        let (client, mut server) = tokio::io::duplex(2);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let msg = ProtoMessage {
+            payload_type: Common::HeartbeatEvent as u32,
+            payload: Some(pb::ProtoHeartbeatEvent::default().encode_to_vec()),
+            client_msg_id: None,
+        };
+        let mut active = Box::pin(conn.writer.send(&msg, Duration::from_secs(1)));
+        tokio::select! {
+            result = &mut active => panic!("two-byte pipe cannot hold a frame: {result:?}"),
+            () = tokio::time::sleep(Duration::from_millis(10)) => {},
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), conn.request(&auth_request()))
+                .await
+                .is_err()
+        );
+        assert!(conn.pending.lock().unwrap().is_empty());
+        assert!(matches!(
+            conn.writer.send(&msg, Duration::from_millis(20)).await,
+            Err(ClientError::WriteTimeout(_))
+        ));
+        assert!(
+            conn.closed_reason().is_none(),
+            "no bytes written by queued waiters"
+        );
+        assert!(conn.session_ends.lock().unwrap().is_empty());
+        let (sent, received) = tokio::join!(active, read_frame(&mut server));
+        sent.unwrap();
+        assert_eq!(received.unwrap(), msg);
+        // A subsequent frame is intact, after both queued cancellation paths.
+        let (sent, received) = tokio::join!(
+            conn.send_message(msg.payload_type, msg.payload.clone().unwrap(), None),
+            read_frame(&mut server)
+        );
+        sent.unwrap();
+        assert_eq!(received.unwrap(), msg);
+    }
+
+    #[tokio::test]
+    async fn trading_and_heartbeat_share_the_interrupted_write_fence() {
+        for trading in [false, true] {
+            let (client, _server) = tokio::io::duplex(2);
+            let conn = Connection::from_stream(client, Duration::from_millis(20));
+            let result = if trading {
+                conn.send_trading_frame(Oa::ProtoOaNewOrderReq as u32, vec![], "t-persisted".into())
+                    .await
+            } else {
+                send_checked(
+                    &conn.writer,
+                    Common::HeartbeatEvent as u32,
+                    pb::ProtoHeartbeatEvent::default().encode_to_vec(),
+                    None,
+                    conn.request_timeout,
+                )
+                .await
+            };
+            assert!(matches!(result, Err(ClientError::WriteTimeout(_))));
+            assert!(conn.closed_reason().is_some());
+            assert!(conn.session_ended(49236051).is_some());
+        }
     }
 
     #[tokio::test]

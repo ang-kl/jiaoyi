@@ -36,6 +36,8 @@ pub struct Progress {
     last_quote_received_at: Option<DateTime<Utc>>,
     last_quote_processed_receipt_at: Option<DateTime<Utc>>,
     quote_receiver_lagged: u64,
+    actor_quote_receiver_lagged: u64,
+    actor_execution_receiver_lagged: u64,
     last_execution_processed_receipt_at: Option<DateTime<Utc>>,
     watchdog_completed_at: Option<DateTime<Utc>>,
     watchdog_completed: Option<Instant>,
@@ -90,6 +92,10 @@ impl Progress {
             "last_quote_received_at": self.last_quote_received_at,
             "last_quote_processed_receipt_at": self.last_quote_processed_receipt_at,
             "quote_receiver_lagged": self.quote_receiver_lagged,
+            "quote_receiver_lagged_scope": "independent_observer",
+            "actor_quote_receiver_lagged": self.actor_quote_receiver_lagged,
+            "actor_execution_receiver_lagged": self.actor_execution_receiver_lagged,
+            "actor_receiver_lagged_scope": "delivery_gaps_since_reconnect_not_unique_events",
             "last_execution_processed_receipt_at": self.last_execution_processed_receipt_at,
             "last_exit_check_completed_at": self.last_exit_check_at,
             "exit_checks_completed": self.exit_checks,
@@ -254,6 +260,24 @@ pub fn exit_check_completed(live: &LivenessMap, account: i64, owned: usize, pend
 pub fn execution_processed(live: &LivenessMap, account: i64, received_at: DateTime<Utc>) {
     beat(live, account, |l| {
         l.monitor.last_execution_processed_receipt_at = Some(received_at)
+    });
+}
+
+/// Actor receivers have their own cursors. A healthy independent observer
+/// cannot establish that the trading actor has consumed every event.
+pub fn actor_quote_lagged(live: &LivenessMap, account: i64, missed: u64) {
+    beat(live, account, |l| {
+        l.monitor.actor_quote_receiver_lagged =
+            l.monitor.actor_quote_receiver_lagged.saturating_add(missed);
+    });
+}
+
+pub fn actor_execution_lagged(live: &LivenessMap, account: i64, missed: u64) {
+    beat(live, account, |l| {
+        l.monitor.actor_execution_receiver_lagged = l
+            .monitor
+            .actor_execution_receiver_lagged
+            .saturating_add(missed);
     });
 }
 
@@ -450,6 +474,8 @@ mod tests {
             .monitor
             .last_quote_processed_receipt_at
             .is_none());
+        actor_quote_lagged(&live, 7, 1024);
+        actor_execution_lagged(&live, 7, 17);
         drop(observer);
         assert!(!live.lock().unwrap()[&7].monitor.connected);
         let observer = SessionObserver::start(&conn, &live, 7, stop);
@@ -457,6 +483,8 @@ mod tests {
         assert_eq!(p.generation, 2);
         assert!(p.last_quote_received_at.is_none());
         assert!(p.last_work_completed_at.is_none());
+        assert_eq!(p.actor_quote_receiver_lagged, 0);
+        assert_eq!(p.actor_execution_receiver_lagged, 0);
         drop(observer);
         let log = log.lock().unwrap();
         assert!(log.orders.is_empty());

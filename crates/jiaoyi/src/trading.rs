@@ -1720,7 +1720,7 @@ pub async fn run_session_with_levels_refresh(
                     }).await?;
                     fast_monitor::execution_processed(live, account_id, m.received_at);
                 }
-                Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Lagged(n)) => fast_monitor::actor_execution_lagged(live, account_id, n),
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
             },
             s = spots.recv() => match s {
@@ -1740,7 +1740,7 @@ pub async fn run_session_with_levels_refresh(
                         l.triggers.insert(sym.name.clone(), distance);
                     });
                 }
-                Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Lagged(n)) => fast_monitor::actor_quote_lagged(live, account_id, n),
                 Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
             },
         }

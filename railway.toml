@@ -2,6 +2,21 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+# Only inputs to the deployed Rust image restart trading. Engineering uploads
+# remain separate. Keep future embedded registrations and all build inputs.
+watchPatterns = [
+  "/crates/**",
+  "/migrations/**",
+  "/config/**",
+  "/.cargo/**",
+  "/Cargo.toml",
+  "/Cargo.lock",
+  "/rust-toolchain.toml",
+  "/Dockerfile",
+  "/.dockerignore",
+  "/railway.toml",
+  "/docs/preregistration-*.md",
+]
 
 [deploy]
 startCommand = "/usr/local/bin/jiaoyi"

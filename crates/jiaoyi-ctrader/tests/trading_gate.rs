@@ -692,6 +692,28 @@ async fn no_answer_is_unconfirmed_not_resent() {
     assert_eq!(sent.outcome, Outcome::Unconfirmed);
     assert_eq!(orders(&log), 1);
     assert_eq!(ledger.intents.lock().unwrap().len(), 1);
+    drop(conn);
+    let (fresh, fresh_log) = fake().spawn();
+    let fresh_session = session_on(&fresh).await;
+    let replay = send(
+        &fresh_session,
+        &allow(),
+        &ledger,
+        &on(),
+        open(1, 28_457_000),
+        "k",
+        Duration::from_millis(300),
+    )
+    .await;
+    assert!(
+        matches!(replay, Err(SendError::Refused(ref refused)) if refused.reason.contains("already recorded"))
+    );
+    assert_eq!(
+        orders(&fresh_log),
+        0,
+        "reconnect cannot replay an unresolved intent"
+    );
+    assert_eq!(ledger.intents.lock().unwrap().len(), 1);
 }
 
 #[tokio::test]

@@ -502,3 +502,58 @@ orders without that evidence.75paired legacy cases are sparse/mixed-reference,
 not support for reducing24bps/side. See journal §ENG-20261030-COST.1–4 and
 validation-17887-cost-evidence-2026-10-30.md. Exact CI/deployed readback pending;
 financial improvement unmeasured, goal and all owner controls preserved.
+
+[§LOG.49] №17,891–17,913, 30 Oct 2026 16:05–17:37 SGT;
+entry 20:55 SGT, by <Codex (GPT-6), effort:not exposed>.
+PR137 merged e2bf329 after check/docker/engineering passed exact head786e38d
+(CI41024051483; unchanged failed job rerun after local history regression
+verification). Main CI41025348067 also passed. Trading5f5bf95f SUCCESS;
+former1067ba56 REMOVED. Actual16:30:08SGT output proves BTC/ETH cost-veto
+blockers on all four accounts; all8exit loops advance. Engineering source
+b07124b unchanged. Owner HTML Telegram49119 delivered16:31:40SGT.
+Follow-up11 targeted regressions pass. One noncritical off-mark restart
+label remains deferred: before half-hour restore, local Day=None displays
+not prepared; durable cost veto still refuses orders. No loss or extra-order
+claim follows. Full receipts in PR137 description. No strategy/risk change.
+
+[§LOG.50] №17,914–17,918, 30 Oct 2026 19:26–19:39 SGT;
+entry20:55SGT, by <Codex (GPT-6), effort:not exposed>.
+Owner requested a thorough C++ rewrite assessment. Three source reviews and
+19:27:39SGT runtime capture support retaining Rust: no measured language
+bottleneck; bot-trade already uses C++ and needed ownership/shutdown/protection
+repairs. Native implementation alone does not establish correctness or edge.
+S3 latest20wins3/5/4/1, delta0 against17:33 with unchanged position identities;
+S1 no measured closes. Legacy S1 research failed; current cost reserve lacks
+adequate current paired calibration. Neither finding authorises tuning.
+Prioritise demonstrated execution/release faults, current documentation,
+measured latency, two-process ownership and economic validation as separate
+acceptance gates. Temporary final GitHub401 recovered before current work.
+
+[§LOG.51] Owner “proceed to strengthen” plus draft dividend contract;
+№17,919–17,923 §§1–2, 30 Oct2026 20:30–20:52SGT;
+entry20:55SGT, by <Codex (GPT-6), effort:not exposed>.
+Read main e2bf329 and GROK_Log through№17,703. Remember to check GROK_Log.txt
+for changes before choosing the next serial. Root coordinates transport,
+actor-loss, release and documentation specialists in one isolated worktree.
+Reproduced normal-request waiter retention, unbounded blocked writes and
+partial-frame reuse after cancellation; fix shared transport lifetime and
+write fence, preserve durable uncertain intent/no replay.74ctrader tests pass.
+Release base guard reproduces/refuses stale or moving main after green CI;
+all157Python tests pass. Trading watch patterns include real build inputs
+and exclude unrelated engineering/docs changes. Actual actor overflow test
+passes; mutation proof and broader Rust checks ongoing. Full CI and both
+runtime identities/behavior still required before release acceptance.
+Dividend aid remains draft-only; TradingView calendar unavailable. Asked once
+for universe and specific routine; no reply or operational schedule presumed.
+No new account link/service/feed/order/paid model route. Cross-process writer
+fencing, full latency envelope and economic evidence remain separate gates.
+GitHub main is unprotected in observed metadata; protection endpoint403 means
+this integration cannot configure strict up-to-date CI. Final API merge race
+remains explicit. Do not change global worker36cap/window/auth, v6/SL/TP/sizing,
+250%floor, owner-only pause or live one-minimum-position rule.
+
+[§LOG.52] №17,924–17,925 §§1–2,30Oct2026 20:55–20:57SGT; entry20:57SGT,
+by <Codex (GPT-6), effort:not exposed>. Local final tests: transport74/74,
+S3 58/58, S1 38/38, monitor5/5, Python157/157; fmt and denied-warning Clippy
+pass without suppression. Actual overflow mutation fails old ignored branch.
+Independent transport/actor reviews accepted. PR/CI/deploy receipts next.
