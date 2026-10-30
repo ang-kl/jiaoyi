@@ -214,6 +214,7 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
             .unwrap();
     }
     let counts = json!({"missing_pnl_position_count":0,"extra_pnl_position_count":1,
+        "pending_zero_pnl_position_count":0,"unresolved_extra_pnl_position_count":1,
         "duplicate_position_id_count":0,"duplicate_pnl_id_count":0,"non_open_position_count":0});
     let relationships = json!({"pending_entry_position_match_count":1,
         "pending_protection_position_match_count":1,"pending_order_missing_position_ref_count":1,
@@ -294,6 +295,7 @@ async fn source_diagnostics_expose_only_typed_whitelist_for_allowed_accounts(poo
         "unmatched_excluded_from_owned_window":false})
     );
     let unknown_counts = json!({"missing_pnl_position_count":null,"extra_pnl_position_count":null,
+        "pending_zero_pnl_position_count":null,"unresolved_extra_pnl_position_count":null,
         "duplicate_position_id_count":null,"duplicate_pnl_id_count":null,"non_open_position_count":null});
     let unknown_relationships = json!({"pending_entry_position_match_count":null,
         "pending_protection_position_match_count":null,"pending_order_missing_position_ref_count":null,

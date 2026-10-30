@@ -234,6 +234,21 @@ class Store:
             c.execute("UPDATE jobs SET state=CASE WHEN merged IS NOT NULL THEN 'verification_queued' "
                       "WHEN pr IS NULL THEN 'queued' ELSE 'repair_queued' END,"
                       "updated=? WHERE state='running'", (now(),))
+            # Older coordinators called rejected read-only analyses deployment
+            # verifications. Reclassify only records with that exact provenance;
+            # preserve every historical result and never promote/requeue them.
+            rows = c.execute("SELECT id FROM jobs WHERE state='verification_pending' "
+                             "AND pr IS NULL AND head IS NULL AND merged IS NULL "
+                             "AND (instr(task,?)=1 OR instr(task,?)=1) "
+                             "AND EXISTS(SELECT 1 FROM events WHERE events.job=jobs.id "
+                             "AND events.kind='incident_review_unresolved') ORDER BY id LIMIT 1000",
+                             (stop_loss_reviews.PREFIX, incidents.PREFIX)).fetchall()
+            for row in rows:
+                at = now()
+                c.execute("UPDATE jobs SET state='review_pending',updated=? WHERE id=?", (at, row["id"]))
+                c.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,?,?)",
+                          (at, row["id"], "review_pending_reclassified",
+                           '{"previous_state":"verification_pending","reason":"unresolved_review_not_release_verification"}'))
 
     def reserve(self, limit, day=None, allow_mutation=True):
         """Reserve before spawn; crashes and failed auth still consume an attempt."""
@@ -504,6 +519,9 @@ class Coordinator:
             active = c.execute("SELECT id FROM jobs WHERE state='running' ORDER BY id LIMIT 1").fetchone()
             pending_count = c.execute("SELECT COUNT(*) FROM jobs WHERE state='verification_pending'").fetchone()[0]
             pending = [r[0] for r in c.execute("SELECT id FROM jobs WHERE state='verification_pending' ORDER BY id LIMIT 20")]
+            review_count = c.execute("SELECT COUNT(*) FROM jobs WHERE state='review_pending'").fetchone()[0]
+            reviews = c.execute("SELECT id,task,CASE WHEN length(result)<=262144 THEN result END AS result "
+                                "FROM jobs WHERE state='review_pending' ORDER BY id LIMIT 20").fetchall()
             ready = c.execute("SELECT COUNT(*) FROM jobs WHERE state IN ('queued','repair_queued','verification_queued')").fetchone()[0]
             scheduled = c.execute("SELECT COUNT(*) FROM jobs WHERE state='scheduled'").fetchone()[0]
             assessment = c.execute("SELECT at,detail FROM events WHERE kind='public_evidence_assessed' ORDER BY id DESC LIMIT 1").fetchone()
@@ -522,6 +540,22 @@ class Coordinator:
                      "outcome": outcome(last["result"])} if last else None)
         last_model = ({"job_id": model["job"], "at": self.public_time(model["at"]),
                        "outcome": outcome(model["detail"])} if model else None)
+        review_items = []
+        for row in reviews:
+            kind = ("stop_loss" if row["task"].startswith(stop_loss_reviews.PREFIX) else
+                    "incident" if row["task"].startswith(incidents.PREFIX) else "unknown")
+            try:
+                detail = json.loads(row["result"] or "{}")
+                code = detail.get("review_pending_reason") if isinstance(detail, dict) else None
+            except (ValueError, TypeError):
+                code = None
+            # Fixed codes only: public status never exposes model prose.
+            allowed = ("structured_source_linked_defect_required", "structured_incident_disposition_required",
+                       "complete_incident_batch_required", "invalid_incident_batch", "incident_batch_identity_mismatch",
+                       "incident_batch_evidence_mismatch", "invalid_disposition", "incident_batch_member_unresolved",
+                       "incident_job_identity_mismatch", "incident_evidence_identity_required", "below_target_followup_required")
+            review_items.append({"id": row["id"], "kind": kind,
+                                 "reason_code": code if code in allowed else "unresolved_review"})
         last_assessment = None
         if assessment:
             try:
@@ -557,6 +591,8 @@ class Coordinator:
             reason = "waiting_for_scheduled_work"
         elif pending_count:
             reason = "no_queued_work_verification_pending"
+        elif review_count:
+            reason = "no_queued_work_review_pending"
         else:
             reason = "no_queued_work_waiting_for_public_evidence_poll"
         active_job = None
@@ -585,6 +621,8 @@ class Coordinator:
                 "automatic_assessment_scope": ["public_health", "public_strategy_assessment_windows"],
                 "scope_limit": "These checks do not establish whole-account source quality or absence of software defects.",
                 "pending_verification": {"count": pending_count, "ids": pending},
+                "pending_reviews": {"count": review_count, "ids": [row["id"] for row in reviews],
+                                    "items": review_items},
                 "queued_count": ready, "session_budget_remaining": max(0, self.config.limit - used),
                 "next_poll_at": (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=next_seconds)).isoformat(),
                 "next_poll_in_seconds": round(next_seconds, 1), "active_job": active_job,
@@ -593,7 +631,7 @@ class Coordinator:
     def activity_tick(self):
         snapshot = self.status()
         activity = snapshot["activity"]
-        stable = {k: activity[k] for k in ("reason", "last_job", "last_model_assessment", "last_public_assessment", "pending_verification")}
+        stable = {k: activity[k] for k in ("reason", "last_job", "last_model_assessment", "last_public_assessment", "pending_verification", "pending_reviews")}
         stable.update(state=snapshot["state"], active_job_id=(activity["active_job"] or {}).get("id"))
         signature = json.dumps(stable, sort_keys=True)
         if signature != self._activity_signature:
@@ -1352,9 +1390,8 @@ class Coordinator:
         structured = (isinstance(report.get("incident"), dict) or isinstance(report.get("incidents"), list)
                       or isinstance(report.get("repair_proposal"), dict))
         if (job["task"].startswith(incidents.PREFIX) or structured) and not applied.get("applied"):
-            pending = {**report, "outcome": "verification_pending",
-                       "summary": "Incident analysis is unresolved: " + str(applied.get("reason", "invalid disposition"))}
-            self.store.update(job["id"], "verification_pending", result=self.safe_detail(json.dumps(pending), 256 * 1024))
+            pending = {**report, "review_pending_reason": str(applied.get("reason") or "unresolved_review")[:160]}
+            self.store.update(job["id"], "review_pending", result=self.safe_detail(json.dumps(pending), 256 * 1024))
             self.store.event("incident_review_unresolved", job["id"],
                              json.dumps({"reason": str(applied.get("reason", "invalid disposition"))[:160]}))
             return applied

@@ -188,6 +188,121 @@ class IncidentAcceptanceTests(unittest.TestCase):
     def source_incident(self):
         state = json.loads(self.c.store.last_event("incident_state") or "{}")
         return next(row for row in state.values() if row.get("kind") == "sources_unavailable")
+
+    def test_actor_recovers_independently_of_broker_pnl_and_recurrence_is_new_evidence(self):
+        health = self.health()
+        health["trading"] = [copy.deepcopy(health["strategy3"][0])]
+        for section in ("trading", "strategy3"):
+            live = health[section][0]["liveness"]
+            live.update(state="stalled", broker_snapshot={"source_complete": False})
+            live["fast_monitor"].update(state="watchdog_stalled", session_connected=True)
+        at = dt.datetime.now(dt.timezone.utc)
+        self.c.incidents.observe(health, self.operations(at), clock=at)
+        original = json.loads(self.c.store.last_event("incident_state"))
+        actors = [row for row in original.values() if row["kind"] == "actor_stalled"]
+        self.assertEqual(len(actors), 2)
+        jobs_before = len(self.c.store.jobs())
+        recovered_at = at + dt.timedelta(seconds=10)
+        for section in ("trading", "strategy3"):
+            live = health[section][0]["liveness"]
+            live["state"] = "alive"
+            live["fast_monitor"].update(state="observing", overdue_after_secs=6,
+                last_watchdog_completed_at=(recovered_at - dt.timedelta(seconds=3)).isoformat())
+        self.c.incidents.observe(health, self.operations(recovered_at), clock=recovered_at)
+        state = json.loads(self.c.store.last_event("incident_state"))
+        for actor in actors:
+            current = state[actor["id"]]
+            self.assertFalse(current["condition_present"])
+            self.assertEqual(current["last_absent_at"], recovered_at.isoformat())
+            self.assertEqual(current["version"], actor["version"])
+            self.assertNotEqual(current["state"], "closed", "source recovery is not repair verification")
+        self.assertTrue(all(row["condition_present"] for row in state.values()
+                            if row["kind"] in ("broker_source_unverified", "protection_unverified")))
+        self.assertEqual(len(self.c.store.jobs()), jobs_before, "recovery needs no model session")
+        self.assertEqual(self.c.store.used(), 0)
+
+        # Restart preserves the recovery and a new real stall is a new version.
+        restarted = w.Coordinator(self.c.config)
+        restarted.incidents.observe(health, self.operations(recovered_at), clock=recovered_at)
+        live = health["strategy3"][0]["liveness"]
+        live["state"] = "stalled"
+        live["fast_monitor"]["state"] = "watchdog_stalled"
+        restarted.incidents.observe(health, self.operations(), clock=recovered_at + dt.timedelta(seconds=10))
+        state = json.loads(restarted.store.last_event("incident_state"))
+        actor = next(row for row in actors if row["strategy"] == "s3")
+        self.assertTrue(state[actor["id"]]["condition_present"])
+        self.assertEqual(state[actor["id"]]["version"], actor["version"] + 1)
+        self.assertEqual(len(restarted.store.jobs()), jobs_before + 1)
+
+    def test_actor_recovery_requires_explicit_current_progress(self):
+        health = self.health()
+        health["strategy3"][0]["open_positions"] = []
+        health["strategy3"][0]["liveness"]["state"] = "stalled"
+        self.c.incidents.observe(health, self.operations())
+        actor = next(row for row in json.loads(self.c.store.last_event("incident_state")).values()
+                     if row["kind"] == "actor_stalled")
+        for live in (None, {}, {"state": "alive"},
+                     {"state": "alive", "fast_monitor": {"state": "observing"}},
+                     {"state": "alive", "fast_monitor": {"state": "observing", "session_connected": False}},
+                     {"state": "starting", "fast_monitor": {"state": "observing", "session_connected": True}},
+                     {"state": "alive", "fast_monitor": {"state": "watchdog_stalled", "session_connected": True}},
+                     {"state": "alive", "fast_monitor": "unknown"}):
+            with self.subTest(liveness=live):
+                health["strategy3"][0]["liveness"] = live
+                self.c.incidents.observe(health, self.operations())
+                self.assertTrue(json.loads(self.c.store.last_event("incident_state"))[actor["id"]]["condition_present"])
+
+    def test_actor_recovery_rejects_stale_missing_future_or_invalid_heartbeat(self):
+        health = self.health()
+        health["strategy3"][0]["open_positions"] = []
+        health["strategy3"][0]["liveness"]["state"] = "stalled"
+        at = dt.datetime.now(dt.timezone.utc)
+        self.c.incidents.observe(health, self.operations(at), clock=at)
+        actor = next(row for row in json.loads(self.c.store.last_event("incident_state")).values()
+                     if row["kind"] == "actor_stalled")
+        live = health["strategy3"][0]["liveness"]
+        live["state"] = "alive"
+        valid = {"state": "observing", "session_connected": True, "overdue_after_secs": 6,
+                 "last_watchdog_completed_at": (at - dt.timedelta(seconds=3)).isoformat()}
+        invalid = [dict(valid, last_watchdog_completed_at=stamp) for stamp in (
+            None, "unknown", (at - dt.timedelta(seconds=7)).isoformat(),
+            (at + dt.timedelta(seconds=1)).isoformat())]
+        invalid += [dict(valid, overdue_after_secs=seconds) for seconds in (
+            None, 0, -1, True, float("nan"), float("inf"))]
+        for monitor in invalid:
+            with self.subTest(monitor=monitor):
+                live["fast_monitor"] = monitor
+                self.c.incidents.observe(health, self.operations(at), clock=at)
+                self.assertTrue(json.loads(self.c.store.last_event("incident_state"))[actor["id"]]["condition_present"])
+        live["fast_monitor"] = valid
+        self.c.incidents.observe(health, self.operations(at), clock=at)
+        self.assertFalse(json.loads(self.c.store.last_event("incident_state"))[actor["id"]]["condition_present"])
+
+    def test_actor_recovery_keeps_partial_and_capped_projection_unknown(self):
+        health = self.health()
+        health["strategy3"][0]["open_positions"] = []
+        health["strategy3"][0]["liveness"]["state"] = "stalled"
+        self.c.incidents.observe(health, self.operations())
+        actor = next(row for row in json.loads(self.c.store.last_event("incident_state")).values()
+                     if row["kind"] == "actor_stalled")
+        health["strategy3"][0]["liveness"] = {"state": "alive", "fast_monitor": {
+            "state": "observing", "session_connected": True, "overdue_after_secs": 6,
+            "last_watchdog_completed_at": dt.datetime.now(dt.timezone.utc).isoformat()}}
+        cases = [(None, self.operations()), (health, None),
+                 ({**health, "status": "starting"}, self.operations()),
+                 ({**health, "strategy3": []}, self.operations()),
+                 ({**health, "strategy3": [{"account_id": n + 1} for n in range(8)] + health["strategy3"]}, self.operations())]
+        for snapshots in cases:
+            with self.subTest(snapshots=snapshots):
+                self.c.incidents.observe(*snapshots)
+                self.assertTrue(json.loads(self.c.store.last_event("incident_state"))[actor["id"]]["condition_present"])
+        capped = copy.deepcopy(health)
+        capped["strategy3"][0]["open_positions"] = [
+            {"position_id": n + 1, "symbol": "CAPPED" + str(n), "stop": None}
+            for n in range(incidents.MAX_INCIDENTS)]
+        self.c.incidents.observe(capped, self.operations())
+        self.assertTrue(json.loads(self.c.store.last_event("incident_state"))[actor["id"]]["condition_present"])
+
     def source_receipts(self, failed=None, code="timeout", at="2026-10-29T20:00:00+00:00"):
         return {route: {"route": route, "ok": route != failed,
                 "http_status": 503 if route == failed and code == "http" else None if route == failed else 200,
@@ -534,7 +649,7 @@ class IncidentAcceptanceTests(unittest.TestCase):
             malformed.pop("incident")
             result = self.c.finish_review(self.job(item["analysis_job"]), malformed)
             self.assertFalse(result.get("applied"))
-            self.assertEqual(self.job(item["analysis_job"])["state"], "verification_pending")
+            self.assertEqual(self.job(item["analysis_job"])["state"], "review_pending")
             self.assertNotEqual(self.full_incident(symbol="MALFORMED")["state"], "closed")
 
         with self.subTest("normal execution does not close an unresolved economic goal"):

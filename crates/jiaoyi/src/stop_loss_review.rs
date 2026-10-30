@@ -1,11 +1,14 @@
 //! Public, read-only evidence for reviews of recorded, owned stop-loss exits.
 //! Saved entry facts are compared with registered rules; no current quotes,
 //! broker requests, execution decisions, or free-form details cross this API.
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use jiaoyi_store::sqlx::{self, PgPool, Row};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
+#[cfg(test)]
+mod admission_tests;
 mod session;
 
 const CANDIDATES: &str = r#"
@@ -25,7 +28,11 @@ WITH exits AS (
 SELECT r.*,a.environment,i.entry_key,i.symbol_id,i.side,i.volume,i.relative_stop,
  i.risk,i.max_risk,i.take_profit,i.created_at,i.owner_count,
  COALESCE(s3.detail,s1.detail,'{}'::jsonb) AS setup,
- COALESCE(s3.prereg_hash,s1.prereg_hash) AS prereg_hash
+ COALESCE(s3.prereg_hash,s1.prereg_hash) AS prereg_hash,
+ s3.label AS original_label,s3.symbol_id AS original_symbol_id,
+ s3.session_date AS original_session_date,s3.decided_at AS original_decided_at,
+ cost_history.prior_cost_veto,cost_history.same_time_cost_veto,
+ entry_history.prior_open,entry_history.same_time_open
 FROM recent r JOIN accounts a ON a.account_id=r.account_id
 JOIN LATERAL (
  SELECT i.*,count(*) OVER() AS owner_count FROM trading_intents i
@@ -37,7 +44,7 @@ JOIN LATERAL (
  ORDER BY i.id LIMIT 1
 ) i ON true
 LEFT JOIN LATERAL (
- SELECT o.detail,o.prereg_hash FROM strategy3_orders o
+ SELECT o.detail,o.prereg_hash,o.label,o.symbol,o.symbol_id,o.session_date,o.decided_at,o.entry_key FROM strategy3_orders o
  WHERE r.strategy='s3' AND o.account_id=r.account_id AND o.entry_key=i.entry_key AND o.kind='open'
  LIMIT 1
 ) s3 ON true
@@ -48,6 +55,25 @@ LEFT JOIN LATERAL (
  WHERE r.strategy='s1' AND f.account_id=r.account_id AND f.entry_key=i.entry_key AND f.kind='open'
  ORDER BY d.id LIMIT 1
 ) s1 ON true
+LEFT JOIN LATERAL (
+ SELECT bool_or(d.at<s3.decided_at) AS prior_cost_veto,
+        bool_or(d.at=s3.decided_at) AS same_time_cost_veto
+ FROM trading_decisions d
+ WHERE d.account_id=r.account_id AND d.symbol=s3.symbol AND d.kind='s3_skip'
+   AND d.detail->>'session_date'=s3.session_date::text
+   AND d.detail->>'prereg_hash'=s3.prereg_hash AND d.detail->>'label'='jiaoyi-s3'
+   AND (d.detail->>'skip_code'='cost_ge_r'
+        OR d.reason LIKE 'cost reserve C (%) >= R (%): barrier too far for a no-drift process; skipped')
+   AND d.at<=s3.decided_at
+) cost_history ON true
+LEFT JOIN LATERAL (
+ SELECT bool_or(o.decided_at<s3.decided_at) AS prior_open,
+        bool_or(o.decided_at=s3.decided_at) AS same_time_open
+ FROM strategy3_orders o
+ WHERE o.account_id=r.account_id AND o.symbol_id=s3.symbol_id
+   AND o.session_date=s3.session_date AND o.kind='open' AND o.entry_key<>s3.entry_key
+   AND o.decided_at<=s3.decided_at
+) entry_history ON true
 ORDER BY r.closed_at DESC,r.id DESC
 "#;
 
@@ -76,6 +102,14 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         .bind(now)
         .fetch_all(pool)
         .await?;
+    // These two admission rules belong to v6. A future current registration
+    // must not retroactively change which historical entries they apply to.
+    let admission_hash = format!(
+        "{:x}",
+        Sha256::digest(include_bytes!(
+            "../../../docs/preregistration-2026-10-28-strategy3-v6.md"
+        ))
+    );
     let mut cases = Vec::new();
     let mut seen = BTreeSet::new();
     for row in rows {
@@ -195,11 +229,51 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         let decision_mark = (strategy == "s3" && registered == Some(true))
             .then(|| session::decision_mark_check(&setup))
             .flatten();
+        // Match the original persisted opening decision, not the close's
+        // hash or today's calendar. Missing or contradictory metadata stays
+        // unknown. A clear check means no prior *recorded* blocker; it cannot
+        // establish that absent telemetry never existed or that the edge works.
+        let original_date: Option<NaiveDate> = row.get("original_session_date");
+        let original_at: Option<DateTime<Utc>> = row.get("original_decided_at");
+        let admission_known = strategy == "s3"
+            && saved_hash.as_deref() == Some(admission_hash.as_str())
+            && row.get::<Option<String>, _>("original_label").as_deref() == Some("jiaoyi-s3")
+            && row.get::<Option<i64>, _>("original_symbol_id")
+                == row.get::<Option<i64>, _>("symbol_id")
+            && row.get::<i64, _>("owner_count") == 1
+            && original_date.is_some()
+            && original_at.is_some()
+            && serde_json::from_value::<NaiveDate>(setup["session_date"].clone()).ok()
+                == original_date
+            // PostgreSQL preserves microseconds; the saved JSON may retain nanoseconds.
+            && serde_json::from_value::<DateTime<Utc>>(setup["decided_at"].clone())
+                .ok()
+                .map(|at| at.timestamp_micros())
+                == original_at.map(|at| at.timestamp_micros())
+            && session::check(&setup).is_some();
+        let history_clear = |prior: &str, same_time: &str| {
+            if !admission_known {
+                None
+            } else if row.get::<Option<bool>, _>(prior) == Some(true) {
+                Some(false)
+            } else if row.get::<Option<bool>, _>(same_time) == Some(true) {
+                // Equal timestamps do not prove the ordering of two decisions.
+                None
+            } else {
+                Some(true)
+            }
+        };
+        let cost_veto_clear = history_clear("prior_cost_veto", "same_time_cost_veto");
+        // The registered one-entry cap counts all prior S3 opens in this
+        // account/symbol/session, including opens under an older hash.
+        let first_entry = history_clear("prior_open", "same_time_open");
         let checks = json!({"gate_risk_recorded":gate,"sizing_within_gate_cap":sizing,
             "preregistration_matches_current_reference":registered,"entry_direction_valid":direction,
             "entry_trigger_valid":trigger,"original_stop_geometry_valid":stop,
             "original_target_geometry_valid":target,"original_session_valid":session,
-            "original_decision_mark_valid":decision_mark,"original_band_valid":band});
+            "original_decision_mark_valid":decision_mark,"original_band_valid":band,
+            "no_prior_recorded_session_cost_veto":cost_veto_clear,
+            "first_recorded_session_entry":first_entry});
         let created: DateTime<Utc> = row.get("created_at");
         let closed: DateTime<Utc> = row.get("closed_at");
         let key: String = row.get("entry_key");
@@ -279,6 +353,12 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
             }
         }
         if strategy == "s3" {
+            if cost_veto_clear.is_none() {
+                missing.push("recorded_session_cost_veto_history");
+            }
+            if first_entry.is_none() {
+                missing.push("recorded_session_entry_history");
+            }
             if decision_mark.is_none() {
                 missing.push("original_decision_mark");
             }
