@@ -1,7 +1,103 @@
 //! The built binary refuses to start without an account allowlist, before it
 //! touches the database or the broker.
 
-use std::process::Command;
+use std::io::{BufRead, BufReader, Read};
+use std::process::{Child, Command, Output};
+
+/// Read readiness from this child's pipe. A successful connection to a
+/// released ephemeral port can belong to another concurrent test process.
+struct ServiceChild {
+    child: Option<Child>,
+    stdout: Option<std::thread::JoinHandle<Vec<u8>>>,
+    ready: Option<tokio::sync::oneshot::Receiver<()>>,
+}
+
+impl ServiceChild {
+    fn new(mut child: Child) -> Self {
+        let stdout = child.stdout.take().unwrap();
+        let (ready, received) = tokio::sync::oneshot::channel();
+        let stdout = std::thread::spawn(move || {
+            let mut ready = Some(ready);
+            let mut output = Vec::new();
+            for line in BufReader::new(stdout).split(b'\n') {
+                let Ok(line) = line else { break };
+                if String::from_utf8_lossy(&line).contains("serving /health, /operations/reports") {
+                    if let Some(ready) = ready.take() {
+                        let _ = ready.send(());
+                    }
+                }
+                output.extend(line);
+                output.push(b'\n');
+            }
+            output
+        });
+        Self {
+            child: Some(child),
+            stdout: Some(stdout),
+            ready: Some(received),
+        }
+    }
+
+    async fn wait_until_serving(&mut self) {
+        let ready = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            self.ready.take().unwrap(),
+        )
+        .await;
+        if !matches!(ready, Ok(Ok(()))) {
+            self.stop();
+            let stdout = self.stdout.take().unwrap().join().unwrap();
+            let mut stderr = String::new();
+            self.child
+                .as_mut()
+                .unwrap()
+                .stderr
+                .take()
+                .unwrap()
+                .read_to_string(&mut stderr)
+                .unwrap();
+            panic!(
+                "child did not serve within 10 s: {ready:?}\n{}\n{stderr}",
+                String::from_utf8_lossy(&stdout)
+            );
+        }
+    }
+
+    fn stop(&mut self) {
+        if let Some(child) = &mut self.child {
+            if child.try_wait().ok().flatten().is_none() {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
+        }
+    }
+
+    fn wait_with_output(mut self) -> std::io::Result<Output> {
+        let mut output = self.child.take().unwrap().wait_with_output()?;
+        output.stdout = self.stdout.take().unwrap().join().unwrap();
+        Ok(output)
+    }
+}
+
+impl std::ops::Deref for ServiceChild {
+    type Target = Child;
+    fn deref(&self) -> &Child {
+        self.child.as_ref().unwrap()
+    }
+}
+impl std::ops::DerefMut for ServiceChild {
+    fn deref_mut(&mut self) -> &mut Child {
+        self.child.as_mut().unwrap()
+    }
+}
+impl Drop for ServiceChild {
+    fn drop(&mut self) {
+        self.stop();
+        if let Some(stdout) = self.stdout.take() {
+            let _ = stdout.join();
+        }
+    }
+}
 
 fn run(envs: &[(&str, &str)]) -> (Option<i32>, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_jiaoyi"));
@@ -46,35 +142,23 @@ async fn sigterm_stops_the_service_after_its_tasks_finish(pool: sqlx::PgPool) {
         .unwrap();
     let base = std::env::var("DATABASE_URL").expect("DATABASE_URL");
     let url = format!("{}/{db}", base.rsplit_once('/').unwrap().0);
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_jiaoyi"))
         .env_clear()
         .env("RUST_LOG", "info")
         .env("JIAOYI_ALLOWED_ACCOUNTS", "49236051")
         .env("JIAOYI_ACCOUNT_ENVIRONMENTS", "49236051:demo")
         .env("DATABASE_URL", &url)
-        .env("PORT", port.to_string())
+        .env("PORT", "0")
         // Nothing listens here: loads fail fast and are recorded.
         .env("CTRADER_DEMO_HOST", "127.0.0.1")
         .env("CTRADER_PORT", "1")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
+        .map(ServiceChild::new)
         .unwrap();
-    // Wait for /health.
-    let mut up = false;
-    for _ in 0..100 {
-        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            up = true;
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-    assert!(up, "service did not start");
+    // The child reports serving only after its account registration and bind.
+    child.wait_until_serving().await;
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     let killed = std::process::Command::new("kill")
         .args(["-TERM", &child.id().to_string()])
@@ -119,11 +203,6 @@ async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
         .unwrap();
     let base = std::env::var("DATABASE_URL").expect("DATABASE_URL");
     let url = format!("{}/{db}", base.rsplit_once('/').unwrap().0);
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_jiaoyi"))
         .env_clear()
         .env("RUST_LOG", "info")
@@ -133,22 +212,15 @@ async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
         .env("JIAOYI_DEMO_ACCOUNT_ID_3", "4779094x")
         .env("UNRELATED_SECRET", "do-not-read-me")
         .env("DATABASE_URL", &url)
-        .env("PORT", port.to_string())
+        .env("PORT", "0")
         .env("CTRADER_DEMO_HOST", "127.0.0.1")
         .env("CTRADER_PORT", "1")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
+        .map(ServiceChild::new)
         .unwrap();
-    let mut up = false;
-    for _ in 0..100 {
-        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            up = true;
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-    assert!(up, "service did not start");
+    child.wait_until_serving().await;
     // Accounts are registered before the HTTP server starts.
     let accounts: Vec<(i64, String)> =
         sqlx::query_as("SELECT account_id, environment FROM accounts ORDER BY account_id")

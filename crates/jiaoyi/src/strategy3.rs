@@ -1072,7 +1072,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                             crate::fast_monitor::quote_processed(&self.live,self.account_id(),q.received_at);
                         }
                     },
-                    Ok(_) | Err(RecvError::Lagged(_)) => {},
+                    Ok(_) => {},
+                    Err(RecvError::Lagged(n)) => crate::fast_monitor::actor_quote_lagged(&self.live,self.account_id(),n),
                     Err(RecvError::Closed) => anyhow::bail!("quote stream closed during historical preparation"),
                 },
                 event=executions.recv()=>match event {
@@ -1080,7 +1081,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                         self.server_event(&e).await;
                         crate::fast_monitor::execution_processed(&self.live,self.account_id(),e.received_at);
                     },
-                    Err(RecvError::Lagged(_))=>{},
+                    Err(RecvError::Lagged(n))=>crate::fast_monitor::actor_execution_lagged(&self.live,self.account_id(),n),
                     Err(RecvError::Closed)=>anyhow::bail!("execution stream closed during historical preparation"),
                 },
             }
@@ -3044,7 +3045,7 @@ pub async fn run_session_with_event_offset(
                         crate::fast_monitor::observe(live, account_id, "execution", t.server_event(&m)).await;
                         crate::fast_monitor::execution_processed(live, account_id, m.received_at);
                     },
-                    Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Lagged(n)) => crate::fast_monitor::actor_execution_lagged(live, account_id, n),
                     Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
                 },
                 s = spots.recv() => match s {
@@ -3063,7 +3064,7 @@ pub async fn run_session_with_event_offset(
                         crate::fast_monitor::quote_processed(live, account_id, spot.received_at);
                         crate::trading::beat(live, account_id, |l| l.last_quote_at = Some(Utc::now()));
                     }
-                    Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Lagged(n)) => crate::fast_monitor::actor_quote_lagged(live, account_id, n),
                     Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
                 },
             }

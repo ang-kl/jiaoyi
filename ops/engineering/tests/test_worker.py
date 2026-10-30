@@ -331,6 +331,11 @@ class ReleaseTests(Fixture, unittest.TestCase):
             calls.append((args, kwargs))
             if kwargs.get("write"):
                 return json.dumps({"merged": True, "sha": "b" * 40})
+            if args[-1].endswith("/git/ref/heads/main"):
+                return json.dumps({"object": {"sha": "c" * 40}})
+            if "/compare/" in args[-1]:
+                return json.dumps({"base_commit": {"sha": "c" * 40},
+                    "merge_base_commit": {"sha": "c" * 40}, "status": "ahead", "behind_by": 0})
             return json.dumps(self.checks() if "check-runs" in args[-1] else self.pr())
         with patch.object(c, "gh", side_effect=gh):
             c.release(job)

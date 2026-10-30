@@ -714,6 +714,146 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
     assert!(l.amends.iter().all(|a| a.take_profit.is_some()));
 }
 
+/// A draining observer does not prove that the trading actor is lossless.
+/// Hold a real TP1 receipt and overflow only the actor's quote cursor.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn actor_quote_loss_is_visible_when_the_observer_keeps_up(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(t.own.len(), 1);
+    });
+    settings::change(
+        &pool,
+        "trading.order_wait_secs",
+        Some(DEMO),
+        Some(json!(120)),
+        "test",
+        "receipt released by a barrier, never by the normal order timeout",
+    )
+    .await
+    .unwrap();
+    let gate = Arc::new(tokio::sync::Semaphore::new(0));
+    // A panic/timeout must release the fake's waiter and its wire-event task.
+    struct CloseGate(Arc<tokio::sync::Semaphore>);
+    impl Drop for CloseGate {
+        fn drop(&mut self) {
+            self.0.close();
+        }
+    }
+    let _cleanup = CloseGate(gate.clone());
+    let (spots, _) = tokio::sync::broadcast::channel(512);
+    f.spot_events = Some(spots.clone());
+    f.close_reply_gate = Some(gate.clone());
+    let (conn, log) = f.spawn();
+    let session = loader::authorise(&pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let list = allowlist();
+    let live = trading::LivenessMap::default();
+    let mut ends = conn.session_ends();
+    let mut received = conn.spot_events();
+    let (trigger, mut stop) = shutdown::channel();
+    let health = || live.lock().unwrap()[&DEMO].monitor.health();
+    let actor = strategy3::run_session_with_event_offset(
+        &pool,
+        &list,
+        Environment::Demo,
+        &session,
+        &live,
+        &mut ends,
+        &mut stop,
+        at(31) - Utc::now(),
+    );
+    tokio::pin!(actor);
+    let exercise = async {
+        // Initialization completed: both actor receivers now exist.
+        loop {
+            let ready = live.lock().unwrap().get(&DEMO).is_some_and(|l| {
+                let h = l.monitor.health();
+                h["active_stage"].is_null() && !h["last_work_completed_at"].is_null()
+            });
+            if ready {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        spots
+            .send(jiaoyi_ctrader::messages::ProtoOaSpotEvent {
+                ctid_trader_account_id: DEMO,
+                symbol_id: BTC,
+                bid: Some(e5(61_384.21) as u64),
+                ask: Some(e5(61_389.0) as u64),
+                ..Default::default()
+            })
+            .unwrap();
+        let trigger_receipt = json!(received.recv().await.unwrap().received_at);
+        while log.lock().unwrap().closes.is_empty() {
+            tokio::task::yield_now().await;
+        }
+        // 5120 events exceed the real actor broadcast capacity (4096).
+        // Receipt barriers let the independent observer drain each batch;
+        // no sleeps or scheduler-speed assumption creates the overflow.
+        for _ in 0..32 {
+            for _ in 0..160 {
+                spots
+                    .send(jiaoyi_ctrader::messages::ProtoOaSpotEvent {
+                        ctid_trader_account_id: DEMO,
+                        symbol_id: BTC,
+                        bid: Some(e5(60_455.0) as u64),
+                        ask: Some(e5(60_460.0) as u64),
+                        ..Default::default()
+                    })
+                    .unwrap();
+            }
+            let mut last = None;
+            for _ in 0..160 {
+                last = Some(received.recv().await.unwrap().received_at);
+            }
+            let receipt = json!(last.unwrap());
+            while health()["last_quote_received_at"] != receipt {
+                tokio::task::yield_now().await;
+            }
+        }
+        assert_eq!(health()["quote_receiver_lagged"], 0);
+        assert_eq!(health()["actor_quote_receiver_lagged"], 0);
+        gate.add_permits(1);
+        loop {
+            let h = health();
+            let processed = &h["last_quote_processed_receipt_at"];
+            if h["actor_quote_receiver_lagged"] != 0
+                || (!processed.is_null() && *processed != trigger_receipt)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        let h = health();
+        assert!(h["actor_quote_receiver_lagged"].as_u64().unwrap() >= 1024);
+        assert_eq!(h["actor_execution_receiver_lagged"], 0);
+        assert_eq!(h["quote_receiver_lagged"], 0);
+        assert_eq!(h["quote_receiver_lagged_scope"], "independent_observer");
+        trigger.fire();
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        tokio::select! {
+            result = &mut actor => panic!("actor stopped before loss assertion: {result:?}"),
+            () = exercise => {},
+        }
+        actor.await.unwrap();
+    })
+    .await
+    .expect("controlled actor overflow and shutdown must complete");
+    let l = log.lock().unwrap();
+    assert!(l.orders.is_empty(), "monitoring cannot create entries");
+    assert_eq!(l.closes.len(), 1, "the held TP1 is never duplicated");
+    assert_eq!(l.closes[0].volume, 8);
+    assert!(l.amends.iter().all(|a| a.take_profit.is_some()));
+}
+
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn exit_timer_rejects_stale_or_future_quotes_and_does_not_repeat_tp1(pool: PgPool) {
     loaded(&pool).await;
