@@ -249,6 +249,33 @@ class Store:
                 c.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,?,?)",
                           (at, row["id"], "review_pending_reclassified",
                            '{"previous_state":"verification_pending","reason":"unresolved_review_not_release_verification"}'))
+            # The old adapter also rejected valid non-repair SL dispositions.
+            # Replay only the original model report through the same strict
+            # source-identity guard; completing its assessment proves no trade fact.
+            rows = c.execute("SELECT j.id,j.task,e.id AS model_event,e.detail AS report,u.id AS rejection_event,u.detail AS rejection "
+                             "FROM jobs j JOIN events e ON e.id=(SELECT max(id) FROM events WHERE job=j.id AND kind='model_report') "
+                             "JOIN events u ON u.id=(SELECT max(id) FROM events WHERE job=j.id AND kind='incident_review_unresolved') "
+                             "WHERE j.state='review_pending' AND j.pr IS NULL AND j.head IS NULL AND j.merged IS NULL "
+                             "AND instr(j.task,?)=1 AND length(j.task)<=? AND length(e.detail)<=262144 "
+                             "AND length(u.detail)<=1024 ORDER BY j.id LIMIT 1000",
+                             (stop_loss_reviews.PREFIX, stop_loss_reviews.MAX_TASK)).fetchall()
+            for row in rows:
+                try:
+                    rejection, report = json.loads(row["rejection"]), json.loads(row["report"])
+                except (ValueError, TypeError, RecursionError):
+                    continue
+                if (row["model_event"] >= row["rejection_event"] or not isinstance(rejection, dict)
+                        or rejection.get("reason") != "structured_source_linked_defect_required"
+                        or not stop_loss_reviews.nonrepair_assessment(row["task"], report)):
+                    continue
+                at = now()
+                state = "completed" if report["outcome"] == "no_change" else "owner_blocked"
+                c.execute("UPDATE jobs SET state=?,updated=?,result=? WHERE id=?", (state, at, row["report"], row["id"]))
+                detail = json.dumps({"previous_state": "review_pending", "source_model_event": row["model_event"],
+                                     "disposition": report["incident"]["disposition"], "acceptance_passed": False,
+                                     "reason": "nonrepair_assessment_recorded_unknowns_retained"})
+                c.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,?,?)",
+                          (at, row["id"], "stop_loss_assessment_reconciled", detail))
 
     def reserve(self, limit, day=None, allow_mutation=True):
         """Reserve before spawn; crashes and failed auth still consume an attempt."""
@@ -1185,6 +1212,8 @@ class Coordinator:
                        "For a proven critical software defect include a structured incident object with disposition "
                        "proven_defect, evidence_ids containing the exact supplied case_id and "
                        "repair_proposal(summary, paths, acceptance_checks). "
+                       "A non-repair disposition may instead use id=null, every supplied case_id exactly once, "
+                       "repair_proposal=null and incidents=null; assessment completion does not verify unknown facts. "
                        "Do not claim a defect from a normal loss or absent optional evidence.")
         if incident_reviewing:
             prompt += ("\n\nREAD-ONLY ABNORMALITY INCIDENT ANALYSIS. Do not modify files or manage trades. "
@@ -1386,7 +1415,9 @@ class Coordinator:
         saved = self.safe_detail(json.dumps(report), 256 * 1024)
         if record:
             self.store.event("model_report", job["id"], saved)
-        applied = self.incidents.apply_review(job, report)
+        applied = ({"applied": True, "reason": "nonrepair_assessment_recorded_unknowns_retained"}
+                   if stop_loss_reviews.nonrepair_assessment(job["task"], report)
+                   else self.incidents.apply_review(job, report))
         structured = (isinstance(report.get("incident"), dict) or isinstance(report.get("incidents"), list)
                       or isinstance(report.get("repair_proposal"), dict))
         if (job["task"].startswith(incidents.PREFIX) or structured) and not applied.get("applied"):
