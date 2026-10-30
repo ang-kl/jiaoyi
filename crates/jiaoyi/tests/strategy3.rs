@@ -805,6 +805,28 @@ async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: 
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) {
     loaded(&pool).await;
+    let assert_blocker = |sym: &strategy3::Sym, now| {
+        let x = strategy3::trigger_distance(sym, now);
+        assert_eq!(x["reason_code"], "session_cost_veto", "{x}");
+        assert_eq!(x["session_date"], json!(today().date));
+        assert!(x["reason"].as_str().unwrap().contains("recorded cost veto"));
+        assert!(x["distance_half_widths"].is_null());
+        assert_eq!(x["bid"], json!(sym.bid));
+        assert_eq!(x["ask"], json!(sym.ask));
+        assert!(
+            x.as_object().unwrap().keys().all(|key| matches!(
+                key.as_str(),
+                "at" | "session_date"
+                    | "bid"
+                    | "ask"
+                    | "distance_half_widths"
+                    | "reason"
+                    | "reason_code"
+            )),
+            "the public blocker contains only quote/session/reason fields: {x}"
+        );
+        x
+    };
     with_trader!(
         &pool,
         fake((60_455.0, 60_462.0)),
@@ -815,6 +837,8 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 .unwrap();
             assert!(orders(&log).is_empty());
             assert_eq!(t.syms[&BTC].cost_skip_session, Some(today().date));
+            assert!(matches!(&t.syms[&BTC].day, Some(Ok(_))));
+            assert_blocker(&t.syms[&BTC], at(30));
             let detail: serde_json::Value = sqlx::query_scalar(
                 "SELECT detail FROM trading_decisions WHERE kind='s3_skip' ORDER BY id DESC LIMIT 1",
             )
@@ -839,6 +863,42 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 "a tighter quote cannot reopen the session"
             );
             assert_eq!(restarted.syms[&BTC].cost_skip_session, Some(today().date));
+            assert!(restarted.syms[&BTC].day.is_none());
+            let x = assert_blocker(&restarted.syms[&BTC], at(60));
+            let live = restarted.live.lock().unwrap().clone();
+            let h = strategy3::health(&pool, &live).await.unwrap();
+            assert_eq!(h[0]["trigger_distance"]["BTCUSD"], x);
+
+            // The durable blocker does not invent quote data or financial readiness.
+            let mut without_quotes = restarted.syms[&BTC].clone();
+            without_quotes.bid = None;
+            without_quotes.ask = None;
+            assert_blocker(&without_quotes, at(60));
+            without_quotes.day = t.syms[&BTC].day.clone();
+            without_quotes.cost_skip_session = None;
+            let no_quote = strategy3::trigger_distance(&without_quotes, at(30));
+            assert_eq!(no_quote["reason"], "no quote yet");
+            assert!(no_quote["distance_half_widths"].is_null());
+            assert!(no_quote["reason_code"].is_null());
+
+            // A prior session's veto is not today's blocker. A genuinely missing
+            // preparation and a window exclusion must retain their own reasons.
+            let next =
+                strategy3::trigger_distance(&restarted.syms[&BTC], at(60) + Duration::days(1));
+            assert_eq!(next["reason"], "today's session is not prepared yet");
+            assert!(next["reason_code"].is_null());
+            let outside = strategy3::trigger_distance(&restarted.syms[&BTC], at(29));
+            assert!(outside["reason"]
+                .as_str()
+                .unwrap()
+                .contains("first 30 minutes"));
+            assert!(outside["reason_code"].is_null());
+            let mut other = restarted.syms[&BTC].clone();
+            other.name = "ETHUSD".into();
+            other.cost_skip_session = None;
+            let unprepared = strategy3::trigger_distance(&other, at(60));
+            assert_eq!(unprepared["reason"], "today's session is not prepared yet");
+            assert!(unprepared["reason_code"].is_null());
             let marks: i64 = sqlx::query_scalar(
                 "SELECT count(*) FROM trading_decisions WHERE kind='s3_mark_decision'",
             )

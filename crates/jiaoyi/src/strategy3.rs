@@ -162,7 +162,8 @@ pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::
 /// instant, the last bid and ask, and the distance from the nearer side's
 /// quote to its edge (the ask to the upper, the bid to the lower) in
 /// half-widths (open × σ), negative once through it. `null`, with the
-/// reason, outside the entry window or without a prepared session.
+/// reason, outside the entry window, after a session cost veto, or without
+/// a prepared session.
 // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
 pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
     let none = |why: &str| json!({"at": now, "bid": sym.bid, "ask": sym.ask, "distance_half_widths": null, "reason": why});
@@ -174,6 +175,14 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
     };
     if let Err(why) = band::entry_window(&s, now) {
         return none(&why);
+    }
+    // Restoring the durable veto returns before preparation. Its active
+    // session blocker is known even when this connection has no Day cache.
+    if cost_skip_stands(sym.cost_skip_session, s.date) {
+        let mut blocked = none("entry blocked for this session by the recorded cost veto (C >= R)");
+        blocked["session_date"] = json!(s.date);
+        blocked["reason_code"] = json!("session_cost_veto");
+        return blocked;
     }
     let day = match &sym.day {
         Some(Ok(d)) if d.session.date == s.date => d,

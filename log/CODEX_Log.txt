@@ -479,3 +479,26 @@ Existing memory now retains validated structured findings as untrusted evidence.
 All147Python tests pass; exact CI/deploy still required. Source211/222 remain
 historical unknown, not financial or release failure. Global deadline,36cap,
 ChatGPT auth and trading rules preserved. Source journal paragraphs8–9.
+
+[§LOG.47] №17,877–17,886 §§1–4,30Oct2026 13:02–15:49SGT; entry16:02SGT,
+by <Codex (GPT-6), effort:not exposed>. PR136 merged b07124b, all3exact-head
+CI green (41005850219); trading1067ba56 and engineering1e318a7c verified
+13:07:38SGT, former workerb883ca29 REMOVED. All8exitloops advanced; four
+valid SL assessments recovered without new model sessions. Two historical
+source analyses211/222 remain unknown. Consolidated HTML delivered13:07:44SGT,
+Telegram49112; full release receipts in PR136. Natural13:30SGT logs prove
+PR134 session-veto restoration on BTC/ETH/JPN225 across all4accounts.
+
+[§LOG.48] №17,886 §§1–4 (15:49SGT), owner“proceed”, №17,887–17,890 §1
+(15:50–16:01SGT),30Oct2026; entry16:02SGT,
+by <Codex (GPT-6), effort:not exposed>. Read mainb07124b/GROK_Log№17,703;
+remember to check GROK_Log.txt for changes before choosing the next serial.
+Actual cost-vetoed symbols were shown eligible or unprepared. Fix display
+only, preserve current-session/date/window/quote semantics and no-order
+regression. Cost gate already precedes sizing; linear C/R cannot improve by
+shrinking quantity. Live is minimum already. Current unknown margin receipt
+does not prove oversized demo order; do not change v6 sizing or retry broker
+orders without that evidence.75paired legacy cases are sparse/mixed-reference,
+not support for reducing24bps/side. See journal §ENG-20261030-COST.1–4 and
+validation-17887-cost-evidence-2026-10-30.md. Exact CI/deployed readback pending;
+financial improvement unmeasured, goal and all owner controls preserved.
