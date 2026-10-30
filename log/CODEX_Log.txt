@@ -557,3 +557,12 @@ by <Codex (GPT-6), effort:not exposed>. Local final tests: transport74/74,
 S3 58/58, S1 38/38, monitor5/5, Python157/157; fmt and denied-warning Clippy
 pass without suppression. Actual overflow mutation fails old ignored branch.
 Independent transport/actor reviews accepted. PR/CI/deploy receipts next.
+
+[§LOG.53] №17,926–17,930 §1,30Oct2026 20:59–21:09SGT; entry21:09SGT,
+by <Codex (GPT-6), effort:not exposed>. PR138 firstCI failed one existing
+startup readiness assertion; merge stopped. Controlled foreign TCP listener
+plus blocked account insertion reproduces false readiness/empty accounts.
+Use this child’s serving event and PORT0, with bounded wait/failure cleanup.
+Retain every account/refusal/shutdown assertion; no production startup edit.
+Startup4/4/fmt/strictClippy pass; rerun fullCI onnewhead. ExactoriginalCI
+collision remains unproven. Runtime source/olddeployment checks prepared.

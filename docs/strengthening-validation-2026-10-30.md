@@ -11,7 +11,7 @@
 | Python coordinator release-base and release-scope checks | Final local suite: **157/157 passed**, including the two further root-agent regressions. | Required CI and deployed coordinator behaviour remain pending. |
 | Account actor lag and recovery | Actual S3 overflow regression failed before the fix and passed afterwards: 5,120 quotes, at least 1,024 actor gaps, zero observer gaps, exactly one TP1 and no entry. | S3 58/58, S1 38/38 and monitor 5/5 also pass; formatting and Clippy pass without suppressions. Deployed diagnostics remain pending. |
 | Current architecture and dividend instructions | Current contract and draft dividend contract written; historical registrations retained. | Dividend routine remains disabled pending the connector and confirmed routine. |
-| CI and deployment | No completed CI or runtime-verification receipt for this change yet. | Required checks, reviewed merge identity, component deployment identity and affected behaviour. |
+| CI and deployment | First CI passed both image/engineering gates but exposed a false TCP-readiness test. Controlled reproduction and child-specific readiness correction pass all four startup tests; every assertion is retained. | Required checks, reviewed merge identity, component deployment identity and affected behaviour. |
 | Concurrent trading writers | No cross-process exclusion proof supplied by these repairs. | Shared-writer ownership/fencing and safe handover require separate evidence before competing executors. |
 | Economic outcome | No new qualified trade-window result established by these changes. | Per-strategy/account latest-20 goal, realised costs, out-of-sample robustness and portfolio validation remain separate gates. |
 
@@ -40,3 +40,5 @@
 ```
 
 [§VALIDATION.4] This JSON is **proposed, not applied**. The owner has authorised necessary strengthening and release; the current limitation is missing Administration access, not an additional approval requirement. Do not bypass the integration's permissions. The final read of `main` followed by a merge retains a race: another writer can advance `main` between those operations. Local base checks narrow that gap but do not close it. Server-enforced strict checks or an equivalent verified merge policy need their own applied-state receipt.
+
+[§VALIDATION.5] PR138 first run `41059420383` failed an existing startup account-row assertion. The old readiness predicate can accept a foreign listener before this child registers accounts; a controlled database lock and listener reproduced that failure. The original runner collision is not independently observed. The test now uses `PORT=0`, its own child stdout serving event and bounded cleanup. Local startup 4/4, formatting and strict Clippy pass; the corrected head requires all CI gates again. Final merge/deployment receipts belong in the PR description.
