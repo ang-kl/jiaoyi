@@ -94,8 +94,11 @@ def context(store, task, current_job_id):
             report = json.loads(row["detail"])
         except (ValueError, TypeError, RecursionError):
             continue
+        legacy_keys = {"outcome", "summary", "tests", "owner_decisions", "acceptance_passed"}
+        structured = (isinstance(report, dict) and set(report) == legacy_keys | {"incident", "incidents"}
+                      and reviews.nonrepair_assessment(row["task"], report))
         if (not isinstance(report, dict) or report.get("acceptance_passed") is not False
-                or set(report) != {"outcome", "summary", "tests", "owner_decisions", "acceptance_passed"}
+                or (set(report) != legacy_keys and not structured)
                 or report.get("outcome") not in ("no_change", "owner_blocked")
                 or (row["state"] == "completed") != (report["outcome"] == "no_change")
                 or any(not isinstance(report.get(key), str) for key in TEXT_LIMITS)):
@@ -110,6 +113,8 @@ def context(store, task, current_job_id):
                 "truncated_fields": [key for key, limit in TEXT_LIMITS.items()
                                      if len(report[key]) > limit]}
         item.update({key: report[key][:limit] for key, limit in TEXT_LIMITS.items()})
+        if structured:
+            item["assessment_disposition"] = report["incident"]["disposition"]
         candidates.append((0 if exact else 1, -row["id"], item))
     output = {"notice": NOTICE, "reports": []}
     for _, _, item in sorted(candidates, key=lambda candidate: candidate[:2]):

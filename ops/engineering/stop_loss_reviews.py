@@ -98,6 +98,42 @@ def case_facts(raw, clock):
     return facts
 
 
+def nonrepair_assessment(task, report):
+    """Validate a completed SL assessment, never certify its claims or seed a repair."""
+    if (not isinstance(task, str) or len(task) > MAX_TASK or not task.startswith(PREFIX)
+            or task.count(EVIDENCE_MARKER) != 1 or not isinstance(report, dict)
+            or report.get("outcome") not in ("no_change", "owner_blocked")
+            or report.get("acceptance_passed") is not False
+            or any(not isinstance(report.get(key), str) for key in ("summary", "tests", "owner_decisions"))
+            or report.get("incidents") is not None or report.get("repair_proposal") is not None):
+        return False
+    details = report.get("incident")
+    if (not isinstance(details, dict)
+            or set(details) != {"id", "disposition", "evidence_ids", "repair_proposal"}
+            or details["id"] is not None or details["repair_proposal"] is not None
+            or details["disposition"] not in ("normal_loss", "research", "missing_evidence", "owner_policy")
+            or (report["outcome"] == "owner_blocked" and details["disposition"] != "owner_policy")):
+        return False
+    evidence = details["evidence_ids"]
+    if (not isinstance(evidence, list) or not 1 <= len(evidence) <= 32
+            or not all(isinstance(value, str) for value in evidence) or len(set(evidence)) != len(evidence)):
+        return False
+    try:
+        packet = json.loads(task.split(EVIDENCE_MARKER, 1)[1])
+        raw = packet.get("cases") if isinstance(packet, dict) else None
+        if not isinstance(raw, list) or not 1 <= len(raw) <= 32:
+            return False
+        clock = dt.datetime.now(dt.timezone.utc)
+        facts = [case_facts(case, clock) for case in raw]
+        if any(case is None for case in facts):
+            return False
+        ids = [case["case_id"] for case in facts]
+        return (len(set(ids)) == len(ids) and set(evidence) == set(ids)
+                and all(case.get("case_id") == fact["case_id"] for case, fact in zip(raw, facts)))
+    except (ValueError, TypeError, RecursionError):
+        return False
+
+
 def material_fingerprint(case):
     """Stable original-rule evidence; not polling time or minor cost revisions."""
     complete = case.get("net_costs_complete") and ratio(case.get("net_r"))
@@ -126,7 +162,9 @@ def review_task(cases, followup=False):
         "findings/checks and acceptance_passed=false; propose one bounded repair with acceptance checks only "
         "if a critical software defect is proven. Include incident with disposition proven_defect, evidence_ids "
         "containing the exact case_id and repair_proposal(summary, paths, acceptance_checks); id may be null "
-        "for the coordinator to link this new incident. Otherwise preserve unknowns and owner decisions. The existing "
+        "for the coordinator to link this new incident. Otherwise preserve unknowns and owner decisions: a non-repair "
+        "incident may use id=null, normal_loss/research/missing_evidence/owner_policy, all packet case_ids, "
+        "repair_proposal=null and incidents=null. Completing an assessment does not verify its unknown facts. The existing "
         "coordinator persists the structured model report, including no-change results and failures; its parent "
         "records journal/release work. The following sanitized JSON is " + EVIDENCE_MARKER
     )

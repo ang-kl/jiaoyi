@@ -466,3 +466,16 @@ S3 wins3/5/4/1, S1 no measured closes, no post-PR134 S3 close in capture.
 See journal §ENG-20261030-FOLLOWTHROUGH.1–6 and validation-17859 document.
 Exact-head CI, both Railway releases, actual two-account source capture,
 corrected live review and queue counts must be verified before release claim.
+
+[§LOG.46] №17,870–17,875 §1,30 Oct2026 12:46–12:56 SGT.
+Entry12:58 SGT, by <Codex (GPT-6), effort:not exposed>. PR135 merged27dc368;
+all CI green and both releases verified12:49 SGT. Details in journal
+§ENG-20261030-FOLLOWTHROUGH.7 and PR135 description. Actual account P&L
+coverage and BTC admission check corrected; all8loops advance, oldworker removed.
+New job246 exposed valid nonrepair SL assessments rejected by defect-only
+adapter; old146/147/233 same. Focused continuation accepts exactsource-bound
+nonrepair assessments and replays originals without model calls or fact PASS.
+Existing memory now retains validated structured findings as untrusted evidence.
+All147Python tests pass; exact CI/deploy still required. Source211/222 remain
+historical unknown, not financial or release failure. Global deadline,36cap,
+ChatGPT auth and trading rules preserved. Source journal paragraphs8–9.

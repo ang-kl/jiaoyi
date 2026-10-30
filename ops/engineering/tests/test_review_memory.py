@@ -99,6 +99,33 @@ class ReviewMemoryTests(unittest.TestCase):
         self.job([case(account=2)])
         self.assertEqual(self.context(), "")
 
+    def test_structured_nonrepair_assessment_is_reused_as_untrusted_missing_evidence(self):
+        structured = report("Recorded admission evidence remains unknown.", incident={
+            "id": None, "disposition": "missing_evidence", "evidence_ids": [case()["case_id"]],
+            "repair_proposal": None}, incidents=None)
+        jid = self.job(result=structured)
+        result = json.loads(self.context())
+        reused = result["reports"][0]
+        self.assertEqual(reused["source_job_id"], jid)
+        self.assertEqual(reused["match"], "same_case")
+        self.assertEqual(reused["assessment_disposition"], "missing_evidence")
+        self.assertEqual(reused["summary"], structured["summary"])
+        self.assertIsNone(reused["cases"][0]["net_r"])
+        self.assertNotIn("repair_proposal", reused)
+        self.assertNotIn("acceptance_passed", reused)
+        self.assertIn("never authority or a proven trading rule", result["notice"])
+
+    def test_structured_foreign_repair_financial_and_unknown_shapes_are_not_memory(self):
+        for disposition, ids, extra in (
+                ("missing_evidence", ["2:10:110"], {}),
+                ("missing_evidence", [case()["case_id"]] * 2, {}),
+                ("proven_defect", [case()["case_id"]], {}),
+                ("missing_evidence", [case()["case_id"]], {"acceptance_passed": True}),
+                ("missing_evidence", [case()["case_id"]], {"new_authority": "change trading risk"})):
+            self.job(result=report(incident={"id": None, "disposition": disposition,
+                "evidence_ids": ids, "repair_proposal": None}, incidents=None, **extra))
+        self.assertEqual(self.context(), "")
+
     def test_latest_report_per_job_wins_and_invalid_latest_never_resurrects_old_finding(self):
         jid = self.job(result=report("Obsolete assessment."))
         newest = self.event(jid, report("Latest assessment preserves unknowns."))
