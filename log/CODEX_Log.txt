@@ -566,3 +566,45 @@ Use this child’s serving event and PORT0, with bounded wait/failure cleanup.
 Retain every account/refusal/shutdown assertion; no production startup edit.
 Startup4/4/fmt/strictClippy pass; rerun fullCI onnewhead. ExactoriginalCI
 collision remains unproven. Runtime source/olddeployment checks prepared.
+
+[§LOG.54] №17,931–17,940,30Oct2026; release21:15SGT/status22:31SGT;
+retrospective entry31Oct2026 07:02SGT, by <Codex (GPT-6), effort:not exposed>.
+PR138 https://github.com/ang-kl/jiaoyi/pull/138 merged132a0dde at21:15SGT.
+Exact-head CI41060987679 and merged-main CI41061751637 passed all three gates.
+Trading deployment e39ebb37-07dc-49fb-abde-119980c56ff7 and engineering
+5b81cb37-f976-4a40-a6af-37127acce895 SUCCESS; respective previous deployments
+5f5bf95f-7db3-4c6b-af35-d758b46396e8 and
+1e318a7c-17dc-4cf8-b6ba-814cb29d9000 REMOVED. All eight loops advanced;
+new actor diagnostics appeared. Watch patterns in the file had not propagated
+to the service setting: applied only the eleven documented trading patterns,
+read back exact values, no extra deployment. Release receipts are in PR138.
+HTML owner report Telegram49123 sent21:31SGT. Engineering checks passed;
+financial qualification stayed false: S1 NatGas637255862 volume reconciliation
+is unresolved. No false goal PASS, registration/risk change or worker-window
+extension. Final release/status sources are №17,939–17,940; detailed receipts remain in PR138.
+
+[§LOG.55] №17,941 §6 (31Oct2026 06:37SGT), №17,942–17,945 §1;
+entry31Oct2026 07:02SGT, by <Codex (GPT-6), effort:not exposed>.
+Owner requests research and plan, not implementation or experiment activation.
+Read main132a0dde and GROK_Log through№17,703 (30Oct04:29SGT); no newer Grok
+entry found. Three specialists inspect ledger/accounting, bot-trade comparison
+and statistical design. Plan: docs/research-validation-plan-2026-10-31.md.
+Eight original statements:610 closing rows,430 unique account/deal pairs,
+180 identical overlaps; no current NatGas case or v6 results in those exports.
+Older bot-trade baseline uses a different live account/currency and lacks
+ownership/deployment provenance. Public06:49SGT S3 wins3/5/4/1 remain below goal;
+S1 live UNKNOWN. Worker5/36 sessions; global mutation window still expired.
+No rewrite, live pause, risk retune, new data service, paid API or shadow broker
+writer. M1 needs current source records/read-only access; later pilot, power,
+scored dates and the conservative200-episode interpretation remain unsealed.
+Keep official per-account latest20 windows distinct from frozen-version and
+unique-episode research. A CI pass on this documentation is not an edge.
+
+[§LOG.56] №17,946 §1,31Oct2026 07:03SGT, by <Codex (GPT-6), effort:not exposed>.
+Three independent reviewers checked the consolidated plan. Incorporated
+hybrid exit-version attribution, historical cutoff versus current valuations,
+explicit entry cohort/censoring, unique rather than independent episode counts,
+cross-week dependence, pilot exclusion and continuing multiplicity on extensions.
+No material bot-trade source-link or benchmark correction. Journal records
+findings and unresolved source inputs. Proceed with documentation-only PR and
+required CI; verify no trading restart under the existing watch patterns.
