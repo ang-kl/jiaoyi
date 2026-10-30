@@ -406,12 +406,34 @@ class IncidentManager:
                 if prior.get("account_id"):
                     section = "strategy3" if prior.get("strategy") == "s3" else "trading"
                     rows = health.get(section)
-                    observed = next((r for r in rows if isinstance(r, dict) and r.get("account_id") == prior["account_id"]), None) if isinstance(rows, list) else None
+                    observed = next((r for r in rows[:8] if isinstance(r, dict) and r.get("account_id") == prior["account_id"]), None) if isinstance(rows, list) else None
                     if observed is None:
                         continue
-                    snapshot = (observed.get("liveness") or {}).get("broker_snapshot")
-                    if isinstance(snapshot, dict) and snapshot.get("source_complete") is False:
-                        continue
+                    live = observed.get("liveness")
+                    live = live if isinstance(live, dict) else {}
+                    if prior.get("kind") == "actor_stalled":
+                        # The fast-monitor state includes watchdog/work freshness.
+                        # Positive actor progress is independent of broker P&L
+                        # coverage; neither proves protection or financial recovery.
+                        monitor = live.get("fast_monitor")
+                        if (live.get("state") != "alive" or not isinstance(monitor, dict)
+                                or monitor.get("state") != "observing"
+                                or monitor.get("session_connected") is not True):
+                            continue
+                        watchdog_at = _stamp(monitor.get("last_watchdog_completed_at"))
+                        overdue_after = _number(monitor.get("overdue_after_secs"))
+                        if watchdog_at is None or overdue_after is None or overdue_after <= 0:
+                            continue
+                        # A replayed healthy body is not current progress. Use
+                        # the monitor's existing deadline, including transport
+                        # age, without inventing another recovery threshold.
+                        watchdog_age = (at - _clock(watchdog_at)).total_seconds()
+                        if not 0 <= watchdog_age <= overdue_after:
+                            continue
+                    else:
+                        snapshot = live.get("broker_snapshot")
+                        if isinstance(snapshot, dict) and snapshot.get("source_complete") is False:
+                            continue
                     if prior.get("kind") == "goal_below_target":
                         goal = next((r for r in operations["reports"] if isinstance(r, dict) and r.get("account_id") == prior["account_id"] and r.get("strategy") == prior.get("strategy")), None)
                         assessment = ((goal or {}).get("report") or {}).get("assessment") or {}

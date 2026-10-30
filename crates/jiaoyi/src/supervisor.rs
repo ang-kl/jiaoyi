@@ -306,6 +306,8 @@ fn source_diagnostic(account: i64, observed_at: Option<DateTime<Utc>>, detail: &
     for field in [
         "missing_pnl_position_count",
         "extra_pnl_position_count",
+        "pending_zero_pnl_position_count",
+        "unresolved_extra_pnl_position_count",
         "duplicate_position_id_count",
         "duplicate_pnl_id_count",
         "non_open_position_count",

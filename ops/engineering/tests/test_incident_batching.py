@@ -113,7 +113,7 @@ class IncidentBatchingTests(unittest.TestCase):
         self.assertFalse(result["applied"])
         self.assertEqual({item["state"] for item in self.state().values()}, {"analysis_incomplete"})
         self.assertTrue(all(item.get("review_applied_job") != job["id"] for item in self.state().values()))
-        self.assertEqual(self.c.store.jobs(("verification_pending",))[0]["id"], job["id"])
+        self.assertEqual(self.c.store.jobs(("review_pending",))[0]["id"], job["id"])
         report = self.report(job["id"])
         report["incidents"][-1] = dict(report["incidents"][0])
         self.assertEqual(self.c.incidents.apply_review(job, report)["reason"], "incident_batch_identity_mismatch")
@@ -140,7 +140,7 @@ class IncidentBatchingTests(unittest.TestCase):
         target["disposition"] = "normal_loss"
         self.assertFalse(self.c.finish_review(job, report)["applied"])
         self.assertEqual(self.state()[target["id"]]["state"], "analysis_incomplete")
-        self.assertEqual(self.c.store.jobs(("verification_pending",))[0]["id"], job["id"])
+        self.assertEqual(self.c.store.jobs(("review_pending",))[0]["id"], job["id"])
 
     def test_running_attempted_and_linked_repairs_stay_put_and_new_evidence_survives(self):
         self.observe(6)

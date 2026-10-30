@@ -102,6 +102,28 @@ class WatchesTest(unittest.TestCase):
         self.assertTrue(reading["still_open"])
         self.assertTrue(reading["excluded_from_owned_window"])
 
+    def test_47790949_recognized_pending_zero_requires_coherent_complete_source(self):
+        row = {"account_id": 47790949, "pnl_coverage_diagnostics": {
+            "extra_pnl_position_count": 1, "pending_zero_pnl_position_count": 1,
+            "unresolved_extra_pnl_position_count": 0},
+            "pnl_coverage_complete": True, "book_stable": True,
+            "balance_stable": True, "source_complete": True}
+        read = lambda: watches.account_47790949_watch(operations(diagnostics=[row]))
+        self.assertFalse(read()["still_open"])
+        self.assertEqual(read()["extra_pnl_position_count"], 1)
+        self.assertFalse(read()["excluded_from_owned_window"])
+        for field in ("source_complete", "book_stable", "balance_stable", "pnl_coverage_complete"):
+            row[field] = False
+            self.assertTrue(read()["still_open"], field)
+            row[field] = True
+        counts = row["pnl_coverage_diagnostics"]
+        for invalid in (None, True, -1, "0", 1):
+            counts["unresolved_extra_pnl_position_count"] = invalid
+            self.assertTrue(read()["still_open"], str(invalid))
+        counts["unresolved_extra_pnl_position_count"] = 0
+        counts["pending_zero_pnl_position_count"] = 0
+        self.assertTrue(read()["still_open"])
+
     def test_episode_watch_names_copies_and_leaves_the_account_window(self):
         reading = watches.episode_watch({"episodes": {
             "available": True, "episodes": 4, "latest20_episodes": 4, "copied": 2,

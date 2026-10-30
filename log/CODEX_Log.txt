@@ -448,3 +448,21 @@ hydrationandobservesunintendedlaterorder, finalsourcegreen. Scope/date/hash
 isolation andread/writefailure/oneentryguardsverified; exit/riskunchanged.
 One restorationlogpernewcache, no per-ticktelemetry. ExactCI/release+monitor
 readbacknext; naturalpostreleaseveto eventnotassumed andnoforcedliveorder.
+
+[§LOG.45] №17,859 §§1–5 (30 Oct 2026 12:22 SGT); owner “fix and finish
+№17,859”, acknowledged №17,861 §1 (12:29 SGT), progress №17,862–17,865 §1.
+Entry 30 Oct 2026 12:38 SGT, by <Codex (GPT-6), effort:not exposed>.
+Read main5db06f9 and GROK_Log through №17,703. Remember to check GROK_Log.txt
+for changes before choosing the next serial. Focused release authorized;
+registered rules, owner controls, worker window/quota/auth remain unchanged.
+Four fixes: fresh actor recovery independent of P&L completeness; original
+S3 admission-history review; strict pending-zero broker P&L coverage and watch;
+separate unresolved reviews from deployment verifications with durable history.
+Each regression reproduced the old failure. Combined141 Python tests, Rust
+review14/snapshot21/projection1/limits9, Clippy and formatting pass. Independent
+review accepts the boundary. Five old analyses remain evidence-pending, never
+made successful by relabeling. Economic review complete, outcome NOT PASS:
+S3 wins3/5/4/1, S1 no measured closes, no post-PR134 S3 close in capture.
+See journal §ENG-20261030-FOLLOWTHROUGH.1–6 and validation-17859 document.
+Exact-head CI, both Railway releases, actual two-account source capture,
+corrected live review and queue counts must be verified before release claim.

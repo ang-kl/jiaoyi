@@ -122,12 +122,25 @@ def account_47790949_watch(operations):
     for row in _rows(operations.get("account_source_diagnostics")):
         if row.get("account_id") != ACCOUNT_47790949:
             continue
-        extra = (row.get("pnl_coverage_diagnostics") or {}).get("extra_pnl_position_count")
+        counts = row.get("pnl_coverage_diagnostics") or {}
+        extra = counts.get("extra_pnl_position_count")
         count_known = isinstance(extra, int) and not isinstance(extra, bool) and extra >= 0
+        pending_zero = counts.get("pending_zero_pnl_position_count")
+        unresolved = counts.get("unresolved_extra_pnl_position_count")
+        classified = count_known and all(
+            isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            for value in (pending_zero, unresolved)
+        ) and pending_zero + unresolved == extra
         excluded = row.get("unmatched_excluded_from_owned_window") is True
         open_item = None
         # Owned-window attribution does not resolve account source coverage.
-        if count_known and extra > 0:
+        # Actual zero marks on unique accepted/unfilled pending entries can;
+        # raw extras remain visible and pending risk is not declared zero.
+        if classified and unresolved == 0 and all(row.get(field) is True for field in (
+            "pnl_coverage_complete", "book_stable", "balance_stable", "source_complete"
+        )):
+            open_item = False
+        elif count_known and extra > 0:
             open_item = True
         elif count_known and row.get("pnl_coverage_complete") is True and row.get("book_stable") is True:
             open_item = False

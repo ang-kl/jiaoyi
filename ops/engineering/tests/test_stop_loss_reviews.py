@@ -160,6 +160,24 @@ class StopLossReviewTests(unittest.TestCase):
         task = self.c.store.jobs()[0]["task"]
         self.assertIn('"original_decision_mark_valid":false', task)
 
+    def test_recorded_admission_history_reaches_review_and_changes_evidence_once(self):
+        first = case(checks={"no_prior_recorded_session_cost_veto": None,
+                             "first_recorded_session_entry": True},
+                     missing_evidence=["recorded_session_cost_veto_history"])
+        initial = self.poll([first])["queued_job_ids"][0]
+        self.c.store.update(initial, "completed", result='{"outcome":"no_change"}')
+        proven = case(checks={"no_prior_recorded_session_cost_veto": False,
+                              "first_recorded_session_entry": True}, missing_evidence=[])
+        followup = self.poll([proven])["queued_job_ids"]
+        self.assertEqual(len(followup), 1)
+        self.assertEqual(self.poll([proven])["queued_job_ids"], [])
+        task = self.c.store.jobs()[0]["task"]
+        facts = json.loads(task.split(sl.EVIDENCE_MARKER, 1)[1])["cases"][0]
+        self.assertFalse(facts["checks"]["no_prior_recorded_session_cost_veto"])
+        self.assertTrue(facts["checks"]["first_recorded_session_entry"])
+        self.assertIn("persisted records", task)
+        self.assertEqual(self.c.store.used(), 0)
+
     def test_old_only_startup_does_not_consume_a_review(self):
         old = case(close="2026-10-27T00:00:00Z")
         self.assertEqual(self.poll([old])["queued_job_ids"], [])

@@ -44,6 +44,59 @@ fn same_book(a: &pb::ProtoOaReconcileRes, b: &pb::ProtoOaReconcileRes) -> bool {
     ap == bp && ao == bo
 }
 
+// The margin gate already recognises broker-allocated future position IDs.
+// A zero mark for an accepted, explicitly unfilled pending entry changes no
+// equity. It is still a pending order, never an owned/open position or zero risk.
+fn pending_zero_marks(
+    book: &pb::ProtoOaReconcileRes,
+    pnl: &pb::ProtoOaGetPositionUnrealizedPnLRes,
+) -> BTreeSet<i64> {
+    let order_ids: BTreeSet<_> = book.order.iter().map(|o| o.order_id).collect();
+    let mark_ids: BTreeSet<_> = pnl
+        .position_unrealized_pn_l
+        .iter()
+        .map(|p| p.position_id)
+        .collect();
+    if book.ctid_trader_account_id != pnl.ctid_trader_account_id
+        || order_ids.len() != book.order.len()
+        || order_ids.iter().any(|id| *id <= 0)
+        || mark_ids.len() != pnl.position_unrealized_pn_l.len()
+    {
+        return BTreeSet::new();
+    }
+    pnl.position_unrealized_pn_l
+        .iter()
+        .filter(|mark| {
+            if mark.position_id <= 0
+                || mark.gross_unrealized_pn_l != 0
+                || mark.net_unrealized_pn_l != 0
+                || book
+                    .position
+                    .iter()
+                    .any(|p| p.position_id == mark.position_id)
+            {
+                return false;
+            }
+            let mut entries = book.order.iter().filter(|o| {
+                o.position_id == Some(mark.position_id)
+                    && o.closing_order != Some(true)
+                    && o.order_type != 4
+            });
+            let Some(order) = entries.next() else {
+                return false;
+            };
+            entries.next().is_none()
+                && order.order_status == 1
+                && order.executed_volume == Some(0)
+                && matches!(order.order_type, 2 | 3 | 6)
+                && order.trade_data.volume > 0
+                && order.trade_data.symbol_id > 0
+                && matches!(order.trade_data.trade_side, 1 | 2)
+        })
+        .map(|mark| mark.position_id)
+        .collect()
+}
+
 fn pnl_covers(
     book: &pb::ProtoOaReconcileRes,
     pnl: &pb::ProtoOaGetPositionUnrealizedPnLRes,
@@ -54,10 +107,18 @@ fn pnl_covers(
         .iter()
         .map(|p| p.position_id)
         .collect();
-    positions.len() == book.position.len()
+    let pending_zero = pending_zero_marks(book, pnl);
+    book.ctid_trader_account_id == pnl.ctid_trader_account_id
+        && positions.len() == book.position.len()
         && marks.len() == pnl.position_unrealized_pn_l.len()
-        && positions == marks
-        && book.position.iter().all(|p| p.position_status == 1)
+        && positions.is_subset(&marks)
+        && marks
+            .difference(&positions)
+            .all(|id| pending_zero.contains(id))
+        && book
+            .position
+            .iter()
+            .all(|p| p.position_id > 0 && p.position_status == 1)
 }
 
 // Explain the existing predicate using only fixed counts. Duplicate counts
@@ -72,9 +133,12 @@ fn pnl_coverage_diagnostics(
         .iter()
         .map(|p| p.position_id)
         .collect();
+    let pending_zero = pending_zero_marks(book, pnl);
     json!({
         "missing_pnl_position_count": positions.difference(&marks).count(),
         "extra_pnl_position_count": marks.difference(&positions).count(),
+        "pending_zero_pnl_position_count": pending_zero.len(),
+        "unresolved_extra_pnl_position_count": marks.difference(&positions).filter(|id| !pending_zero.contains(id)).count(),
         "duplicate_position_id_count": book.position.len() - positions.len(),
         "duplicate_pnl_id_count": pnl.position_unrealized_pn_l.len() - marks.len(),
         "non_open_position_count": book.position.iter().filter(|p| p.position_status != 1).count(),
@@ -784,6 +848,172 @@ mod tests {
         assert!(!pnl_covers(&book, &pnl));
     }
 
+    fn pending_zero_fixture() -> (
+        pb::ProtoOaReconcileRes,
+        pb::ProtoOaGetPositionUnrealizedPnLRes,
+    ) {
+        let book = pb::ProtoOaReconcileRes {
+            ctid_trader_account_id: ACCOUNT,
+            order: vec![pb::ProtoOaOrder {
+                order_id: 1,
+                position_id: Some(8),
+                order_type: 3,
+                order_status: 1,
+                executed_volume: Some(0),
+                stop_price: Some(10.0),
+                stop_loss: Some(9.0),
+                trade_data: pb::ProtoOaTradeData {
+                    symbol_id: 1,
+                    volume: 100,
+                    trade_side: 1,
+                    ..Default::default()
+                },
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let pnl = pb::ProtoOaGetPositionUnrealizedPnLRes {
+            ctid_trader_account_id: ACCOUNT,
+            money_digits: 2,
+            position_unrealized_pn_l: vec![pb::ProtoOaPositionUnrealizedPnL {
+                position_id: 8,
+                gross_unrealized_pn_l: 0,
+                net_unrealized_pn_l: 0,
+            }],
+            ..Default::default()
+        };
+        (book, pnl)
+    }
+
+    #[test]
+    fn pending_zero_mark_is_covered_only_by_unique_unfilled_accepted_entry() {
+        let (book, pnl) = pending_zero_fixture();
+        assert!(pnl_covers(&book, &pnl));
+        for field in ["net", "gross", "account", "duplicate", "unlinked"] {
+            let mut bad = pnl.clone();
+            match field {
+                "net" => bad.position_unrealized_pn_l[0].net_unrealized_pn_l = 1,
+                "gross" => bad.position_unrealized_pn_l[0].gross_unrealized_pn_l = -1,
+                "account" => bad.ctid_trader_account_id += 1,
+                "duplicate" => bad
+                    .position_unrealized_pn_l
+                    .push(bad.position_unrealized_pn_l[0]),
+                "unlinked" => bad.position_unrealized_pn_l[0].position_id += 1,
+                _ => unreachable!(),
+            }
+            assert!(!pnl_covers(&book, &bad), "accepted {field}");
+        }
+        for field in [
+            "filled",
+            "unknown_filled",
+            "status",
+            "protective",
+            "unknown_type",
+            "duplicate",
+            "zero_id",
+            "zero_volume",
+            "missing_ref",
+        ] {
+            let mut bad = book.clone();
+            match field {
+                "filled" => bad.order[0].executed_volume = Some(1),
+                "unknown_filled" => bad.order[0].executed_volume = None,
+                "status" => bad.order[0].order_status = 2,
+                "protective" => bad.order[0].closing_order = Some(true),
+                "unknown_type" => bad.order[0].order_type = 99,
+                "duplicate" => bad.order.push(bad.order[0].clone()),
+                "zero_id" => bad.order[0].order_id = 0,
+                "zero_volume" => bad.order[0].trade_data.volume = 0,
+                "missing_ref" => bad.order[0].position_id = None,
+                _ => unreachable!(),
+            }
+            assert!(!pnl_covers(&bad, &pnl), "accepted {field}");
+        }
+        let mut missing_open = book.clone();
+        missing_open.position.push(pb::ProtoOaPosition {
+            position_id: 7,
+            position_status: 1,
+            ..Default::default()
+        });
+        assert!(!pnl_covers(&missing_open, &pnl));
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn pending_zero_capture_restores_float_without_adopting_or_zeroing_pending_risk(
+        pool: PgPool,
+    ) {
+        use std::{
+            collections::VecDeque,
+            sync::{Arc, Mutex},
+        };
+        jiaoyi_store::upsert_account(&pool, ACCOUNT, Environment::Demo)
+            .await
+            .unwrap();
+        let (book, pnl) = pending_zero_fixture();
+        let trader = pb::ProtoOaTrader {
+            ctid_trader_account_id: ACCOUNT,
+            balance: 123456,
+            money_digits: Some(2),
+            deposit_asset_id: 1,
+            total_margin_calculation_type: Some(1),
+            ..Default::default()
+        };
+        let (conn, log) = FakeBroker {
+            account_id: ACCOUNT,
+            assets: vec![(1, "USD".into())],
+            scripted_traders: Arc::new(Mutex::new(VecDeque::from([trader.clone(), trader]))),
+            scripted_books: Arc::new(Mutex::new(VecDeque::from([book.clone(), book]))),
+            scripted_pnl: Arc::new(Mutex::new(VecDeque::from([pnl]))),
+            ..Default::default()
+        }
+        .spawn();
+        conn.application_auth("client", &Secret::new("secret"))
+            .await
+            .unwrap();
+        let account = Allowlist::parse(Some("49236051"))
+            .unwrap()
+            .permit(ACCOUNT)
+            .unwrap();
+        let session = conn
+            .account_auth(&account, &Secret::new("tok"))
+            .await
+            .unwrap();
+        capture(&pool, &session).await.unwrap();
+        let detail: Value = sqlx::query_scalar("SELECT detail FROM report_account_snapshots WHERE account_id=$1 AND sample_key='latest'")
+            .bind(ACCOUNT).fetch_one(&pool).await.unwrap();
+        assert_eq!(detail["source_complete"], true);
+        assert_eq!(detail["failure_reasons"], json!([]));
+        assert_eq!(detail["float"], 0.0);
+        assert_eq!(detail["equity"], 1234.56);
+        assert_eq!(
+            detail["pnl_coverage_diagnostics"]["extra_pnl_position_count"],
+            1
+        );
+        assert_eq!(
+            detail["pnl_coverage_diagnostics"]["pending_zero_pnl_position_count"],
+            1
+        );
+        assert_eq!(
+            detail["pnl_coverage_diagnostics"]["unresolved_extra_pnl_position_count"],
+            0
+        );
+        assert_eq!(detail["open_positions"], 0);
+        assert_eq!(detail["pending_orders"], 1);
+        assert!(detail["pending_risk"].is_null());
+        assert!(detail["pending_stop_loss_before_unquoted_costs"].is_null());
+        assert_eq!(detail["pending_orders_with_unquoted_costs"], 1);
+        let owned: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM trading_intents WHERE account_id=$1")
+                .bind(ACCOUNT)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(owned, 0);
+        let log = log.lock().unwrap();
+        assert!(log.orders.is_empty() && log.amends.is_empty() && log.closes.is_empty());
+        assert_eq!(log.payload_types.iter().filter(|t| **t == pb::ProtoOaPayloadType::ProtoOaGetPositionUnrealizedPnlReq as u32).count(), 1);
+    }
+
     async fn seed_relationship_observations(pool: &PgPool) {
         // A partial closing observation deliberately does not prove full closure.
         sqlx::query("INSERT INTO deals(account_id,deal_id,order_id,position_id,broker_symbol_id,volume,filled_volume,trade_side,deal_status,created_at,executed_at,is_closing,raw,fetched_at) VALUES ($1,1,1,8,1,100,100,'BUY','FILLED',now()-interval '1 minute',now()-interval '1 minute',false,''::bytea,now()), ($1,2,1,8,1,100,10,'SELL','PARTIALLY_FILLED',now()-interval '1 minute',now()-interval '1 minute',true,''::bytea,now()), ($2,3,1,9,1,100,100,'BUY','FILLED',now(),now(),false,''::bytea,now()), ($1,4,1,10,1,100,0,'BUY','REJECTED',now(),now(),false,''::bytea,now())")
@@ -1054,6 +1284,8 @@ mod tests {
             json!({
                 "missing_pnl_position_count": expected_counts[0],
                 "extra_pnl_position_count": expected_counts[1],
+                "pending_zero_pnl_position_count": 0,
+                "unresolved_extra_pnl_position_count": expected_counts[1],
                 "duplicate_position_id_count": expected_counts[2],
                 "duplicate_pnl_id_count": expected_counts[3],
                 "non_open_position_count": expected_counts[4],
