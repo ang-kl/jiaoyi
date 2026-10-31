@@ -590,17 +590,17 @@ class IncidentAcceptanceTests(unittest.TestCase):
                 "status": "completed" if all_green or name != "docker" else "in_progress",
                 "conclusion": "success" if all_green or name != "docker" else None,
                 "app": {"slug": "github-actions"}} for name in ("check", "docker", "engineering")]})
-        with patch.object(self.c, "gh", side_effect=github):
+        with patch.object(self.c, "gh", side_effect=github), patch.object(self.c.releases, "before_merge", return_value=True):
             self.c.release(self.job(repair["id"]))
             self.assertEqual(merges, [])
             self.assertEqual(self.job(repair["id"])["state"], "ci_wait")
             all_green = True
             self.c.release(self.job(repair["id"]))
         self.assertEqual(len(merges), 1)
-        deployment = {"data": {"serviceInstance": {"latestDeployment": {
-            "id": "verified-deployment", "status": "SUCCESS", "meta": {"commitHash": merged}}}}}
-        with patch.object(w.urllib.request, "urlopen", side_effect=[
-                io.BytesIO(json.dumps(deployment).encode()), io.BytesIO(b'{"status":"ok"}')]):
+        deployment = {"id": "verified-deployment", "status": "SUCCESS", "meta": {"commitHash": merged}}
+        with patch.object(self.c.releases, "plan", return_value={"scope": "trading_runtime", "merged_at": "2026-10-28T00:00:00Z"}), \
+                patch.object(self.c.releases, "deployments", return_value=([deployment], [deployment])), \
+                patch.object(w.urllib.request, "urlopen", return_value=io.BytesIO(b'{"status":"ok"}')):
             self.c.release(self.job(repair["id"]))
         self.assertEqual(self.job(repair["id"])["state"], "verification_queued")
         self.c.incidents.tick()
@@ -691,8 +691,12 @@ class IncidentAcceptanceTests(unittest.TestCase):
         self.assertTrue(reserved["task"].startswith(incidents.PREFIX))
         self.assertNotEqual(reserved["id"], held)
         self.assertEqual(self.job(held)["state"], "queued")
+        def read_after_cutoff(*args, **kwargs):
+            self.assertFalse(kwargs.get("write"), "merge after cutoff")
+            self.assertTrue(args[-1].endswith("/pulls/123"))
+            return github(*args, **kwargs)
         with patch.object(self.c.config, "mutation_allowed", return_value=False), \
-             patch.object(self.c, "gh", side_effect=AssertionError("merge after cutoff")):
+             patch.object(self.c, "gh", side_effect=read_after_cutoff):
             self.c.store.update(repair["id"], "ci_wait")
             self.c.release(self.job(repair["id"]))
             with self.assertRaisesRegex(RuntimeError, "window|deadline|closed"):
