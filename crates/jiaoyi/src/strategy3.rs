@@ -654,6 +654,24 @@ impl Ledger for S3Ledger<'_> {
     async fn owns_position(&self, account_id: i64, position_id: i64) -> Result<bool, String> {
         self.inner.owns_position(account_id, position_id).await
     }
+    async fn management_authority(
+        &self,
+        account_id: i64,
+        position_id: i64,
+    ) -> Result<gate::ManagementAuthority, String> {
+        self.inner
+            .management_authority(account_id, position_id)
+            .await
+    }
+    async fn record_authority_absence(
+        &self,
+        account_id: i64,
+        position_id: i64,
+    ) -> Result<(), String> {
+        self.inner
+            .record_authority_absence(account_id, position_id)
+            .await
+    }
 }
 
 // ---------------------------------------------------------------- state
@@ -907,6 +925,9 @@ pub struct Trader<'a, 'c> {
     read_shutdown: Option<Shutdown>,
     event_offset: chrono::Duration,
     protected_through: HashMap<i64, DateTime<Utc>>,
+    authority_recovery: Option<crate::trading::AuthorityRecovery>,
+    authority_started: bool,
+    authority_pending_count: usize,
     /// The loops' liveness, shared with `/health` (each reconcile run beats
     /// it). A trader driven on its own keeps its own map.
     // Claude · № 17,074 25-Oct (ordered: owner "merge when green and deploy";
@@ -1006,6 +1027,9 @@ impl<'a, 'c> Trader<'a, 'c> {
             read_shutdown: None,
             event_offset: chrono::Duration::zero(),
             protected_through: HashMap::new(),
+            authority_recovery: None,
+            authority_started: false,
+            authority_pending_count: 0,
             live: Default::default(),
         };
         t.read_commission().await;
@@ -1036,6 +1060,11 @@ impl<'a, 'c> Trader<'a, 'c> {
         }
         let mut quotes = self.session.connection().spot_events();
         let mut executions = self.session.connection().executions();
+        let recovered = self
+            .authority_recovery
+            .as_ref()
+            .expect("runtime protection has an authority recovery lane")
+            .completion();
         let mut stop = self
             .read_shutdown
             .clone()
@@ -1053,6 +1082,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         loop {
             tokio::select! {
                 _ = stop.wait() => anyhow::bail!("shutdown during historical preparation"),
+                _ = recovered.notified() => self.reconcile(Utc::now()).await?,
                 result = &mut read => { progress.complete(); return Ok(result); },
                 _ = exits.tick() => self.check_exits(Utc::now()+self.event_offset).await?,
                 _ = clock.tick() => self.session_end(Utc::now()+self.event_offset).await?,
@@ -1078,10 +1108,20 @@ impl<'a, 'c> Trader<'a, 'c> {
                 },
                 event=executions.recv()=>match event {
                     Ok(e)=>{
-                        self.server_event(&e).await;
+                        self.server_event(&e).await?;
                         crate::fast_monitor::execution_processed(&self.live,self.account_id(),e.received_at);
                     },
-                    Err(RecvError::Lagged(n))=>crate::fast_monitor::actor_execution_lagged(&self.live,self.account_id(),n),
+                    Err(RecvError::Lagged(n))=>{
+                        crate::fast_monitor::actor_execution_lagged(&self.live,self.account_id(),n);
+                        let mut ids: std::collections::HashSet<i64> = self.own.keys().copied().collect();
+                        if let Some(queue) = &self.authority_recovery { ids.extend(queue.tracked()); }
+                        for id in ids {
+                            crate::authority::mark_gap(self.pool, self.account_id(), id, "Strategy 3 execution stream lagged during preparation")
+                                .await.map_err(anyhow::Error::msg)?;
+                            if let Some(queue) = &self.authority_recovery { queue.invalidate(id); }
+                        }
+                        self.reconcile(Utc::now()).await?;
+                    },
                     Err(RecvError::Closed)=>anyhow::bail!("execution stream closed during historical preparation"),
                 },
             }
@@ -1142,16 +1182,51 @@ impl<'a, 'c> Trader<'a, 'c> {
     pub async fn reconcile(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
         let account_id = self.account_id();
         let res = self.session.reconcile().await?;
+        let present: std::collections::HashSet<i64> =
+            res.position.iter().map(|p| p.position_id).collect();
+        let mut previous: std::collections::HashSet<i64> = self.own.keys().copied().collect();
+        if let Some(queue) = &self.authority_recovery {
+            previous.extend(queue.tracked());
+        }
+        for id in previous.difference(&present) {
+            crate::authority::mark_disappeared(
+                self.pool,
+                account_id,
+                *id,
+                "Strategy 3 observed broker position absence",
+            )
+            .await
+            .map_err(anyhow::Error::msg)?;
+        }
+        if let Some(queue) = &self.authority_recovery {
+            queue.observe(&res.position, LABEL);
+        }
+        if !self.authority_started {
+            for p in &res.position {
+                if p.trade_data.label.as_deref() == Some(LABEL) {
+                    crate::authority::mark_gap(
+                        self.pool,
+                        account_id,
+                        p.position_id,
+                        "Strategy 3 session restarted",
+                    )
+                    .await
+                    .map_err(anyhow::Error::msg)?;
+                }
+            }
+            self.authority_started = true;
+        }
         let mut plans = s3s::open_plans(self.pool, account_id).await?;
         // Strategy 3's unresolved opens: accepted only, or no answer (Codex P1
         // on #14). Never resent.
-        let mut unresolved: Vec<ts::UnresolvedIntent> =
+        let unresolved: Vec<ts::UnresolvedIntent> =
             ts::open_intents_unresolved(self.pool, account_id)
                 .await?
                 .into_iter()
                 .filter(|u| u.entry_key.starts_with("s3:"))
                 .collect();
         let mut seen = Vec::new();
+        let mut authority_pending = Vec::new();
         self.program_positions = 0;
         for p in &res.position {
             let label = p.trade_data.label.as_deref();
@@ -1159,43 +1234,63 @@ impl<'a, 'c> Trader<'a, 'c> {
                 self.program_positions += 1;
             }
             if label != Some(LABEL) {
-                continue;
-            }
-            let mut owned = ts::owns_position(self.pool, account_id, p.position_id).await?;
-            if !owned {
-                // In full only at the requested volume; a part keeps the
-                // intent unresolved, its remainder reserved below until it
-                // fills, ends or is absent after the grace (Codex P1 on #15,
-                // as #16 does for Strategy 1).
-                // Claude · № 17,060 25-Oct (ordered: owner "merge when green
-                // and deploy"; Codex round 3 on #15)
-                if let Some(i) = unresolved.iter().position(|u| {
-                    u.symbol_id == Some(p.trade_data.symbol_id) && u.position_id.is_none()
-                }) {
-                    let part = unresolved[i]
-                        .volume
-                        .is_some_and(|v| p.trade_data.volume < v);
-                    let key = unresolved[i].entry_key.clone();
-                    if part {
-                        unresolved[i].position_id = Some(p.position_id);
-                    } else {
-                        unresolved.remove(i);
-                    }
-                    self.adopt(&key, p, part).await?;
-                    // Claude · № 17,020 25-Oct (Codex P1 on #15): the adopted
-                    // position's plan is read after its fill row exists.
-                    plans = s3s::open_plans(self.pool, account_id).await?;
-                    owned = true;
+                if previous.contains(&p.position_id) {
+                    authority_pending.push(json!({"position_id":p.position_id,
+                        "symbol_id":p.trade_data.symbol_id,
+                        "reason":"previous strategy position label changed; authority unverified",
+                        "stop_loss":p.stop_loss,"take_profit":p.take_profit}));
                 }
-            }
-            if !owned {
                 continue;
             }
-            let Some(side) = Side::from_proto(p.trade_data.trade_side) else {
-                continue;
+            let authority =
+                crate::authority::position_authority(self.pool, account_id, p.position_id)
+                    .await
+                    .and_then(|a| {
+                        a.validate_current(p)?;
+                        if !a.entry_key.starts_with("s3:") {
+                            return Err("the opening anchor belongs to another strategy".into());
+                        }
+                        if self
+                            .own
+                            .get(&p.position_id)
+                            .and_then(|o| o.entry_key.as_ref())
+                            .is_some_and(|key| key != &a.entry_key)
+                        {
+                            return Err("the opening anchor changed since adoption".into());
+                        }
+                        Ok(a)
+                    });
+            let authority = match authority {
+                Ok(a) => a,
+                Err(reason) => {
+                    authority_pending.push(json!({"position_id": p.position_id,
+                        "symbol_id": p.trade_data.symbol_id, "reason": reason,
+                        "stop_loss": p.stop_loss, "take_profit": p.take_profit}));
+                    if let Some(recovery) = &self.authority_recovery {
+                        recovery.enqueue(p);
+                    }
+                    continue;
+                }
             };
+            if !plans
+                .iter()
+                .any(|x| x.position_id == p.position_id && x.entry_key == authority.entry_key)
+            {
+                // Populate the registered plan only after independent fill
+                // provenance has proved this exact opening anchor.
+                let part = unresolved
+                    .iter()
+                    .find(|u| u.entry_key == authority.entry_key)
+                    .and_then(|u| u.volume)
+                    .is_some_and(|v| p.trade_data.volume < v);
+                self.adopt(&authority.entry_key, p, part).await?;
+                plans = s3s::open_plans(self.pool, account_id).await?;
+            }
             seen.push(p.position_id);
-            let plan = plans.iter().rev().find(|x| x.position_id == p.position_id);
+            let plan = plans
+                .iter()
+                .rev()
+                .find(|x| x.position_id == p.position_id && x.entry_key == authority.entry_key);
             let tp1_sent = s3s::tp1_done(self.pool, account_id, p.position_id).await?;
             let end_attempts =
                 s3s::orders_for_position(self.pool, account_id, p.position_id, "session_end")
@@ -1203,7 +1298,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             let e = self.own.entry(p.position_id).or_insert_with(|| Own {
                 position_id: p.position_id,
                 symbol_id: p.trade_data.symbol_id,
-                side,
+                side: authority.side,
                 volume: p.trade_data.volume,
                 entry: p.price,
                 stop: p.stop_loss,
@@ -1219,7 +1314,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                         .as_str()
                         .and_then(|d| d.parse().ok())
                 }),
-                entry_key: plan.map(|x| x.entry_key.clone()),
+                entry_key: Some(authority.entry_key.clone()),
                 tp1_sent,
                 tp1_next_try: None,
                 end_attempts,
@@ -1259,6 +1354,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
             e.tp1_sent |= tp1_sent;
         }
+        self.authority_pending_count = authority_pending.len();
         self.own.retain(|id, _| seen.contains(id));
         let broker_positions: Vec<i64> = res.position.iter().map(|p| p.position_id).collect();
         self.recover_history_exits(&broker_positions).await?;
@@ -1295,6 +1391,10 @@ impl<'a, 'c> Trader<'a, 'c> {
             let at_broker = res.order.iter().any(|o| {
                 o.trade_data.label.as_deref() == Some(LABEL)
                     && Some(o.trade_data.symbol_id) == u.symbol_id
+            }) || res.position.iter().any(|p| {
+                p.trade_data.label.as_deref() == Some(LABEL)
+                    && Some(p.trade_data.symbol_id) == u.symbol_id
+                    && !seen.contains(&p.position_id)
             });
             if at_broker || now - u.created_at < grace {
                 self.pending.push(Pending {
@@ -1318,6 +1418,17 @@ impl<'a, 'c> Trader<'a, 'c> {
             .await?;
         }
         self.d.version = Some(r.version);
+        let authority_reasons = authority_pending
+            .iter()
+            .map(|p| {
+                format!(
+                    "{}:{}",
+                    p["position_id"],
+                    p["reason"].as_str().unwrap_or("unverified")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
         let detail = json!({
             "positions": self.own.values().map(|o| json!({
                 "position_id": o.position_id,
@@ -1328,15 +1439,18 @@ impl<'a, 'c> Trader<'a, 'c> {
                 "tp1_sent": o.tp1_sent,
             })).collect::<Vec<_>>(),
             "program_positions": self.program_positions,
+            "authority_pending": authority_pending,
         });
         self.d
             .note(
                 None,
                 "reconcile",
                 &format!(
-                    "{} Strategy 3 position(s); {} position(s) of this program",
+                    "{} Strategy 3 position(s); {} position(s) of this program; {} authority unverified [{}]",
                     self.own.len(),
-                    self.program_positions
+                    self.program_positions,
+                    authority_pending.len(),
+                    authority_reasons,
                 ),
                 detail,
             )
@@ -1368,44 +1482,19 @@ impl<'a, 'c> Trader<'a, 'c> {
         part: bool,
     ) -> anyhow::Result<()> {
         let account_id = self.account_id();
-        let (kind, outcome, description) = if part {
+        let (outcome, description) = if part {
             (
-                "RECONCILED_PARTIAL_FILL",
                 "reconciled_partial_fill",
                 "an unconfirmed Strategy 3 open found partly filled by reconcile: the position adopted, the remainder held",
             )
         } else {
             (
-                "RECONCILED_FILL",
                 "reconciled_fill",
                 "an unconfirmed Strategy 3 open found filled by reconcile",
             )
         };
-        ts::record_event(
-            self.pool,
-            &ts::EventRow {
-                account_id,
-                entry_key: Some(key.to_string()),
-                client_msg_id: None,
-                payload_type: 0,
-                kind: kind.into(),
-                position_id: Some(p.position_id),
-                order_id: None,
-                deal_id: None,
-                symbol_id: Some(p.trade_data.symbol_id),
-                side: Side::from_proto(p.trade_data.trade_side).map(|s| s.as_str().to_string()),
-                price: p.price,
-                volume: Some(p.trade_data.volume),
-                stop_loss: p.stop_loss,
-                label: p.trade_data.label.clone(),
-                error_code: None,
-                description: Some(description.into()),
-                is_server_event: None,
-                raw: vec![],
-                received_at: Utc::now(),
-            },
-        )
-        .await?;
+        // The qualifier already required a positive correlated receipt.
+        // Do not fabricate a second fill from this current-state snapshot.
         let symbol = self
             .syms
             .get(&p.trade_data.symbol_id)
@@ -1431,7 +1520,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 slippage: None,
                 spread: None,
                 volume: Some(p.trade_data.volume),
-                detail: json!({"note": "the open was Unconfirmed; reconcile found its position"}),
+                detail: json!({"note": description}),
             },
         )
         .await?;
@@ -1509,6 +1598,12 @@ impl<'a, 'c> Trader<'a, 'c> {
     }
 
     fn open_risk(&self) -> Result<f64, String> {
+        if self.authority_pending_count > 0 {
+            return Err(format!(
+                "{} Strategy 3 position(s) await management authority: open risk is unknown",
+                self.authority_pending_count
+            ));
+        }
         let mut total: f64 = self.pending.iter().map(|p| p.risk).sum();
         for o in self.own.values() {
             let (Some(entry), Some(stop)) = (o.entry, o.stop) else {
@@ -1840,6 +1935,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     )
                     .await;
             }
+            Err(e @ (SendError::Evidence(_) | SendError::Authority(_))) => return Err(e.into()),
             Err(e) => {
                 if let Some(x) = self.own.get_mut(&position_id) {
                     x.last_amend = Some(now);
@@ -2011,6 +2107,10 @@ impl<'a, 'c> Trader<'a, 'c> {
                         json!({"entry_key": key}),
                     )
                     .await;
+                // No frame was sent. Refresh a stale owned quantity/anchor
+                // before the registered retry; never rewrite the rejected
+                // command's quantity or retry an unconfirmed broker write.
+                self.reconcile(Utc::now()).await?;
                 Ok(None)
             }
             Err(e) => Err(e.into()),
@@ -2570,17 +2670,30 @@ impl<'a, 'c> Trader<'a, 'c> {
     /// a take-profit hit): recorded as it came, and a closing deal also as a
     /// broker exit, so `/trading/costs` reports it.
     // Codex · № 17,197 26-Oct (ordered: O-1, make skipped owned executions observable).
-    pub async fn server_event(&self, m: &ReceivedExecution) {
+    pub async fn server_event(&self, m: &ReceivedExecution) -> anyhow::Result<()> {
         let Some(e) = gate::decode_execution(self.account_id(), m) else {
-            return;
+            return Ok(());
         };
         let owned = e.position_id.is_some_and(|id| self.own.contains_key(&id));
+        let tracked = owned
+            || match e.position_id {
+                Some(id) => {
+                    crate::trading::historical_strategy_position(
+                        self.pool,
+                        self.account_id(),
+                        id,
+                        "s3:",
+                    )
+                    .await?
+                }
+                None => false,
+            };
         // Retain the original protobuf privately, before either silent filter.
         // No payload, label text, prices or client request ids enter the log.
-        if owned {
-            if let Err(err) = ts::record_event(self.pool, &crate::trading::event_row(&e)).await {
-                tracing::error!(error = %err, "strategy 3 owned execution not recorded");
-            }
+        if tracked {
+            // Lost raw quantity evidence invalidates continued management.
+            // The actor exits; its next session requires scoped recovery.
+            ts::record_event(self.pool, &crate::trading::event_row(&e)).await?;
         }
         // Codex · № 17,217 26-Oct: observed broker closing deals retain a
         // client id. Correlation alone does not make a fill our close request.
@@ -2609,11 +2722,10 @@ impl<'a, 'c> Trader<'a, 'c> {
                     if owned {
                         self.warn_execution_drop(&e, "client_msg_id_present");
                     }
-                    return;
+                    return Ok(());
                 }
                 Err(error) => {
-                    tracing::error!(account = self.account_id(), error = %error, "strategy 3 close ownership lookup failed");
-                    return;
+                    return Err(error.into());
                 }
             }
         }
@@ -2621,16 +2733,15 @@ impl<'a, 'c> Trader<'a, 'c> {
             if owned {
                 self.warn_execution_drop(&e, "label_mismatch");
             }
-            return;
+            return Ok(());
         }
-        if !owned {
-            if let Err(err) = ts::record_event(self.pool, &crate::trading::event_row(&e)).await {
-                tracing::error!(error = %err, "strategy 3 server execution event not recorded");
-            }
+        if !tracked {
+            ts::record_event(self.pool, &crate::trading::event_row(&e)).await?;
         }
         if let Err(err) = self.broker_exit(m).await {
             tracing::error!(error = %err, "strategy 3 broker exit not recorded");
         }
+        Ok(())
     }
 
     // Codex · № 17,225 26-Oct: actual broker absence plus independently synced deals.
@@ -3000,6 +3111,14 @@ pub async fn run_session_with_event_offset(
     t.protect_during_reads = true;
     t.read_shutdown = Some(shutdown.clone());
     t.event_offset = offset;
+    let r0 = rules(pool, account_id, env).await?;
+    let (recovery_queue, recovery_rx) =
+        crate::trading::authority_recovery(Duration::from_secs(r0.reconcile_secs));
+    let recovered = recovery_queue.completion();
+    let recovery_worker =
+        crate::trading::run_authority_recovery(pool, session, recovery_queue.clone(), recovery_rx);
+    tokio::pin!(recovery_worker);
+    t.authority_recovery = Some(recovery_queue);
     if t.syms.is_empty() {
         anyhow::bail!("no resolved symbols stored for this account yet (a data load comes first)");
     }
@@ -3008,7 +3127,6 @@ pub async fn run_session_with_event_offset(
     let mut spots = conn.spot_events();
     let mut execs = conn.executions();
     session.subscribe_spots(&ids).await?;
-    let r0 = rules(pool, account_id, env).await?;
     let mut reconcile_tick = tokio::time::interval(Duration::from_secs(r0.reconcile_secs));
     reconcile_tick.tick().await;
     let mut clock = tokio::time::interval(Duration::from_secs(1));
@@ -3022,6 +3140,7 @@ pub async fn run_session_with_event_offset(
     let management = async {
         loop {
             tokio::select! {
+                _ = recovered.notified() => t.reconcile(Utc::now()).await?,
                 changed=prepared_rx.changed()=>{
                     if changed.is_err() {return Ok(())}
                     let ready=prepared_rx.borrow_and_update().clone();
@@ -3042,10 +3161,20 @@ pub async fn run_session_with_event_offset(
                 _ = exits.tick() => crate::fast_monitor::observe(live,account_id,"registered_exits",t.check_exits(Utc::now()+offset)).await?,
                 m = execs.recv() => match m {
                     Ok(m) => {
-                        crate::fast_monitor::observe(live, account_id, "execution", t.server_event(&m)).await;
+                        crate::fast_monitor::observe(live, account_id, "execution", t.server_event(&m)).await?;
                         crate::fast_monitor::execution_processed(live, account_id, m.received_at);
                     },
-                    Err(RecvError::Lagged(n)) => crate::fast_monitor::actor_execution_lagged(live, account_id, n),
+                    Err(RecvError::Lagged(n)) => {
+                        crate::fast_monitor::actor_execution_lagged(live, account_id, n);
+                        let mut ids: std::collections::HashSet<i64> = t.own.keys().copied().collect();
+                        if let Some(queue) = &t.authority_recovery { ids.extend(queue.tracked()); }
+                        for id in ids {
+                            crate::authority::mark_gap(pool, account_id, id, "Strategy 3 execution stream lagged")
+                                .await.map_err(anyhow::Error::msg)?;
+                            if let Some(queue) = &t.authority_recovery { queue.invalidate(id); }
+                        }
+                        t.reconcile(Utc::now()).await?;
+                    },
                     Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
                 },
                 s = spots.recv() => match s {
@@ -3073,7 +3202,11 @@ pub async fn run_session_with_event_offset(
     tokio::pin!(management);
     // Poll the read-only worker even while an actor handler awaits the
     // database or an execution receipt. Only the actor owns trading state.
-    tokio::select! {result=&mut management=>result, result=&mut preparation=>result}
+    tokio::select! {
+        result=&mut management=>result,
+        result=&mut preparation=>result,
+        _=&mut recovery_worker=>anyhow::bail!("the authority recovery channel closed"),
+    }
 }
 
 // ---------------------------------------------------------------- health

@@ -70,6 +70,10 @@ pub struct FakeBroker {
     pub cash_flows: Vec<pb::ProtoOaDepositWithdraw>,
     /// Deal history of the account.
     pub deals: Vec<pb::ProtoOaDeal>,
+    /// Scoped ownership recovery history; shared across reconnects.
+    pub authority_orders: Arc<Mutex<Vec<pb::ProtoOaOrder>>>,
+    pub authority_deals: Arc<Mutex<Vec<pb::ProtoOaDeal>>>,
+    pub next_position_id: Arc<std::sync::atomic::AtomicI64>,
     /// Ordered read snapshots, shared by clones. Empty means `deals` as usual.
     pub scripted_deal_replies: Arc<Mutex<VecDeque<ScriptedDealReply>>>,
     /// At most this many deals per response (0 = unlimited); more sets hasMore.
@@ -234,6 +238,14 @@ fn oa_error(id: Option<String>, code: &str) -> ProtoMessage {
 }
 
 impl FakeBroker {
+    fn remember_open(
+        &self,
+        req: &pb::ProtoOaNewOrderReq,
+        p: &pb::ProtoOaPosition,
+        d: &pb::ProtoOaDeal,
+    ) {
+        remember_open(&self.authority_orders, &self.authority_deals, req, p, d);
+    }
     /// Start the fake and return a client connection to it, plus its log.
     /// Refused as expired: listed in `expired_tokens`, or spent by a refresh.
     fn expired(&self, token: &str) -> bool {
@@ -812,8 +824,10 @@ impl FakeBroker {
                                 None,
                                 None,
                             ));
-                            let position_id =
-                                1000 + self.positions.lock().unwrap().len() as i64 + 1;
+                            let position_id = 1001
+                                + self
+                                    .next_position_id
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             let (wr, positions, parts, cancel, account) = (
                                 wr.clone(),
                                 self.positions.clone(),
@@ -821,6 +835,8 @@ impl FakeBroker {
                                 self.cancel_remainder,
                                 self.account_id,
                             );
+                            let (authority_orders, authority_deals) =
+                                (self.authority_orders.clone(), self.authority_deals.clone());
                             tokio::spawn(async move {
                                 let start = tokio::time::Instant::now();
                                 let buy = req.trade_side == pb::ProtoOaTradeSide::Buy as i32;
@@ -886,6 +902,13 @@ impl FakeBroker {
                                     } else {
                                         pb::ProtoOaExecutionType::OrderPartialFill
                                     };
+                                    remember_open(
+                                        &authority_orders,
+                                        &authority_deals,
+                                        &req,
+                                        &position,
+                                        &deal,
+                                    );
                                     let m = execution(
                                         id.clone(),
                                         account,
@@ -933,7 +956,10 @@ impl FakeBroker {
                             let rel = req.relative_stop_loss.unwrap_or(0) as f64 / 100_000.0;
                             let rel_tp = req.relative_take_profit.unwrap_or(0) as f64 / 100_000.0;
                             let mut positions = self.positions.lock().unwrap();
-                            let position_id = 1000 + positions.len() as i64 + 1;
+                            let position_id = 1001
+                                + self
+                                    .next_position_id
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             let position = pb::ProtoOaPosition {
                                 position_id,
                                 trade_data: pb::ProtoOaTradeData {
@@ -995,12 +1021,26 @@ impl FakeBroker {
                                 Some(deal),
                             );
                             match self.fill_delay {
-                                None => out.push(filled),
+                                None => {
+                                    self.remember_open(&req, &position, &deal);
+                                    out.push(filled);
+                                }
                                 Some(delay) => {
                                     // The fill comes later, on its own.
                                     let (wr, positions) = (wr.clone(), self.positions.clone());
+                                    let (authority_orders, authority_deals) = (
+                                        self.authority_orders.clone(),
+                                        self.authority_deals.clone(),
+                                    );
                                     tokio::spawn(async move {
                                         tokio::time::sleep(delay).await;
+                                        remember_open(
+                                            &authority_orders,
+                                            &authority_deals,
+                                            &req,
+                                            &position,
+                                            &deal,
+                                        );
                                         positions.lock().unwrap().push(position);
                                         let _ = write_frame(&mut *wr.lock().await, &filled).await;
                                     });
@@ -1088,6 +1128,8 @@ impl FakeBroker {
                                     volume: req.volume,
                                     filled_volume: req.volume,
                                     symbol_id: p.trade_data.symbol_id,
+                                    trade_side: if p.trade_data.trade_side == 1 { 2 } else { 1 },
+                                    execution_timestamp: chrono::Utc::now().timestamp_millis(),
                                     deal_status: pb::ProtoOaDealStatus::Filled as i32,
                                     // O-1: live closing fills include this detail;
                                     // absence made duplicate-close controls unreachable.
@@ -1098,6 +1140,7 @@ impl FakeBroker {
                                     }),
                                     ..Default::default()
                                 };
+                                self.authority_deals.lock().unwrap().push(deal);
                                 out.push(execution(
                                     id,
                                     self.account_id,
@@ -1107,14 +1150,35 @@ impl FakeBroker {
                                 ));
                             }
                             Some(i) => {
-                                let p = positions.remove(i);
+                                let mut p = positions.remove(i);
                                 drop(positions);
+                                let deal = pb::ProtoOaDeal {
+                                    deal_id: p.position_id * 10 + 8,
+                                    order_id: p.position_id * 10 + 7,
+                                    position_id: p.position_id,
+                                    symbol_id: p.trade_data.symbol_id,
+                                    volume: p.trade_data.volume,
+                                    filled_volume: p.trade_data.volume,
+                                    trade_side: if p.trade_data.trade_side == 1 { 2 } else { 1 },
+                                    execution_timestamp: chrono::Utc::now().timestamp_millis(),
+                                    deal_status: pb::ProtoOaDealStatus::Filled as i32,
+                                    close_position_detail: Some(pb::ProtoOaClosePositionDetail {
+                                        closed_volume: Some(p.trade_data.volume),
+                                        entry_price: p.price.unwrap_or_default(),
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                };
+                                self.authority_deals.lock().unwrap().push(deal);
+                                p.trade_data.volume = 0;
+                                p.position_status =
+                                    pb::ProtoOaPositionStatus::PositionStatusClosed as i32;
                                 out.push(execution(
                                     id,
                                     self.account_id,
                                     pb::ProtoOaExecutionType::OrderFilled,
                                     Some(p),
-                                    None,
+                                    Some(deal),
                                 ));
                             }
                             None => {
@@ -1122,6 +1186,58 @@ impl FakeBroker {
                                 out.push(oa_error(id, "POSITION_NOT_FOUND"));
                             }
                         }
+                    } else if pt == Oa::ProtoOaOrderListByPositionIdReq as i32 {
+                        let req =
+                            pb::ProtoOaOrderListByPositionIdReq::decode(body.as_slice()).unwrap();
+                        let order = self
+                            .authority_orders
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .filter(|o| o.position_id == Some(req.position_id))
+                            .cloned()
+                            .collect();
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaOrderListByPositionIdRes as i32,
+                            pb::ProtoOaOrderListByPositionIdRes {
+                                payload_type: None,
+                                ctid_trader_account_id: self.account_id,
+                                order,
+                                has_more: false,
+                            }
+                            .encode_to_vec(),
+                        ));
+                    } else if pt == Oa::ProtoOaDealListByPositionIdReq as i32 {
+                        let req =
+                            pb::ProtoOaDealListByPositionIdReq::decode(body.as_slice()).unwrap();
+                        let mut deal = self
+                            .deals
+                            .iter()
+                            .filter(|d| d.position_id == req.position_id)
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        deal.extend(
+                            self.authority_deals
+                                .lock()
+                                .unwrap()
+                                .iter()
+                                .filter(|d| d.position_id == req.position_id)
+                                .cloned(),
+                        );
+                        deal.sort_by_key(|d| d.deal_id);
+                        deal.dedup_by_key(|d| d.deal_id);
+                        out.push(reply(
+                            id,
+                            Oa::ProtoOaDealListByPositionIdRes as i32,
+                            pb::ProtoOaDealListByPositionIdRes {
+                                payload_type: None,
+                                ctid_trader_account_id: self.account_id,
+                                deal,
+                                has_more: false,
+                            }
+                            .encode_to_vec(),
+                        ));
                     } else if pt == Oa::ProtoOaCashFlowHistoryListReq as i32 {
                         let req =
                             pb::ProtoOaCashFlowHistoryListReq::decode(body.as_slice()).unwrap();
@@ -1228,6 +1344,36 @@ impl FakeBroker {
             log,
         )
     }
+}
+
+fn remember_open(
+    orders: &Arc<Mutex<Vec<pb::ProtoOaOrder>>>,
+    deals: &Arc<Mutex<Vec<pb::ProtoOaDeal>>>,
+    req: &pb::ProtoOaNewOrderReq,
+    p: &pb::ProtoOaPosition,
+    d: &pb::ProtoOaDeal,
+) {
+    let order = pb::ProtoOaOrder {
+        order_id: d.order_id,
+        trade_data: pb::ProtoOaTradeData {
+            volume: req.volume,
+            ..p.trade_data.clone()
+        },
+        order_type: pb::ProtoOaOrderType::Market as i32,
+        order_status: pb::ProtoOaOrderStatus::OrderStatusFilled as i32,
+        executed_volume: Some(p.trade_data.volume),
+        client_order_id: req.client_order_id.clone(),
+        position_id: Some(p.position_id),
+        closing_order: Some(false),
+        ..Default::default()
+    };
+    let mut os = orders.lock().unwrap();
+    if let Some(old) = os.iter_mut().find(|o| o.order_id == order.order_id) {
+        *old = order;
+    } else {
+        os.push(order);
+    }
+    deals.lock().unwrap().push(*d);
 }
 
 /// A broker-side fill: ORDER_FILLED with no client message id and the

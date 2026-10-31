@@ -947,6 +947,9 @@ pub fn position_money(deals: &[DealMoney]) -> Result<(i64, DateTime<Utc>, f64), 
                 .close_money_digits
                 .or(d.money_digits)
                 .ok_or("a closing deal has no money digits")?;
+            if !(0..=18).contains(&digits) {
+                return Err("closing monetary precision is outside 0..18".into());
+            }
             let unit = 10f64.powi(digits);
             let gross = d
                 .close_gross_profit
@@ -960,18 +963,21 @@ pub fn position_money(deals: &[DealMoney]) -> Result<(i64, DateTime<Utc>, f64), 
             let conversion_fee = d
                 .close_pnl_conversion_fee
                 .ok_or("a closing deal has no P&L conversion fee")?;
-            net += (gross + swap) as f64 / unit;
-            net -= commission.abs() as f64 / unit;
-            net -= conversion_fee.abs() as f64 / unit;
+            net += (gross as f64 + swap as f64) / unit;
+            net -= commission.unsigned_abs() as f64 / unit;
+            net -= conversion_fee.unsigned_abs() as f64 / unit;
             closed_at = closed_at.max(Some(d.executed_at));
         }
+    }
+    if !net.is_finite() {
+        return Err("closing net money is not finite".into());
     }
     Ok((opened, closed_at.ok_or("no closing deal")?, net))
 }
 
 /// A strategy's closed positions on an account, oldest close first, in net
-/// R, and how many closed positions could not be measured (no recorded risk,
-/// or a money field missing). `prefix`: the strategy's open entry keys
+/// R, and how many candidate lifecycles lack complete evidence (including
+/// contradictory receipts, missing original risk or closing money). `prefix`: the strategy's open entry keys
 /// (`s1:` or `s3:`). A position belongs to the open whose fill events name
 /// it; its risk is the gate's for the whole requested volume, scaled by the
 /// filled share.
@@ -980,110 +986,16 @@ pub async fn closed_trades(
     account_id: i64,
     prefix: &str,
 ) -> Result<(Vec<ClosedTrade>, usize), sqlx::Error> {
-    let opens = sqlx::query(
-        "SELECT DISTINCT ON (e.position_id) i.entry_key, e.position_id, i.volume, i.risk
-         FROM trading_intents i
-         JOIN trading_events e ON e.entry_key = i.entry_key
-         WHERE i.account_id = $1 AND i.kind = 'open' AND i.entry_key LIKE $2 || '%'
-           AND e.account_id = $1 AND e.position_id IS NOT NULL AND e.kind = ANY($3)
-         ORDER BY e.position_id, i.id",
-    )
-    .bind(account_id)
-    .bind(prefix)
-    .bind(FILL_KINDS)
-    .fetch_all(pool)
-    .await?;
-    if opens.is_empty() {
-        return Ok((Vec::new(), 0));
-    }
-    let position_ids: Vec<i64> = opens.iter().map(|o| o.get("position_id")).collect();
-    // Read this account's owned positions together. Fetching once per
-    // position made every /health request repeat an account-deal scan and
-    // a network round trip for the entire closed-trade history.
-    let rows = sqlx::query(
-        "SELECT position_id, is_closing, filled_volume, executed_at, money_digits,
-                close_gross_profit, close_swap, close_commission, close_pnl_conversion_fee,
-                close_money_digits
-         FROM deals WHERE account_id = $1 AND position_id = ANY($2) AND filled_volume > 0
-         ORDER BY position_id, executed_at, deal_id",
-    )
-    .bind(account_id)
-    .bind(&position_ids)
-    .fetch_all(pool)
-    .await?;
-    let mut by_position: std::collections::HashMap<i64, Vec<DealMoney>> =
-        std::collections::HashMap::new();
-    for d in rows {
-        by_position
-            .entry(d.get("position_id"))
-            .or_default()
-            .push(DealMoney {
-                is_closing: d.get("is_closing"),
-                filled_volume: d.get("filled_volume"),
-                executed_at: d.get("executed_at"),
-                money_digits: d.get("money_digits"),
-                close_gross_profit: d.get("close_gross_profit"),
-                close_swap: d.get("close_swap"),
-                close_commission: d.get("close_commission"),
-                close_pnl_conversion_fee: d.get("close_pnl_conversion_fee"),
-                close_money_digits: d.get("close_money_digits"),
-            });
-    }
-    let mut out = Vec::new();
-    let mut unmeasured = 0;
-    for o in opens {
-        let position_id: i64 = o.get("position_id");
-        let deals = by_position.remove(&position_id).unwrap_or_default();
-        let (opened, closed_at, net) = match position_money(&deals) {
-            Ok(x) => x,
-            Err(why) if why == "still open" => continue,
-            Err(why)
-                if why == "no opening deal stored yet"
-                    && !deals.iter().any(|d| d.is_closing && d.filled_volume > 0) =>
-            {
-                continue;
-            }
-            // Positive closing history without its opening is unknown, not
-            // an absent outcome that can make performance look complete.
-            Err(_) => {
-                unmeasured += 1;
-                continue;
-            }
-        };
-        let requested: Option<i64> = o.get("volume");
-        let risk: Option<f64> = o.get("risk");
-        let share = match requested {
-            Some(v) if v > 0 && opened <= v => opened as f64 / v as f64,
-            // The original risk applies only to its requested quantity. An
-            // expanded lifecycle or unknown request cannot inherit full risk.
-            _ => {
-                unmeasured += 1;
-                continue;
-            }
-        };
-        match risk.map(|r| r * share) {
-            Some(r) if r.is_finite() && r > 0.0 => out.push(ClosedTrade {
-                entry_key: o.get("entry_key"),
-                position_id,
-                closed_at,
-                r: net / r,
-            }),
-            _ => unmeasured += 1,
-        }
-    }
-    out.sort_by(|a, b| {
-        a.closed_at
-            .cmp(&b.closed_at)
-            .then(a.position_id.cmp(&b.position_id))
-    });
-    Ok((out, unmeasured))
+    let evidence =
+        crate::outcomes::read(pool, account_id, prefix.trim_end_matches(':'), Utc::now()).await?;
+    Ok((evidence.trades, evidence.unmeasured))
 }
 
 /// A strategy's results on an account, in R only (no money).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Performance {
     pub trades: usize,
-    /// Closed positions that could not be measured (not counted above).
+    /// Unresolved candidate lifecycles, excluded from the measured closes.
     pub unmeasured: usize,
     pub net_r: f64,
     /// Σ winning R ÷ |Σ losing R|; `None` with no losing trade.

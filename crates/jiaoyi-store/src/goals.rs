@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{PgPool, Row};
 
-use crate::trading::{self, ClosedTrade};
+use crate::trading::ClosedTrade;
 
 pub const WINDOW: usize = 20;
 pub const WIN_RATE_TARGET: f64 = 0.73;
@@ -154,7 +154,7 @@ fn summarize_at(
     }
     if unmeasured_positions > 0 {
         missing_reasons.push(format!(
-            "{unmeasured_positions} closed position(s) lack complete net-R evidence"
+            "{unmeasured_positions} position lifecycle(s) lack complete net-R evidence"
         ));
     }
     if trades.iter().any(|t| !t.r.is_finite()) {
@@ -231,92 +231,6 @@ fn summarize_at(
 
 // All source tables are existing action-owner receipts. We only detect gaps;
 // we do not infer a fill from absence or create/reconcile any trading record.
-const QUALITY_SQL: &str = r#"
-WITH owned AS (
- SELECT DISTINCT ON (e.position_id) e.position_id, i.entry_key, i.volume AS requested_volume
- FROM trading_intents i JOIN trading_events e
-   ON e.entry_key = i.entry_key AND e.account_id = i.account_id
- WHERE i.account_id = $1 AND i.kind = 'open' AND i.entry_key LIKE $2 || ':%'
-   AND e.position_id IS NOT NULL AND e.kind = ANY($3) AND e.volume > 0
- ORDER BY e.position_id, i.id
-), opening_deal_events AS (
- SELECT position_id, SUM(volume)::bigint AS quantity FROM (
-   SELECT DISTINCT ON (e.position_id, e.deal_id) e.position_id, e.volume
-   FROM trading_events e JOIN owned o ON o.entry_key = e.entry_key AND o.position_id = e.position_id
-   WHERE e.account_id = $1 AND e.kind = ANY($3) AND e.volume > 0 AND e.deal_id IS NOT NULL
-   ORDER BY e.position_id, e.deal_id, e.id DESC
- ) d GROUP BY position_id
-), opening_events AS (
- SELECT o.position_id, GREATEST(COALESCE(d.quantity,0),COALESCE((
-  SELECT MAX(e.volume) FROM trading_events e WHERE e.account_id=$1
-   AND e.entry_key=o.entry_key AND e.position_id=o.position_id
-   AND e.kind=ANY($3) AND e.volume>0
- ),0))::bigint AS quantity
- FROM owned o LEFT JOIN opening_deal_events d ON d.position_id=o.position_id
-), history AS (
- SELECT o.position_id,
-   COALESCE(SUM(d.filled_volume) FILTER (WHERE NOT d.is_closing), 0)::bigint AS opened,
-   COALESCE(SUM(d.filled_volume) FILTER (WHERE d.is_closing), 0)::bigint AS closed,
-   BOOL_OR(d.is_closing AND (d.close_gross_profit IS NULL OR d.close_swap IS NULL
-      OR d.close_commission IS NULL OR d.close_pnl_conversion_fee IS NULL OR COALESCE(d.close_money_digits,d.money_digits) IS NULL
-      OR COALESCE(d.close_money_digits,d.money_digits) NOT BETWEEN 0 AND 18)) AS missing_costs,
-   BOOL_OR(d.deal_status NOT IN ('FILLED','PARTIALLY_FILLED')) AS invalid_status
- FROM owned o LEFT JOIN deals d ON d.account_id = $1 AND d.position_id = o.position_id AND d.filled_volume > 0
- GROUP BY o.position_id
-), local_receipts AS (
- SELECT position_id, entry_key, SUM(volume)::bigint AS quantity, MAX(received_at) AS at FROM (
-  SELECT DISTINCT ON (e.position_id,e.deal_id) e.position_id, i.entry_key, e.volume,e.received_at
-  FROM trading_events e JOIN trading_intents i ON i.entry_key = e.entry_key AND i.account_id=e.account_id
-  JOIN owned o ON o.position_id=e.position_id
-  WHERE e.account_id=$1 AND i.kind='close' AND e.kind=ANY($3) AND e.volume>0 AND e.deal_id IS NOT NULL
-  ORDER BY e.position_id,e.deal_id,e.id DESC
- ) d GROUP BY position_id,entry_key
-), fills AS (
- SELECT DISTINCT ON (f.entry_key) f.position_id,f.entry_key,f.volume AS quantity,
-   COALESCE(f.answered_at,f.sent_at) AS at
- FROM strategy3_fills f JOIN owned o ON o.position_id=f.position_id
- WHERE $2='s3' AND f.account_id=$1 AND f.kind IN ('broker_exit','tp1','session_end')
-   AND f.outcome IN ('filled','partly_filled') AND f.volume>0
- ORDER BY f.entry_key,f.id DESC
-), s1_fills AS (
- SELECT DISTINCT ON (f.entry_key) f.position_id,f.entry_key,f.volume AS quantity,
-   COALESCE(f.answered_at,f.sent_at) AS at
- FROM strategy1_fills f JOIN owned o ON o.position_id=f.position_id
- WHERE $2='s1' AND f.account_id=$1 AND f.kind='broker_exit'
-   AND f.outcome IN ('filled','partly_filled') AND f.volume>0
- ORDER BY f.entry_key,f.id DESC
-), grouped_receipts AS (
- SELECT position_id,entry_key,MAX(quantity) AS quantity, MAX(at) AS at
- FROM (SELECT * FROM local_receipts UNION ALL SELECT * FROM fills UNION ALL SELECT * FROM s1_fills) r
- GROUP BY position_id,entry_key
-), closing_receipts AS (
- SELECT position_id,SUM(quantity)::bigint AS quantity,MAX(at) AS at FROM grouped_receipts GROUP BY position_id
-)
-SELECT o.position_id, o.requested_volume, GREATEST(COALESCE(e.quantity,0),h.opened) AS opened,
- h.opened AS history_opened,h.closed,COALESCE(h.missing_costs,false) AS missing_costs,
- COALESCE(h.invalid_status,false) AS invalid_status,
- COALESCE(c.quantity,0) AS observed_closed, c.at AS latest_exit,
- (EXISTS (
-  SELECT 1 FROM trading_events x JOIN trading_intents i ON i.account_id=x.account_id AND i.entry_key=x.entry_key
-  WHERE x.account_id=$1 AND x.position_id=o.position_id AND i.kind='close'
-   AND x.kind=ANY($3) AND x.volume>0 AND x.deal_id IS NOT NULL
-   AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.account_id=$1 AND d.position_id=o.position_id AND d.deal_id=x.deal_id AND d.is_closing)
- ) OR EXISTS (
-  SELECT 1 FROM grouped_receipts g WHERE g.position_id=o.position_id AND g.entry_key LIKE $2||'-broker:%'
-   AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.account_id=$1 AND d.position_id=o.position_id AND d.is_closing
-     AND g.entry_key=$2||'-broker:'||$1::text||':'||o.position_id::text||':'||d.deal_id::text)
- )) AS receipt_deal_missing,
- EXISTS (
-  SELECT 1 FROM trading_events x WHERE x.account_id=$1 AND x.position_id=o.position_id
-   AND x.kind=ANY($3) AND x.volume>0 AND x.entry_key IS NULL
-   AND NOT EXISTS (SELECT 1 FROM deals d WHERE d.account_id=$1 AND d.deal_id=x.deal_id)
-   AND NOT EXISTS (SELECT 1 FROM grouped_receipts g WHERE g.position_id=x.position_id
-      AND g.entry_key=$2||'-broker:'||$1::text||':'||x.position_id::text||':'||x.deal_id::text)
- ) AS unmatched_owned_fill
-FROM owned o JOIN history h ON h.position_id=o.position_id
-LEFT JOIN opening_events e ON e.position_id=o.position_id
-LEFT JOIN closing_receipts c ON c.position_id=o.position_id
-"#;
 
 async fn watermark(pool: &PgPool, account_id: i64) -> Result<String, sqlx::Error> {
     sqlx::query_scalar(
@@ -359,15 +273,11 @@ pub async fn assess(
     }
     let cutoff = Utc::now();
     let before = watermark(pool, account_id).await?;
-    let (mut trades, mut unmeasured) =
-        trading::closed_trades(pool, account_id, &format!("{strategy}:")).await?;
-    let rows = sqlx::query(QUALITY_SQL)
-        .bind(account_id)
-        .bind(strategy)
-        .bind(trading::FILL_KINDS)
-        .fetch_all(pool)
-        .await?;
-    let mut reasons = Vec::new();
+    let evidence = crate::outcomes::read(pool, account_id, strategy, cutoff).await?;
+    let trades = evidence.trades;
+    let unmeasured = evidence.unmeasured;
+    let mut reasons = evidence.reasons;
+    let latest_exit = evidence.latest_exit;
     let snapshot = crate::settings::snapshot(pool, Some(account_id)).await?;
     let horizon = snapshot
         .integer("trading.reconcile_secs")
@@ -408,86 +318,6 @@ pub async fn assess(
     } else {
         reasons.push("no broker-history fetch receipt is stored".into());
     }
-    let owned_positions: std::collections::HashSet<i64> =
-        rows.iter().map(|r| r.get("position_id")).collect();
-    let mut invalid_measured = std::collections::HashSet::new();
-    for trade in &trades {
-        if !owned_positions.contains(&trade.position_id) {
-            invalid_measured.insert(trade.position_id);
-            reasons.push(format!(
-                "position {}: no positive owned opening receipt",
-                trade.position_id
-            ));
-        }
-    }
-    let mut latest_exit = None;
-    for row in rows {
-        let reasons_before = reasons.len();
-        let position: i64 = row.get("position_id");
-        let opened: i64 = row.get("opened");
-        let closed: i64 = row.get("closed");
-        let history_opened: i64 = row.get("history_opened");
-        if closed > opened && opened > 0 {
-            reasons.push(format!(
-                "position {position}: closing history exceeds proven opening quantity"
-            ));
-        }
-        let was_measured = trades.iter().any(|t| t.position_id == position);
-        // The recorded risk belongs to the original requested quantity. A
-        // closed position cannot prove its filled-share risk from a missing,
-        // nonpositive or smaller request. Retain the reason even when the
-        // closed-trade reader already excluded it as unmeasured. Still-open
-        // positions are outside this cohort.
-        let requested: Option<i64> = row.get("requested_volume");
-        if (was_measured || (opened > 0 && closed >= opened))
-            && requested.is_none_or(|quantity| quantity <= 0 || quantity < opened)
-        {
-            reasons.push(format!(
-                "position {position}: original requested volume missing or inconsistent with proven opening quantity"
-            ));
-        }
-        let observed_closed: i64 = row.get("observed_closed");
-        if history_opened < opened
-            && (was_measured || closed > 0 || (observed_closed >= opened && observed_closed > 0))
-        {
-            reasons.push(format!(
-                "position {position}: opening history trails confirmed opening receipt quantity"
-            ));
-        }
-        let at: Option<DateTime<Utc>> = row.get("latest_exit");
-        latest_exit = latest_exit.max(at);
-        if observed_closed >= opened
-            && observed_closed > 0
-            && (opened == 0
-                || closed < observed_closed
-                || row.get::<bool, _>("receipt_deal_missing"))
-        {
-            reasons.push(format!(
-                "position {position}: terminal exit receipts await complete broker history"
-            ));
-        }
-        if closed >= opened && opened > 0 && row.get::<bool, _>("missing_costs") {
-            reasons.push(format!(
-                "position {position}: closing costs or monetary precision missing"
-            ));
-        }
-        if row.get::<bool, _>("invalid_status") {
-            reasons.push(format!(
-                "position {position}: positive-volume history has an unsupported deal status"
-            ));
-        }
-        if row.get::<bool, _>("unmatched_owned_fill") {
-            reasons.push(format!(
-                "position {position}: unclassified owned fill awaits authoritative history"
-            ));
-        }
-        if reasons.len() > reasons_before {
-            invalid_measured.insert(position);
-        }
-    }
-    let before_filter = trades.len();
-    trades.retain(|t| !invalid_measured.contains(&t.position_id));
-    unmeasured += before_filter - trades.len();
     if watermark(pool, account_id).await? != before {
         reasons.push("account receipts or broker history changed during assessment".into());
     }

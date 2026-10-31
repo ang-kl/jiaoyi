@@ -11,8 +11,8 @@ use jiaoyi_core::secret::Secret;
 use jiaoyi_ctrader::messages as pb;
 use jiaoyi_ctrader::testkit::{FakeBroker, FakeLog};
 use jiaoyi_ctrader::trading::{
-    send, Command, EventRecord, Intent, IntentWrite, Ledger, Outcome, Policy, SendError, Side,
-    VolumeLimits, HEDGED, NETTED,
+    send, Command, EventRecord, Intent, IntentWrite, Ledger, ManagementAuthority, Outcome, Policy,
+    SendError, Side, VolumeLimits, HEDGED, NETTED,
 };
 use jiaoyi_ctrader::Connection;
 
@@ -25,8 +25,25 @@ struct MemLedger {
     intents: Arc<Mutex<Vec<Intent>>>,
     events: Arc<Mutex<Vec<EventRecord>>>,
     owned: Arc<Mutex<Vec<i64>>>,
+    authorities: Arc<Mutex<HashMap<i64, ManagementAuthority>>>,
     fail: bool,
+    fail_fill_receipt: bool,
     margin_unavailable: bool,
+}
+
+impl MemLedger {
+    fn prove(&self, position_id: i64, side: Side, volume: i64) {
+        self.owned.lock().unwrap().push(position_id);
+        self.authorities.lock().unwrap().insert(
+            position_id,
+            ManagementAuthority {
+                entry_key: "fixture-owned-opening".into(),
+                symbol_id: ETH,
+                side,
+                remaining_volume: volume,
+            },
+        );
+    }
 }
 
 impl Ledger for MemLedger {
@@ -53,9 +70,25 @@ impl Ledger for MemLedger {
         Ok(IntentWrite::Recorded)
     }
     async fn record_event(&self, e: &EventRecord) -> Result<(), String> {
+        if self.fail_fill_receipt && e.kind == "ORDER_FILLED" {
+            return Err("injected durable fill write failure".into());
+        }
         if let Some(p) = e.position_id {
             if e.kind == "ORDER_FILLED" {
                 self.owned.lock().unwrap().push(p);
+                if let Some(i) = self.intents.lock().unwrap().iter().find(|i| {
+                    Some(i.entry_key.as_str()) == e.entry_key.as_deref() && i.kind == "open"
+                }) {
+                    self.authorities.lock().unwrap().insert(
+                        p,
+                        ManagementAuthority {
+                            entry_key: i.entry_key.clone(),
+                            symbol_id: i.symbol_id.unwrap(),
+                            side: i.side.unwrap(),
+                            remaining_volume: e.volume.unwrap(),
+                        },
+                    );
+                }
             }
         }
         self.events.lock().unwrap().push(e.clone());
@@ -63,6 +96,26 @@ impl Ledger for MemLedger {
     }
     async fn owns_position(&self, _account_id: i64, position_id: i64) -> Result<bool, String> {
         Ok(self.owned.lock().unwrap().contains(&position_id))
+    }
+    async fn management_authority(
+        &self,
+        _account_id: i64,
+        position_id: i64,
+    ) -> Result<ManagementAuthority, String> {
+        self.authorities
+            .lock()
+            .unwrap()
+            .get(&position_id)
+            .cloned()
+            .ok_or("authority incomplete: fixture lacks qualified opening".into())
+    }
+    async fn record_authority_absence(
+        &self,
+        _account_id: i64,
+        position_id: i64,
+    ) -> Result<(), String> {
+        self.authorities.lock().unwrap().remove(&position_id);
+        Ok(())
     }
 }
 
@@ -1098,7 +1151,7 @@ async fn margin_unavailable_does_not_prevent_owned_amend_or_close() {
         margin_unavailable: true,
         ..Default::default()
     };
-    ledger.owned.lock().unwrap().push(9);
+    ledger.prove(9, Side::Buy, 100);
     for (key, command) in [
         (
             "amend",
@@ -1252,7 +1305,7 @@ async fn an_amend_rejects_a_direction_that_differs_from_fresh_broker_state() {
         let (conn, log) = f.spawn();
         let s = session_on(&conn).await;
         let ledger = MemLedger::default();
-        ledger.owned.lock().unwrap().push(77);
+        ledger.prove(77, stale_side, 100);
         let result = send(
             &s,
             &allow(),
@@ -1269,7 +1322,7 @@ async fn an_amend_rejects_a_direction_that_differs_from_fresh_broker_state() {
         )
         .await;
         assert!(
-            matches!(&result, Err(SendError::Refused(r)) if r.reason.contains("broker direction")),
+            matches!(&result, Err(SendError::Refused(r)) if r.reason.contains("direction")),
             "{result:?}"
         );
         assert!(log.lock().unwrap().amends.is_empty(), "no amendment frame");
@@ -1286,7 +1339,7 @@ async fn an_amend_rejects_an_unrecognised_broker_direction() {
     let (conn, log) = f.spawn();
     let s = session_on(&conn).await;
     let ledger = MemLedger::default();
-    ledger.owned.lock().unwrap().push(77);
+    ledger.prove(77, Side::Buy, 100);
     let result = send(
         &s,
         &allow(),
@@ -1303,7 +1356,7 @@ async fn an_amend_rejects_an_unrecognised_broker_direction() {
     )
     .await;
     assert!(
-        matches!(&result, Err(SendError::Refused(r)) if r.reason.contains("broker direction")),
+        matches!(&result, Err(SendError::Refused(r)) if r.reason.contains("direction")),
         "{result:?}"
     );
     assert!(log.lock().unwrap().amends.is_empty());
@@ -1325,7 +1378,7 @@ async fn matching_directions_keep_tightening_and_preserve_take_profit() {
         let (conn, log) = f.clone().spawn();
         let s = session_on(&conn).await;
         let ledger = MemLedger::default();
-        ledger.owned.lock().unwrap().push(77);
+        ledger.prove(77, side, 100);
         let sent = send(
             &s,
             &allow(),
@@ -1354,4 +1407,202 @@ async fn matching_directions_keep_tightening_and_preserve_take_profit() {
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].take_profit, Some(take_profit));
     }
+}
+
+#[tokio::test]
+async fn a_historical_owner_without_current_authority_cannot_manage() {
+    let f = fake();
+    f.positions
+        .lock()
+        .unwrap()
+        .push(position(77, ETH, Some("jiaoyi-s3")));
+    let (conn, log) = f.spawn();
+    let s = session_on(&conn).await;
+    let ledger = MemLedger::default();
+    ledger.owned.lock().unwrap().push(77);
+    for (key, command) in [
+        (
+            "historical-amend",
+            Command::AmendStop {
+                position_id: 77,
+                side: Side::Buy,
+                current_stop: Some(90.0),
+                new_stop: 95.0,
+            },
+        ),
+        (
+            "historical-close",
+            Command::Close {
+                position_id: 77,
+                volume: 100,
+            },
+        ),
+    ] {
+        let result = send(
+            &s,
+            &allow(),
+            &ledger,
+            &on(),
+            command,
+            key,
+            Duration::from_secs(1),
+        )
+        .await;
+        assert!(matches!(result, Err(SendError::Refused(_))));
+    }
+    let log = log.lock().unwrap();
+    assert!(log.amends.is_empty() && log.closes.is_empty());
+    assert!(ledger.intents.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_close_refuses_both_reversals_and_even_an_owned_fraction_of_enlarged_exposure() {
+    for (original, current_side, current_volume, requested) in [
+        (Side::Buy, 2, 13, 13),
+        (Side::Sell, 1, 13, 13),
+        (Side::Buy, 1, 26, 13),
+        (Side::Buy, 1, 13, 14),
+    ] {
+        let f = fake();
+        let mut p = position(77, ETH, Some("jiaoyi-s3"));
+        p.trade_data.trade_side = current_side;
+        p.trade_data.volume = current_volume;
+        f.positions.lock().unwrap().push(p);
+        let (conn, log) = f.spawn();
+        let s = session_on(&conn).await;
+        let ledger = MemLedger::default();
+        ledger.prove(77, original, 13);
+        let result = send(
+            &s,
+            &allow(),
+            &ledger,
+            &on(),
+            Command::Close {
+                position_id: 77,
+                volume: requested,
+            },
+            "qualified-close",
+            Duration::from_secs(1),
+        )
+        .await;
+        assert!(matches!(result, Err(SendError::Refused(_))), "{result:?}");
+        assert!(log.lock().unwrap().closes.is_empty());
+        assert!(ledger.intents.lock().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn a_proven_reduced_residual_keeps_its_close() {
+    let f = fake();
+    let mut p = position(77, ETH, Some("jiaoyi-s3"));
+    p.trade_data.volume = 5;
+    f.positions.lock().unwrap().push(p);
+    let (conn, log) = f.spawn();
+    let s = session_on(&conn).await;
+    let ledger = MemLedger::default();
+    ledger.prove(77, Side::Buy, 5);
+    let result = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        Command::Close {
+            position_id: 77,
+            volume: 5,
+        },
+        "reduced-close",
+        Duration::from_secs(1),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(result.outcome, Outcome::Filled { .. }));
+    assert_eq!(log.lock().unwrap().closes.len(), 1);
+}
+
+#[tokio::test]
+async fn a_post_send_fill_persistence_failure_is_unresolved_and_never_resent() {
+    let f = fake();
+    let (conn, log) = f.clone().spawn();
+    let s = session_on(&conn).await;
+    let ledger = MemLedger {
+        fail_fill_receipt: true,
+        ..Default::default()
+    };
+    let result = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        open(1, 28_457_000),
+        "fill-write-failure",
+        Duration::from_secs(1),
+    )
+    .await;
+    assert!(matches!(result, Err(SendError::Evidence(_))), "{result:?}");
+    assert_eq!(
+        log.lock().unwrap().orders.len(),
+        1,
+        "frame was sent: not a refusal"
+    );
+    assert_eq!(ledger.intents.lock().unwrap().len(), 1);
+    assert!(
+        f.positions.lock().unwrap()[0].stop_loss.is_some(),
+        "broker protection retained"
+    );
+    // Even after the broker later reports no position, the original entry key
+    // remains consumed; this refusal is not merely symbol-capacity admission.
+    f.positions.lock().unwrap().clear();
+    let retry = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        open(1, 28_457_000),
+        "fill-write-failure",
+        Duration::from_secs(1),
+    )
+    .await;
+    assert!(matches!(retry, Err(SendError::Refused(r)) if r.reason.contains("already recorded")));
+    assert_eq!(log.lock().unwrap().orders.len(), 1);
+}
+
+#[tokio::test]
+async fn shared_gate_absence_revokes_authority_before_same_shape_reappearance() {
+    let f = fake();
+    let (conn, log) = f.clone().spawn();
+    let s = session_on(&conn).await;
+    let ledger = MemLedger::default();
+    ledger.prove(77, Side::Buy, 100);
+    let close = Command::Close {
+        position_id: 77,
+        volume: 100,
+    };
+    let result = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        close.clone(),
+        "observed-absent",
+        Duration::from_secs(1),
+    )
+    .await;
+    assert!(matches!(result, Err(SendError::Refused(_))));
+    f.positions
+        .lock()
+        .unwrap()
+        .push(position(77, ETH, Some("jiaoyi-s3")));
+    let result = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        close,
+        "reappeared",
+        Duration::from_secs(1),
+    )
+    .await;
+    assert!(matches!(result, Err(SendError::Refused(_))));
+    assert!(log.lock().unwrap().closes.is_empty());
+    assert_eq!(f.positions.lock().unwrap()[0].stop_loss, Some(90.0));
 }

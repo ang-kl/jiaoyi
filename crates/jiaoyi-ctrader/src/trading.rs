@@ -56,6 +56,44 @@ pub enum Side {
     Sell,
 }
 
+/// Authority over the residual of one positively evidenced opening. This is
+/// supplied by the durable ledger, never inferred from a current broker label.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ManagementAuthority {
+    pub entry_key: String,
+    pub symbol_id: i64,
+    pub side: Side,
+    pub remaining_volume: i64,
+}
+
+impl ManagementAuthority {
+    pub fn validate_current(&self, p: &pb::ProtoOaPosition) -> Result<(), String> {
+        if p.position_status != pb::ProtoOaPositionStatus::PositionStatusOpen as i32 {
+            return Err("authority incomplete: broker position is not open".into());
+        }
+        if p.trade_data.symbol_id != self.symbol_id
+            || Side::from_proto(p.trade_data.trade_side) != Some(self.side)
+        {
+            return Err(
+                "authority mixed: broker symbol/direction differs from the owned opening".into(),
+            );
+        }
+        if self.remaining_volume <= 0 || p.trade_data.volume <= 0 {
+            return Err("authority incomplete: no positive owned residual".into());
+        }
+        // Compare with reconstructed actual fills/exits, never with requested
+        // order volume or a stale cached position quantity. A discrepancy can
+        // be a late legitimate partial; it must be recovered, not called foreign.
+        if p.trade_data.volume != self.remaining_volume {
+            return Err(format!(
+                "authority incomplete: broker quantity {} differs from evidenced residual {}",
+                p.trade_data.volume, self.remaining_volume
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl Side {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -224,6 +262,21 @@ pub trait Ledger {
         account_id: i64,
         position_id: i64,
     ) -> impl Future<Output = Result<bool, String>> + Send;
+    /// Current lifecycle authority. Historical ownership alone is insufficient.
+    fn management_authority(
+        &self,
+        _account_id: i64,
+        _position_id: i64,
+    ) -> impl Future<Output = Result<ManagementAuthority, String>> + Send {
+        async { Err("authority incomplete: current lifecycle evidence unavailable".into()) }
+    }
+    fn record_authority_absence(
+        &self,
+        _account_id: i64,
+        _position_id: i64,
+    ) -> impl Future<Output = Result<(), String>> + Send {
+        async { Err("authority absence persistence unavailable".into()) }
+    }
 }
 
 /// A refusal: nothing was written to the socket.
@@ -273,6 +326,12 @@ pub enum SendError {
     Refused(#[from] Refused),
     #[error("the frame could not be written: {0}")]
     Write(#[from] ClientError),
+    #[error(
+        "execution evidence could not be persisted after send: {0}; outcome remains unresolved"
+    )]
+    Evidence(String),
+    #[error("management continuity could not be persisted: {0}")]
+    Authority(String),
 }
 
 /// Decode an execution message into its record. `None` for a message that
@@ -750,15 +809,32 @@ pub async fn send<L: Ledger>(
         } => {
             // The position as the broker holds it now: its stop must be
             // passed in the trade's favour, and its take-profit is carried.
+            let authority = ledger
+                .management_authority(account_id, *position_id)
+                .await
+                .map_err(|reason| Refused { reason })?;
+            if authority.side != *side {
+                return Err(Refused {
+                    reason: "authority mixed: command direction differs from owned opening".into(),
+                }
+                .into());
+            }
             let rec = session.reconcile().await.map_err(|e| Refused {
                 reason: format!("the open positions are unreadable ({e}): no amend"),
             })?;
             let Some(p) = rec.position.iter().find(|p| p.position_id == *position_id) else {
+                ledger
+                    .record_authority_absence(account_id, *position_id)
+                    .await
+                    .map_err(SendError::Authority)?;
                 return Err(Refused {
                     reason: format!("position {position_id} is not open at the broker: no amend"),
                 }
                 .into());
             };
+            authority
+                .validate_current(p)
+                .map_err(|reason| Refused { reason })?;
             // Historical ownership and the caller's cached side do not prove
             // the direction of the position the broker currently holds. Using
             // a stale opposite side would let a supposedly favourable amend
@@ -788,7 +864,38 @@ pub async fn send<L: Ledger>(
             }
             take_profit = p.take_profit.filter(|t| t.is_finite() && *t > 0.0);
         }
-        Command::Close { .. } => {}
+        Command::Close {
+            position_id,
+            volume,
+        } => {
+            let authority = ledger
+                .management_authority(account_id, *position_id)
+                .await
+                .map_err(|reason| Refused { reason })?;
+            let rec = session.reconcile().await.map_err(|e| Refused {
+                reason: format!("current position unreadable ({e}): no close"),
+            })?;
+            let Some(p) = rec.position.iter().find(|p| p.position_id == *position_id) else {
+                ledger
+                    .record_authority_absence(account_id, *position_id)
+                    .await
+                    .map_err(SendError::Authority)?;
+                return Err(Refused {
+                    reason: format!("position {position_id} is not open at the broker: no close"),
+                }
+                .into());
+            };
+            authority
+                .validate_current(p)
+                .map_err(|reason| Refused { reason })?;
+            if *volume > authority.remaining_volume {
+                return Err(Refused {
+                    reason: "close exceeds the evidenced owned residual; reconcile and re-plan"
+                        .into(),
+                }
+                .into());
+            }
+        }
     }
     let conn = session.connection();
     let client_msg_id = conn.next_trading_id();
@@ -863,7 +970,10 @@ pub async fn send<L: Ledger>(
         };
         rec.entry_key = Some(entry_key.to_string());
         if let Err(e) = ledger.record_event(&rec).await {
-            tracing::error!(account = account_id, entry_key, error = %e, "execution event not recorded");
+            // The frame has already been written. Never call this a refusal,
+            // manufacture a confirmed fill, or let the actor keep managing on
+            // a stale residual. Its recorded intent survives for recovery.
+            return Err(SendError::Evidence(e));
         }
         events.push(rec.clone());
         match (rec.kind.as_str(), &cmd) {

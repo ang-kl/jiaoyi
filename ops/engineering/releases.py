@@ -406,6 +406,11 @@ class Releases:
             plan = self.saved(job["id"], "release_scope") or {}
             disposition = self.saved(job["id"], "release_disposition") or {}
             reason = disposition.get("release_reason")
+            if reason is None and job["state"] == "owner_blocked":
+                # Older coordinator guards stored this exact literal directly.
+                # Never parse model prose or expose an unrecognised result.
+                reason = ("release_identity_changed" if job.get("result") == "PR identity changed; release refused"
+                          else "legacy_release_reason_unavailable")
             if job["state"] == "ci_wait" and not self.c.config.mutation_allowed():
                 reason = "mutation_window_closed"
             items.append({"id": job["id"], "state": job["state"], "pr": job.get("pr"),
