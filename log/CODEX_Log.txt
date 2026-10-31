@@ -663,3 +663,20 @@ meaningfulnewtestfunctions;37/37gatechecks,fmt,diffcheckpass; independentreview
 no blockers. Registeredpolicy,TPpreservation,riskandadoptionunchanged.
 FullCI/merge/deployedreadback pending. C04concreteS3v6falsificationcandidate,
 C05/C06partial,C08uncertified,C09unsealed; noholdoutornewmodelexperiment.
+
+
+[§LOG.63] №17,976–17,983 §§1–2,31Oct2026 09:47–10:14SGT;
+by <Codex (GPT-6), effort:not exposed>. PR141 merged97ffc69 greenall3;
+Railway e3dbefa6-7f2e-419e-902d-923d992145a7 exactsource,18/18releasechecks,
+oldinstance removed,eightactorsadvance,engineeringunchanged. Funding124windows/
+18ops resolvesperiodscope;80S3terminal/cashjoinsverified,14originalmonetaryrisks
+archived,66missing. No financialPASS. CurrentGROK_Logunchangedthrough№17,703.
+
+[§LOG.64] №17,981–17,983 §§1–2,31Oct2026 10:02–10:14SGT;
+by <Codex (GPT-6), effort:not exposed>. Owner specificallyauthorised legacydemo
+pendingordercancellation; verified10:01:42SGT ORDER_CANCELLED,zeroexecuted,
+absentpending andunchangedemptypositions. Private scopedreceipt retainsIDs.
+Secondrepair rejects uncertified mixed/open-request risk denominators and
+prevents missingevidence from clearinglimits. Allcash/dealsretained;15goals,
+12limits,8UItests pass. S3Kelly reader affectedforinvalidsamples; inspected80
+unchanged,universalentryinvariance notclaimed. Fullreview/CI/releasepending.

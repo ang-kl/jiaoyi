@@ -129,7 +129,7 @@ fn pill(state: &str) -> String {
         s if s.starts_with("paused by the owner") => "warn",
         "PAUSED by the owner" => "warn",
         "LIMIT REACHED: owner's decision needed" => "bad",
-        "partial" | "pending" | "running" | "unread" | "starting" => "warn",
+        "partial" | "pending" | "running" | "unread" | "starting" | "incomplete evidence" => "warn",
         "failed" | "refused" | "not_listed" | "environment_mismatch" | "stalled" => "bad",
         _ => "neutral",
     };
@@ -177,6 +177,12 @@ fn performance_table(accounts: &[Value]) -> String {
             let what = rows(&p["limit_reached"])
                 .iter()
                 .map(|x| {
+                    if x["evidence"] == "prior_alert_unresolved" {
+                        return format!(
+                            "{} previously reached; current evidence incomplete",
+                            txt(&x["limit"])
+                        );
+                    }
                     format!(
                         "{} {} (limit {})",
                         txt(&x["limit"]),
@@ -186,9 +192,21 @@ fn performance_table(accounts: &[Value]) -> String {
                 })
                 .collect::<Vec<_>>()
                 .join("; ");
+            let qualification = if p["unmeasured"].as_u64().is_some_and(|n| n > 0) {
+                " Measured positions only; incomplete results do not establish recovery."
+            } else {
+                ""
+            };
             format!(
-                r#"{}<div class="note">{what}. Trading continues; only the owner pauses.</div>"#,
+                r#"{}<div class="note">{what}. Trading continues; only the owner pauses.{qualification}</div>"#,
                 pill("LIMIT REACHED: owner's decision needed")
+            )
+        } else if p["unmeasured"].as_u64().is_some_and(|n| n > 0) || p["limit_status"] == "unknown"
+        {
+            format!(
+                r#"{}<div class="note">{} position(s) unmeasured; limits cannot be declared clear. Displayed results cover measured positions only.</div>"#,
+                pill("incomplete evidence"),
+                txt(&p["unmeasured"])
             )
         } else if p.is_object() {
             let pf = match p["to_limits"]["pf_margin"].as_f64() {
@@ -889,6 +907,46 @@ mod tests {
     }
 
     // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
+    #[test]
+    fn incomplete_results_never_render_within_limits_or_clear_a_prior_alert() {
+        let incomplete = json!({"closed_trades":0,"unmeasured":1,
+            "net_r":null,"profit_factor":null,"max_drawdown_r":null,"current_drawdown_r":null,
+            "evidence_state":"incomplete","limit_status":"unknown",
+            "limit_reached":null,"owner_decision_needed":false,
+            "to_limits":{"drawdown_room_r":null,"pf_margin":null,"pf_trades_to_judge":null}});
+        let page = performance_table(&[json!({"account_id":1,"performance":incomplete,
+            "owner_pause":{"paused":false}})]);
+        assert!(page.contains("incomplete evidence"), "{page}");
+        assert!(page.contains("limits cannot be declared clear"), "{page}");
+        assert!(!page.contains("within limits"), "{page}");
+        assert!(!page.contains("drawdown room"), "{page}");
+
+        let retained = json!({"closed_trades":9,"unmeasured":1,
+            "net_r":-9,"profit_factor":0,"max_drawdown_r":9,"current_drawdown_r":9,
+            "evidence_state":"incomplete","limit_status":"prior_alert_unresolved",
+            "limit_reached":[{"limit":"drawdown_r","value":null,"threshold":null,
+                "evidence":"prior_alert_unresolved"}],"owner_decision_needed":true});
+        let page = performance_table(&[json!({"account_id":1,"performance":retained,
+            "owner_pause":{"paused":false}})]);
+        assert!(
+            page.contains("LIMIT REACHED: owner&#39;s decision needed"),
+            "{page}"
+        );
+        assert!(
+            page.contains("drawdown_r previously reached; current evidence incomplete"),
+            "{page}"
+        );
+        assert!(
+            page.contains("incomplete results do not establish recovery"),
+            "{page}"
+        );
+        assert!(!page.contains("within limits"), "{page}");
+        assert!(
+            !page.contains("drawdown_r — (limit —)"),
+            "prior alert has no fresh numeric value: {page}"
+        );
+    }
+
     #[test]
     fn both_strategies_show_results_limit_alerts_the_owners_pause_and_trigger_distance() {
         let now = "2026-10-25T08:00:00Z".parse().unwrap();

@@ -905,7 +905,7 @@ pub struct DealMoney {
 }
 
 /// A position's net money in the deposit currency from its deals, when it
-/// is closed (the closing deals' volume reaches the opening deals'): each
+/// is closed (the closing deals' volume equals the opening deals'): each
 /// closing deal's gross profit + swap − |commission| − |P&L conversion fee|,
 /// at its close money digits.
 ///
@@ -916,7 +916,7 @@ pub struct DealMoney {
 /// again. Commissions and fees are costs whatever their sign in the feed (as
 /// `research::commission_per_unit` reads them). Returns (opened volume,
 /// closed at, net money), or `Err(why)` when it is open or a money field is
-/// missing.
+/// missing or the closing quantity exceeds proven opening history.
 pub fn position_money(deals: &[DealMoney]) -> Result<(i64, DateTime<Utc>, f64), String> {
     let opened: i64 = deals
         .iter()
@@ -933,6 +933,11 @@ pub fn position_money(deals: &[DealMoney]) -> Result<(i64, DateTime<Utc>, f64), 
     }
     if closed < opened {
         return Err("still open".into());
+    }
+    if closed > opened {
+        // A reversal can contain both a close and a new open in one deal.
+        // This closing/opening split cannot certify that mixed lifecycle.
+        return Err("closing history exceeds proven opening quantity".into());
     }
     let mut net = 0.0;
     let mut closed_at = None;
@@ -1031,7 +1036,15 @@ pub async fn closed_trades(
         let deals = by_position.remove(&position_id).unwrap_or_default();
         let (opened, closed_at, net) = match position_money(&deals) {
             Ok(x) => x,
-            Err(why) if why == "still open" || why == "no opening deal stored yet" => continue,
+            Err(why) if why == "still open" => continue,
+            Err(why)
+                if why == "no opening deal stored yet"
+                    && !deals.iter().any(|d| d.is_closing && d.filled_volume > 0) =>
+            {
+                continue;
+            }
+            // Positive closing history without its opening is unknown, not
+            // an absent outcome that can make performance look complete.
             Err(_) => {
                 unmeasured += 1;
                 continue;
@@ -1040,8 +1053,13 @@ pub async fn closed_trades(
         let requested: Option<i64> = o.get("volume");
         let risk: Option<f64> = o.get("risk");
         let share = match requested {
-            Some(v) if v > 0 => (opened as f64 / v as f64).min(1.0),
-            _ => 1.0,
+            Some(v) if v > 0 && opened <= v => opened as f64 / v as f64,
+            // The original risk applies only to its requested quantity. An
+            // expanded lifecycle or unknown request cannot inherit full risk.
+            _ => {
+                unmeasured += 1;
+                continue;
+            }
         };
         match risk.map(|r| r * share) {
             Some(r) if r.is_finite() && r > 0.0 => out.push(ClosedTrade {

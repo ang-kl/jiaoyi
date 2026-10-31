@@ -344,11 +344,11 @@ async fn closed_performance_batches_history_without_changing_position_semantics(
     let (closed, unmeasured) = store::trading::closed_trades(&measured, A, "s3:")
         .await
         .unwrap();
-    assert_eq!(closed.len(), 66);
-    assert_eq!(unmeasured, 2);
+    assert_eq!(closed.len(), 65);
+    assert_eq!(unmeasured, 3);
     assert_eq!(
         closed.iter().map(|t| t.position_id).collect::<Vec<_>>(),
-        (1..=64).chain([94, 95]).collect::<Vec<_>>()
+        (1..=64).chain([94]).collect::<Vec<_>>()
     );
     for trade in &closed[..64] {
         assert_eq!(
@@ -365,9 +365,9 @@ async fn closed_performance_batches_history_without_changing_position_semantics(
         closed[64].r, 4.0,
         "original risk is scaled by the filled share"
     );
-    assert_eq!(
-        closed[65].r, 2.0,
-        "legacy performance fallback for missing request is preserved"
+    assert!(
+        !closed.iter().any(|t| t.position_id == 95),
+        "missing original request remains unmeasured, never a full-risk fallback"
     );
     assert_eq!(
         acquisitions.load(Ordering::SeqCst),
@@ -525,6 +525,13 @@ async fn terminal_receipts_must_match_the_actual_broker_closing_deals(pool: PgPo
 async fn terminal_close_with_no_opening_history_is_not_silently_skipped(pool: PgPool) {
     passing(&pool, A, "s3").await;
     position(&pool, A, "s3", 99, None, 0).await;
+    position(&pool, A, "s3", 98, None, 100).await;
+    let before_close = store::trading::performance(&pool, A, "s3").await.unwrap();
+    assert_eq!(
+        (before_close.trades, before_close.unmeasured),
+        (20, 0),
+        "no history/no close and a genuinely open neighbour are not closed outcomes"
+    );
     close_receipt(&pool, A, "s3", 99, 100, 1).await;
     deal(
         &pool,
@@ -538,8 +545,15 @@ async fn terminal_close_with_no_opening_history_is_not_silently_skipped(pool: Pg
     )
     .await;
     fetch(&pool, A, 0, true, false).await;
+    let legacy = store::trading::performance(&pool, A, "s3").await.unwrap();
+    assert_eq!(
+        (legacy.trades, legacy.unmeasured),
+        (20, 1),
+        "a positive closing history with no opening must not disappear from legacy qualification"
+    );
     let missing = goals::assess(&pool, A, "s3").await.unwrap();
     assert_eq!(missing.state, AssessmentState::Unknown);
+    assert_eq!(missing.unmeasured_positions, 1);
     assert!(missing
         .missing_reasons
         .iter()
@@ -555,8 +569,189 @@ async fn terminal_close_with_no_opening_history_is_not_silently_skipped(pool: Pg
         t0() + Duration::minutes(99) - Duration::hours(1),
     )
     .await;
+    let legacy = store::trading::performance(&pool, A, "s3").await.unwrap();
+    assert_eq!((legacy.trades, legacy.unmeasured), (21, 0));
     let settled = goals::assess(&pool, A, "s3").await.unwrap();
     assert_eq!(settled.measured_closed_positions, 21);
     assert_eq!(settled.state, AssessmentState::BelowTarget);
     assert_eq!(settled.window.position_ids.last(), Some(&99));
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn mixed_reversal_history_is_unmeasured_without_erasing_account_cash(pool: PgPool) {
+    let id = 70;
+    // The actual NatGas quantity/cash shape: one original SELL10,000, then a
+    // BUY20,000 that closes10,000 and opens10,000, further BUY scale-ins,
+    // and a final SELL200,000. The legacy is_closing split cannot certify
+    // the original strategy risk for this mixed lifecycle.
+    let key = format!("s1:{A}:1:{id}");
+    let opening_at = t0() + Duration::minutes(id) - Duration::hours(1);
+    // Receipts are append-only: construct the original intent and fill once.
+    sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk) VALUES($1,$2,$2,'open',1,'sell',10000,38800,38.8,38.8)")
+        .bind(A).bind(&key).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO trading_events(account_id,entry_key,client_msg_id,payload_type,kind,position_id,deal_id,symbol_id,side,volume,raw,received_at) VALUES($1,$2,$2,2126,'ORDER_FILLED',$3,700,1,'sell',10000,''::bytea,$4)")
+        .bind(A).bind(&key).bind(id).bind(opening_at).execute(&pool).await.unwrap();
+    deal(&pool, A, id, 700, 10_000, false, None, opening_at).await;
+    sqlx::query("UPDATE deals SET trade_side='SELL' WHERE account_id=$1 AND deal_id=700")
+        .bind(A)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let start = t0() + Duration::minutes(id);
+    deal(&pool, A, id, 701, 20_000, true, Some(-30), start).await;
+    deal(
+        &pool,
+        A,
+        id,
+        702,
+        90_000,
+        false,
+        None,
+        start + Duration::minutes(1),
+    )
+    .await;
+    deal(
+        &pool,
+        A,
+        id,
+        703,
+        50_000,
+        false,
+        None,
+        start + Duration::minutes(2),
+    )
+    .await;
+    deal(
+        &pool,
+        A,
+        id,
+        704,
+        50_000,
+        false,
+        None,
+        start + Duration::minutes(3),
+    )
+    .await;
+    deal(
+        &pool,
+        A,
+        id,
+        705,
+        200_000,
+        true,
+        Some(-9850),
+        start + Duration::minutes(4),
+    )
+    .await;
+    sqlx::query("UPDATE deals SET close_closed_volume=10000,close_gross_profit=-30,close_commission=0 WHERE account_id=$1 AND deal_id=701")
+        .bind(A).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE deals SET trade_side='SELL',close_gross_profit=-9850,close_commission=0 WHERE account_id=$1 AND deal_id=705")
+        .bind(A).execute(&pool).await.unwrap();
+    fetch(&pool, A, 0, true, false).await;
+    let cash_before: i64 = sqlx::query_scalar("SELECT SUM(close_gross_profit+close_swap-ABS(close_commission)-ABS(close_pnl_conversion_fee))::bigint FROM deals WHERE account_id=$1 AND position_id=$2 AND is_closing")
+        .bind(A).bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(cash_before, -9880);
+    let (closed, unmeasured) = store::trading::closed_trades(&pool, A, "s1:")
+        .await
+        .unwrap();
+    assert!(
+        closed.is_empty(),
+        "mixed history must not become measured S1 R: {closed:?}"
+    );
+    assert_eq!(unmeasured, 1);
+    let performance = store::trading::performance(&pool, A, "s1").await.unwrap();
+    assert_eq!((performance.trades, performance.unmeasured), (0, 1));
+    let assessment = goals::assess(&pool, A, "s1").await.unwrap();
+    assert_eq!(assessment.state, AssessmentState::Unknown);
+    assert_eq!(
+        assessment.unmeasured_positions, 1,
+        "count the position only once"
+    );
+    assert!(assessment
+        .missing_reasons
+        .iter()
+        .any(|r| r.contains("closing history exceeds")));
+    assert!(assessment
+        .missing_reasons
+        .iter()
+        .any(|r| r.contains("original requested volume")));
+    let cash_after: i64 = sqlx::query_scalar("SELECT SUM(close_gross_profit+close_swap-ABS(close_commission)-ABS(close_pnl_conversion_fee))::bigint FROM deals WHERE account_id=$1 AND position_id=$2 AND is_closing")
+        .bind(A).bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        cash_after, cash_before,
+        "qualification must preserve broker cash"
+    );
+    let deal_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM deals WHERE account_id=$1 AND position_id=$2")
+            .bind(A)
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(deal_count, 6);
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn legacy_risk_requires_a_positive_request_covering_all_opening_history(pool: PgPool) {
+    for (index, requested) in [None, Some(0), Some(-100), Some(50)]
+        .into_iter()
+        .enumerate()
+    {
+        let account = A + index as i64;
+        position_with_requested_volume(&pool, account, "s1", 1, Some(-2.0), 100, requested).await;
+        fetch(&pool, account, 0, true, false).await;
+        let (closed, unmeasured) = store::trading::closed_trades(&pool, account, "s1:")
+            .await
+            .unwrap();
+        assert!(
+            closed.is_empty(),
+            "requested {requested:?} cannot certify risk: {closed:?}"
+        );
+        assert_eq!(unmeasured, 1);
+        let assessment = goals::assess(&pool, account, "s1").await.unwrap();
+        assert_eq!(assessment.state, AssessmentState::Unknown);
+        assert_eq!(assessment.unmeasured_positions, 1);
+        assert!(assessment
+            .missing_reasons
+            .iter()
+            .any(|r| r.contains("original requested volume")));
+    }
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn complete_and_partially_filled_requests_keep_valid_risk_with_partial_exits(pool: PgPool) {
+    position_with_requested_volume(&pool, A, "s1", 1, Some(2.0), 100, Some(100)).await;
+    position_with_requested_volume(&pool, A, "s1", 2, None, 100, Some(200)).await;
+    let at = t0() + Duration::minutes(2);
+    deal(&pool, A, 2, 21, 40, true, Some(80), at).await;
+    let (closed, unmeasured) = store::trading::closed_trades(&pool, A, "s1:")
+        .await
+        .unwrap();
+    assert_eq!(
+        closed.len(),
+        1,
+        "a partly closed position stays outside the cohort"
+    );
+    assert_eq!(unmeasured, 0);
+    deal(
+        &pool,
+        A,
+        2,
+        22,
+        60,
+        true,
+        Some(120),
+        at + Duration::seconds(1),
+    )
+    .await;
+    let (closed, unmeasured) = store::trading::closed_trades(&pool, A, "s1:")
+        .await
+        .unwrap();
+    assert_eq!(closed.len(), 2);
+    assert_eq!(unmeasured, 0);
+    assert_eq!(closed[0].r, 2.0, "fully filled original risk");
+    assert_eq!(
+        closed[1].r, 4.0,
+        "100 of 200 filled scales risk to one half"
+    );
 }

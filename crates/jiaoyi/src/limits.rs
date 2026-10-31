@@ -92,13 +92,19 @@ pub fn reached(p: &Performance, l: &Limits) -> Vec<(&'static str, f64, f64)> {
 pub fn performance_json(p: &Performance, l: &Limits) -> Value {
     let hit = reached(p, l);
     let judged = p.trades as i64 >= l.pf_min_trades;
+    let complete = p.unmeasured == 0;
+    let show_result = complete || p.trades > 0;
     json!({
         "closed_trades": p.trades,
         "unmeasured": p.unmeasured,
-        "net_r": p.net_r,
+        "evidence_state": if complete { "measured" } else { "incomplete" },
+        "performance_scope": "measured closed positions only",
+        "limit_status": if !hit.is_empty() { "reached" } else if complete { "within_limits" } else { "unknown" },
+        "retained_limit_alerts": [],
+        "net_r": show_result.then_some(p.net_r),
         "profit_factor": p.profit_factor,
-        "max_drawdown_r": p.max_drawdown_r,
-        "current_drawdown_r": p.current_drawdown_r,
+        "max_drawdown_r": show_result.then_some(p.max_drawdown_r),
+        "current_drawdown_r": show_result.then_some(p.current_drawdown_r),
         "last_closed_at": p.last_closed_at,
         "limits": {
             "drawdown_r": l.drawdown_r,
@@ -106,9 +112,9 @@ pub fn performance_json(p: &Performance, l: &Limits) -> Value {
             "pf_min_trades": l.pf_min_trades,
         },
         "to_limits": {
-            "drawdown_room_r": l.drawdown_r - p.max_drawdown_r,
-            "pf_trades_to_judge": (l.pf_min_trades - p.trades as i64).max(0),
-            "pf_margin": if judged { p.profit_factor.map(|pf| pf - l.pf_floor) } else { None },
+            "drawdown_room_r": complete.then_some(l.drawdown_r - p.max_drawdown_r),
+            "pf_trades_to_judge": complete.then_some((l.pf_min_trades - p.trades as i64).max(0)),
+            "pf_margin": if complete && judged { p.profit_factor.map(|pf| pf - l.pf_floor) } else { None },
         },
         "limit_reached": if hit.is_empty() {
             Value::Null
@@ -124,17 +130,58 @@ pub fn performance_json(p: &Performance, l: &Limits) -> Value {
     })
 }
 
+/// Incomplete evidence cannot clear an earlier alert. Retain its name, not
+/// its old numeric value as if it were a fresh measurement.
+fn retain_prior_alerts(detail: &mut Value, last: Option<&(String, Value)>, s: &Strategy) {
+    if detail["evidence_state"] != "incomplete" {
+        return;
+    }
+    let Some((_, prior)) = last.filter(|(kind, _)| kind == s.reached) else {
+        return;
+    };
+    let mut current = detail["limit_reached"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mut retained = Vec::new();
+    for name in ["drawdown_r", "profit_factor"] {
+        if prior["limits"]
+            .as_array()
+            .is_some_and(|names| names.iter().any(|value| value == name))
+            && !current.iter().any(|value| value["limit"] == name)
+        {
+            current.push(json!({"limit": name, "value": null, "threshold": null,
+                "evidence": "prior_alert_unresolved"}));
+            retained.push(name);
+        }
+    }
+    if !retained.is_empty() {
+        if detail["limit_status"] == "unknown" {
+            detail["limit_status"] = json!("prior_alert_unresolved");
+        }
+        detail["limit_reached"] = json!(current);
+        detail["retained_limit_alerts"] = json!(retained);
+        detail["owner_decision_needed"] = json!(true);
+    }
+}
+
 /// A strategy's results and limits on an account, for `/health`.
 pub async fn health(pool: &PgPool, account_id: i64, s: &Strategy) -> anyhow::Result<Value> {
     let p = ts::performance(pool, account_id, s.code).await?;
     let l = limits(pool, account_id).await?;
-    Ok(performance_json(&p, &l))
+    let mut detail = performance_json(&p, &l);
+    if p.unmeasured > 0 {
+        let last = ts::latest_limit_decision(pool, account_id, &[s.reached, s.cleared]).await?;
+        retain_prior_alerts(&mut detail, last.as_ref(), s);
+    }
+    Ok(detail)
 }
 
 /// Check a strategy's limits on an account and record a decision when what
 /// is reached changes: `reached` with the limits and the numbers, or
 /// `cleared` when nothing is reached any more. It records; it never pauses.
-/// Returns the limits reached now.
+/// Returns the limits reached now, including prior alerts retained while
+/// results are incomplete. Missing evidence is never a recovery.
 pub async fn check(
     pool: &PgPool,
     account_id: i64,
@@ -145,7 +192,6 @@ pub async fn check(
     let p = ts::performance(pool, account_id, s.code).await?;
     let l = limits(pool, account_id).await?;
     let hit = reached(&p, &l);
-    let names: Vec<&'static str> = hit.iter().map(|h| h.0).collect();
     let last = ts::latest_limit_decision(pool, account_id, &[s.reached, s.cleared]).await?;
     let last_names: Option<Vec<String>> = last.as_ref().and_then(|(kind, d)| {
         (kind == s.reached).then(|| {
@@ -160,6 +206,15 @@ pub async fn check(
         })
     });
     let mut detail = performance_json(&p, &l);
+    retain_prior_alerts(&mut detail, last.as_ref(), s);
+    let names: Vec<&'static str> = ["drawdown_r", "profit_factor"]
+        .into_iter()
+        .filter(|name| {
+            detail["limit_reached"]
+                .as_array()
+                .is_some_and(|rows| rows.iter().any(|row| row["limit"] == *name))
+        })
+        .collect();
     if let (Some(d), Some(e)) = (detail.as_object_mut(), extra.as_object()) {
         for (k, v) in e {
             d.insert(k.clone(), v.clone());
@@ -175,7 +230,7 @@ pub async fn check(
             .as_ref()
             .is_some_and(|n| n.iter().map(String::as_str).eq(names.iter().copied()));
         if !same {
-            let what = hit
+            let mut what = hit
                 .iter()
                 .map(|(limit, value, threshold)| match *limit {
                     "drawdown_r" => format!("drawdown {value:.2}R ≥ {threshold}R"),
@@ -186,6 +241,19 @@ pub async fn check(
                 })
                 .collect::<Vec<_>>()
                 .join("; ");
+            if let Some(retained) = detail["retained_limit_alerts"]
+                .as_array()
+                .filter(|a| !a.is_empty())
+            {
+                what.push_str(&format!(
+                    "; prior alerts retained while evidence is incomplete: {}",
+                    retained
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
             ts::record_decision(
                 pool,
                 account_id,
@@ -199,7 +267,7 @@ pub async fn check(
             )
             .await?;
         }
-    } else if last_names.is_some() {
+    } else if p.unmeasured == 0 && last_names.is_some() {
         ts::record_decision(
             pool,
             account_id,
