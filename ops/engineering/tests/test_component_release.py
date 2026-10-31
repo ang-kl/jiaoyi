@@ -293,6 +293,30 @@ class DeploymentTests(Fixture):
 
 
 class RecoveryAndAuthorityTests(Fixture):
+    def test_legacy_release_reasons_are_fixed_codes_and_do_not_mutate_or_expose_results(self):
+        private = "private-untrusted-diagnostic"
+        cases = [(88, 81, "a7ccef9be83376842a3b64756cbffd3a4f16d723", "PR identity changed; release refused"),
+                 (133, 127, "592097a3ffe1e38d7fd5a7bf87e11ff9ee97de1c", "PR identity changed; release refused"),
+                 (134, 128, "e" * 40, json.dumps({"summary": "PR identity changed; release refused", "private": private}))]
+        self.config.work_until = dt.datetime(2000, 1, 1, tzinfo=dt.timezone.utc)
+        with self.c.store.connect() as db:
+            for jid, pr, head, result in cases:
+                db.execute("INSERT INTO jobs(id,task,state,created,updated,pr,head,result) VALUES(?,?,'owner_blocked',?,?,?,?,?)",
+                           (jid, "retained source evidence", w.now(), w.now(), pr, head, result))
+            before_events = db.execute("SELECT count(*) FROM events").fetchone()[0]
+        before_jobs = self.c.store.jobs(("owner_blocked",))
+        backlog = self.c.releases.backlog()
+        self.assertEqual({item["id"]: item["reason"] for item in backlog["items"]},
+                         {88: "release_identity_changed", 133: "release_identity_changed", 134: "legacy_release_reason_unavailable"})
+        self.assertNotIn(private, json.dumps(backlog))
+        self.assertNotIn("PR identity changed; release refused", json.dumps(backlog))
+        self.assertEqual(self.c.store.jobs(("owner_blocked",)), before_jobs)
+        with self.c.store.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM events").fetchone()[0], before_events)
+        self.assertEqual(self.c.store.used(), 0)
+        self.assertFalse(self.config.mutation_allowed())
+        self.assertEqual(self.config.limit, 36)
+
     def test_operator_receipt_rejects_fifo_and_nonprivate_file_without_waiting(self):
         self.fixture()
         path = self.c.store.private / "pipe"
