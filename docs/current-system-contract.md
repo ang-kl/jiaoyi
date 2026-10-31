@@ -44,3 +44,15 @@
 [§CURRENT.12] The [checkpoint follow-through](checkpoint-progress-2026-10-31.md) records direct broker lifecycle/protection evidence and a reproduced stop-amendment control defect. The shared gate now refuses a command whose direction differs from the freshly reconciled broker position, preserving existing TP and tightening rules. A passed component release does not establish a financial edge; the specific pending-order disposition is now verified, while complete attribution and sealed evaluation remain separately tracked.
 
 [§CURRENT.13] The checkpoint follow-through records the bounded PR142 qualification of mixed/reversed lifecycle risk; invalid quantities caught by that qualification remain unmeasured and cash records are retained. Its limit guard prevents recovery/clearance when the shared reader reports incomplete evidence. The subsequent [implementation audit](proposal-implementation-audit-2026-10-31.md) reproduces additional receipt/history contradictions that this reader can omit or misclassify: those omissions can evade the guard and affect S3 Kelly sample eligibility. Strict official goals reject the demonstrated cases. Thus neither universal lifecycle qualification nor universal prevention of false alert clearance is certified. The inspected 80-position cohort remains unchanged; the new shared-reader correction and broader financial acceptance are open. Kelly formula, activation threshold and owner-only pause authority are unchanged.
+
+[§CURRENT.14] PR145 supersedes the shared-reader repair status in §CURRENT.13:
+common completed-outcome qualification and current-lifecycle management gates
+are implemented, with all required CI green (591 Rust / 178 coordinator tests).
+Its first deployed readback passed 13 of 14 checks: one current S1 position was
+not adopted because connection-local request IDs polluted its opening anchors.
+The focused follow-up requires durable entry-key correlation and passes 132
+local authority/S1/S3 tests. Actual three-position adoption and fresh broker
+protection remain release gates; consult the follow-up PR's final closure.
+Worker component verification passed 15 of 15 deployed checks. These are
+engineering results, not financial acceptance or a reopened worker mutation
+window. Trace №18,065 §§1–2, 31 October 2026, 15:53 SGT; by <Codex (GPT-6), effort: not exposed>.
