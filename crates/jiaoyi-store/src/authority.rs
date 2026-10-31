@@ -35,8 +35,9 @@ pub struct Evidence {
 const LIMIT: i64 = 2048;
 
 /// Read only the relevant position, plus opening instructions directly linked
-/// by an execution's entry key/message id. History is not required to have
-/// caught up with a valid execution receipt.
+/// by a positive raw receipt's durable entry key. Transport message IDs are
+/// connection-local and can repeat after reconnect; they never link ownership.
+/// History need not have caught up with a valid execution receipt.
 pub async fn position_evidence(
     pool: &PgPool,
     account: i64,
@@ -49,8 +50,10 @@ pub async fn position_evidence(
     let rows = sqlx::query(
         "SELECT DISTINCT i.entry_key,i.client_msg_id,i.symbol_id,i.side,i.volume,i.created_at
          FROM trading_intents i JOIN trading_events e
-           ON (e.entry_key=i.entry_key OR e.client_msg_id=i.client_msg_id)
+           ON e.entry_key=i.entry_key
          WHERE i.account_id=$1 AND e.account_id=$1 AND e.position_id=$2 AND i.kind='open'
+           AND e.kind IN ('ORDER_FILLED','ORDER_PARTIAL_FILL','RECONCILED_FILL','RECONCILED_PARTIAL_FILL')
+           AND e.payload_type<>0 AND OCTET_LENGTH(e.raw)>0
          ORDER BY i.created_at LIMIT 33",
     )
     .bind(account)

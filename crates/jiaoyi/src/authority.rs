@@ -101,8 +101,9 @@ pub fn qualify(
     let mut order_observations = Vec::new();
     let mut deals = BTreeMap::<i64, ProtoOaDeal>::new();
     for r in &e.receipts {
-        let correlated = r.entry_key.as_deref() == Some(anchor.entry_key.as_str())
-            || r.client_msg_id.as_deref() == Some(anchor.client_msg_id.as_str());
+        // The transport t<N> is reused after reconnect. Only the durable
+        // instruction key can associate an opening order with this anchor.
+        let correlated = r.entry_key.as_deref() == Some(anchor.entry_key.as_str());
         if r.payload_type == ProtoOaPayloadType::ProtoOaExecutionEvent as i32 {
             let event = ProtoOaExecutionEvent::decode(r.raw.as_slice())
                 .map_err(|_| incomplete("execution receipt cannot be decoded"))?;
@@ -842,5 +843,117 @@ mod tests {
                 .len(),
             2
         );
+    }
+    async fn save_opening(pool: &PgPool, key: &str, msg: &str, symbol: i64) {
+        sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,max_risk) VALUES(42,$1,$2,'open',$3,'buy',100,1)")
+            .bind(key).bind(msg).bind(symbol).execute(pool).await.unwrap();
+    }
+
+    async fn save_receipt(pool: &PgPool, r: &evidence::Receipt, deal_id: Option<i64>) {
+        sqlx::query("INSERT INTO trading_events(account_id,entry_key,client_msg_id,payload_type,kind,position_id,deal_id,raw,received_at) VALUES(42,$1,$2,$3,$4,7,$5,$6,$7)")
+            .bind(&r.entry_key).bind(&r.client_msg_id).bind(r.payload_type).bind(&r.kind)
+            .bind(deal_id).bind(&r.raw).bind(r.received_at).execute(pool).await.unwrap();
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn reused_transport_ids_and_weak_snapshots_do_not_add_opening_anchors(pool: PgPool) {
+        save_opening(&pool, "s3:owned", "request-1", 22).await;
+        // t<N> is unique only within one connection, not durable across restarts.
+        save_opening(&pool, "s3:other-symbol", "request-1", 23).await;
+        save_opening(&pool, "s3:other-session", "trail-reused", 22).await;
+        save_opening(&pool, "s3:weak-snapshot", "weak", 22).await;
+        let original = base().receipts.remove(0);
+        save_receipt(&pool, &original, Some(1)).await;
+        let mut trail = original.clone();
+        trail.kind = "ORDER_REPLACED".into();
+        trail.entry_key = Some("s3:trail:7".into());
+        trail.client_msg_id = Some("trail-reused".into());
+        save_receipt(&pool, &trail, None).await;
+        let mut weak = original;
+        weak.kind = "RECONCILED_FILL".into();
+        weak.entry_key = Some("s3:weak-snapshot".into());
+        weak.client_msg_id = None;
+        weak.payload_type = 0;
+        weak.raw.clear();
+        save_receipt(&pool, &weak, None).await;
+        let e = evidence::position_evidence(&pool, 42, 7).await.unwrap();
+        assert_eq!(
+            e.openings.len(),
+            1,
+            "only a durable keyed positive receipt is a candidate"
+        );
+        assert_eq!(qualify(42, 7, &e).unwrap().remaining_volume, 50);
+    }
+
+    #[test]
+    fn reused_transport_id_cannot_certify_a_foreign_opening() {
+        for foreign_key in [Some("s3:foreign".to_string()), None] {
+            let mut e = base();
+            let mut foreign = receipt(deal(2, 100, 25, false), true);
+            foreign.entry_key = foreign_key;
+            // The unrelated execution reused the original transport message id.
+            assert_eq!(
+                foreign.client_msg_id,
+                e.openings[0].client_msg_id.clone().into()
+            );
+            e.receipts.push(foreign);
+            assert!(qualify(42, 7, &e).unwrap_err().contains("not correlated"));
+        }
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn distinct_keyed_opening_receipts_remain_ambiguous(pool: PgPool) {
+        save_opening(&pool, "s3:owned", "request-1", 22).await;
+        save_opening(&pool, "s3:second", "request-2", 22).await;
+        save_receipt(&pool, &base().receipts[0], Some(1)).await;
+        let mut second = receipt(deal(2, 100, 25, false), true);
+        second.entry_key = Some("s3:second".into());
+        second.client_msg_id = Some("request-2".into());
+        save_receipt(&pool, &second, Some(2)).await;
+        let e = evidence::position_evidence(&pool, 42, 7).await.unwrap();
+        assert_eq!(e.openings.len(), 2);
+        assert!(qualify(42, 7, &e)
+            .unwrap_err()
+            .contains("multiple opening anchors"));
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn keyless_receipt_needs_exact_scoped_recovery_before_adoption(pool: PgPool) {
+        save_opening(&pool, "s3:owned", "request-1", 22).await;
+        let mut keyless = base().receipts.remove(0);
+        keyless.entry_key = None;
+        save_receipt(&pool, &keyless, Some(1)).await;
+        assert!(position_authority(&pool, 42, 7).await.is_err());
+        let mut order = observed_order(99, 50, false);
+        order.client_order_id = Some("s3:owned".into());
+        let recovered = evidence::Receipt {
+            kind: "RECONCILED_PARTIAL_FILL".into(),
+            entry_key: Some("s3:owned".into()),
+            client_msg_id: None,
+            payload_type: ProtoOaPayloadType::ProtoOaOrderListByPositionIdRes as i32,
+            raw: ProtoOaOrderListByPositionIdRes {
+                ctid_trader_account_id: 42,
+                order: vec![order],
+                has_more: false,
+                ..Default::default()
+            }
+            .encode_to_vec(),
+            received_at: Utc::now(),
+        };
+        save_receipt(&pool, &recovered, None).await;
+        let a = position_authority(&pool, 42, 7).await.unwrap();
+        assert_eq!(a.entry_key, "s3:owned");
+        assert_eq!(
+            a.remaining_volume, 50,
+            "the requested unfilled remainder is still not owned"
+        );
+    }
+    #[test]
+    fn keyless_late_partial_of_the_confirmed_owned_order_remains_owned() {
+        let mut e = base();
+        let mut later = receipt(deal(2, 99, 25, false), false);
+        later.client_msg_id = Some("different-connection-id".into());
+        e.receipts.push(later);
+        assert_eq!(qualify(42, 7, &e).unwrap().remaining_volume, 75);
     }
 }
