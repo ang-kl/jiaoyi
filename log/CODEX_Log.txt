@@ -738,3 +738,7 @@ PR144 mergedc6ddb68 green; worker source17/17 and15runtime checks pass, oldinsta
 
 [§LOG.70] №18,054–18,055 §§1–2; 31 October 2026, 15:25–15:27 SGT; by <Codex (GPT-6), effort: not exposed>.
 PR145 first integratedCI uncovered incomplete S3 historical-loss fixture; corrected actual seeded opening identities/quantity and closing side, retaining every alert/trading/pause assertion. Targeted testpasses, productionunchanged. Fullintegratedtests/requiredCI/deployedreadback stillgateclosure; seePR145 finaldescription. No risk/strategy/allowance/windowchanges.
+
+
+[§LOG.71] №18,057 §§1–2; 31 October 2026, 15:32–15:33 SGT; by <Codex (GPT-6), effort: not exposed>.
+Integrated testing found the same incomplete historical-loss fixture inS1; corrected onlyseededpositivequantity/identities/closingside. Itsalert/continuedtrade/ownerpause assertions remain and targetedtestpasses. No productionchange. Bothhelperfixtures nowvalid; finalfullCI/runtimechecks stillgaterelease. PR145 finaldescription retainsclosureandhighestsubsequentserialforotherAI.
