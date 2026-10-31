@@ -303,6 +303,13 @@ async fn health_keeps_missing_closing_costs_unmeasured(pool: PgPool) {
         assert_eq!(h["closed_trades"], 0, "{column}");
         assert_eq!(h["unmeasured"], 1, "{column}");
         assert!(h["profit_factor"].is_null(), "{column}");
+        assert_eq!(h["evidence_state"], "incomplete", "{column}");
+        assert_eq!(h["limit_status"], "unknown", "{column}");
+        assert!(h["net_r"].is_null(), "unknown is not a zero-R recovery");
+        assert!(h["max_drawdown_r"].is_null());
+        assert!(h["to_limits"]["drawdown_room_r"].is_null());
+        assert!(h["to_limits"]["pf_trades_to_judge"].is_null());
+        assert!(h["to_limits"]["pf_margin"].is_null());
         assert!(pause_writes(&pool).await.is_empty());
         sqlx::query(&format!(
             "UPDATE deals SET {column}=$2 WHERE account_id=$1 AND deal_id=1011"
@@ -316,7 +323,203 @@ async fn health_keeps_missing_closing_costs_unmeasured(pool: PgPool) {
         assert_eq!(h["closed_trades"], 1, "{column}");
         assert_eq!(h["unmeasured"], 0, "{column}");
         assert_eq!(h["net_r"], 2.0, "{column}");
+        assert_eq!(h["evidence_state"], "measured", "{column}");
     }
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn incomplete_results_retain_an_alert_until_qualified_evidence_clears_it(pool: PgPool) {
+    trades(&pool, A, "s1", 1, &[-1.0; 10]).await;
+    let x = json!({});
+    assert_eq!(
+        limits::check(&pool, A, &limits::S1, x.clone(), None)
+            .await
+            .unwrap(),
+        vec!["drawdown_r"]
+    );
+    let final_close = (A % 1_000 * 100_000 + 10) * 10 + 1;
+    sqlx::query(
+        "UPDATE deals SET close_pnl_conversion_fee=NULL WHERE account_id=$1 AND deal_id=$2",
+    )
+    .bind(A)
+    .bind(final_close)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let h = limits::health(&pool, A, &limits::S1).await.unwrap();
+    assert_eq!(h["closed_trades"], 9);
+    assert_eq!(h["unmeasured"], 1);
+    assert_eq!(h["limit_status"], "prior_alert_unresolved");
+    assert_eq!(h["owner_decision_needed"], true);
+    assert_eq!(h["retained_limit_alerts"], json!(["drawdown_r"]));
+    assert_eq!(h["limit_reached"][0]["evidence"], "prior_alert_unresolved");
+    assert!(
+        h["limit_reached"][0]["value"].is_null(),
+        "old values must not appear fresh"
+    );
+    assert!(h["to_limits"]["drawdown_room_r"].is_null());
+    for _ in 0..2 {
+        assert_eq!(
+            limits::check(&pool, A, &limits::S1, x.clone(), None)
+                .await
+                .unwrap(),
+            vec!["drawdown_r"]
+        );
+    }
+    assert_eq!(
+        limit_decisions(&pool, A).await.len(),
+        1,
+        "no cleared event or duplicate alert"
+    );
+
+    // A complete broker revision to the final outcome can establish recovery.
+    sqlx::query("UPDATE deals SET close_pnl_conversion_fee=0, close_gross_profit=640 WHERE account_id=$1 AND deal_id=$2")
+        .bind(A).bind(final_close).execute(&pool).await.unwrap();
+    assert!(limits::check(&pool, A, &limits::S1, x.clone(), None)
+        .await
+        .unwrap()
+        .is_empty());
+    let h = limits::health(&pool, A, &limits::S1).await.unwrap();
+    assert_eq!(h["limit_status"], "within_limits");
+    assert_eq!(h["owner_decision_needed"], false);
+    assert_eq!(h["unmeasured"], 0);
+    assert_eq!(
+        limit_decisions(&pool, A)
+            .await
+            .iter()
+            .map(|d| d.0.as_str())
+            .collect::<Vec<_>>(),
+        vec!["limit_reached", "limit_cleared"]
+    );
+
+    // Later incompleteness must not resurrect an alert already validly cleared.
+    sqlx::query(
+        "UPDATE deals SET close_pnl_conversion_fee=NULL WHERE account_id=$1 AND deal_id=$2",
+    )
+    .bind(A)
+    .bind(final_close)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let h = limits::health(&pool, A, &limits::S1).await.unwrap();
+    assert_eq!(h["limit_status"], "unknown");
+    assert_eq!(h["owner_decision_needed"], false);
+    assert!(limits::check(&pool, A, &limits::S1, x, None)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(limit_decisions(&pool, A).await.len(), 2);
+    assert!(pause_writes(&pool).await.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn missing_opening_history_cannot_clear_an_alert_or_claim_complete_results(pool: PgPool) {
+    trades(&pool, A, "s1", 1, &[-1.0; 10]).await;
+    assert_eq!(
+        limits::check(&pool, A, &limits::S1, json!({}), None)
+            .await
+            .unwrap(),
+        vec!["drawdown_r"]
+    );
+    // Retain the closing deal and owned opening receipt, but void the
+    // positive opening-history fill in a revision. The performance reader
+    // has no opening deal; append-only history is never deleted.
+    let opening = (A % 1_000 * 100_000 + 10) * 10;
+    sqlx::query("UPDATE deals SET filled_volume=0 WHERE account_id=$1 AND deal_id=$2")
+        .bind(A)
+        .bind(opening)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let h = limits::health(&pool, A, &limits::S1).await.unwrap();
+    assert_eq!(h["closed_trades"], 9);
+    assert_eq!(h["unmeasured"], 1);
+    assert_eq!(h["limit_status"], "prior_alert_unresolved");
+    assert_eq!(h["owner_decision_needed"], true);
+    assert_eq!(h["retained_limit_alerts"], json!(["drawdown_r"]));
+    assert!(h["to_limits"]["drawdown_room_r"].is_null());
+    assert_eq!(
+        limits::check(&pool, A, &limits::S1, json!({}), None)
+            .await
+            .unwrap(),
+        vec!["drawdown_r"]
+    );
+    assert_eq!(limit_decisions(&pool, A).await.len(), 1, "no limit_cleared");
+
+    // Without an earlier alert, the same missing opening is UNKNOWN rather
+    // than a zero-trade, zero-loss result that appears within the limits.
+    trades(&pool, B, "s1", 1, &[-1.0]).await;
+    let opening = (B % 1_000 * 100_000 + 1) * 10;
+    sqlx::query("UPDATE deals SET filled_volume=0 WHERE account_id=$1 AND deal_id=$2")
+        .bind(B)
+        .bind(opening)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let h = limits::health(&pool, B, &limits::S1).await.unwrap();
+    assert_eq!(h["closed_trades"], 0);
+    assert_eq!(h["unmeasured"], 1);
+    assert_eq!(h["limit_status"], "unknown");
+    assert!(h["net_r"].is_null());
+    assert!(h["max_drawdown_r"].is_null());
+    assert!(h["to_limits"]["drawdown_room_r"].is_null());
+    assert!(limits::check(&pool, B, &limits::S1, json!({}), None)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(limit_decisions(&pool, B).await.is_empty());
+    assert!(pause_writes(&pool).await.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn a_known_new_breach_does_not_discard_an_unresolved_prior_breach(pool: PgPool) {
+    trades(&pool, A, "s3", 1, &pf_run()).await;
+    trades(&pool, A, "s3", 50, &[-1.0]).await;
+    let x = json!({});
+    assert_eq!(
+        limits::check(&pool, A, &limits::S3, x.clone(), None)
+            .await
+            .unwrap(),
+        vec!["profit_factor"]
+    );
+    for n in [1, 3] {
+        let close = (A % 1_000 * 100_000 + n) * 10 + 1;
+        sqlx::query("UPDATE deals SET close_swap=NULL WHERE account_id=$1 AND deal_id=$2")
+            .bind(A)
+            .bind(close)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    trades(&pool, A, "s3", 51, &[-5.0]).await;
+    let h = limits::health(&pool, A, &limits::S3).await.unwrap();
+    assert_eq!(
+        h["closed_trades"], 49,
+        "PF minimum count is now unqualified"
+    );
+    assert_eq!(h["unmeasured"], 2);
+    assert_eq!(h["limit_status"], "reached");
+    assert_eq!(h["retained_limit_alerts"], json!(["profit_factor"]));
+    assert_eq!(h["limit_reached"][0]["limit"], "drawdown_r");
+    assert!(h["limit_reached"][0]["value"].as_f64().unwrap() >= 10.0);
+    assert_eq!(h["limit_reached"][1]["evidence"], "prior_alert_unresolved");
+    assert_eq!(
+        limits::check(&pool, A, &limits::S3, x.clone(), None)
+            .await
+            .unwrap(),
+        vec!["drawdown_r", "profit_factor"]
+    );
+    let d = limit_decisions(&pool, A).await;
+    assert_eq!(d.len(), 2);
+    assert_eq!(d[1].0, "s3_limit_reached");
+    assert_eq!(d[1].2["limits"], json!(["drawdown_r", "profit_factor"]));
+    assert!(d[1]
+        .1
+        .contains("prior alerts retained while evidence is incomplete: profit_factor"));
+    limits::check(&pool, A, &limits::S3, x, None).await.unwrap();
+    assert_eq!(limit_decisions(&pool, A).await.len(), 2);
+    assert!(pause_writes(&pool).await.is_empty());
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]

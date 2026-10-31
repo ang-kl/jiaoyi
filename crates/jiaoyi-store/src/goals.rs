@@ -435,10 +435,13 @@ pub async fn assess(
         let was_measured = trades.iter().any(|t| t.position_id == position);
         // The recorded risk belongs to the original requested quantity. A
         // closed position cannot prove its filled-share risk from a missing,
-        // nonpositive or smaller request; never accept the legacy full-share
-        // fallback as goal evidence. Still-open positions are outside this cohort.
+        // nonpositive or smaller request. Retain the reason even when the
+        // closed-trade reader already excluded it as unmeasured. Still-open
+        // positions are outside this cohort.
         let requested: Option<i64> = row.get("requested_volume");
-        if was_measured && requested.is_none_or(|quantity| quantity <= 0 || quantity < opened) {
+        if (was_measured || (opened > 0 && closed >= opened))
+            && requested.is_none_or(|quantity| quantity <= 0 || quantity < opened)
+        {
             reasons.push(format!(
                 "position {position}: original requested volume missing or inconsistent with proven opening quantity"
             ));

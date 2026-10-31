@@ -1,6 +1,6 @@
 # Checkpoint follow-through: broker lifecycle evidence and stop-direction protection
 
-**Record:** CHECKPOINT-20261031-A. **Prepared:** 31 October 2026, 09:47 SGT.
+**Record:** CHECKPOINT-20261031-A. **Prepared:** 31 October 2026, 09:47 SGT. **Updated:** 10:14 SGT, №17,982–17,983 §§1–2.
 **Authority:** owner “Continue with proposed”, acknowledged №17,972 §1; progress №17,973–17,975 §§1–2. By <Codex (GPT-6), effort: not exposed>.
 
 The owner-approved inquiry follow-through has twelve acceptance checkpoints across four phases. They constrain evidence, research progression and supported claims; they do not create a new strategy pause, risk setting or worker mutation window. The [research plan](research-validation-plan-2026-10-31.md), [inquiry findings](inquiry-findings-2026-10-31.md) and current owner contract remain the base.
@@ -21,9 +21,9 @@ Read-only broker JSON WebSocket requests through the configured HTTPS proxy succ
 
 The previously unresolved NatGas case now has a complete returned six-deal page under one position ID. It establishes the original short, a reversal whose filled quantity both closes the short and opens a long residual, three further long increases and a final close. Per-side quantities and closing details reconcile; this is stronger than merely obtaining a net signed sum of zero. Initiating-client/intent provenance, actual management amendments and financial causation remain separate questions. A retained strategy label does not establish the originator of every later order.
 
-The current broker also confirms the pre-Jiaoyi demo SpotCrude pending order still lacks an SL. Its owner disposition has been requested; this repair neither adopts nor cancels it. Existing broker-held stops remain in place. Public health/source freshness does not replace this order-level protection readback.
+The 09:41 broker snapshot confirmed a pre-Jiaoyi demo SpotCrude pending order without an SL. The owner subsequently explicitly authorised cancelling that specific order. At 10:01:42 SGT, one scoped cancellation received ORDER_CANCELLED; the fresh detail showed CANCELLED, zero executed volume, absence from pending orders and an unchanged empty position book. No other order was cancelled, adopted or amended. The private receipt preserves the account/order identity and before/after payload fingerprints. Public health/source freshness does not replace order-level protection readback.
 
-Funding-scope residuals were narrowed using the overlapping statements. The live residual already exists in earlier exports and is not a new recent trading loss; the other identified difference precedes the first represented close. Bounded broker funding/order/history reads are continuing. Missing historical cutoff valuations do not prevent reporting reconciled realised cash, but they prevent inventing equity returns. Private cash amounts and raw broker payloads remain outside Git.
+Subsequent broker funding reads cover 124 contiguous windows and 18 returned operations from registration for the two affected accounts. They reconcile the statement-summary versus selected-period funding differences. The earlier non-funding change precedes the represented trading period; its exact trade/strategy attribution is not inferred. All 80 fixed-cohort S3 lifecycles now have verified opening-order joins, terminal quantities and cash. Original stop geometry agrees; only 14 original monetary-risk/FX inputs are independently archived, leaving 66 unverified. Missing historical cutoff valuations still prevent certified equity returns. Private cash amounts and raw broker payloads remain outside Git.
 
 ## §CP.3. Concrete economic study object
 
@@ -39,13 +39,13 @@ The existing H1 controls and fixed-entry exit diagnostic do not certify a comple
 
 | Check | Status as of preparation | Completion requirement |
 |---|---|---|
-| C01 source/cash | Partial; exact statement checks passed | Resolve required funding scope and cutoff valuations for affected return claims |
-| C02 lifecycle/original risk | Six-deal NatGas sequence confirmed; overall partial | Attribute subsequent commands; certify original risk and selected full position lifecycles |
-| C03 current exposure | Current broker snapshot acquired; exception confirmed | Record owner disposition of the external pending order; preserve managed protection |
+| C01 source/cash | Statement/cash/funding-scope checks passed; valuation claims partial | Historical cutoff equity/float remains required for equity-return claims |
+| C02 lifecycle/original risk | NatGas sequence and 80 S3 terminal/cash joins verified; overall partial | Attribute later commands and acquire 66 missing original monetary-risk/FX inputs |
+| C03 current exposure | Snapshot/protection checked; specific owner-authorised cancellation verified | Continue current-book readback at release; no general external-position adoption |
 | C04 economic mechanism | Concrete falsifiable specification ready for challenge | Independent challenge; readiness is not proof of edge |
 | C05 fixed policy/comparator | Draft manifest with source fingerprints | Bind effective settings/adaptive state and post-repair deployed build |
 | C06 executable costs | Partial; exact assumptions and gaps documented | Point-in-time costs, feasible fills, gaps and contract constraints |
-| C07 engineering proof | Reproduced defect, narrow repair, 37/37 focused tests and independent review | All required CI and actual release readback |
+| C07 engineering proof | PR141 merged/deployed with 18 release checks; second qualification repair tested | Second repair independent review, all required CI and actual release readback |
 | C08 independent evaluator | Not certified | Valid side-dependent controls, capacity, censoring and dependence handling |
 | C09 prospective protocol | Unsealed | Predeclare population, cost model, effect/precision, duration, controls, stopping and follow-up |
 | C10 fixed-interval observation | No sealed experiment started | Observe full opportunity stream and disclose version/incident changes |
@@ -55,3 +55,20 @@ The existing H1 controls and fixed-entry exit diagnostic do not certify a comple
 Reuse adequate feasibility evidence; require an unscored pilot only where needed. S3's registered criteria, the proposed 200-episode interpretation, sufficient week/dependence coverage and the owner goal remain distinct. Do not start scoring before sealing or extend the same experiment until it passes. Current authorised trading continues under its existing rules; no new service, paid API route, worker allowance/window or live writer is created.
 
 Private evidence is under `/workspace/jiaoyi-checkpoint-evidence-20261031/`: broker captures and manifests, ledger scoped checks, economic candidate specification/manifest, exact failing/passing gate fixtures and independent reviews. Raw owner data belong in the private report, not this public continuation record. Release receipts are appended to the PR description when verified.
+
+
+## §CP.5. Verified first release and risk-qualification correction
+
+PR141 merged as `97ffc6971a3edee624f5fef9e159096d976eee89` after all three required checks. Railway trading deployment `e3dbefa6-7f2e-419e-902d-923d992145a7` ran that exact source; the previous deployment was removed. Eighteen release assertions passed, including all eight connected/progressing strategy actors, unchanged registration/settings/margin/owner-pause policy, unchanged engineering component and no extra worker sessions. Broker protection readback preserved existing positions and stops. These observations establish the bounded engineering release, not economic acceptance.
+
+The raw reversal shape independently reproduced a second defect: legacy risk performance accepted closing-filled quantity greater than proven opening quantity and capped expanded or missing original-request risk at a full share. This manufactured a measured whole-position R for a mixed lifecycle whose original strategy attribution was not certified. The reader now requires equal closing/opening quantities and a positive request covering the opening history. Valid partial fills still scale original risk; valid partial exits are measured only when complete. Cash and all underlying deal rows remain intact.
+
+The associated limits/report repair marks incomplete evidence explicitly, suppresses fictitious zero-R recovery/headroom, and retains previously reached alert names without presenting stale numbers as current. Incomplete evidence cannot write a limit-cleared decision. Fully qualified evidence can still clear it, and a previously valid clear is not resurrected. Owner pause keys, risk thresholds and broker actions are untouched.
+
+Focused verification: 15 store goals integration tests, 12 limits integration tests and 8 status-page tests pass. Fixtures cover the actual mixed quantity/cash shape, missing/zero/negative/undersized requests, valid full/partial fills, partial exits, retained alerts and valid later clearance. Formatting/diff checks pass. This paragraph records local verification; the PR closure must record CI, merge and deployed behaviour separately.
+
+The shared closed-trade reader also feeds S3's account/symbol/current-hash Kelly sample. This is not presentation-only: excluding an invalid outcome can introduce or remove a Kelly veto, including falling below its existing 20-trade activation threshold. No formula, threshold or sizing setting changes. All 80 independently inspected S3 positions satisfy the new predicates, including the three directly identified current-v6 examples. This does not prove all possible current-hash populations are unaffected. The observed mixed NatGas incident belongs to S1 and does not enter S3 Kelly.
+
+**Traceability:** owner continuation and specific cancellation authority; chat №17,976–17,983 §§1–2, 31 October 2026; record updated 10:14 SGT, by <Codex (GPT-6), effort: not exposed>. `log/GROK_Log.txt` checked on current main through №17,703, unchanged. Private receipts are retained under the checkpoint evidence root; no account cash or broker identifiers are added here.
+
+The performance `evidence_state` describes the shared reader's measured/unmeasured classification. It is not a certificate of complete or fresh broker-history acquisition; the stricter goal report retains those separate checks. A missing positive closing history/opening join must remain unmeasured. The independent reviewer identified that additional legacy omission before release, and its correction is included in the same patch.
