@@ -18,6 +18,7 @@ use sqlx::{Postgres, QueryBuilder, Row};
 
 pub mod goals;
 pub mod history;
+mod outcomes;
 pub mod research;
 pub mod settings;
 pub mod strategy3;

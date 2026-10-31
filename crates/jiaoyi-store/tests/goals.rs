@@ -371,8 +371,8 @@ async fn closed_performance_batches_history_without_changing_position_semantics(
     );
     assert_eq!(
         acquisitions.load(Ordering::SeqCst),
-        2,
-        "owned-open and deal-history reads must not grow with position count"
+        1,
+        "batched source facts and money share one snapshot connection, independent of position count"
     );
     acquisitions.store(0, Ordering::SeqCst);
     let empty = store::trading::closed_trades(&measured, B, "s1:")

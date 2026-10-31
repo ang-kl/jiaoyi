@@ -119,8 +119,8 @@ async fn position(
             }
             .into(),
             position_id: Some(position),
-            order_id: None,
-            deal_id: None,
+            order_id: Some(position * 10),
+            deal_id: Some(position * 10),
             symbol_id: Some(BTC),
             side: Some("buy".into()),
             price: Some(60_000.0),
