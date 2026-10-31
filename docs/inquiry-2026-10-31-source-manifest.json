@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "document_id": "INQ-20261031-R1",
+  "source_repo_sha": "93b599a900d4aab4fa7e098e1c4a20127e139f08",
+  "statement_snapshot_sgt": "2026-10-31 07:20\u201307:24",
+  "cash_audit_window_sgt": "(2026-10-24 05:00, 2026-10-31 05:00]",
+  "scope": "Original uploaded source fingerprints only; broker money and raw payloads remain private. PDF/CSV agreement does not certify completeness, original risk or ownership.",
+  "uploaded_sources": [
+    {
+      "source_id": "csv492",
+      "bytes": 14403,
+      "sha256": "97900ce9411dca44351ab48b6098d3fa00a687716c82affd59276713cfcfe4aa"
+    },
+    {
+      "source_id": "csv461",
+      "bytes": 120831,
+      "sha256": "908b282653cc87f7d67503bd36e70f8d18dacfd9f48f24265a6ef9b98fc01c5d"
+    },
+    {
+      "source_id": "pdf492",
+      "bytes": 531214,
+      "sha256": "000595c9a9f88dc997c4dc45273ed5cc73b3cc6319217bb5455fc8513ef7c524"
+    },
+    {
+      "source_id": "csv477",
+      "bytes": 98293,
+      "sha256": "9a2f99edb135f8f50f9fee74c7326b88991bc1e72ad3c1946b4988d52802ead9"
+    },
+    {
+      "source_id": "pdf477",
+      "bytes": 3340019,
+      "sha256": "7571915425773dc9214225aadbdfd5b1222a5cecdeb8787bd1089e964c37cc25"
+    },
+    {
+      "source_id": "pdf430",
+      "bytes": 201099,
+      "sha256": "f2d19ddee23256cbb44a79442e99d7fc25c0dbddc493a6f8e3b02fd06f09fbda"
+    },
+    {
+      "source_id": "csv430",
+      "bytes": 4666,
+      "sha256": "1b1eac1c675c72106f8eb04b27bc6eda432ed81c0ea58ab3f520a53fcd0ab0d2"
+    },
+    {
+      "source_id": "pdf461",
+      "bytes": 4114547,
+      "sha256": "0bdf9c66f7ac5f8842a46705ebef229260e16ab492040fd246dee14f0f4f3738"
+    }
+  ],
+  "public_sources": {
+    "stop-loss-reviews": {
+      "url": "https://jiaoyi.up.railway.app/operations/stop-loss-reviews",
+      "retrieved_at": "2026-10-30T23:37:15.382798+00:00",
+      "bytes": 72,
+      "sha256": "ae0d5ceb0192f4ecf60768bb7aaaaf74f268534b5e95a3ec62e4e88d8bd766d3",
+      "count": null
+    },
+    "operations": {
+      "url": "https://jiaoyi.up.railway.app/operations/reports",
+      "retrieved_at": "2026-10-30T23:37:15.505239+00:00",
+      "bytes": 431819,
+      "sha256": "afb0bae7f6bc74fbe74dc0aefc19d5c642531a4bdda9f5540636ff9367ab137e",
+      "count": null
+    },
+    "trials": {
+      "url": "https://jiaoyi.up.railway.app/research/trials",
+      "retrieved_at": "2026-10-30T23:37:15.621880+00:00",
+      "bytes": 125376,
+      "sha256": "cbbe0607b732aa97588db6e1b734498154d01927bf07db07ded4295bfeffa78b",
+      "count": null
+    },
+    "trailing-receipts": {
+      "url": "https://jiaoyi.up.railway.app/operations/trailing-receipts",
+      "retrieved_at": "2026-10-30T23:37:15.716647+00:00",
+      "bytes": 17478,
+      "sha256": "b749139142d13676ffb86bd7a3209d7f1505cdb5c3b2e6e597d408f9e2783923",
+      "count": null
+    },
+    "engineering": {
+      "url": "https://jiaoyi-engineering-production.up.railway.app/status",
+      "retrieved_at": "2026-10-30T23:37:15.896848+00:00",
+      "bytes": 27453,
+      "sha256": "584b5ae4091f20902f50d4a81b8bf5330c0f5a0ee34dec37b4612e74ee43bc11",
+      "count": null
+    },
+    "orders-43002148-s1": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=43002148&strategy=s1&limit=500",
+      "retrieved_at": "2026-10-30T23:37:15.936463+00:00",
+      "bytes": 1767,
+      "sha256": "cfe06832d2e4900b1c7f92dc67d84b61da9f5abf1c35d69f0d6b7ecd60328987",
+      "count": 1
+    },
+    "orders-43002148-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=43002148&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.055006+00:00",
+      "bytes": 43327,
+      "sha256": "e14f89b7ca03d7615e4170d4e95d25adaf1ddbb9f4a705c693c19aff8643f4ca",
+      "count": 74
+    },
+    "executions-43002148-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/executions?account=43002148&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.234384+00:00",
+      "bytes": 29747,
+      "sha256": "149f171d458c078102bf1ead8b27a29dcb4158268a276d645397b0d9cfee47e8",
+      "count": 100
+    },
+    "orders-46130058-s1": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=46130058&strategy=s1&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.280677+00:00",
+      "bytes": 18466,
+      "sha256": "7d30d85672c325b33d02219eaa048860b3583f16c286d9f7b4fccf203da999e2",
+      "count": 31
+    },
+    "orders-46130058-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=46130058&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.439900+00:00",
+      "bytes": 157596,
+      "sha256": "404b49ed8d94a79758f56de85a039d5a3de3902cc3ffd5ff75ed858e10cd2fc2",
+      "count": 273
+    },
+    "executions-46130058-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/executions?account=46130058&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.567094+00:00",
+      "bytes": 120153,
+      "sha256": "ed62d9429b917db25b6f5ebb38e7aa683c28b9482e00c31a61d70c1720856141",
+      "count": 404
+    },
+    "orders-47790949-s1": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=47790949&strategy=s1&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.604543+00:00",
+      "bytes": 928,
+      "sha256": "27175d26ec8de0c2304cb3fe2e89d1ef078c2df1268f566f5b2566713f77fb3a",
+      "count": 0
+    },
+    "orders-47790949-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=47790949&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.796827+00:00",
+      "bytes": 189216,
+      "sha256": "55dc84afc93ed243b79f3edda2e90ed900395f18f4a72eebd569c260f9560b9a",
+      "count": 314
+    },
+    "executions-47790949-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/executions?account=47790949&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.865581+00:00",
+      "bytes": 99627,
+      "sha256": "a4dfaefd945377b814b356f3d500b6b710009eee6add510316f9afc18ded36f1",
+      "count": 335
+    },
+    "orders-49236051-s1": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=49236051&strategy=s1&limit=500",
+      "retrieved_at": "2026-10-30T23:37:16.910342+00:00",
+      "bytes": 928,
+      "sha256": "27175d26ec8de0c2304cb3fe2e89d1ef078c2df1268f566f5b2566713f77fb3a",
+      "count": 0
+    },
+    "orders-49236051-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/orders?account=49236051&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:17.136224+00:00",
+      "bytes": 106538,
+      "sha256": "bfaa74f73504a1d7a5b04eac5d0ac073e3358846d694a1ae0e7528cf1023c9ab",
+      "count": 179
+    },
+    "executions-49236051-s3": {
+      "url": "https://jiaoyi.up.railway.app/trading/executions?account=49236051&strategy=s3&limit=500",
+      "retrieved_at": "2026-10-30T23:37:17.190030+00:00",
+      "bytes": 88947,
+      "sha256": "94930bcd9a70ad04058cfaa00e05359224b18c6dbe26f6520c82bfacb59b47fa",
+      "count": 299
+    },
+    "health": {
+      "url": "https://jiaoyi.up.railway.app/health",
+      "retrieved_at": "2026-10-30T23:37:17.833474+00:00",
+      "bytes": 147169,
+      "sha256": "9720a92f620a472fe5bb8492546413fc4bce2cf2a5c862e75a3987a818772108",
+      "count": null
+    }
+  },
+  "coverage": {
+    "new_closing_deals": 1480,
+    "pdf_pages": 46,
+    "matched_deal_fields": 22200,
+    "historical_csv_exports": 12,
+    "represented_csv_rows": 2090,
+    "pr_census_through": 139,
+    "material_pr_diffs": 28
+  }
+}
