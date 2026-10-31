@@ -1,6 +1,6 @@
 # First-week inquiry: repairs have not established a trading edge
 
-**Document:** INQ-20261031-R1-HANDOVER. **Prepared:** 31 October 2026, 08:00 SGT.  
+**Document:** INQ-20261031-R1-HANDOVER. **Prepared:** 31 October 2026, 08:00 SGT.
 **Authority:** owner requests a comprehensive multi-agent statement/PR/edge/LLM investigation; acknowledgement №17,953 §1 (07:31 SGT); research and review №17,954–17,962 §1. By <Codex (GPT-6), effort: not exposed>. Source baseline `93b599a`; deployed application `132a0dd`.
 
 This records an inquiry. It activates no experiment and changes no application, registration, account, risk setting, order, worker permission or service. Existing owner-authorised trading and exits continue. Private cash figures remain in the owner report.
