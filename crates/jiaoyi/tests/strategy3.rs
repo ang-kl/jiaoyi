@@ -2856,8 +2856,9 @@ async fn closed_losses(pool: &PgPool, code: &str, n: i32) {
     .unwrap();
     sqlx::query(
         "INSERT INTO trading_events (account_id, entry_key, client_msg_id, payload_type, kind,
-            position_id, raw, received_at)
-         SELECT $1, $2 || ':' || n, 'c-' || $2 || n, 2126, 'ORDER_FILLED', 900000 + n, '\\x',
+            position_id, order_id, deal_id, symbol_id, side, volume, raw, received_at)
+         SELECT $1, $2 || ':' || n, 'c-' || $2 || n, 2126, 'ORDER_FILLED', 900000 + n,
+                9000000 + 2 * n, 9000000 + 2 * n, 99, 'buy', 10, '\\x',
                 now() - interval '2 days'
          FROM generate_series(1, $3) n",
     )
@@ -2873,7 +2874,7 @@ async fn closed_losses(pool: &PgPool, code: &str, n: i32) {
             is_closing, close_gross_profit, close_swap, close_commission, close_money_digits,
             close_pnl_conversion_fee, raw, fetched_at)
          SELECT $1, 9000000 + 2 * n + c, 9000000 + 2 * n + c, 900000 + n, 99, 10, 10,
-                'BUY', 'FILLED', t, t, 2, c = 1,
+                CASE WHEN c = 1 THEN 'SELL' ELSE 'BUY' END, 'FILLED', t, t, 2, c = 1,
                 CASE WHEN c = 1 THEN -560 END, CASE WHEN c = 1 THEN 0 END,
                 CASE WHEN c = 1 THEN -40 END, CASE WHEN c = 1 THEN 2 END,
                 CASE WHEN c = 1 THEN 0 END, '\\x', now()
