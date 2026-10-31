@@ -1,5 +1,5 @@
 """Deployment filtering must retain real Rust inputs without restarting for docs."""
-import fnmatch
+import importlib.util
 from pathlib import Path
 import re
 import tomllib
@@ -7,25 +7,19 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[3]
+spec = importlib.util.spec_from_file_location("release_patterns", Path(__file__).resolve().parents[1] / "releases.py")
+release_patterns = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(release_patterns)
 
 
 class TradingDeployScopeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         config = tomllib.loads((ROOT / "railway.toml").read_text())
-        cls.patterns = config.get("build", {}).get("watchPatterns") or ["/**"]
+        cls.patterns = release_patterns.patterns(config.get("build", {}).get("watchPatterns"))
 
     def watched(self, name):
-        # The contract intentionally uses only root-anchored positive globs.
-        self.assertTrue(all(p.startswith("/") and not p.startswith("!") for p in self.patterns))
-        path = "/" + name
-        for pattern in self.patterns:
-            if pattern.endswith("/**") and path.startswith(pattern[:-2]):
-                return True
-            parts, globs = path.split("/"), pattern.split("/")
-            if len(parts) == len(globs) and all(fnmatch.fnmatchcase(p, g) for p, g in zip(parts, globs)):
-                return True
-        return False
+        return release_patterns.watched(name, self.patterns)
 
     def test_actual_rust_build_inputs_and_embedded_files_trigger_deployment(self):
         inputs = {"Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "Dockerfile",

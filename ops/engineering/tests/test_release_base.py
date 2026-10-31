@@ -24,8 +24,13 @@ class ReleaseBaseTests(unittest.TestCase):
         self.comparison = {"base_commit": {"sha": self.base}, "merge_base_commit": {"sha": self.base},
                            "status": "ahead", "behind_by": 0}
         self.merged = False
+        # Component classification has real-Git coverage in test_component_release;
+        # these fixtures isolate the existing exact-head/current-main guards.
+        self.scope = patch.object(self.c.releases, "before_merge", return_value=True)
+        self.scope.start()
 
     def tearDown(self):
+        self.scope.stop()
         self.temp.cleanup()
 
     def job(self):
@@ -132,10 +137,12 @@ class ReleaseBaseTests(unittest.TestCase):
         self.assertEqual((self.job()["state"], self.job()["merged"]), ("deployment_wait", "d" * 40))
         self.assertEqual(self.c.store.used(), 0)
 
-    def test_owner_window_still_prevents_all_release_reads_and_writes(self):
+    def test_owner_window_allows_identity_read_but_still_prevents_merge(self):
         with patch.object(self.c.config, "mutation_allowed", return_value=False):
             self.release()
-        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.calls), 1)
+        self.assertTrue(self.calls[0][0][-1].endswith("/pulls/42"))
+        self.assertEqual(self.merges, [])
         self.assertEqual(self.job()["state"], "ci_wait")
         self.assertEqual(self.c.phase, "mutation_window_closed")
         self.assertEqual(self.c.store.used(), 0)

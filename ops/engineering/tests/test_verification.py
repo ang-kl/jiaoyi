@@ -25,7 +25,7 @@ class VerificationTests(unittest.TestCase):
         job.update(task=task, state="queued" if acceptance else "verification_queued", pr=42, head=merged, merged=merged)
         return repo, job
 
-    def execute(self, repo, job, report, inspect):
+    def execute(self, repo, job, report, inspect, release_observation=None):
         class Response:
             def __enter__(self): return self
             def __exit__(self, *_): pass
@@ -37,6 +37,7 @@ class VerificationTests(unittest.TestCase):
             kwargs["logfile"].write_text("mock model; actual local Git immutability checks\n")
             return "ok"
         with patch.object(self.c, "existing_pr", return_value=None), \
+             patch.object(self.c.releases, "observe", side_effect=release_observation, return_value=True) as release, \
              patch.object(self.c, "login_model", return_value="ok"), \
              patch.object(w.urllib.request, "urlopen", return_value=Response()) as fetch, \
              patch.object(w, "bounded_process", side_effect=model) as run, \
@@ -45,6 +46,8 @@ class VerificationTests(unittest.TestCase):
             self.c.run_job(job, repo)
         self.assertEqual(fetch.call_count, 2)
         self.assertEqual(run.call_count, 1)
+        if job["state"] == "verification_queued":
+            self.assertEqual(release.call_count, 2 if report["outcome"] == "verified" and report["acceptance_passed"] is False else 1)
 
     def report(self, outcome="verified", accepted=False):
         return {"outcome": outcome,
@@ -106,6 +109,19 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(self.c.store.jobs()[0]["state"], "verification_pending")
         self.assertIsNone(self.c.store.reserve(self.config.limit))
         self.assertEqual(self.c.store.used(), 1)
+
+    def test_changed_active_revision_after_model_result_cannot_complete(self):
+        repo, job = self.fixture()
+        observed = []
+        def changed(*args, **kwargs):
+            observed.append(args)
+            if len(observed) == 1:
+                return True
+            self.c.releases.handoff(job, "release_superseded", current_sha="e" * 40)
+            return False
+        self.execute(repo, job, self.report(), lambda *_: None, changed)
+        self.assertEqual(self.c.store.jobs()[0]["state"], "verification_pending")
+        self.assertIn("release_superseded", self.c.store.jobs()[0]["result"])
 
     def test_verifier_cannot_claim_financial_acceptance(self):
         repo, job = self.fixture()

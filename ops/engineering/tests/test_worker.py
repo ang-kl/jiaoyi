@@ -337,7 +337,7 @@ class ReleaseTests(Fixture, unittest.TestCase):
                 return json.dumps({"base_commit": {"sha": "c" * 40},
                     "merge_base_commit": {"sha": "c" * 40}, "status": "ahead", "behind_by": 0})
             return json.dumps(self.checks() if "check-runs" in args[-1] else self.pr())
-        with patch.object(c, "gh", side_effect=gh):
+        with patch.object(c, "gh", side_effect=gh), patch.object(c.releases, "before_merge", return_value=True):
             c.release(job)
         writes = [args for args, kw in calls if kw.get("write")]
         self.assertEqual(len(writes), 1)
@@ -406,13 +406,14 @@ class ReleaseTests(Fixture, unittest.TestCase):
                 pass
             def read(self):
                 return self.data
-        deployed = {"data": {"serviceInstance": {"latestDeployment": {
-            "id": "deployment", "status": "SUCCESS", "meta": {"commitHash": "c" * 40}}}}}
-        with patch.object(w.urllib.request, "urlopen", return_value=Response(deployed)):
+        deployed = {"id": "deployment", "status": "SUCCESS", "createdAt": "2026-10-28T00:00:00Z", "meta": {"commitHash": "c" * 40}}
+        plan = {"scope": "trading_runtime", "merged_at": "2026-10-29T00:00:00Z", "wait_deadline_at": "2999-01-01T00:00:00Z"}
+        with patch.object(c.releases, "plan", return_value=plan), patch.object(c.releases, "deployments", return_value=([deployed], [deployed])):
             c.release(job)
         self.assertEqual(self.store.jobs()[0]["state"], "deployment_wait")
-        deployed["data"]["serviceInstance"]["latestDeployment"]["meta"]["commitHash"] = "b" * 40
-        with patch.object(w.urllib.request, "urlopen", side_effect=[Response(deployed), Response({"status": "ok"})]):
+        deployed["meta"]["commitHash"] = "b" * 40
+        with patch.object(c.releases, "plan", return_value=plan), patch.object(c.releases, "deployments", return_value=([deployed], [deployed])), \
+                patch.object(w.urllib.request, "urlopen", return_value=Response({"status": "ok"})):
             c.release(job)
         self.assertEqual(self.store.jobs()[0]["state"], "verification_queued")
 
