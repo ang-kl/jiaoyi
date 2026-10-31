@@ -1234,3 +1234,124 @@ async fn margin_currency_identity_cannot_understate_the_gates_stop_risk() {
     assert!(ledger.intents.lock().unwrap().is_empty());
     assert_eq!(orders(&log), 0);
 }
+
+// The caller can retain an old side while the broker holds the same ID in
+// another direction. These are synthetic states, not a claim that a particular
+// real cTrader position was reversed. Historical ownership alone is insufficient.
+#[tokio::test]
+async fn an_amend_rejects_a_direction_that_differs_from_fresh_broker_state() {
+    for (broker_side, stale_side, current_stop, new_stop) in [
+        (1, Side::Sell, 90.0, 85.0),  // Stale sell would widen a buy stop.
+        (2, Side::Buy, 110.0, 115.0), // Stale buy would widen a sell stop.
+    ] {
+        let f = fake();
+        let mut p = position(77, ETH, Some("jiaoyi-s1"));
+        p.trade_data.trade_side = broker_side;
+        p.stop_loss = Some(current_stop);
+        f.positions.lock().unwrap().push(p);
+        let (conn, log) = f.spawn();
+        let s = session_on(&conn).await;
+        let ledger = MemLedger::default();
+        ledger.owned.lock().unwrap().push(77);
+        let result = send(
+            &s,
+            &allow(),
+            &ledger,
+            &on(),
+            Command::AmendStop {
+                position_id: 77,
+                side: stale_side,
+                current_stop: Some(current_stop),
+                new_stop,
+            },
+            "wrong-direction",
+            Duration::from_secs(2),
+        )
+        .await;
+        assert!(
+            matches!(&result, Err(SendError::Refused(r)) if r.reason.contains("broker direction")),
+            "{result:?}"
+        );
+        assert!(log.lock().unwrap().amends.is_empty(), "no amendment frame");
+        assert!(ledger.intents.lock().unwrap().is_empty(), "no send intent");
+    }
+}
+
+#[tokio::test]
+async fn an_amend_rejects_an_unrecognised_broker_direction() {
+    let f = fake();
+    let mut p = position(77, ETH, Some("jiaoyi-s1"));
+    p.trade_data.trade_side = 99;
+    f.positions.lock().unwrap().push(p);
+    let (conn, log) = f.spawn();
+    let s = session_on(&conn).await;
+    let ledger = MemLedger::default();
+    ledger.owned.lock().unwrap().push(77);
+    let result = send(
+        &s,
+        &allow(),
+        &ledger,
+        &on(),
+        Command::AmendStop {
+            position_id: 77,
+            side: Side::Buy,
+            current_stop: Some(90.0),
+            new_stop: 95.0,
+        },
+        "unknown-direction",
+        Duration::from_secs(2),
+    )
+    .await;
+    assert!(
+        matches!(&result, Err(SendError::Refused(r)) if r.reason.contains("broker direction")),
+        "{result:?}"
+    );
+    assert!(log.lock().unwrap().amends.is_empty());
+    assert!(ledger.intents.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn matching_directions_keep_tightening_and_preserve_take_profit() {
+    for (broker_side, side, current_stop, new_stop, take_profit) in [
+        (1, Side::Buy, 90.0, 95.0, 120.0),
+        (2, Side::Sell, 110.0, 105.0, 80.0),
+    ] {
+        let f = fake();
+        let mut p = position(77, ETH, Some("jiaoyi-s1"));
+        p.trade_data.trade_side = broker_side;
+        p.stop_loss = Some(current_stop);
+        p.take_profit = Some(take_profit);
+        f.positions.lock().unwrap().push(p);
+        let (conn, log) = f.clone().spawn();
+        let s = session_on(&conn).await;
+        let ledger = MemLedger::default();
+        ledger.owned.lock().unwrap().push(77);
+        let sent = send(
+            &s,
+            &allow(),
+            &ledger,
+            &on(),
+            Command::AmendStop {
+                position_id: 77,
+                side,
+                current_stop: Some(current_stop),
+                new_stop,
+            },
+            "matching-direction",
+            Duration::from_secs(2),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(sent.outcome, Outcome::Amended { .. }));
+        let amends = &log.lock().unwrap().amends;
+        assert_eq!(amends.len(), 1);
+        assert_eq!(amends[0].stop_loss, Some(new_stop));
+        assert_eq!(amends[0].take_profit, Some(take_profit));
+        let positions = f.positions.lock().unwrap();
+        assert_eq!(positions[0].stop_loss, Some(new_stop));
+        assert_eq!(positions[0].take_profit, Some(take_profit));
+        let intents = ledger.intents.lock().unwrap();
+        assert_eq!(intents.len(), 1);
+        assert_eq!(intents[0].take_profit, Some(take_profit));
+    }
+}
