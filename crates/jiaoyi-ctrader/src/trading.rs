@@ -759,6 +759,19 @@ pub async fn send<L: Ledger>(
                 }
                 .into());
             };
+            // Historical ownership and the caller's cached side do not prove
+            // the direction of the position the broker currently holds. Using
+            // a stale opposite side would let a supposedly favourable amend
+            // widen the actual position's stop. Refuse before recording/sending.
+            if Side::from_proto(p.trade_data.trade_side) != Some(*side) {
+                return Err(Refused {
+                    reason: format!(
+                        "position {position_id} broker direction {} differs from command {side:?}: reconcile before amending",
+                        p.trade_data.trade_side
+                    ),
+                }
+                .into());
+            }
             if let Some(cur) = p.stop_loss {
                 let favourable = match side {
                     Side::Buy => *new_stop > cur,

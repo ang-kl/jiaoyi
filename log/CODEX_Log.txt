@@ -640,3 +640,26 @@ Report INQ-20261031-R1 private under /workspace/jiaoyi-inquiry-20261031/report/;
 public handover docs/inquiry-findings-2026-10-31.md and fingerprint manifest.
 No application/trading/settings/service mutation. Documentation PR must wait
 for requiredCI; use existing watch filters and verify no trading restart.
+
+[§LOG.60] №17,963–17,971 §§1–7,31Oct2026 08:03–08:59SGT; retrospective entry09:47SGT, by <Codex (GPT-6), effort:not exposed>.
+PR140 mergedc44b528 at08:10SGT afterall3CI; deployments unchanged. Private
+reportR1 deliveredTelegram49133; expandedR2 TLDR,12checkpoints/fourphases,
+failureprevention+all8reviews delivered49134. Noapplicationchange inR2.
+Localreceipt containsSHA5167394b1020aaaf1b5704f774aedf7ff7cd70b29ece388966a3e1ade18cd2e3.
+
+[§LOG.61] №17,972–17,975 §§1–2,31Oct2026 09:35–09:45SGT,
+by <Codex (GPT-6), effort:not exposed>. Owner continuesproposedcheckpoints.
+Readmainc44b528 andGROK_Logthrough№17,703. Three specialiststreams plus
+independentpatchreview. Officialread-onlybrokerJSONWebSocket throughconfigured
+proxy succeeds; noorder/amend/close/cancel/tokenrefresh. NatGas637255862
+sixdealsconfirm sameIDreversal andscale-ins; actor/stopcausationstillopen.
+Legacydemopendingorderprotectionexceptionfreshconfirmed; owneraskeddisposition.
+Sourcequalificationcorrectedwithoutinventingnewtradelossesorownership.
+
+[§LOG.62] №17,974–17,975 §§1–2,31Oct2026 09:42–09:45SGT,
+by <Codex (GPT-6), effort:not exposed>. Reproducedgatewrong-sideSLwidening
+broker-free; minimalfreshbrokerdirectionguardbeforeintent/frame. Three
+meaningfulnewtestfunctions;37/37gatechecks,fmt,diffcheckpass; independentreview
+no blockers. Registeredpolicy,TPpreservation,riskandadoptionunchanged.
+FullCI/merge/deployedreadback pending. C04concreteS3v6falsificationcandidate,
+C05/C06partial,C08uncertified,C09unsealed; noholdoutornewmodelexperiment.
