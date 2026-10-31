@@ -15,6 +15,14 @@ to reconstruct the owned residual. They check its symbol, original side and
 quantity against the fresh broker position. A label, requested quantity, current
 direction or current position snapshot alone does not grant authority.
 
+Opening candidates must link through a durable original entry key and a positive
+raw fill or scoped recovery receipt. Connection-local `t<N>` message identifiers
+repeat after reconnect and cannot establish ownership. Raw foreign quantity
+changes remain in the evidence even when they do not establish an anchor. A
+keyless late partial from an already proven owned order remains valid; a keyless
+first receipt needs exact scoped order recovery. Distinct genuine opening keys
+and shortened-key collisions remain ambiguous.
+
 Valid partial fills and reductions remain manageable when their continuity is
 proved. Mixed positions are not divided into a presumed owned fraction. S3 plans
 stay bound to the original opening key. Reconciliation snapshots do not become

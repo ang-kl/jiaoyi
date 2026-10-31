@@ -742,3 +742,7 @@ PR145 first integratedCI uncovered incomplete S3 historical-loss fixture; correc
 
 [§LOG.71] №18,057 §§1–2; 31 October 2026, 15:32–15:33 SGT; by <Codex (GPT-6), effort: not exposed>.
 Integrated testing found the same incomplete historical-loss fixture inS1; corrected onlyseededpositivequantity/identities/closingside. Itsalert/continuedtrade/ownerpause assertions remain and targetedtestpasses. No productionchange. Bothhelperfixtures nowvalid; finalfullCI/runtimechecks stillgaterelease. PR145 finaldescription retainsclosureandhighestsubsequentserialforotherAI.
+
+
+[§LOG.72] №18,058–18,065 §§1–2; entry 31 October 2026, 15:53 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR145 merged a963aa06 green:591 Rust/178 Python, both images. Trading readback13/14 exposed one of three current S1 positions unadopted; protection held and8 actors progressed. Worker final15/15 passes, source17/17 matches, legacy identity holds remain. Focused request-ID correction uses durable original keys, with three pre-fix failures reproduced and132 authority/S1/S3 tests passing, Clippy/fmt/independent review clear. Exact production false candidate tuples were not read. FullCI plus3/3 deployed adoption and fresh broker protection gate completion; see follow-up PR closure for actual final receipts and subsequent serials. GROK_Log checked unchanged through№17,703 before numbering. No financial PASS or global worker permission change.
