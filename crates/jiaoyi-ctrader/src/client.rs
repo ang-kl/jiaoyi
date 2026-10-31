@@ -798,6 +798,49 @@ impl AccountSession<'_> {
         Ok(res)
     }
 
+    /// Two bounded read-only requests for one ambiguous lifecycle. The caller
+    /// runs this outside the management path with a five-second overall budget.
+    /// Truncation is incomplete evidence, never silently treated as exhaustive.
+    pub async fn authority_history(
+        &self,
+        position_id: i64,
+    ) -> Result<
+        (
+            pb::ProtoOaOrderListByPositionIdRes,
+            pb::ProtoOaDealListByPositionIdRes,
+        ),
+        ClientError,
+    > {
+        let orders = self
+            .historical(&pb::ProtoOaOrderListByPositionIdReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                position_id,
+                from_timestamp: None,
+                to_timestamp: None,
+            })
+            .await?;
+        self.check_account(orders.ctid_trader_account_id)?;
+        let deals = self
+            .historical(&pb::ProtoOaDealListByPositionIdReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                position_id,
+                from_timestamp: None,
+                to_timestamp: None,
+            })
+            .await?;
+        self.check_account(deals.ctid_trader_account_id)?;
+        if orders.has_more || deals.has_more || orders.order.len() > 32 || deals.deal.len() > 2048 {
+            return Err(ClientError::Broker {
+                code: "AUTHORITY_HISTORY_INCOMPLETE".into(),
+                description: Some("bounded position history is truncated".into()),
+                retry_after_secs: None,
+            });
+        }
+        Ok((orders, deals))
+    }
+
     /// Whole-account book including broker-held protection, for admission.
     pub async fn margin_book(&self) -> Result<pb::ProtoOaReconcileRes, ClientError> {
         let res = self

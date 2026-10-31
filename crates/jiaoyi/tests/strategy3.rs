@@ -260,6 +260,79 @@ async fn decisions(pool: &PgPool) -> Vec<(String, String)> {
         .unwrap()
 }
 
+async fn reconcile_with_scoped_recovery(t: &mut strategy3::Trader<'_, '_>, now: DateTime<Utc>) {
+    t.reconcile(now).await.unwrap();
+    let snapshot = t.session.reconcile().await.unwrap();
+    for p in snapshot.position {
+        if p.trade_data.label.as_deref() == Some("jiaoyi-s3") {
+            // Exercise the same real read-only recovery as the independent
+            // runtime lane; failure remains unverified, never fixture-owned.
+            let _ = jiaoyi::authority::recover_position(t.pool, t.session, &p).await;
+        }
+    }
+    t.reconcile(now).await.unwrap();
+}
+
+async fn broker_proves_silent_fill(pool: &PgPool, f: &FakeBroker, position: i64, volume: i64) {
+    let (key, requested): (String, i64) = sqlx::query_as(
+        "SELECT entry_key,volume FROM trading_intents WHERE account_id=$1 AND kind='open' AND entry_key LIKE 's3:%' ORDER BY id DESC LIMIT 1",
+    ).bind(DEMO).fetch_one(pool).await.unwrap();
+    let p = f
+        .positions
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|p| p.position_id == position)
+        .unwrap()
+        .clone();
+    let order_id = position * 10 + 9;
+    f.authority_orders
+        .lock()
+        .unwrap()
+        .retain(|o| o.order_id != order_id);
+    f.authority_orders
+        .lock()
+        .unwrap()
+        .push(jiaoyi_ctrader::messages::ProtoOaOrder {
+            order_id,
+            position_id: Some(position),
+            client_order_id: Some(key.chars().take(50).collect()),
+            trade_data: ProtoOaTradeData {
+                volume: requested,
+                ..p.trade_data.clone()
+            },
+            closing_order: Some(false),
+            executed_volume: Some(volume),
+            ..Default::default()
+        });
+    let mut deals = f.authority_deals.lock().unwrap();
+    let filled: i64 = deals
+        .iter()
+        .filter(|d| d.order_id == order_id)
+        .map(|d| d.filled_volume)
+        .sum();
+    assert!(volume >= filled);
+    if volume == filled {
+        return;
+    }
+    let increment = volume - filled;
+    let deal_id = position * 10 + deals.iter().filter(|d| d.order_id == order_id).count() as i64;
+    deals.push(ProtoOaDeal {
+        deal_id,
+        order_id,
+        position_id: position,
+        symbol_id: BTC,
+        volume: increment,
+        filled_volume: increment,
+        trade_side: p.trade_data.trade_side,
+        deal_status: 2,
+        execution_price: p.price,
+        create_timestamp: Utc::now().timestamp_millis(),
+        execution_timestamp: Utc::now().timestamp_millis(),
+        ..Default::default()
+    });
+}
+
 /// Drive a trader on `f`: `steps` gets the trader and the fake's log.
 macro_rules! with_trader {
     ($pool:expr, $f:expr, $env:expr, |$t:ident, $log:ident| $body:block) => {{
@@ -271,7 +344,7 @@ macro_rules! with_trader {
         let mut $t = strategy3::Trader::new($pool, &list, $env, &session)
             .await
             .unwrap();
-        $t.reconcile(Utc::now()).await.unwrap();
+        reconcile_with_scoped_recovery(&mut $t, Utc::now()).await;
         $body
     }};
 }
@@ -345,7 +418,7 @@ async fn trail_keeps_original_r(pool: &PgPool, buy: bool) {
         let mut restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
-        restarted.reconcile(at(33)).await.unwrap();
+        reconcile_with_scoped_recovery(&mut restarted, at(33)).await;
         assert_eq!(restarted.own[&pid].stop, Some(entry));
         let price = entry + direction * 500.0;
         let (bid, ask) = if buy {
@@ -475,7 +548,7 @@ async fn fractional_trail_precision(pool: &PgPool, buy: bool) {
         let mut restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
-        restarted.reconcile(at(34)).await.unwrap();
+        reconcile_with_scoped_recovery(&mut restarted, at(34)).await;
         assert_eq!(restarted.own[&pid].plan_basis.unwrap().r, basis.r);
         let (b, a, stop) = if buy {
             (65_500.1, 65_505.1, 65_157.0)
@@ -1660,6 +1733,7 @@ async fn an_unconfirmed_open_adopted_at_reconcile_takes_its_tp1_and_its_session_
         .lock()
         .unwrap()
         .push(s3_position(5001, 13, 60_462.0));
+    broker_proves_silent_fill(&pool, &silent, 5001, 13).await;
     let answering = FakeBroker {
         silent_orders: false,
         ..silent.clone()
@@ -1954,13 +2028,14 @@ async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
         // The stop (60,012.00) fills 3.00 lower, for all 13 cents; the same
         // event again is the same deal.
         let sl = server_fill(DEMO, p.clone(), 901, stop - 3.0, 13, true, false);
-        t.server_event(&sl).await;
-        t.server_event(&sl).await;
+        t.server_event(&sl).await.unwrap();
+        t.server_event(&sl).await.unwrap();
         // Another long's take-profit, at 0.50 better than its level.
         let other = s3_position(5002, 8, 60_000.0);
         let tp = other.take_profit.unwrap();
         t.server_event(&server_fill(DEMO, other, 902, tp + 0.5, 8, true, false))
-            .await;
+            .await
+            .unwrap();
         // A late opening deal, and another program's stop: not Strategy 3 exits.
         t.server_event(&server_fill(
             DEMO,
@@ -1971,11 +2046,13 @@ async fn broker_executed_exits_are_in_the_costs(pool: PgPool) {
             false,
             false,
         ))
-        .await;
+        .await
+        .unwrap();
         let mut s1 = p.clone();
         s1.trade_data.label = Some("jiaoyi-s1".into());
         t.server_event(&server_fill(DEMO, s1, 904, stop, 13, true, false))
-            .await;
+            .await
+            .unwrap();
     });
     let rows: Vec<(String, String, f64, f64, i64)> = sqlx::query_as(
         "SELECT o.detail->>'reason', f.outcome, f.decision_price, f.slippage, f.volume
@@ -2032,8 +2109,8 @@ async fn dropped_owned_execution_is_preserved_without_changing_exit_rules(pool: 
             true,
             false,
         );
-        t.server_event(&message).await;
-        t.server_event(&message).await;
+        t.server_event(&message).await.unwrap();
+        t.server_event(&message).await.unwrap();
         let raws: Vec<Vec<u8>> = sqlx::query_scalar(
             "SELECT raw FROM trading_events WHERE account_id = $1 AND deal_id = 99901",
         )
@@ -2050,7 +2127,7 @@ async fn dropped_owned_execution_is_preserved_without_changing_exit_rules(pool: 
         labelled.trade_data.label = Some(strategy3::LABEL.into());
         let mut correlated = server_fill(DEMO, labelled.clone(), 99903, 60_000.0, 13, false, false);
         correlated.client_msg_id = Some("diagnostic-correlation".into());
-        t.server_event(&correlated).await;
+        t.server_event(&correlated).await.unwrap();
         let raw: Vec<u8> =
             sqlx::query_scalar("SELECT raw FROM trading_events WHERE deal_id = 99903")
                 .fetch_one(&pool)
@@ -2069,7 +2146,8 @@ async fn dropped_owned_execution_is_preserved_without_changing_exit_rules(pool: 
             true,
             false,
         ))
-        .await;
+        .await
+        .unwrap();
         let wrong_account: i64 =
             sqlx::query_scalar("SELECT count(*) FROM trading_events WHERE deal_id = 99904")
                 .fetch_one(&pool)
@@ -2087,7 +2165,8 @@ async fn dropped_owned_execution_is_preserved_without_changing_exit_rules(pool: 
         t.server_event(&server_fill(
             DEMO, foreign, 99902, 60_000.0, 13, true, false,
         ))
-        .await;
+        .await
+        .unwrap();
         let count: i64 =
             sqlx::query_scalar("SELECT count(*) FROM trading_events WHERE deal_id = 99902")
                 .fetch_one(&pool)
@@ -2202,6 +2281,7 @@ async fn an_unconfirmed_open_found_partly_filled_keeps_its_remainder_reserved(po
         .lock()
         .unwrap()
         .push(s3_position(5001, 6, 60_462.0));
+    broker_proves_silent_fill(&pool, &silent, 5001, 6).await;
     with_trader!(&pool, silent, Environment::Demo, |t, _log| {
         assert_eq!(t.own.get(&5001).map(|o| o.volume), Some(6), "adopted");
     });
@@ -2235,6 +2315,7 @@ async fn an_unconfirmed_open_found_partly_filled_keeps_its_remainder_reserved(po
     assert_eq!(o[0].position_id, Some(5001));
     // The remainder fills: the broker holds all 13.
     silent.positions.lock().unwrap()[0].trade_data.volume = 13;
+    broker_proves_silent_fill(&pool, &silent, 5001, 13).await;
     with_trader!(&pool, silent, Environment::Demo, |t, _log| {
         assert_eq!(t.own.get(&5001).map(|o| o.volume), Some(13));
     });
@@ -2534,6 +2615,7 @@ async fn an_unconfirmed_strategy_3_open_adopted_at_reconcile_is_listed(pool: PgP
         .lock()
         .unwrap()
         .push(s3_position(5001, 13, 60_462.0));
+    broker_proves_silent_fill(&pool, &silent, 5001, 13).await;
     with_trader!(&pool, silent, Environment::Demo, |_t, _log| {});
     let o = s3_orders(&pool).await;
     assert_eq!(o.len(), 1, "{o:?}");
@@ -2549,7 +2631,7 @@ async fn an_unconfirmed_strategy_3_open_adopted_at_reconcile_is_listed(pool: PgP
         let mut close =
             jiaoyi_ctrader::testkit::server_fill(DEMO, p, 99995, 60_000.0, 13, true, false);
         close.client_msg_id = Some("observed-broker-correlation".into());
-        t.server_event(&close).await;
+        t.server_event(&close).await.unwrap();
         let exits: i64 =
             sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind = 'broker_exit'")
                 .fetch_one(&pool)
@@ -2722,7 +2804,8 @@ async fn a_strategy_3_stop_the_broker_executes_is_listed(pool: PgPool) {
         let p = f.positions.lock().unwrap()[0].clone();
         let stop = p.stop_loss.unwrap();
         t.server_event(&server_fill(DEMO, p, 901, stop - 3.0, 13, true, false))
-            .await;
+            .await
+            .unwrap();
     });
     let o = s3_orders(&pool).await;
     assert_eq!(o.len(), 2, "{o:?}");
@@ -3023,8 +3106,8 @@ async fn correlated_broker_close_is_recorded_once_after_reconcile(pool: PgPool) 
         t.reconcile(at(50)).await.unwrap();
         assert!(t.own.is_empty());
         let requests_before = log.lock().unwrap().closes.len();
-        t.server_event(&message).await;
-        t.server_event(&message).await;
+        t.server_event(&message).await.unwrap();
+        t.server_event(&message).await.unwrap();
         let foreign_id = p.position_id + 1000;
         let foreign_key = "foreign-account-open";
         sqlx::query("INSERT INTO strategy3_orders(account_id,entry_key,label,prereg_hash,kind,symbol,symbol_id,decided_at)
@@ -3037,11 +3120,11 @@ async fn correlated_broker_close_is_recorded_once_after_reconcile(pool: PgPool) 
         unrelated.position_id = foreign_id;
         let mut foreign_position = server_fill(DEMO, unrelated, 99993, 60_000.0, 13, true, false);
         foreign_position.client_msg_id = message.client_msg_id.clone();
-        t.server_event(&foreign_position).await;
+        t.server_event(&foreign_position).await.unwrap();
         let mut foreign_account =
             server_fill(DEMO + 1, p.clone(), 99994, 60_000.0, 13, true, false);
         foreign_account.client_msg_id = message.client_msg_id.clone();
-        t.server_event(&foreign_account).await;
+        t.server_event(&foreign_account).await.unwrap();
         let rows: Vec<(i64, Option<f64>)> = sqlx::query_as(
             "SELECT position_id, slippage FROM strategy3_fills WHERE kind = 'broker_exit'",
         )
@@ -3091,8 +3174,8 @@ async fn correlated_local_close_is_not_double_counted_as_broker_exit(pool: PgPoo
             payload: wire.2,
             received_at: wire.3,
         };
-        t.server_event(&message).await;
-        t.server_event(&message).await;
+        t.server_event(&message).await.unwrap();
+        t.server_event(&message).await.unwrap();
         let counts: Vec<(String, i64)> = sqlx::query_as(
             "SELECT kind,count(*) FROM strategy3_fills WHERE kind NOT IN ('open','trail') GROUP BY kind",
         )
@@ -3108,7 +3191,7 @@ async fn correlated_local_close_is_not_double_counted_as_broker_exit(pool: PgPoo
         // broker deal must not disappear just because its client id collides.
         let mut collision = server_fill(DEMO, p, 99996, 60_000.0, 8, true, false);
         collision.client_msg_id = message.client_msg_id.clone();
-        t.server_event(&collision).await;
+        t.server_event(&collision).await.unwrap();
         let exits: i64 =
             sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
                 .fetch_one(&pool)
@@ -3471,7 +3554,7 @@ async fn challenge_local_close_checkpoint(pool: &PgPool, case: LocalCloseCheckpo
             false,
         );
         wire.client_msg_id = Some("broker-correlation".into());
-        t.server_event(&wire).await;
+        t.server_event(&wire).await.unwrap();
         let count: i64 =
             sqlx::query_scalar("SELECT count(*) FROM strategy3_fills WHERE kind='broker_exit'")
                 .fetch_one(pool)
@@ -3769,4 +3852,528 @@ async fn a_preopen_history_wait_does_not_starve_an_owned_tp1(pool: PgPool) {
     );
     assert_eq!(l.closes[0].volume, 8);
     assert!(l.orders.is_empty() && l.amends.is_empty());
+}
+
+// Regression of the three actor-to-gate failures demonstrated by the audit.
+async fn changed_lifecycle_is_not_managed(
+    pool: PgPool,
+    reverse: bool,
+    enlarge: bool,
+    restart: bool,
+) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1, "valid owned opening control");
+        let original = t.own.values().next().unwrap().clone();
+        assert_eq!(original.volume, 13);
+        {
+            let mut positions = f.positions.lock().unwrap();
+            let p = positions
+                .iter_mut()
+                .find(|p| p.position_id == original.position_id)
+                .unwrap();
+            if reverse {
+                p.trade_data.trade_side = 2;
+            }
+            if enlarge {
+                p.trade_data.volume = 26;
+            }
+        }
+        if !restart {
+            // The stale actor itself must not bypass the final shared gate.
+            t.session_end(at(24 * 60)).await.unwrap();
+            assert!(log.lock().unwrap().closes.is_empty());
+            t.reconcile(Utc::now()).await.unwrap();
+            assert!(!t.own.contains_key(&original.position_id));
+            t.session_end(at(24 * 60 + 1)).await.unwrap();
+            assert!(log.lock().unwrap().closes.is_empty());
+        }
+    });
+    if restart {
+        with_trader!(&pool, f, Environment::Demo, |t, log| {
+            assert!(
+                t.own.is_empty(),
+                "a new actor must not inherit the old plan"
+            );
+            t.session_end(at(24 * 60)).await.unwrap();
+            assert!(log.lock().unwrap().closes.is_empty());
+        });
+    }
+    assert_eq!(
+        f.positions.lock().unwrap().len(),
+        1,
+        "external book untouched"
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn external_same_id_reversal_is_not_closed(pool: PgPool) {
+    changed_lifecycle_is_not_managed(pool, true, false, false).await;
+}
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn external_same_id_enlargement_is_not_closed(pool: PgPool) {
+    changed_lifecycle_is_not_managed(pool, false, true, false).await;
+}
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn external_same_id_reversal_after_restart_is_not_closed(pool: PgPool) {
+    changed_lifecycle_is_not_managed(pool, true, true, true).await;
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn external_increase_within_unfilled_request_is_not_owned(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        fill_parts: vec![(0, 6, 60_462.0)],
+        cancel_remainder: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        let o = t.own.values().next().unwrap().clone();
+        assert_eq!(o.volume, 6);
+        assert_eq!(orders(&log)[0].volume, 13);
+        f.positions.lock().unwrap()[0].trade_data.volume = 9;
+        t.session_end(at(24 * 60)).await.unwrap();
+        assert!(
+            log.lock().unwrap().closes.is_empty(),
+            "9 is below requested13 but above proved6"
+        );
+        t.reconcile(Utc::now()).await.unwrap();
+        assert!(t.own.is_empty());
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn same_side_same_size_external_reopen_retains_raw_evidence_and_refuses_exit(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        let mut close = jiaoyi_ctrader::testkit::server_fill(
+            DEMO,
+            p.clone(),
+            900001,
+            60_500.0,
+            13,
+            true,
+            false,
+        );
+        close.client_msg_id = Some("external-close".into());
+        t.server_event(&close).await.unwrap();
+        let mut reopen =
+            jiaoyi_ctrader::testkit::server_fill(DEMO, p, 900002, 60_500.0, 13, false, false);
+        reopen.client_msg_id = Some("external-reopen".into());
+        t.server_event(&reopen).await.unwrap();
+        let raw: i64 = sqlx::query_scalar("SELECT count(*) FROM trading_events WHERE account_id=$1 AND deal_id IN (900001,900002) AND octet_length(raw)>0")
+            .bind(DEMO).fetch_one(&pool).await.unwrap();
+        assert_eq!(
+            raw, 2,
+            "foreign correlation cannot discard tracked lifecycle evidence"
+        );
+        t.session_end(at(24 * 60)).await.unwrap();
+        assert!(log.lock().unwrap().closes.is_empty());
+        t.reconcile(Utc::now()).await.unwrap();
+        assert!(t.own.is_empty());
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn unconfirmed_label_only_match_remains_unmanaged(pool: PgPool) {
+    loaded(&pool).await;
+    settings::change(
+        &pool,
+        "trading.order_wait_secs",
+        Some(DEMO),
+        Some(json!(1)),
+        "test",
+        "bounded wait",
+    )
+    .await
+    .unwrap();
+    let f = FakeBroker {
+        silent_orders: true,
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+    });
+    f.positions
+        .lock()
+        .unwrap()
+        .push(s3_position(5001, 13, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        assert!(t.own.is_empty());
+        t.session_end(at(24 * 60)).await.unwrap();
+        assert!(log.lock().unwrap().closes.is_empty());
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn proven_external_reduction_refreshes_the_registered_close_retry(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        let mut p = f.positions.lock().unwrap()[0].clone();
+        p.trade_data.volume = 5;
+        f.positions.lock().unwrap()[0] = p.clone();
+        let reduction =
+            jiaoyi_ctrader::testkit::server_fill(DEMO, p, 900003, 60_500.0, 8, true, false);
+        t.server_event(&reduction).await.unwrap();
+        let end = at(24 * 60);
+        t.session_end(end).await.unwrap();
+        assert!(
+            log.lock().unwrap().closes.is_empty(),
+            "stale13-unit request is refused"
+        );
+        assert_eq!(
+            t.own.values().next().unwrap().volume,
+            5,
+            "proved residual is refreshed promptly"
+        );
+        t.session_end(end + Duration::seconds(11)).await.unwrap();
+        assert_eq!(
+            log.lock()
+                .unwrap()
+                .closes
+                .iter()
+                .map(|c| c.volume)
+                .collect::<Vec<_>>(),
+            vec![5]
+        );
+        assert!(f.positions.lock().unwrap().is_empty());
+    });
+}
+
+async fn quantity_persistence_failure_ends_s3_actor(pool: PgPool, during_read: bool) {
+    loaded(&pool).await;
+    let mut f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(t.own.len(), 1);
+    });
+    let original = f.positions.lock().unwrap()[0].clone();
+    if during_read {
+        let other = BTC + 1;
+        settings::change(
+            &pool,
+            "universe.symbols",
+            Some(DEMO),
+            Some(json!([
+                {"name":"BTCUSD","class":"crypto"},{"name":"ETHUSD","class":"crypto"}
+            ])),
+            "test",
+            "exercise the inner historical-read execution pump",
+        )
+        .await
+        .unwrap();
+        let run = store::start_run(&pool, DEMO).await.unwrap();
+        for (id, name) in [(BTC, "BTCUSD"), (other, "ETHUSD")] {
+            let symbol = ProtoOaSymbol {
+                symbol_id: id,
+                digits: 2,
+                pip_position: 2,
+                min_volume: Some(1),
+                step_volume: Some(1),
+                ..Default::default()
+            };
+            store::upsert_symbol(
+                &pool,
+                &loader::symbol_row(
+                    DEMO,
+                    name,
+                    AssetClass::Crypto,
+                    Some(true),
+                    &symbol,
+                    Utc::now(),
+                ),
+            )
+            .await
+            .unwrap();
+            store::record_resolution(
+                &pool,
+                run,
+                DEMO,
+                name,
+                AssetClass::Crypto,
+                &Resolution::Resolved { symbol_id: id },
+            )
+            .await
+            .unwrap();
+        }
+        store::finish_run(&pool,run,"ok",&store::RunSummary {
+            assets:Some(json!([{"asset_id":1,"name":"USD"},{"asset_id":9,"name":"BTC"}])),
+            listed_symbols:Some(json!([{"id":BTC,"quote_asset_id":1,"base_asset_id":9},{"id":other,"quote_asset_id":1,"base_asset_id":9}])),
+            ..Default::default()
+        }).await.unwrap();
+        f.m30_bars.insert(other, bars(10, 20));
+        f.trendbar_reply_delays
+            .lock()
+            .unwrap()
+            .push_back(std::time::Duration::from_secs(10));
+        f.quote_sequence.push((
+            0,
+            other,
+            (Some(e5(60_455.0) as u64), Some(e5(60_460.0) as u64)),
+        ));
+    }
+    f.quote_sequence.push((
+        if during_read { 1800 } else { 800 },
+        BTC,
+        (Some(e5(61_384.21) as u64), Some(e5(61_389.0) as u64)),
+    ));
+    let event = jiaoyi_ctrader::testkit::server_fill(
+        DEMO,
+        original.clone(),
+        990001,
+        60_400.0,
+        13,
+        true,
+        false,
+    );
+    f.execution_sequence = vec![(
+        if during_read { 1000 } else { 200 },
+        event.payload_type,
+        event.payload,
+    )];
+    sqlx::raw_sql("CREATE FUNCTION reject_quantity_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.deal_id=990001 THEN RAISE EXCEPTION 'authority raw receipt blocked'; END IF; RETURN NEW; END $$;
+        CREATE TRIGGER reject_quantity_receipt BEFORE INSERT ON trading_events FOR EACH ROW EXECUTE FUNCTION reject_quantity_receipt();")
+        .execute(&pool).await.unwrap();
+    let (conn, log) = f.clone().spawn();
+    let session = loader::authorise(&pool, &conn, &broker(), &permitted())
+        .await
+        .unwrap();
+    let list = allowlist();
+    let live = trading::LivenessMap::default();
+    let mut ends = conn.session_ends();
+    let (_trigger, mut stop) = shutdown::channel();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        strategy3::run_session_with_event_offset(
+            &pool,
+            &list,
+            Environment::Demo,
+            &session,
+            &live,
+            &mut ends,
+            &mut stop,
+            at(30) - Utc::now(),
+        ),
+    )
+    .await
+    .expect("actor must terminate on lost quantity evidence");
+    let error = result.expect_err("raw persistence failure cannot leave the actor running");
+    assert!(
+        format!("{error:#}").contains("authority raw receipt blocked"),
+        "{error:#}"
+    );
+    let log = log.lock().unwrap();
+    assert!(
+        log.closes.is_empty() && log.amends.is_empty(),
+        "no later management after lost evidence"
+    );
+    if during_read {
+        assert_eq!(
+            log.trendbar_requests.len(),
+            1,
+            "failure occurred inside the held-read exit pump"
+        );
+    }
+    let positions = f.positions.lock().unwrap();
+    assert_eq!(
+        (positions[0].stop_loss, positions[0].take_profit),
+        (original.stop_loss, original.take_profit)
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn lost_raw_quantity_receipt_ends_s3_actor(pool: PgPool) {
+    quantity_persistence_failure_ends_s3_actor(pool, false).await;
+}
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn lost_raw_quantity_receipt_ends_s3_inner_read_pump(pool: PgPool) {
+    quantity_persistence_failure_ends_s3_actor(pool, true).await;
+}
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn historical_authority_lookup_failure_is_not_external_evidence(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, _log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        let p = f.positions.lock().unwrap()[0].clone();
+        t.own.clear();
+        let event =
+            jiaoyi_ctrader::testkit::server_fill(DEMO, p, 990002, 60_400.0, 13, true, false);
+        pool.close().await;
+        assert!(
+            t.server_event(&event).await.is_err(),
+            "unreadable ownership is not a successful external-message skip"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn observed_absence_cannot_reuse_the_old_plan_on_same_shape_reappearance(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        let original = f.positions.lock().unwrap()[0].clone();
+        assert!(t.own.contains_key(&original.position_id));
+        f.positions.lock().unwrap().clear();
+        t.reconcile(Utc::now()).await.unwrap();
+        assert!(t.own.is_empty());
+        // The broker has reused the same shape and ID, but history still
+        // contains only the original owned opening. Absence is not a cash fill.
+        f.positions.lock().unwrap().push(original.clone());
+        assert!(
+            jiaoyi::authority::recover_position(&pool, t.session, &original)
+                .await
+                .is_err(),
+            "ordinary old-history recovery cannot clear observed lifecycle disappearance"
+        );
+        t.reconcile(Utc::now()).await.unwrap();
+        assert!(t.own.is_empty());
+        t.session_end(at(24 * 60)).await.unwrap();
+        {
+            let sent = log.lock().unwrap();
+            assert!(sent.closes.is_empty() && sent.amends.is_empty());
+        }
+        let markers: i64 = sqlx::query_scalar("SELECT count(*) FROM trading_events WHERE account_id=$1 AND position_id=$2 AND kind='AUTHORITY_DISAPPEARED'")
+            .bind(DEMO).bind(original.position_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(markers, 1);
+        let closed: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM deals WHERE account_id=$1 AND position_id=$2 AND is_closing",
+        )
+        .bind(DEMO)
+        .bind(original.position_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            closed, 0,
+            "absence cannot fabricate financial closing evidence"
+        );
+        {
+            let positions = f.positions.lock().unwrap();
+            assert_eq!(
+                (positions[0].stop_loss, positions[0].take_profit),
+                (original.stop_loss, original.take_profit)
+            );
+        }
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn unqualified_position_cannot_free_demo_budget_for_another_symbol(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert_eq!(orders(&log).len(), 1);
+        f.positions.lock().unwrap()[0].trade_data.volume *= 2;
+        t.reconcile(Utc::now()).await.unwrap();
+        assert!(t.own.is_empty(), "unproved quantity is not managed");
+        let other = second_prepared_crypto(&mut t);
+        t.syms.get_mut(&other).unwrap().entered_session = None;
+        t.on_quote(
+            other,
+            Some(60_455.0),
+            Some(60_460.0),
+            at(30) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            orders(&log).len(),
+            1,
+            "quarantined exposure cannot turn into zero risk"
+        );
+        let decisions = decisions(&pool).await;
+        assert!(
+            decisions
+                .iter()
+                .any(|(kind, why)| kind == "s3_skip" && why.contains("await management authority")),
+            "{decisions:?}"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn lost_trail_raw_receipt_is_fatal_to_s3_management(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        sqlx::raw_sql("CREATE FUNCTION reject_trail_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW.kind='ORDER_REPLACED' THEN RAISE EXCEPTION 'trail raw receipt blocked'; END IF; RETURN NEW; END $$;
+            CREATE TRIGGER reject_trail_receipt BEFORE INSERT ON trading_events FOR EACH ROW EXECUTE FUNCTION reject_trail_receipt();")
+            .execute(&pool).await.unwrap();
+        let error = t
+            .on_quote(BTC, Some(60_700.0), Some(60_705.0), at(31))
+            .await
+            .expect_err("receipt loss after amend must end management");
+        assert!(
+            format!("{error:#}").contains("trail raw receipt blocked"),
+            "{error:#}"
+        );
+        assert_eq!(
+            log.lock().unwrap().amends.len(),
+            1,
+            "the uncertain amendment is not resent"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn failure_to_persist_shared_gate_absence_is_fatal_to_s3_trailing(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        sqlx::raw_sql("CREATE FUNCTION reject_absence_marker() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW.kind='AUTHORITY_DISAPPEARED' THEN RAISE EXCEPTION 'absence marker blocked'; END IF; RETURN NEW; END $$;
+            CREATE TRIGGER reject_absence_marker BEFORE INSERT ON trading_events FOR EACH ROW EXECUTE FUNCTION reject_absence_marker();")
+            .execute(&pool).await.unwrap();
+        f.positions.lock().unwrap().clear();
+        let error = t
+            .on_quote(BTC, Some(60_700.0), Some(60_705.0), at(31))
+            .await
+            .expect_err("shared gate absence must be persisted, or management ends");
+        assert!(
+            format!("{error:#}").contains("absence marker blocked"),
+            "{error:#}"
+        );
+        assert!(
+            log.lock().unwrap().amends.is_empty(),
+            "no write follows unrecorded absence"
+        );
+    });
 }

@@ -604,6 +604,80 @@ async fn event_kinds(pool: &PgPool) -> Vec<(Option<String>, String)> {
         .unwrap()
 }
 
+/// Broker-side evidence for fills which happened while this fixture's client
+/// was disconnected. A label alone deliberately supplies no such evidence.
+async fn broker_proves_s1_fill(pool: &PgPool, f: &FakeBroker, position: i64) {
+    let p = f
+        .positions
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|p| p.position_id == position)
+        .unwrap()
+        .clone();
+    let (key, requested): (String, i64) = sqlx::query_as(
+        "SELECT entry_key,volume FROM trading_intents WHERE account_id=$1 AND kind='open' AND symbol_id=$2 AND entry_key LIKE 's1:%' ORDER BY id DESC LIMIT 1",
+    ).bind(DEMO).bind(p.trade_data.symbol_id).fetch_one(pool).await.unwrap();
+    let wire_key: String = key.chars().take(50).collect();
+    let order_id = f
+        .authority_orders
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|o| {
+            o.position_id == Some(position)
+                && o.client_order_id.as_deref() == Some(wire_key.as_str())
+        })
+        .map(|o| o.order_id)
+        .unwrap_or(9001);
+    let volume = p.trade_data.volume;
+    f.authority_orders
+        .lock()
+        .unwrap()
+        .retain(|o| o.order_id != order_id);
+    f.authority_orders
+        .lock()
+        .unwrap()
+        .push(jiaoyi_ctrader::messages::ProtoOaOrder {
+            order_id,
+            position_id: Some(position),
+            client_order_id: Some(wire_key),
+            trade_data: ProtoOaTradeData {
+                volume: requested,
+                ..p.trade_data.clone()
+            },
+            closing_order: Some(false),
+            executed_volume: Some(volume),
+            ..Default::default()
+        });
+    let mut deals = f.authority_deals.lock().unwrap();
+    let filled: i64 = deals
+        .iter()
+        .filter(|d| d.order_id == order_id)
+        .map(|d| d.filled_volume)
+        .sum();
+    assert!(volume >= filled);
+    if volume == filled {
+        return;
+    }
+    let increment = volume - filled;
+    let deal_id = deals.iter().map(|d| d.deal_id).max().unwrap_or(7000) + 1;
+    deals.push(jiaoyi_ctrader::messages::ProtoOaDeal {
+        deal_id,
+        order_id,
+        position_id: position,
+        symbol_id: p.trade_data.symbol_id,
+        volume: increment,
+        filled_volume: increment,
+        trade_side: p.trade_data.trade_side,
+        deal_status: 2,
+        execution_price: p.price,
+        create_timestamp: Utc::now().timestamp_millis(),
+        execution_timestamp: Utc::now().timestamp_millis(),
+        ..Default::default()
+    });
+}
+
 fn intent(key: &str, kind: &str) -> store::trading::IntentRow {
     store::trading::IntentRow {
         account_id: DEMO,
@@ -743,6 +817,7 @@ async fn an_accepted_only_open_is_adopted_after_a_restart(pool: PgPool) {
         stop_loss: Some(3491.0),
         ..Default::default()
     });
+    broker_proves_s1_fill(&pool, &f, 1001).await;
     f.fill_delay = None;
     let log2 = trade(&pool, &f, 2, Environment::Demo).await;
     assert!(log2.lock().unwrap().orders.is_empty(), "never resent");
@@ -1064,7 +1139,8 @@ async fn an_open_remainder_is_reserved_until_it_fills(pool: PgPool) {
     .await;
     let d = decisions(&pool).await;
     assert_eq!(log.lock().unwrap().orders.len(), 1, "{d:?}");
-    // $72.00 adopted (60 cents from 3611.00 to 3491.00) plus $48.00 reserved.
+    // $72.00 adopted plus $48.00 still reserved: another $120.00 entry
+    // cannot fit within the unchanged $200.01 budget.
     assert!(
         d.iter().any(|(k, r)| k == "skip"
             && r.contains(
@@ -1127,17 +1203,19 @@ async fn a_partial_fill_recovered_at_startup_keeps_its_remainder_reserved(pool: 
     other.position_id = 1002;
     other.trade_data.volume = 10;
     f.positions.lock().unwrap().push(other);
+    broker_proves_s1_fill(&pool, &f, 1001).await;
     f.fill_delay = None;
     f.quote_sequence = vec![(500, BTC, q(3608.0, 3611.0))];
     let log2 = trade(&pool, &f, 2, Environment::Demo).await;
     let d = decisions(&pool).await;
     assert!(log2.lock().unwrap().orders.is_empty(), "{d:?}");
-    // $72.00 adopted (60 cents from 3611.00 to 3491.00) plus $48.00 reserved.
+    // The valid partial keeps $72.00 adopted plus its $48.00 remainder
+    // reserved. The additional unproven labelled position makes total risk
+    // unknown, which is a stronger refusal than the numeric budget alone.
     assert!(
-        d.iter().any(|(k, r)| k == "skip"
-            && r.contains(
-                "open risk 120.00 plus this entry's 120.00 would exceed its budget 200.01"
-            )),
+        d.iter()
+            .any(|(k, r)| k == "skip"
+                && r.contains("await management authority: open risk is unknown")),
         "{d:?}"
     );
     let ev: Vec<(String, Option<i64>, Option<i64>)> = sqlx::query_as(
@@ -1170,6 +1248,7 @@ async fn a_partial_fill_recovered_at_startup_keeps_its_remainder_reserved(pool: 
         .retain(|p| p.position_id == 1001);
     // The remainder fills: the broker holds all 100 cents.
     f.positions.lock().unwrap()[0].trade_data.volume = 100;
+    broker_proves_s1_fill(&pool, &f, 1001).await;
     f.quote_sequence = vec![];
     let log3 = trade(&pool, &f, 2, Environment::Demo).await;
     assert!(log3.lock().unwrap().orders.is_empty(), "never resent");
@@ -1221,6 +1300,7 @@ async fn a_reconciled_partial_and_its_late_deal_are_one_fill(pool: PgPool) {
         stop_loss: Some(3491.0),
         ..Default::default()
     });
+    broker_proves_s1_fill(&pool, &f, 1001).await;
     f.fill_delay = None;
     f.quote_sequence = vec![];
     trade(&pool, &f, 2, Environment::Demo).await;
@@ -1514,6 +1594,7 @@ async fn a_partial_open_reconciled_in_full_is_listed_at_its_full_volume(pool: Pg
     assert_eq!((o.len(), o[0].filled_volume), (1, Some(60)), "{o:?}");
     // The remainder fills: the broker holds all 100 cents.
     f.positions.lock().unwrap()[0].trade_data.volume = 100;
+    broker_proves_s1_fill(&pool, &f, 1001).await;
     f.fill_parts = vec![];
     f.quote_sequence = vec![];
     trade(&pool, &f, 2, Environment::Demo).await;
@@ -1556,6 +1637,7 @@ async fn an_unconfirmed_strategy_1_open_adopted_at_reconcile_is_listed(pool: PgP
         stop_loss: Some(3491.0),
         ..Default::default()
     });
+    broker_proves_s1_fill(&pool, &f, 1001).await;
     f.fill_delay = None;
     trade(&pool, &f, 2, Environment::Demo).await;
     let o = s1_orders(&pool).await;
@@ -1909,8 +1991,49 @@ async fn the_owners_pause_stops_new_entries_and_the_trail_still_runs(pool: PgPoo
     );
     // Lifted by the owner: BTCUSD's signal is still there.
     owner_sets_pause(&pool, 0).await;
-    f.quote_sequence = vec![(0, BTC, q(3608.0, 3611.0))];
-    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    let before: i64 = sqlx::query_scalar("SELECT COALESCE(max(id), 0) FROM trading_decisions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // A restarted actor first requalifies ETHUSD. Supply the existing one
+    // BTCUSD quote after that observable barrier; recovery itself never
+    // executes an entry and the original two-second deadline is unchanged.
+    f.quote_sequence.clear();
+    let (spots, _) = tokio::sync::broadcast::channel(1);
+    f.spot_events = Some(spots.clone());
+    let quote_after_recovery = async {
+        loop {
+            let ready: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM trading_decisions
+                 WHERE id > $1 AND account_id = $2 AND kind = 'reconcile'
+                   AND detail->>'own' = '1' AND detail->'external' = '[]'::jsonb)",
+            )
+            .bind(before)
+            .bind(DEMO)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            if ready {
+                let (bid, ask) = q(3608.0, 3611.0);
+                spots
+                    .send(jiaoyi_ctrader::messages::ProtoOaSpotEvent {
+                        ctid_trader_account_id: DEMO,
+                        symbol_id: BTC,
+                        bid,
+                        ask,
+                        ..Default::default()
+                    })
+                    .unwrap();
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    };
+    let (log, ready) = tokio::join!(
+        trade(&pool, &f, 2, Environment::Demo),
+        tokio::time::timeout(Duration::from_secs(2), quote_after_recovery)
+    );
+    ready.expect("existing exposure requalified within the original session deadline");
     let orders = log.lock().unwrap().orders.clone();
     assert_eq!(orders.len(), 1, "{:?}", decisions(&pool).await);
     assert_eq!(orders[0].symbol_id, BTC);
@@ -1991,4 +2114,154 @@ fn the_distance_to_the_level_is_in_atr_and_turns_negative_through_it() {
     let x = trading::trigger_distance(&Ok(buy), Some(3600.0), None, at);
     assert_eq!(x["distance_atr"], serde_json::Value::Null);
     assert!(x["reason"].as_str().unwrap().contains("no quote"));
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn s1_restart_does_not_amend_external_reversal_or_enlargement(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake(vec![(3608.0, 3611.0)]);
+    let opening = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(opening.lock().unwrap().orders.len(), 1);
+    let original = f.positions.lock().unwrap()[0].clone();
+    for (side, volume) in [
+        (2, original.trade_data.volume),
+        (1, original.trade_data.volume * 2),
+    ] {
+        {
+            let mut positions = f.positions.lock().unwrap();
+            positions[0].trade_data.trade_side = side;
+            positions[0].trade_data.volume = volume;
+        }
+        f.quotes = HashMap::from([(ETH, vec![q(3700.0, 3701.0)])]);
+        let log = trade(&pool, &f, 2, Environment::Demo).await;
+        assert!(
+            log.lock().unwrap().amends.is_empty(),
+            "changed lifecycle must not trail"
+        );
+        assert!(log.lock().unwrap().orders.is_empty());
+        let h = trading::health(&pool, &HashMap::new()).await.unwrap();
+        assert_eq!(h[0]["last_reconcile"]["own"], 0);
+        assert_eq!(f.positions.lock().unwrap()[0].trade_data.volume, volume);
+    }
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn s1_label_only_unconfirmed_position_cannot_grant_authority(pool: PgPool) {
+    loaded(&pool).await;
+    set(&pool, "trading.order_wait_secs", json!(1)).await;
+    let mut f = fake(vec![(3608.0, 3611.0)]);
+    f.fill_delay = Some(Duration::from_secs(600));
+    let opening = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(opening.lock().unwrap().orders.len(), 1);
+    f.positions.lock().unwrap().push(ProtoOaPosition {
+        position_id: 5001,
+        trade_data: ProtoOaTradeData {
+            symbol_id: ETH,
+            volume: 5,
+            trade_side: 1,
+            label: Some("jiaoyi-s1".into()),
+            ..Default::default()
+        },
+        position_status: 1,
+        price: Some(3611.0),
+        stop_loss: Some(3491.0),
+        ..Default::default()
+    });
+    f.fill_delay = None;
+    f.quotes = HashMap::from([(ETH, vec![q(3700.0, 3701.0)])]);
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    assert!(log.lock().unwrap().amends.is_empty());
+    let h = trading::health(&pool, &HashMap::new()).await.unwrap();
+    assert_eq!(h[0]["last_reconcile"]["own"], 0);
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT (detail->>'pending')::BIGINT FROM trading_decisions WHERE account_id=$1 AND kind='reconcile' ORDER BY id DESC LIMIT 1"
+    ).bind(DEMO).fetch_one(&pool).await.unwrap();
+    assert_eq!(pending, 1, "unresolved evidence is not broker absence");
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn lost_raw_quantity_receipt_ends_s1_actor(pool: PgPool) {
+    loaded(&pool).await;
+    let mut f = fake(vec![(3608.0, 3611.0)]);
+    let initial = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(initial.lock().unwrap().orders.len(), 1);
+    let original = f.positions.lock().unwrap()[0].clone();
+    let event = jiaoyi_ctrader::testkit::server_fill(
+        DEMO,
+        original.clone(),
+        990001,
+        3600.0,
+        5,
+        true,
+        false,
+    );
+    f.execution_sequence = vec![(200, event.payload_type, event.payload)];
+    f.quotes.clear();
+    f.quote_sequence = vec![(800, ETH, q(3700.0, 3701.0))];
+    sqlx::raw_sql("CREATE FUNCTION reject_quantity_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.deal_id=990001 THEN RAISE EXCEPTION 'authority raw receipt blocked'; END IF; RETURN NEW; END $$;
+        CREATE TRIGGER reject_quantity_receipt BEFORE INSERT ON trading_events FOR EACH ROW EXECUTE FUNCTION reject_quantity_receipt();")
+        .execute(&pool).await.unwrap();
+    let result = session_result(&pool, &f, 3)
+        .await
+        .expect("actor must end on lost quantity evidence");
+    let error = result.expect_err("raw persistence failure cannot be silently ignored");
+    assert!(
+        format!("{error:#}").contains("authority raw receipt blocked"),
+        "{error:#}"
+    );
+    let positions = f.positions.lock().unwrap();
+    assert_eq!(
+        (positions[0].stop_loss, positions[0].take_profit),
+        (original.stop_loss, original.take_profit)
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn unqualified_position_cannot_free_s1_demo_budget_for_another_symbol(pool: PgPool) {
+    loaded_with(
+        &pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    let mut f = fake_on(&[ETH, BTC], 2_000);
+    f.fill_quotes = HashMap::from([(ETH, (3608.0, 3611.0)), (BTC, (3608.0, 3611.0))]);
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    let first = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(first.lock().unwrap().orders.len(), 1);
+    f.positions.lock().unwrap()[0].trade_data.volume *= 2;
+    f.quote_sequence = vec![(500, BTC, q(3608.0, 3611.0))];
+    let next = trade(&pool, &f, 2, Environment::Demo).await;
+    assert!(
+        next.lock().unwrap().orders.is_empty(),
+        "quarantined exposure cannot disappear from the risk budget"
+    );
+    let decisions = decisions(&pool).await;
+    assert!(
+        decisions
+            .iter()
+            .any(|(kind, why)| kind == "skip" && why.contains("await management authority")),
+        "{decisions:?}"
+    );
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn lost_trail_raw_receipt_is_fatal_to_s1_management(pool: PgPool) {
+    loaded(&pool).await;
+    sqlx::raw_sql("CREATE FUNCTION reject_trail_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.kind='ORDER_REPLACED' THEN RAISE EXCEPTION 'trail raw receipt blocked'; END IF; RETURN NEW; END $$;
+        CREATE TRIGGER reject_trail_receipt BEFORE INSERT ON trading_events FOR EACH ROW EXECUTE FUNCTION reject_trail_receipt();")
+        .execute(&pool).await.unwrap();
+    let f = fake(vec![(3608.0, 3611.0), (3700.0, 3701.0)]);
+    let result = session_result(&pool, &f, 3)
+        .await
+        .expect("lost amendment evidence must end actor");
+    let error = result.expect_err("a trail cannot swallow receipt persistence failure");
+    assert!(
+        format!("{error:#}").contains("trail raw receipt blocked"),
+        "{error:#}"
+    );
 }

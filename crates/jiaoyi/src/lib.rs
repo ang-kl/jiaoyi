@@ -3,6 +3,7 @@
 //! and report on them.
 
 pub mod admission;
+pub mod authority;
 pub mod config;
 pub mod edge;
 pub mod fast_monitor;

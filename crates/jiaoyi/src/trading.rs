@@ -581,6 +581,26 @@ impl Ledger for PgLedger<'_> {
             .await
             .map_err(|e| e.to_string())
     }
+    async fn management_authority(
+        &self,
+        account_id: i64,
+        position_id: i64,
+    ) -> Result<gate::ManagementAuthority, String> {
+        crate::authority::position_authority(self.pool, account_id, position_id).await
+    }
+    async fn record_authority_absence(
+        &self,
+        account_id: i64,
+        position_id: i64,
+    ) -> Result<(), String> {
+        crate::authority::mark_disappeared(
+            self.pool,
+            account_id,
+            position_id,
+            "fresh shared gate observed absence",
+        )
+        .await
+    }
 }
 
 // ---------------------------------------------------------------- fills
@@ -644,6 +664,182 @@ impl Ledger for TimedLedger<'_> {
     async fn owns_position(&self, account_id: i64, position_id: i64) -> Result<bool, String> {
         self.inner.owns_position(account_id, position_id).await
     }
+    async fn management_authority(
+        &self,
+        account_id: i64,
+        position_id: i64,
+    ) -> Result<gate::ManagementAuthority, String> {
+        self.inner
+            .management_authority(account_id, position_id)
+            .await
+    }
+    async fn record_authority_absence(
+        &self,
+        account_id: i64,
+        position_id: i64,
+    ) -> Result<(), String> {
+        self.inner
+            .record_authority_absence(account_id, position_id)
+            .await
+    }
+}
+
+/// A bounded read-only recovery lane, separate from quote/exit handling.
+/// A retained label only schedules a search; it never proves ownership.
+#[derive(Clone)]
+pub(crate) struct AuthorityRecovery {
+    tx: tokio::sync::mpsc::Sender<jiaoyi_ctrader::messages::ProtoOaPosition>,
+    queued: Arc<Mutex<HashMap<i64, RecoveryAttempt>>>,
+    observed: Arc<Mutex<HashSet<i64>>>,
+    retry_after: Duration,
+    completed: Arc<tokio::sync::Notify>,
+}
+
+struct RecoveryAttempt {
+    in_flight: bool,
+    at: tokio::time::Instant,
+    invalidated: bool,
+}
+
+impl AuthorityRecovery {
+    pub(crate) fn completion(&self) -> Arc<tokio::sync::Notify> {
+        self.completed.clone()
+    }
+    pub(crate) fn tracked(&self) -> Vec<i64> {
+        let mut ids = self.observed.lock().unwrap().clone();
+        ids.extend(
+            self.queued
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, a)| a.in_flight)
+                .map(|(id, _)| *id),
+        );
+        ids.into_iter().collect()
+    }
+    pub(crate) fn observe(
+        &self,
+        positions: &[jiaoyi_ctrader::messages::ProtoOaPosition],
+        label: &str,
+    ) {
+        let present: HashSet<i64> = positions.iter().map(|p| p.position_id).collect();
+        let mut observed = self.observed.lock().unwrap();
+        observed.retain(|id| present.contains(id));
+        observed.extend(
+            positions
+                .iter()
+                .filter(|p| p.trade_data.label.as_deref() == Some(label))
+                .map(|p| p.position_id),
+        );
+    }
+    pub(crate) fn invalidate(&self, position_id: i64) {
+        let mut queued = self.queued.lock().unwrap();
+        if let Some(a) = queued.get_mut(&position_id) {
+            if a.in_flight {
+                a.invalidated = true;
+            } else {
+                queued.remove(&position_id);
+            }
+        }
+    }
+    pub(crate) fn enqueue(&self, position: &jiaoyi_ctrader::messages::ProtoOaPosition) {
+        let mut queued = self.queued.lock().unwrap();
+        queued.retain(|_, a| a.in_flight || a.at.elapsed() < self.retry_after);
+        if queued.contains_key(&position.position_id) {
+            return;
+        }
+        queued.insert(
+            position.position_id,
+            RecoveryAttempt {
+                in_flight: true,
+                at: tokio::time::Instant::now(),
+                invalidated: false,
+            },
+        );
+        if self.tx.try_send(position.clone()).is_err() {
+            queued.remove(&position.position_id);
+        }
+    }
+    fn finished(&self, position_id: i64) {
+        {
+            let mut queued = self.queued.lock().unwrap();
+            if queued.get(&position_id).is_some_and(|a| a.invalidated) {
+                // A new gap while reading is changed evidence, allowing one
+                // fresh recovery after this one has finished.
+                queued.remove(&position_id);
+            } else {
+                queued.insert(
+                    position_id,
+                    RecoveryAttempt {
+                        in_flight: false,
+                        at: tokio::time::Instant::now(),
+                        invalidated: false,
+                    },
+                );
+            }
+        }
+        self.completed.notify_one();
+    }
+}
+
+pub(crate) fn authority_recovery(
+    retry_after: Duration,
+) -> (
+    AuthorityRecovery,
+    tokio::sync::mpsc::Receiver<jiaoyi_ctrader::messages::ProtoOaPosition>,
+) {
+    let (tx, rx) = tokio::sync::mpsc::channel(16);
+    (
+        AuthorityRecovery {
+            tx,
+            queued: Arc::new(Mutex::new(HashMap::new())),
+            observed: Arc::new(Mutex::new(HashSet::new())),
+            retry_after,
+            completed: Arc::new(tokio::sync::Notify::new()),
+        },
+        rx,
+    )
+}
+
+pub(crate) async fn run_authority_recovery(
+    pool: &PgPool,
+    session: &AccountSession<'_>,
+    queue: AuthorityRecovery,
+    mut rx: tokio::sync::mpsc::Receiver<jiaoyi_ctrader::messages::ProtoOaPosition>,
+) {
+    while let Some(position) = rx.recv().await {
+        let result = crate::authority::recover_position(pool, session, &position).await;
+        queue.finished(position.position_id);
+        match result {
+            Ok(()) => {}
+            Err(reason) => tracing::debug!(
+                account = session.account().id(),
+                position = position.position_id,
+                reason,
+                "position authority recovery remains incomplete"
+            ),
+        }
+    }
+}
+
+pub(crate) async fn historical_strategy_position(
+    pool: &PgPool,
+    account_id: i64,
+    position_id: i64,
+    prefix: &str,
+) -> Result<bool, jiaoyi_store::sqlx::Error> {
+    jiaoyi_store::sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM trading_events e
+         JOIN trading_intents i ON i.entry_key=e.entry_key AND i.account_id=e.account_id
+         WHERE e.account_id=$1 AND e.position_id=$2 AND i.kind='open'
+           AND i.entry_key LIKE $3 || '%' AND e.kind=ANY($4))",
+    )
+    .bind(account_id)
+    .bind(position_id)
+    .bind(prefix)
+    .bind(ts::FILL_KINDS)
+    .fetch_one(pool)
+    .await
 }
 
 /// What a Strategy 1 order was, for its fill record.
@@ -970,6 +1166,7 @@ struct Sym {
 
 #[derive(Debug, Clone)]
 struct Own {
+    entry_key: String,
     position_id: i64,
     symbol_id: i64,
     side: Side,
@@ -1002,6 +1199,9 @@ struct Book {
     sent: HashMap<String, String>,
     /// How long an unresolved open with nothing at the broker stays pending.
     grace: chrono::Duration,
+    recovery: Option<AuthorityRecovery>,
+    authority_started: bool,
+    authority_pending: usize,
 }
 
 /// The risk of what is left of an open (`volume` requested, `filled` so far)
@@ -1015,6 +1215,12 @@ pub fn outstanding_risk(risk: Option<f64>, volume: Option<i64>, filled: i64) -> 
 
 /// Strategy 1's risk at its stops: its positions' and its unresolved opens'.
 fn held_risk(book: &Book, syms: &HashMap<i64, Sym>, deposit: Option<&str>) -> Result<f64, String> {
+    if book.authority_pending > 0 {
+        return Err(format!(
+            "{} Strategy 1 position(s) await management authority: open risk is unknown",
+            book.authority_pending
+        ));
+    }
     let mut total = open_risk(&book.own, syms, deposit)?;
     for (key, p) in &book.pending {
         let Some(r) = p.risk else {
@@ -1244,10 +1450,9 @@ struct Reconciled {
     released: Vec<String>,
 }
 
-/// The broker wins. Positions with this program's label are adopted when an
-/// intent of its own filled them, or when an unresolved open on their symbol
-/// did (accepted only, or no answer: Codex P1 on #14); any other position is
-/// external. An unresolved open still pending at the broker, or younger than
+/// Adopt only a positively correlated, continuous owned lifecycle. A label
+/// and a same-symbol unresolved request only schedule read-only recovery.
+/// An unresolved open still pending at the broker, or younger than
 /// the book's grace, stays pending; an older one with nothing at the broker is
 /// released (`RECONCILED_ABSENT`), never resent.
 async fn reconcile(
@@ -1258,6 +1463,39 @@ async fn reconcile(
     let grace = book.grace;
     let res = session.reconcile().await?;
     let account_id = session.account().id();
+    let present: HashSet<i64> = res.position.iter().map(|p| p.position_id).collect();
+    let mut previous: HashSet<i64> = book.own.keys().copied().collect();
+    if let Some(queue) = &book.recovery {
+        previous.extend(queue.tracked());
+    }
+    for id in previous.difference(&present) {
+        crate::authority::mark_disappeared(
+            pool,
+            account_id,
+            *id,
+            "Strategy 1 observed broker position absence",
+        )
+        .await
+        .map_err(anyhow::Error::msg)?;
+    }
+    if let Some(queue) = &book.recovery {
+        queue.observe(&res.position, LABEL);
+    }
+    if !book.authority_started {
+        for p in &res.position {
+            if p.trade_data.label.as_deref() == Some(LABEL) {
+                crate::authority::mark_gap(
+                    pool,
+                    account_id,
+                    p.position_id,
+                    "Strategy 1 session restarted",
+                )
+                .await
+                .map_err(anyhow::Error::msg)?;
+            }
+        }
+        book.authority_started = true;
+    }
     let mut seen = HashSet::new();
     let mut external: Vec<Value> = Vec::new();
     let ext = |p: &jiaoyi_ctrader::messages::ProtoOaPosition| {
@@ -1270,14 +1508,23 @@ async fn reconcile(
         })
     };
     // Strategy 1's own unresolved opens (Strategy 3 reconciles its own).
-    let mut unresolved: Vec<ts::UnresolvedIntent> = ts::open_intents_unresolved(pool, account_id)
+    let unresolved: Vec<ts::UnresolvedIntent> = ts::open_intents_unresolved(pool, account_id)
         .await?
         .into_iter()
         .filter(|u| u.entry_key.starts_with("s1:"))
         .collect();
+    book.authority_pending = 0;
     for p in &res.position {
         // Claude · № 17,020 25-Oct (Strategy 3 v2: each strategy manages only its own label)
         if p.trade_data.label.as_deref() != Some(LABEL) {
+            if previous.contains(&p.position_id) {
+                book.authority_pending += 1;
+                let mut detail = ext(p);
+                detail["reason"] =
+                    json!("previous strategy position label changed; authority unverified");
+                external.push(detail);
+                continue;
+            }
             if !p
                 .trade_data
                 .label
@@ -1288,55 +1535,44 @@ async fn reconcile(
             }
             continue;
         }
-        let mut owned = ts::owns_position(pool, account_id, p.position_id).await?;
-        if !owned {
-            // An unresolved open that did fill: adopted once, recorded. In
-            // full only at the requested volume; a part keeps the intent
-            // unresolved, its remainder reserved below until it fills, ends
-            // or is absent after the grace (Codex round 4 on #14).
-            // Claude · № 17,020 25-Oct (ordered: owner "Merge now, fix next")
-            if let Some(i) = unresolved.iter().position(|u| {
-                u.symbol_id == Some(p.trade_data.symbol_id) && u.position_id.is_none()
-            }) {
-                let part = unresolved[i]
-                    .volume
-                    .is_some_and(|v| p.trade_data.volume < v);
-                let (kind, why) = if part {
-                    (
-                        "RECONCILED_PARTIAL_FILL",
-                        "an unresolved open found partly filled by reconcile: the position adopted, the remainder held",
-                    )
-                } else {
-                    (
-                        "RECONCILED_FILL",
-                        "an unresolved open found filled by reconcile",
-                    )
-                };
-                ts::record_event(
-                    pool,
-                    &reconciled_row(account_id, &unresolved[i].entry_key, kind, Some(p), why),
-                )
-                .await?;
-                if part {
-                    unresolved[i].position_id = Some(p.position_id);
-                } else {
-                    unresolved.remove(i);
+        let authority = crate::authority::position_authority(pool, account_id, p.position_id)
+            .await
+            .and_then(|a| {
+                a.validate_current(p)?;
+                if !a.entry_key.starts_with("s1:") {
+                    return Err("the opening anchor belongs to another strategy".into());
                 }
-                owned = true;
+                if book
+                    .own
+                    .get(&p.position_id)
+                    .is_some_and(|o| o.entry_key != a.entry_key)
+                {
+                    return Err("the opening anchor changed since adoption".into());
+                }
+                Ok(a)
+            });
+        let authority = match authority {
+            Ok(a) => a,
+            Err(reason) => {
+                book.authority_pending += 1;
+                let mut detail = ext(p);
+                detail["management_authority"] = json!("unverified");
+                detail["reason"] = json!(reason);
+                detail["stop_loss"] = json!(p.stop_loss);
+                detail["take_profit"] = json!(p.take_profit);
+                external.push(detail);
+                if let Some(recovery) = &book.recovery {
+                    recovery.enqueue(p);
+                }
+                continue;
             }
-        }
-        if !owned {
-            external.push(ext(p));
-            continue;
-        }
-        let Some(side) = Side::from_proto(p.trade_data.trade_side) else {
-            continue;
         };
         seen.insert(p.position_id);
         let e = book.own.entry(p.position_id).or_insert(Own {
+            entry_key: authority.entry_key,
             position_id: p.position_id,
             symbol_id: p.trade_data.symbol_id,
-            side,
+            side: authority.side,
             volume: p.trade_data.volume,
             entry: p.price,
             stop: p.stop_loss,
@@ -1381,6 +1617,10 @@ async fn reconcile(
         let at_broker = res.order.iter().any(|o| {
             o.trade_data.label.as_deref() == Some(LABEL)
                 && Some(o.trade_data.symbol_id) == u.symbol_id
+        }) || res.position.iter().any(|p| {
+            p.trade_data.label.as_deref() == Some(LABEL)
+                && Some(p.trade_data.symbol_id) == u.symbol_id
+                && !seen.contains(&p.position_id)
         });
         if at_broker || now - u.created_at < grace {
             book.pending.insert(
@@ -1432,10 +1672,11 @@ async fn note_reconcile(d: &mut Decisions<'_>, r: Reconciled) {
         .iter()
         .map(|e| {
             format!(
-                "{}:{}:{}",
+                "{}:{}:{}:{}",
                 e["symbol_id"],
                 e["side"].as_str().unwrap_or("?"),
-                e["volume"]
+                e["volume"],
+                e["reason"].as_str().unwrap_or("external"),
             )
         })
         .collect();
@@ -1596,8 +1837,14 @@ pub async fn run_session_with_levels_refresh(
     let r0 = rules(pool, account_id, env).await?;
     d.version = Some(r0.version);
     let mut trail_amend_secs = r0.trail_amend_secs;
+    let (recovery_queue, recovery_rx) = authority_recovery(Duration::from_secs(r0.reconcile_secs));
+    let recovered = recovery_queue.completion();
+    let recovery_worker =
+        run_authority_recovery(pool, session, recovery_queue.clone(), recovery_rx);
+    tokio::pin!(recovery_worker);
     let mut book = Book {
         grace: grace_of(&r0),
+        recovery: Some(recovery_queue),
         ..Book::default()
     };
     let mut execs = conn.executions();
@@ -1653,97 +1900,128 @@ pub async fn run_session_with_levels_refresh(
     initializing.complete();
     let mut exits = tokio::time::interval(fast_monitor::INTERVAL);
     exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    loop {
-        tokio::select! {
-            _ = shutdown.wait() => return Ok(()),
-            _ = exits.tick() => {
-                fast_monitor::observe(live,account_id,"registered_exits",async {
-                    let ids:HashSet<i64>=book.own.values().map(|p|p.symbol_id).collect();
+    let management = async {
+        loop {
+            tokio::select! {
+                _ = shutdown.wait() => return Ok(()),
+                _ = recovered.notified() => {
+                    let rec = reconcile(pool, session, &mut book).await?;
+                    note_reconcile(d, rec).await;
+                    beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
+                    // Re-evaluate a still-fresh quote that arrived before
+                    // continuity recovery finished. This path never enters.
+                    let ids: HashSet<i64> = book.own.values().map(|o|o.symbol_id).collect();
                     for id in ids {
-                        if let Some(sym)=syms.get(&id) {
+                        if let Some(sym) = syms.get(&id) {
                             manage_positions(&ctx,d,sym,&mut book,trail_amend_secs,true,Utc::now()).await?;
                         }
                     }
-                    fast_monitor::exit_check_completed(live,account_id,book.own.len(),book.pending.len());
-                    Ok::<(),anyhow::Error>(())
-                }).await?;
-            }
-            e = ends.recv() => {
-                if let Ok(e) = e {
-                    if e.affects(account_id) {
-                        anyhow::bail!("the broker ended the session: {}", e.reason);
-                    }
                 }
-            }
-            _ = reconcile_tick.tick() => {
-                fast_monitor::observe(live, account_id, "reconcile", async {
-                let r = rules(pool, account_id, env).await?;
-                d.version = Some(r.version);
-                trail_amend_secs = r.trail_amend_secs;
-                book.grace = grace_of(&r);
-                let rec = reconcile(pool, session, &mut book).await?;
-                note_reconcile(d, rec).await;
-                beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
-                crate::limits::check(pool, account_id, &crate::limits::S1, limit_detail(), d.version).await?;
-                Ok::<(), anyhow::Error>(())
-                }).await?;
-            }
-            _ = &mut refresh_levels => anyhow::bail!("the levels refresh channel closed"),
-            Some((updates, applied)) = levels_rx.recv() => {
-                for (id, levels) in updates {
-                    if let Some(s) = syms.get_mut(&id) { s.levels = levels; }
+                _ = exits.tick() => {
+                    fast_monitor::observe(live,account_id,"registered_exits",async {
+                        let ids:HashSet<i64>=book.own.values().map(|p|p.symbol_id).collect();
+                        for id in ids {
+                            if let Some(sym)=syms.get(&id) {
+                                manage_positions(&ctx,d,sym,&mut book,trail_amend_secs,true,Utc::now()).await?;
+                            }
+                        }
+                        fast_monitor::exit_check_completed(live,account_id,book.own.len(),book.pending.len());
+                        Ok::<(),anyhow::Error>(())
+                    }).await?;
                 }
-                levels_loading.store(false, std::sync::atomic::Ordering::Relaxed);
-                let _ = applied.send(());
-            }
-            m = execs.recv() => match m {
-                Ok(m) => {
-                    fast_monitor::observe(live, account_id, "execution", async {
-                    // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
-                    // a stop the broker executed is recorded with its fill, before
-                    // reconcile drops the position. A lost record ends the session.
-                    broker_exit(pool, account_id, &m, &book, &syms).await?;
-                    // A late answer (the gate had stopped listening): a fill
-                    // of any size is read from the broker at once, adopted and
-                    // trailed; an end of an unresolved open frees its risk
-                    // (Codex rounds 1 and 2 on #14).
-                    if let Some(late) = server_event(pool, account_id, &m, &book.sent).await {
-                        let fill = ts::FILL_KINDS.contains(&late.kind.as_str());
-                        let end = ts::END_KINDS.contains(&late.kind.as_str());
-                        if late.new && (fill || (end && book.pending.contains_key(&late.entry_key))) {
-                            let rec = reconcile(pool, session, &mut book).await?;
-                            note_reconcile(d, rec).await;
-                            beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
+                e = ends.recv() => {
+                    if let Ok(e) = e {
+                        if e.affects(account_id) {
+                            anyhow::bail!("the broker ended the session: {}", e.reason);
                         }
                     }
+                }
+                _ = reconcile_tick.tick() => {
+                    fast_monitor::observe(live, account_id, "reconcile", async {
+                    let r = rules(pool, account_id, env).await?;
+                    d.version = Some(r.version);
+                    trail_amend_secs = r.trail_amend_secs;
+                    book.grace = grace_of(&r);
+                    let rec = reconcile(pool, session, &mut book).await?;
+                    note_reconcile(d, rec).await;
+                    beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
+                    crate::limits::check(pool, account_id, &crate::limits::S1, limit_detail(), d.version).await?;
                     Ok::<(), anyhow::Error>(())
                     }).await?;
-                    fast_monitor::execution_processed(live, account_id, m.received_at);
                 }
-                Err(RecvError::Lagged(n)) => fast_monitor::actor_execution_lagged(live, account_id, n),
-                Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
-            },
-            s = spots.recv() => match s {
-                Ok(spot) => {
-                    let received_at = spot.received_at;
-                    let ev = spot.event;
-                    let Some(sym) = syms.get_mut(&ev.symbol_id) else { continue };
-                    if let Some(b) = ev.bid { sym.bid = Some(b as f64 / 100_000.0);sym.bid_at=Some(received_at); }
-                    if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0);sym.ask_at=Some(received_at); }
-                    let sym = sym.clone();
-                    fast_monitor::observe(live, account_id, "quote", on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut book, &mut tried, trail_amend_secs, !levels_loading.load(std::sync::atomic::Ordering::Relaxed))).await?;
-                    fast_monitor::quote_processed(live, account_id, received_at);
-                    let now = Utc::now();
-                    let distance = trigger_distance(&sym.levels, sym.bid, sym.ask, now);
-                    beat(live, account_id, |l| {
-                        l.last_quote_at = Some(now);
-                        l.triggers.insert(sym.name.clone(), distance);
-                    });
+                _ = &mut refresh_levels => anyhow::bail!("the levels refresh channel closed"),
+                Some((updates, applied)) = levels_rx.recv() => {
+                    for (id, levels) in updates {
+                        if let Some(s) = syms.get_mut(&id) { s.levels = levels; }
+                    }
+                    levels_loading.store(false, std::sync::atomic::Ordering::Relaxed);
+                    let _ = applied.send(());
                 }
-                Err(RecvError::Lagged(n)) => fast_monitor::actor_quote_lagged(live, account_id, n),
-                Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
-            },
+                m = execs.recv() => match m {
+                    Ok(m) => {
+                        fast_monitor::observe(live, account_id, "execution", async {
+                        // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design"):
+                        // a stop the broker executed is recorded with its fill, before
+                        // reconcile drops the position. A lost record ends the session.
+                        broker_exit(pool, account_id, &m, &book, &syms).await?;
+                        // A late answer (the gate had stopped listening): a fill
+                        // of any size is read from the broker at once, adopted and
+                        // trailed; an end of an unresolved open frees its risk
+                        // (Codex rounds 1 and 2 on #14).
+                        if let Some(late) = server_event(pool, account_id, &m, &book.sent).await? {
+                            let fill = ts::FILL_KINDS.contains(&late.kind.as_str());
+                            let end = ts::END_KINDS.contains(&late.kind.as_str());
+                            if late.new && (fill || (end && book.pending.contains_key(&late.entry_key))) {
+                                let rec = reconcile(pool, session, &mut book).await?;
+                                note_reconcile(d, rec).await;
+                                beat(live, account_id, |l| l.last_reconcile_run_at = Some(Utc::now()));
+                            }
+                        }
+                        Ok::<(), anyhow::Error>(())
+                        }).await?;
+                        fast_monitor::execution_processed(live, account_id, m.received_at);
+                    }
+                    Err(RecvError::Lagged(n)) => {
+                        fast_monitor::actor_execution_lagged(live, account_id, n);
+                        let mut ids: HashSet<i64> = book.own.keys().copied().collect();
+                        if let Some(queue) = &book.recovery { ids.extend(queue.tracked()); }
+                        for id in ids {
+                            crate::authority::mark_gap(pool, account_id, id, "Strategy 1 execution stream lagged")
+                                .await.map_err(anyhow::Error::msg)?;
+                            if let Some(queue) = &book.recovery { queue.invalidate(id); }
+                        }
+                        let rec = reconcile(pool, session, &mut book).await?;
+                        note_reconcile(d, rec).await;
+                    },
+                    Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
+                },
+                s = spots.recv() => match s {
+                    Ok(spot) => {
+                        let received_at = spot.received_at;
+                        let ev = spot.event;
+                        let Some(sym) = syms.get_mut(&ev.symbol_id) else { continue };
+                        if let Some(b) = ev.bid { sym.bid = Some(b as f64 / 100_000.0);sym.bid_at=Some(received_at); }
+                        if let Some(a) = ev.ask { sym.ask = Some(a as f64 / 100_000.0);sym.ask_at=Some(received_at); }
+                        let sym = sym.clone();
+                        fast_monitor::observe(live, account_id, "quote", on_quote(&ctx, d, &syms, &sym, deposit.as_deref(), &mut book, &mut tried, trail_amend_secs, !levels_loading.load(std::sync::atomic::Ordering::Relaxed))).await?;
+                        fast_monitor::quote_processed(live, account_id, received_at);
+                        let now = Utc::now();
+                        let distance = trigger_distance(&sym.levels, sym.bid, sym.ask, now);
+                        beat(live, account_id, |l| {
+                            l.last_quote_at = Some(now);
+                            l.triggers.insert(sym.name.clone(), distance);
+                        });
+                    }
+                    Err(RecvError::Lagged(n)) => fast_monitor::actor_quote_lagged(live, account_id, n),
+                    Err(RecvError::Closed) => anyhow::bail!("the connection closed"),
+                },
+            }
         }
+    };
+    tokio::pin!(management);
+    tokio::select! {
+        result = &mut management => result,
+        _ = &mut recovery_worker => anyhow::bail!("the authority recovery channel closed"),
     }
 }
 
@@ -1776,38 +2054,54 @@ async fn server_event(
     account_id: i64,
     m: &ReceivedExecution,
     sent: &HashMap<String, String>,
-) -> Option<Answer> {
+) -> anyhow::Result<Option<Answer>> {
+    let Some(mut e) = gate::decode_execution(account_id, m) else {
+        return Ok(None);
+    };
+    let mut tracked = false;
     let key = match &m.client_msg_id {
         None => None,
         Some(id) => match sent.get(id) {
             Some(k) => Some(k.clone()),
-            // Not a frame of the trading path.
-            None => return None,
+            None => {
+                tracked = match e.position_id {
+                    Some(id) => historical_strategy_position(pool, account_id, id, "s1:").await?,
+                    None => false,
+                };
+                // Foreign messages on a tracked ID are continuity evidence,
+                // never a new ownership grant or a locally correlated answer.
+                if !tracked {
+                    return Ok(None);
+                }
+                None
+            }
         },
     };
-    let mut e = gate::decode_execution(account_id, m)?;
     // Claude · № 17,020 25-Oct: another strategy's position (a broker event
     // with no request of ours): its own loop records it.
     if key.is_none()
         && e.label
             .as_deref()
             .is_some_and(|l| l != LABEL && gate::PROGRAM_LABELS.contains(&l))
+        && !tracked
     {
-        return None;
+        let tracked = match e.position_id {
+            Some(id) => historical_strategy_position(pool, account_id, id, "s1:").await?,
+            None => false,
+        };
+        if !tracked {
+            return Ok(None);
+        }
     }
     e.entry_key = key.clone();
-    let new = match ts::record_event(pool, &event_row(&e)).await {
-        Ok(new) => new,
-        Err(err) => {
-            tracing::error!(error = %err, "execution event not recorded");
-            true
-        }
-    };
-    key.map(|entry_key| Answer {
+    // A lost quantity event can make an external reopen look unchanged.
+    // End this actor on failure; reconnect must establish continuity anew.
+    let new = ts::record_event(pool, &event_row(&e)).await?;
+    Ok(key.map(|entry_key| Answer {
         entry_key,
         kind: e.kind,
         new,
-    })
+    }))
 }
 
 /// The one Strategy 1 management evaluator, shared by quotes and the
@@ -1933,6 +2227,7 @@ async fn manage_positions(
                 };
                 record_fill(pool, fill, ledger.sent_at(), &sent).await?;
             }
+            Err(e @ (SendError::Evidence(_) | SendError::Authority(_))) => return Err(e.into()),
             Err(e) => {
                 d.note(
                     Some(name),
@@ -2222,6 +2517,72 @@ pub fn decisions(pool: &PgPool, account_id: i64) -> Decisions<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn authority_gap_tracking_ends_on_broker_absence_not_retry_expiry_or_label_change() {
+        let (queue, mut work) = authority_recovery(Duration::ZERO);
+        let mut position = jiaoyi_ctrader::messages::ProtoOaPosition {
+            position_id: 42,
+            ..Default::default()
+        };
+        position.trade_data.label = Some(LABEL.into());
+        queue.observe(std::slice::from_ref(&position), LABEL);
+        queue.enqueue(&position);
+        work.recv().await.unwrap();
+        queue.finished(42);
+        position.trade_data.label = Some("external".into());
+        queue.observe(std::slice::from_ref(&position), LABEL);
+        assert_eq!(
+            queue.tracked(),
+            vec![42],
+            "expired retry and changed label do not erase continuity scope"
+        );
+        queue.observe(&[], LABEL);
+        assert!(
+            queue.tracked().is_empty(),
+            "actual broker absence removes completed tracking"
+        );
+    }
+    #[tokio::test]
+    async fn authority_recovery_keeps_new_gaps_visible_without_duplicate_read_loops() {
+        let (queue, mut work) = authority_recovery(Duration::from_secs(300));
+        let position = jiaoyi_ctrader::messages::ProtoOaPosition {
+            position_id: 42,
+            ..Default::default()
+        };
+        queue.enqueue(&position);
+        assert_eq!(work.recv().await.unwrap().position_id, 42);
+        assert_eq!(
+            queue.tracked(),
+            vec![42],
+            "an in-flight position remains tracked without Own"
+        );
+        queue.invalidate(42);
+        queue.enqueue(&position);
+        assert!(
+            work.try_recv().is_err(),
+            "a new gap cannot start a concurrent duplicate read"
+        );
+        queue.finished(42);
+        queue.enqueue(&position);
+        assert_eq!(
+            work.try_recv().unwrap().position_id,
+            42,
+            "changed gap evidence gets one immediate follow-up"
+        );
+        queue.finished(42);
+        queue.enqueue(&position);
+        assert!(
+            work.try_recv().is_err(),
+            "unchanged incomplete evidence observes the backoff"
+        );
+        queue.invalidate(42);
+        queue.enqueue(&position);
+        assert_eq!(
+            work.try_recv().unwrap().position_id,
+            42,
+            "a later gap is not hidden behind an old success/backoff"
+        );
+    }
     #[test]
     fn a_loop_is_stalled_after_twice_its_reconcile_interval() {
         let t0: chrono::DateTime<Utc> = "2026-10-25T04:02:28Z".parse().unwrap();

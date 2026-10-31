@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::{Postgres, QueryBuilder, Row};
 
+pub mod authority;
 pub mod goals;
 pub mod history;
 mod outcomes;

@@ -21,6 +21,14 @@ use crate::pb::{self, ProtoOaPayloadType as Oa, ProtoPayloadType as Common};
 /// Every payload type this program may send, with the reason it is needed.
 pub const SENDABLE: &[(i32, &str)] = &[
     (
+        Oa::ProtoOaOrderListByPositionIdReq as i32,
+        "recover ownership for one ambiguous position",
+    ),
+    (
+        Oa::ProtoOaDealListByPositionIdReq as i32,
+        "recover fills for one ambiguous position",
+    ),
+    (
         Oa::ProtoOaExpectedMarginReq as i32,
         "estimate margin before a new entry",
     ),
@@ -201,6 +209,10 @@ request!(pb::ProtoOaGetTickDataReq => Oa::ProtoOaGetTickdataReq,
          pb::ProtoOaGetTickDataRes => Oa::ProtoOaGetTickdataRes);
 request!(pb::ProtoOaDealListReq => Oa::ProtoOaDealListReq,
          pb::ProtoOaDealListRes => Oa::ProtoOaDealListRes);
+request!(pb::ProtoOaOrderListByPositionIdReq => Oa::ProtoOaOrderListByPositionIdReq,
+         pb::ProtoOaOrderListByPositionIdRes => Oa::ProtoOaOrderListByPositionIdRes);
+request!(pb::ProtoOaDealListByPositionIdReq => Oa::ProtoOaDealListByPositionIdReq,
+         pb::ProtoOaDealListByPositionIdRes => Oa::ProtoOaDealListByPositionIdRes);
 request!(pb::ProtoOaTraderReq => Oa::ProtoOaTraderReq,
          pb::ProtoOaTraderRes => Oa::ProtoOaTraderRes);
 request!(pb::ProtoOaExpectedMarginReq => Oa::ProtoOaExpectedMarginReq,
@@ -234,7 +246,9 @@ mod tests {
     assert_not_impl_any!(pb::ProtoOaMarginCallUpdateReq: Request);
 
     /// The read requests, and nothing else.
-    const EXPECTED_SENDABLE: [i32; 19] = [
+    const EXPECTED_SENDABLE: [i32; 21] = [
+        Oa::ProtoOaOrderListByPositionIdReq as i32,
+        Oa::ProtoOaDealListByPositionIdReq as i32,
         Oa::ProtoOaExpectedMarginReq as i32,
         Oa::ProtoOaMarginCallListReq as i32,
         Common::HeartbeatEvent as i32,
