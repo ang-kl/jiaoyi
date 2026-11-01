@@ -909,6 +909,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "chrono-tz",
  "http-body-util",
@@ -956,6 +957,7 @@ dependencies = [
  "rust_decimal",
  "rustls",
  "serde",
+ "serde_json",
  "static_assertions",
  "thiserror",
  "tokio",

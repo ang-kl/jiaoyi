@@ -746,3 +746,81 @@ Integrated testing found the same incomplete historical-loss fixture inS1; corre
 
 [§LOG.72] №18,058–18,065 §§1–2; entry 31 October 2026, 15:53 SGT; by <Codex (GPT-6), effort: not exposed>.
 PR145 merged a963aa06 green:591 Rust/178 Python, both images. Trading readback13/14 exposed one of three current S1 positions unadopted; protection held and8 actors progressed. Worker final15/15 passes, source17/17 matches, legacy identity holds remain. Focused request-ID correction uses durable original keys, with three pre-fix failures reproduced and132 authority/S1/S3 tests passing, Clippy/fmt/independent review clear. Exact production false candidate tuples were not read. FullCI plus3/3 deployed adoption and fresh broker protection gate completion; see follow-up PR closure for actual final receipts and subsequent serials. GROK_Log checked unchanged through№17,703 before numbering. No financial PASS or global worker permission change.
+
+
+[§LOG.73] №18,087–18,092; entry 1 November 2026, 10:29 SGT; by <Codex (GPT-6), effort: not exposed>.
+Owner requests a fix plan covering the earlier №18,083 and universal one-second assessment, including manual trades/edits. Draft docs/all-trades-assessment-fix-plan-2026-11-01.md maps complete account inventory, independent deterministic assessment, final pre-write entry validation, bounded reporting and separately validated calibration. Independent review corrected quote-burst starvation, registered-versus-instantaneous cost semantics, AccountSession source attribution and completion wording. Fifteen engineering scenarios and four economic gates are planned, not passed. Exact №18,083 text was not recoverable; owner asked once; its scope remains explicitly open without blocking known work. Prior private broker evidence remains dated and separated from current-state/financial claims. GROK_Log checked unchanged through№17,703 before numbering. Documentation/local journal only: no build, trading code, broker action, worker dispatch, PR, merge or deployment in this planning turn. File/link/Markdown checks passed; this entry and plan are local drafts, not published to main.
+
+
+[§LOG.74] №18,093–18,102 §§1–2; entry 1 November 2026, 19:10 SGT; by <Codex (GPT-6), effort: not exposed>.
+Owner authorises execution of the all-trades assessment plan. Parallel observer,
+entry-guard, economic-evidence and release work plus independent challenge.
+Implemented a deterministic one-second read-only assessment for all four account
+books, including manual/external trades, source ages and bounded material-change
+persistence. Added authenticated owner HTML/JSON and scoped quote-coverage reads;
+public projection contains aggregate counts/status only. Final entry checks run
+after ledger work and writer-lock acquisition, retain frozen signal/registered
+cost semantics, and distinguish proven-unsent from uncertain transmission.
+Versioned S3 v7 five-second dispatch deadline and S1 six-second dispatch policy;
+predecessor same-session cost vetoes retained, historical outcomes not relabelled.
+Independent review corrected stale-book passes, pending attribution, margin
+coverage, successful validation receipts and a history-cancellation race. The
+original history assertions pass 16/16; S3 72/72 and coordinator178 pass. Final
+integrated Rust/Clippy, required CI, exact deployment and 30-minute runtime
+observation still gate release; see implementation PR final receipt for closure
+and later serials. No deployment or financial PASS is asserted by this entry.
+Offline audit reproduces25 source hashes/four selected lifecycles; one research
+candidate definition frozen, alternative-return claims remain unverified pending
+actual interval coverage and replay controls. No forced trade, manual adoption,
+risk-limit change or worker permission renewal. Missing exact №18,083 remains a
+scope item, not a blocker to known work. Re-read origin/main95e631a and GROK_Log
+unchanged through№17,703 before numbering. See docs/all-trades-assessment-release-
+2026-11-01.md and its economic disposition. Private evidence stays outside Git.
+
+
+[§LOG.75] №18,103–18,111 §§1–2; entry 1 November 2026, 19:26 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR148 https://github.com/ang-kl/jiaoyi/pull/148 first headf28a3ab passed643 Rust,
+178 coordinator and all three CI jobs. Final plan audit nevertheless identified
+four omissions: permission explanations, bounded deadline incidents, dispatch
+impact measurements and component recovery instructions. These are corrected in
+the same PR before merge; earlier green does not certify the amended source.
+The actual incident store is32/32 with no closed record; bounded factual overflow
+retains new observer episodes without deleting unresolved incidents or spending
+model sessions. Its coordinator component needs an exact-source release, with
+existing expired mutation window and session ceiling retained. Historical queue
+records outside the public latest20 remain unverified, not falsely completed.
+A full S3/PostgreSQL/protobuf benchmark completed34 synthetic admissions across
+12 declared scenarios: ordinary warm cases16–31ms, cold1.53–1.55s; late/delayed
+expired attempts emitted zero frames. Historical selected intents include1/6
+and2/8 already beyond five seconds; broader cohorts lack registration/decision
+clocks, so these are conditional bounds, not measured v7 rejection rates. Main
+review retains versioned deadline under owner execution authority; no zero-impact
+or financial PASS claim. See dispatch benchmark/release docs. Amended integrated
+checks, exact trading/worker source and30-minute observation remain pending; see
+PR148 final receipt for closure and subsequent serials. GROK_Log unchanged through
+№17,703; recheck before allocating future serials.
+
+
+[§LOG.76] №18,112–18,114 §§1–2; entry 1 November 2026, 19:30 SGT; by <Codex (GPT-6), effort: not exposed>.
+Amended PR148 closes the four known plan gaps. Observer32 tests and coordinator188
+pass; saturated-projection recurrence, overflow/restart/recovery and entry-blocker
+provenance are checked. Deadline accounting now uses the scheduled tick's one-second
+completion budget and explicit skipped intervals, replacing the1.5s heuristic;
+event-triggered publications cannot conceal a skipped timer. S1's three full-path
+controls measured7–10ms with one opening frame and over5.99s budget remaining.
+Component recovery procedures retain ledger compatibility and exit protection.
+Final integrated suite/updated requiredCI/merge/deployed readback are still gates;
+follow PR148 final receipt for actual completion and latest subsequent serial.
+The first integrated source had643 passing Rust tests; amended totals will be
+recorded from their final log. No financial
+PASS, forced order or renewal of worker authority.
+
+
+[§LOG.77] №18,115–18,116 §§1–2; entry 1 November 2026, 19:34 SGT; by <Codex (GPT-6), effort: not exposed>.
+Amended integratedCI caught the source-scanning no-pause-writer invariant reading
+new inline test fixtures as production writers. Relocated only the permission
+fixtures to crate test_support; kept their assertions, the safety scan and all
+runtime behaviour unchanged. Recheck the relocated fixtures/limits and require
+all updated CI jobs before merging PR148. Earlier green is not accepted for this
+head. Exact release/observation remains pending; final PR description records
+closure, remaining evidence and later chat serials.

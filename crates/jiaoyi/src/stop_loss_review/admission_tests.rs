@@ -217,3 +217,128 @@ async fn unsupported_missing_contradictory_and_same_time_evidence_remains_unknow
         );
     }
 }
+
+fn v6_hash() -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(include_bytes!(
+            "../../../../docs/preregistration-2026-10-28-strategy3-v6.md"
+        ))
+    )
+}
+
+#[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+async fn v7_inherits_only_prior_v6_cost_veto_without_rewriting_v6_history(pool: PgPool) {
+    for account in 1..=6 {
+        let mut open = opening(&pool, account).await;
+        if matches!(account, 4 | 5) {
+            open.prereg_hash = v6_hash();
+        }
+        record_case(&pool, &open).await;
+        let mut veto = open.clone();
+        veto.prereg_hash = if account == 5 {
+            crate::strategy3::prereg_hash()
+        } else {
+            v6_hash()
+        };
+        let at = match account {
+            2 => open.decided_at + Duration::seconds(1),
+            3 => open.decided_at,
+            _ => open.decided_at - Duration::seconds(1),
+        };
+        if account == 6 {
+            for change in 0..5 {
+                let mut other = veto.clone();
+                match change {
+                    0 => other.account_id = 999,
+                    1 => other.symbol = "ETHUSD".into(),
+                    2 => other.prereg_hash = "unknown-predecessor".into(),
+                    3 => {
+                        other.detail["session_date"] =
+                            json!(open.session_date.unwrap() - Duration::days(1));
+                    }
+                    _ => other.label = "another-owner".into(),
+                }
+                skip(&pool, &other, at, true).await;
+            }
+        } else {
+            skip(&pool, &veto, at, true).await;
+        }
+    }
+    let result = evidence(&pool, &[1, 2, 3, 4, 5, 6]).await.unwrap();
+    assert_eq!(result["cases"].as_array().unwrap().len(), 6);
+    for case in result["cases"].as_array().unwrap() {
+        let account = case["account_id"].as_i64().unwrap();
+        assert_eq!(
+            case["checks"]["no_prior_recorded_session_cost_veto"],
+            match account {
+                1 | 4 => json!(false),
+                3 => Value::Null,
+                _ => json!(true),
+            },
+            "account {account}: only the original admission's known vetoes apply"
+        );
+        assert_eq!(case["checks"]["first_recorded_session_entry"], true);
+        assert_eq!(
+            case["checks"]["preregistration_matches_current_reference"],
+            !matches!(account, 4 | 5),
+            "historical recognition must not relabel v6 as the current registration"
+        );
+    }
+    let old_hashes: Vec<String> = sqlx::query_scalar(
+        "SELECT prereg_hash FROM strategy3_orders WHERE account_id IN (4,5) AND kind='open'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(old_hashes, vec![v6_hash(), v6_hash()]);
+}
+
+#[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+async fn only_v7_uses_unsent_evidence_known_at_the_original_opening(pool: PgPool) {
+    for account in 1..=9 {
+        let mut open = opening(&pool, account).await;
+        if account == 6 {
+            open.prereg_hash = v6_hash();
+        }
+        record_case(&pool, &open).await;
+        let prior = OrderRow {
+            entry_key: format!("s3:{account}:prior-attempt"),
+            decided_at: open.decided_at - Duration::minutes(30),
+            ..open.clone()
+        };
+        record_order(&pool, &prior).await.unwrap();
+        if account != 7 {
+            let at = match account {
+                2 => open.decided_at + Duration::seconds(1),
+                3 => open.decided_at,
+                _ => open.decided_at - Duration::seconds(1),
+            };
+            sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,received_at,raw) VALUES($1,$2,0,'REFUSED_BEFORE_SEND',$3,''::bytea)")
+                .bind(if account == 8 { 999 } else { account })
+                .bind(if account == 9 { "another-attempt" } else { &prior.entry_key })
+                .bind(at).execute(&pool).await.unwrap();
+        }
+        if matches!(account, 4 | 5) {
+            sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,received_at,raw) VALUES($1,$2,2126,'ORDER_ACCEPTED',$3,''::bytea)")
+                .bind(account).bind(&prior.entry_key)
+                .bind(open.decided_at + Duration::seconds(if account == 4 { -1 } else { 1 }))
+                .execute(&pool).await.unwrap();
+        }
+    }
+    let result = evidence(&pool, &[1, 2, 3, 4, 5, 6, 7, 8, 9]).await.unwrap();
+    assert_eq!(result["cases"].as_array().unwrap().len(), 9);
+    for case in result["cases"].as_array().unwrap() {
+        let account = case["account_id"].as_i64().unwrap();
+        assert_eq!(
+            case["checks"]["first_recorded_session_entry"],
+            match account {
+                1 | 5 => json!(true),
+                3 => Value::Null,
+                _ => json!(false),
+            },
+            "account {account}: only a known durable unsent outcome releases v7 allowance"
+        );
+        assert_eq!(case["checks"]["no_prior_recorded_session_cost_veto"], true);
+    }
+}

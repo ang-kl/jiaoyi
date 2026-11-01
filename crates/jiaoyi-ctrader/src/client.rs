@@ -28,6 +28,7 @@ use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::task::{AbortHandle, JoinHandle};
 use tokio::time::Instant;
 
+use crate::entry_guard::{EntryGuard, GuardRefusal, Quote};
 use crate::frame::{read_frame, write_frame, FrameError};
 use crate::payload::{
     check_sendable, check_tradable, payload_name, NotSendable, Request, Response,
@@ -50,6 +51,8 @@ pub const EMPTY_WINDOWS_TO_STOP: u32 = 3;
 pub enum ClientError {
     #[error(transparent)]
     NotSendable(#[from] NotSendable),
+    #[error(transparent)]
+    EntryRefused(#[from] GuardRefusal),
     #[error("frame: {0}")]
     Frame(#[from] FrameError),
     #[error("connect: {0}")]
@@ -137,10 +140,77 @@ pub struct ReceivedSpot {
 }
 type Writer = Box<dyn AsyncWrite + Send + Unpin>;
 
+#[derive(Default)]
+struct EntryState {
+    generation: u64,
+    quotes: HashMap<(i64, i64), Quote>,
+    revisions: HashMap<i64, u64>,
+}
+
+impl EntryState {
+    fn validate(&self, guard: &EntryGuard) -> Result<serde_json::Value, GuardRefusal> {
+        if self.generation != guard.connection_generation {
+            return Err(self.refusal(
+                guard,
+                "ENTRY_CONNECTION_CHANGED",
+                "entry belongs to a different connection generation",
+                "after_writer_lock",
+            ));
+        }
+        let quote = self.quotes.get(&(guard.account_id, guard.symbol_id));
+        let revision = self.revisions.get(&guard.account_id).copied().unwrap_or(0);
+        let now = Utc::now();
+        let monotonic_now = Instant::now();
+        guard
+            .validate(quote, revision, now, monotonic_now)
+            .map_err(|mut refusal| {
+                refusal.evidence["connection_generation"] = serde_json::json!(self.generation);
+                refusal.evidence["stage"] = serde_json::json!("after_writer_lock");
+                refusal
+            })?;
+        let mut receipt = guard.snapshot(quote, revision, now, monotonic_now);
+        receipt["connection_generation"] = serde_json::json!(self.generation);
+        receipt["stage"] = serde_json::json!("after_writer_lock");
+        receipt["result"] = serde_json::json!("passed");
+        Ok(receipt)
+    }
+
+    fn refusal(
+        &self,
+        guard: &EntryGuard,
+        code: &'static str,
+        reason: &'static str,
+        stage: &'static str,
+    ) -> GuardRefusal {
+        let mut refusal = guard.refusal(
+            code,
+            reason,
+            self.quotes.get(&(guard.account_id, guard.symbol_id)),
+            self.revisions.get(&guard.account_id).copied().unwrap_or(0),
+            Utc::now(),
+            Instant::now(),
+        );
+        refusal.evidence["connection_generation"] = serde_json::json!(self.generation);
+        refusal.evidence["stage"] = serde_json::json!(stage);
+        refusal
+    }
+
+    fn invalidate(&mut self, accounts: &[i64]) {
+        self.quotes
+            .retain(|(id, _), _| !accounts.is_empty() && !accounts.contains(id));
+        for (id, revision) in &mut self.revisions {
+            if accounts.is_empty() || accounts.contains(id) {
+                *revision = revision.saturating_add(1);
+            }
+        }
+    }
+}
+
 /// Every writer (requests, trading and heartbeat) shares the same deadline and
 /// interruption fence. A cancelled/failed partial frame makes this byte stream
 /// unusable; it is never safe to append another frame or retry an order on it.
 struct TransportWriter {
+    entry_state: Arc<StdMutex<EntryState>>,
     stream: Mutex<Writer>,
     closed: Arc<StdMutex<Option<String>>>,
     pending: Pending,
@@ -180,15 +250,46 @@ impl TransportWriter {
     }
 
     async fn send(&self, msg: &ProtoMessage, budget: Duration) -> Result<(), ClientError> {
+        self.send_guarded(msg, budget, None).await.map(|_| ())
+    }
+
+    async fn send_guarded(
+        &self,
+        msg: &ProtoMessage,
+        budget: Duration,
+        guard: Option<&EntryGuard>,
+    ) -> Result<Option<serde_json::Value>, ClientError> {
         let deadline = Instant::now() + budget;
         // A cancelled waiter has written no bytes and must not invalidate the
         // other operation holding the stream. Arm only after taking the lock.
-        let mut stream = tokio::time::timeout_at(deadline, self.stream.lock())
+        let lock_deadline = guard.map_or(deadline, |g| deadline.min(g.expires));
+        let mut stream = tokio::time::timeout_at(lock_deadline, self.stream.lock())
             .await
-            .map_err(|_| ClientError::WriteTimeout(budget))?;
+            .map_err(|_| match guard {
+                Some(g) if Instant::now() >= g.expires => {
+                    ClientError::EntryRefused(self.entry_state.lock().unwrap().refusal(
+                        g,
+                        "ENTRY_EXPIRED",
+                        "entry dispatch deadline elapsed while waiting for writer",
+                        "writer_wait",
+                    ))
+                }
+                Some(g) => ClientError::EntryRefused(self.entry_state.lock().unwrap().refusal(
+                    g,
+                    "ENTRY_WRITE_WAIT_TIMEOUT",
+                    "writer wait budget elapsed before any entry bytes",
+                    "writer_wait",
+                )),
+                None => ClientError::WriteTimeout(budget),
+            })?;
         if let Some(reason) = self.closed.lock().unwrap().clone() {
             return Err(ClientError::Disconnected(reason));
         }
+        // This check follows the writer-lock wait and precedes the first
+        // possible byte. A refusal here cannot invalidate the shared stream.
+        let validation = guard
+            .map(|guard| self.entry_state.lock().unwrap().validate(guard))
+            .transpose()?;
         let mut attempt = WriteAttempt {
             transport: self,
             completed: false,
@@ -197,7 +298,7 @@ impl TransportWriter {
             .await
             .map_err(|_| ClientError::WriteTimeout(budget))??;
         attempt.completed = true;
-        Ok(())
+        Ok(validation)
     }
 }
 
@@ -216,6 +317,7 @@ impl Drop for WriteAttempt<'_> {
 
 /// A connection to one cTrader proxy (demo or live).
 pub struct Connection {
+    entry_state: Arc<StdMutex<EntryState>>,
     writer: Arc<TransportWriter>,
     pending: Pending,
     next_id: AtomicU64,
@@ -325,7 +427,13 @@ impl Connection {
         let (session_end_tx, _) = broadcast::channel(64);
         let (executions_tx, _) = broadcast::channel(1024);
         let closed: Arc<StdMutex<Option<String>>> = Arc::default();
+        static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+        let entry_state = Arc::new(StdMutex::new(EntryState {
+            generation: NEXT_GENERATION.fetch_add(1, Ordering::Relaxed),
+            ..EntryState::default()
+        }));
         let writer = Arc::new(TransportWriter {
+            entry_state: entry_state.clone(),
             stream: Mutex::new(stream),
             closed: closed.clone(),
             pending: pending.clone(),
@@ -342,15 +450,25 @@ impl Connection {
             let ends = (session_ends.clone(), session_end_tx.clone());
             let executions = executions_tx.clone();
             let closed = closed.clone();
+            let entry_state = entry_state.clone();
             tokio::spawn(async move {
                 let reason = loop {
                     match read_frame(&mut reader).await {
-                        Ok(msg) => route(msg, &pending, &spots_tx, &notices, &ends, &executions),
+                        Ok(msg) => route(
+                            msg,
+                            &pending,
+                            &spots_tx,
+                            &notices,
+                            &ends,
+                            &executions,
+                            &entry_state,
+                        ),
                         Err(e) => break e.to_string(),
                     }
                 };
                 tracing::warn!(%reason, "cTrader connection closed");
                 *closed.lock().unwrap() = Some(reason);
+                entry_state.lock().unwrap().invalidate(&[]);
                 // Dropping the senders wakes every waiting request with an error.
                 pending.lock().unwrap().clear();
                 // Drop every spot sender: consumers see `Closed` once drained.
@@ -361,6 +479,7 @@ impl Connection {
         writer.tasks.lock().unwrap().push(read_task.abort_handle());
 
         let mut conn = Connection {
+            entry_state,
             writer,
             pending,
             next_id: AtomicU64::new(1),
@@ -427,12 +546,42 @@ impl Connection {
     /// The trading write path: only a payload type on `TRADING`, only from the
     /// order gate (`crate::trading::send`). Its responses arrive on
     /// [`Connection::executions`], never as a pending request's response.
+    pub fn entry_generation(&self) -> u64 {
+        self.entry_state.lock().unwrap().generation
+    }
+
+    pub fn entry_revision(&self, account_id: i64) -> u64 {
+        *self
+            .entry_state
+            .lock()
+            .unwrap()
+            .revisions
+            .entry(account_id)
+            .or_default()
+    }
+
+    pub fn validate_entry_guard(&self, guard: &EntryGuard) -> Result<(), GuardRefusal> {
+        self.entry_state.lock().unwrap().validate(guard).map(|_| ())
+    }
+
     pub(crate) async fn send_trading_frame(
         &self,
         payload_type: u32,
         payload: Vec<u8>,
         client_msg_id: String,
     ) -> Result<(), ClientError> {
+        self.send_guarded_trading_frame(payload_type, payload, client_msg_id, None)
+            .await
+            .map(|_| ())
+    }
+
+    pub(crate) async fn send_guarded_trading_frame(
+        &self,
+        payload_type: u32,
+        payload: Vec<u8>,
+        client_msg_id: String,
+        guard: Option<&EntryGuard>,
+    ) -> Result<Option<serde_json::Value>, ClientError> {
         if let Some(reason) = self.closed.lock().unwrap().clone() {
             return Err(ClientError::Disconnected(reason));
         }
@@ -442,7 +591,9 @@ impl Connection {
             payload: Some(payload),
             client_msg_id: Some(client_msg_id),
         };
-        self.writer.send(&msg, self.request_timeout).await
+        self.writer
+            .send_guarded(&msg, self.request_timeout, guard)
+            .await
     }
 
     /// A receiver of execution events and order errors. Subscribe before
@@ -636,6 +787,7 @@ async fn send_checked(
     writer.send(&msg, budget).await
 }
 
+#[allow(clippy::too_many_arguments)]
 fn route(
     msg: ProtoMessage,
     pending: &Pending,
@@ -646,8 +798,10 @@ fn route(
         broadcast::Sender<SessionEnd>,
     ),
     executions: &broadcast::Sender<ReceivedExecution>,
+    entry_state: &StdMutex<EntryState>,
 ) {
     let end = |account_ids: Vec<i64>, reason: String| {
+        entry_state.lock().unwrap().invalidate(&account_ids);
         let e = SessionEnd {
             account_ids,
             reason,
@@ -664,10 +818,37 @@ fn route(
     let payload = msg.payload.as_deref().unwrap_or(&[]);
     let pt = msg.payload_type as i32;
     if pt == Oa::ProtoOaExecutionEvent as i32
+        || pt == Oa::ProtoOaTrailingSlChangedEvent as i32
+        || pt == Oa::ProtoOaTraderUpdateEvent as i32
+        || pt == Oa::ProtoOaMarginChangedEvent as i32
         || pt == Oa::ProtoOaOrderErrorEvent as i32
         || pt == Oa::ProtoOaErrorRes as i32
         || pt == Common::ErrorRes as i32
     {
+        let changed = if pt == Oa::ProtoOaExecutionEvent as i32 {
+            Some(pb::ProtoOaExecutionEvent::decode(payload).map(|e| e.ctid_trader_account_id))
+        } else if pt == Oa::ProtoOaTrailingSlChangedEvent as i32 {
+            Some(
+                pb::ProtoOaTrailingSlChangedEvent::decode(payload)
+                    .map(|e| e.ctid_trader_account_id),
+            )
+        } else if pt == Oa::ProtoOaTraderUpdateEvent as i32 {
+            Some(pb::ProtoOaTraderUpdatedEvent::decode(payload).map(|e| e.ctid_trader_account_id))
+        } else if pt == Oa::ProtoOaMarginChangedEvent as i32 {
+            Some(pb::ProtoOaMarginChangedEvent::decode(payload).map(|e| e.ctid_trader_account_id))
+        } else {
+            None
+        };
+        if let Some(account) = changed {
+            let mut state = entry_state.lock().unwrap();
+            match account {
+                Ok(account) => {
+                    let revision = state.revisions.entry(account).or_default();
+                    *revision = revision.saturating_add(1);
+                }
+                Err(_) => state.invalidate(&[]),
+            }
+        }
         let _ = executions.send(ReceivedExecution {
             received_at: Utc::now(),
             client_msg_id: msg.client_msg_id.clone(),
@@ -676,10 +857,22 @@ fn route(
         });
     } else if pt == Oa::ProtoOaSpotEvent as i32 {
         if let Ok(event) = ProtoOaSpotEvent::decode(payload) {
-            let _ = spots.send(ReceivedSpot {
-                received_at: Utc::now(),
-                event,
-            });
+            let received_at = Utc::now();
+            {
+                let mut state = entry_state.lock().unwrap();
+                let key = (event.ctid_trader_account_id, event.symbol_id);
+                // Only subscribed symbols should arrive. Bound unexpected input.
+                if state.quotes.len() < 4096 || state.quotes.contains_key(&key) {
+                    let quote = state.quotes.entry(key).or_default();
+                    if let Some(bid) = event.bid {
+                        quote.bid = Some((bid as f64 / 100_000.0, received_at));
+                    }
+                    if let Some(ask) = event.ask {
+                        quote.ask = Some((ask as f64 / 100_000.0, received_at));
+                    }
+                }
+            }
+            let _ = spots.send(ReceivedSpot { received_at, event });
         }
     } else if pt == Common::HeartbeatEvent as i32 {
         // The proxy's keep-alive. Nothing to do.
@@ -1809,5 +2002,237 @@ mod tests {
             }
             server_task.await.unwrap();
         }
+    }
+
+    async fn guard_fixture(conn: &Connection, server: &mut tokio::io::DuplexStream) -> EntryGuard {
+        let mut quotes = conn.spot_events();
+        write_frame(
+            server,
+            &ProtoMessage {
+                payload_type: Oa::ProtoOaSpotEvent as u32,
+                client_msg_id: None,
+                payload: Some(
+                    pb::ProtoOaSpotEvent {
+                        ctid_trader_account_id: 7,
+                        symbol_id: 9,
+                        bid: Some(10_100_000),
+                        ask: Some(10_200_000),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                ),
+            },
+        )
+        .await
+        .unwrap();
+        quotes.recv().await.unwrap();
+        EntryGuard {
+            connection_generation: conn.entry_generation(),
+            account_id: 7,
+            symbol_id: 9,
+            side: crate::trading::Side::Buy,
+            signal: crate::entry_guard::Signal::Trend { level: 100.0 },
+            cost: None,
+            expires: Instant::now() + Duration::from_secs(1),
+            account_revision: conn.entry_revision(7),
+        }
+    }
+
+    #[tokio::test]
+    async fn entry_guard_runs_after_writer_lock_wait_and_preserves_stream_on_refusal() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let mut guard = guard_fixture(&conn, &mut server).await;
+        guard.expires = Instant::now() + Duration::from_millis(20);
+        let held = conn.writer.stream.lock().await;
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            conn.send_guarded_trading_frame(
+                Oa::ProtoOaNewOrderReq as u32,
+                vec![1],
+                "guard-expired".into(),
+                Some(&guard),
+            ),
+        )
+        .await
+        .expect("expiry must finish even while another operation retains the lock");
+        assert!(matches!(result, Err(ClientError::EntryRefused(e)) if e.code == "ENTRY_EXPIRED"));
+        drop(held);
+        assert!(
+            conn.closed_reason().is_none(),
+            "zero-byte refusal must not kill the stream"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), read_frame(&mut server))
+                .await
+                .is_err()
+        );
+        let good = guard_fixture(&conn, &mut server).await;
+        conn.send_guarded_trading_frame(
+            Oa::ProtoOaNewOrderReq as u32,
+            vec![1],
+            "guard-valid".into(),
+            Some(&good),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            read_frame(&mut server)
+                .await
+                .unwrap()
+                .client_msg_id
+                .as_deref(),
+            Some("guard-valid")
+        );
+    }
+
+    #[tokio::test]
+    async fn new_connection_cannot_reuse_old_guard_and_guarded_partial_write_stays_uncertain() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let old = Connection::from_stream(client, Duration::from_secs(1));
+        let guard = guard_fixture(&old, &mut server).await;
+        let (client, mut server) = tokio::io::duplex(2);
+        let fresh = Connection::from_stream(client, Duration::from_millis(30));
+        let new_guard = guard_fixture(&fresh, &mut server).await;
+        assert!(
+            matches!(fresh.send_guarded_trading_frame(Oa::ProtoOaNewOrderReq as u32,
+            vec![1], "old-generation".into(), Some(&guard)).await,
+            Err(ClientError::EntryRefused(e)) if e.code == "ENTRY_CONNECTION_CHANGED")
+        );
+        let result = fresh
+            .send_guarded_trading_frame(
+                Oa::ProtoOaNewOrderReq as u32,
+                vec![1; 256],
+                "partial".into(),
+                Some(&new_guard),
+            )
+            .await;
+        assert!(
+            matches!(result, Err(ClientError::WriteTimeout(_))),
+            "{result:?}"
+        );
+        assert!(fresh.closed_reason().is_some());
+    }
+
+    #[tokio::test]
+    async fn manual_protection_account_and_margin_events_invalidate_admission_and_are_observable() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let guard = guard_fixture(&conn, &mut server).await;
+        let mut events = conn.executions();
+        for (index, (payload_type, payload)) in [
+            (
+                Oa::ProtoOaTrailingSlChangedEvent as u32,
+                pb::ProtoOaTrailingSlChangedEvent {
+                    ctid_trader_account_id: 7,
+                    position_id: 8,
+                    order_id: 9,
+                    stop_price: 101.0,
+                    utc_last_update_timestamp: Utc::now().timestamp_millis(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            (
+                Oa::ProtoOaTraderUpdateEvent as u32,
+                pb::ProtoOaTraderUpdatedEvent {
+                    ctid_trader_account_id: 7,
+                    trader: pb::ProtoOaTrader::default(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            (
+                Oa::ProtoOaMarginChangedEvent as u32,
+                pb::ProtoOaMarginChangedEvent {
+                    ctid_trader_account_id: 7,
+                    position_id: 8,
+                    used_margin: 100,
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            write_frame(
+                &mut server,
+                &ProtoMessage {
+                    payload_type,
+                    payload: Some(payload),
+                    client_msg_id: None,
+                },
+            )
+            .await
+            .unwrap();
+            let event = events.recv().await.unwrap();
+            assert_eq!(event.payload_type, payload_type);
+            assert_eq!(conn.entry_revision(7), index as u64 + 1);
+            assert!(
+                crate::trading::decode_execution(7, &event).is_none(),
+                "account update is not a fill"
+            );
+            assert_eq!(
+                conn.validate_entry_guard(&guard).unwrap_err().code,
+                "ENTRY_ACCOUNT_CHANGED"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn entry_guard_observes_reader_quotes_arriving_while_writer_is_held() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let guard = guard_fixture(&conn, &mut server).await;
+        let held = conn.writer.stream.lock().await;
+        let mut sending = Box::pin(conn.send_guarded_trading_frame(
+            Oa::ProtoOaNewOrderReq as u32,
+            vec![1],
+            "changed-side".into(),
+            Some(&guard),
+        ));
+        tokio::select! {
+            result = &mut sending => panic!("writer is still held: {result:?}"),
+            _ = tokio::time::sleep(Duration::from_millis(5)) => {},
+        }
+        let mut quotes = conn.spot_events();
+        write_frame(
+            &mut server,
+            &ProtoMessage {
+                payload_type: Oa::ProtoOaSpotEvent as u32,
+                client_msg_id: None,
+                payload: Some(
+                    pb::ProtoOaSpotEvent {
+                        ctid_trader_account_id: 7,
+                        symbol_id: 9,
+                        bid: Some(9_800_000),
+                        ask: Some(9_900_000),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                ),
+            },
+        )
+        .await
+        .unwrap();
+        quotes.recv().await.unwrap();
+        drop(held);
+        let Err(ClientError::EntryRefused(refusal)) = sending.await else {
+            panic!("changed quote must refuse before writing");
+        };
+        assert_eq!(refusal.code, "ENTRY_SIGNAL_CHANGED");
+        assert_eq!(refusal.evidence["bid"]["price"], 98.0);
+        let _new_quote = guard_fixture(&conn, &mut server).await;
+        assert_eq!(
+            refusal.evidence["bid"]["price"], 98.0,
+            "receipt retains the exact refused snapshot, not the later good quote"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), read_frame(&mut server))
+                .await
+                .is_err()
+        );
+        assert!(conn.closed_reason().is_none());
     }
 }

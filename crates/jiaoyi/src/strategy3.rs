@@ -11,7 +11,7 @@
 //! - A symbol is skipped when the cost reserve C is at least R.
 //! - `REQUIRED_RR` is 1.38. Owner, 27-10-2026: target near 1.4R.
 //!
-//! The rules are `docs/preregistration-2026-10-28-strategy3-v6.md`, embedded
+//! The rules are `docs/preregistration-2026-11-01-strategy3-v7.md`, embedded
 //! and hashed: every decision, intent and trade records that hash and the
 //! label `jiaoyi-s3`. The 25 Oct file remains the record of the rule that
 //! produced the statement losses. It is not the rule this loop trades.
@@ -90,10 +90,10 @@ pub const LABEL: &str = "jiaoyi-s3";
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-10-28-strategy3-v6.md";
+pub const PREREG_FILE: &str = "docs/preregistration-2026-11-01-strategy3-v7.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-10-28-strategy3-v6.md");
+    include_str!("../../../docs/preregistration-2026-11-01-strategy3-v7.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -111,6 +111,30 @@ pub fn prereg_hash() -> String {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
+}
+
+/// v7 changes dispatch only. A v6 cost veto already made for this session
+/// remains binding; this compatibility does not import any Kelly outcomes.
+pub async fn session_cost_veto(
+    pool: &PgPool,
+    account_id: i64,
+    symbol: &str,
+    date: chrono::NaiveDate,
+    hash: &str,
+) -> Result<bool, jiaoyi_store::sqlx::Error> {
+    if s3s::cost_skipped_in_session(pool, account_id, symbol, date, hash).await? {
+        return Ok(true);
+    }
+    if hash != prereg_hash() {
+        return Ok(false);
+    }
+    let predecessor: String = Sha256::digest(
+        include_str!("../../../docs/preregistration-2026-10-28-strategy3-v6.md").as_bytes(),
+    )
+    .iter()
+    .map(|b| format!("{b:02x}"))
+    .collect();
+    s3s::cost_skipped_in_session(pool, account_id, symbol, date, &predecessor).await
 }
 
 fn dir_side(d: Dir) -> Side {
@@ -649,6 +673,23 @@ impl Ledger for S3Ledger<'_> {
         Ok(w)
     }
     async fn record_event(&self, e: &EventRecord) -> Result<(), String> {
+        if e.kind == "REFUSED_BEFORE_SEND" && e.error_code.as_deref() == Some("ENTRY_COST_GE_R") {
+            let detail = json!({"strategy": STRATEGY, "label": LABEL,
+                "prereg_hash": self.order.prereg_hash, "session_date": self.order.session_date,
+                "skip_code": "cost_ge_r", "entry_key": e.entry_key,
+                "dispatch_policy": jiaoyi_ctrader::entry_guard::POLICY});
+            ts::record_decision(
+                self.inner.pool,
+                e.account_id,
+                Some(&self.order.symbol),
+                "s3_skip",
+                "final registered cost reserve C >= R: durable session veto",
+                &detail,
+                self.inner.settings_version,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        }
         self.inner.record_event(e).await
     }
     async fn owns_position(&self, account_id: i64, position_id: i64) -> Result<bool, String> {
@@ -2209,6 +2250,11 @@ impl<'a, 'c> Trader<'a, 'c> {
         let Some(mark) = band::decision_mark(&s, now) else {
             return Ok(());
         };
+        let dispatch_remaining = (mark + chrono::Duration::seconds(band::MARK_WINDOW_SECS) - now)
+            .to_std()
+            .unwrap_or_default();
+        let dispatch_deadline = tokio::time::Instant::now() + dispatch_remaining;
+        let dispatch_revision = self.session.connection().entry_revision(self.account_id());
         let (Some(bid), Some(ask)) = (sym.bid, sym.ask) else {
             return Ok(());
         };
@@ -2223,9 +2269,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         if cost_skip_stands(sym.cost_skip_session, s.date) {
             return Ok(());
         }
-        if s3s::cost_skipped_in_session(self.pool, self.account_id(), &name, s.date, &self.hash)
-            .await?
-        {
+        if session_cost_veto(self.pool, self.account_id(), &name, s.date, &self.hash).await? {
             self.syms.get_mut(&symbol_id).unwrap().cost_skip_session = Some(s.date);
             tracing::info!(account = self.account_id(), symbol = %name,
                 session_date = %s.date, prereg_hash = %self.hash,
@@ -2549,8 +2593,26 @@ impl<'a, 'c> Trader<'a, 'c> {
             self.skip(symbol_id, &name, &why, detail, now).await;
             return Ok(());
         }
+        detail["dispatch_policy"] = json!(jiaoyi_ctrader::entry_guard::POLICY);
+        detail["dispatch_deadline"] =
+            json!(mark + chrono::Duration::seconds(band::MARK_WINDOW_SECS));
+        let entry_guard = jiaoyi_ctrader::entry_guard::EntryGuard {
+            connection_generation: self.session.connection().entry_generation(),
+            account_id: self.account_id(),
+            symbol_id,
+            side: dir_side(side),
+            signal: jiaoyi_ctrader::entry_guard::Signal::Mark { band: b },
+            cost: Some(jiaoyi_ctrader::entry_guard::Cost {
+                prepared_spread: spread,
+                commission_round_trip: commission_rt,
+                slippage_bps_per_side: slippage_bps_per_side(sym.class),
+                original_r: r_price,
+            }),
+            expires: dispatch_deadline,
+            account_revision: dispatch_revision,
+        };
         let account_id = self.account_id();
-        let n = s3s::opens_in_session(self.pool, account_id, symbol_id, s.date).await?;
+        let n = s3s::attempts_in_session(self.pool, account_id, symbol_id, s.date).await?;
         let key = format!("s3:{account_id}:{symbol_id}:{}:{}", s.date, n + 1);
         if let Some(x) = self.syms.get_mut(&symbol_id) {
             x.last_try = Some(now);
@@ -2593,7 +2655,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             edge: Ok(()),
             max_risk: sized.max_risk,
         };
-        match gate::send(
+        match gate::send_entry(
             self.session,
             self.allowlist,
             &ledger,
@@ -2601,6 +2663,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             cmd,
             &key,
             Duration::from_secs(r.order_wait_secs),
+            &entry_guard,
         )
         .await
         {
@@ -3478,7 +3541,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-10-28-strategy3-v6.md"
+            "/../../docs/preregistration-2026-11-01-strategy3-v7.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)

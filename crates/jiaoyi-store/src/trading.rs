@@ -64,6 +64,60 @@ pub async fn intent_exists(pool: &PgPool, entry_key: &str) -> Result<bool, sqlx:
         .await
 }
 
+/// A daily Strategy 1 decision may retry only an explicitly proven-unsent
+/// attempt. Sent, rejected and uncertain attempts retain the prior daily hold.
+#[derive(Debug, PartialEq)]
+pub enum EntryAttempt {
+    Ready(String),
+    WaitUntil(DateTime<Utc>),
+    Held,
+}
+
+pub async fn next_entry_attempt(
+    pool: &PgPool,
+    account_id: i64,
+    base: &str,
+    now: DateTime<Utc>,
+) -> Result<EntryAttempt, sqlx::Error> {
+    let prefix = format!("{base}:retry:");
+    let rows = sqlx::query("SELECT i.entry_key,
+        (SELECT max(e.received_at) FROM trading_events e WHERE e.account_id=i.account_id
+            AND e.entry_key=i.entry_key AND e.kind='REFUSED_BEFORE_SEND'
+            AND NOT EXISTS (SELECT 1 FROM trading_events other WHERE other.account_id=i.account_id
+                AND other.entry_key=i.entry_key AND other.kind <> 'REFUSED_BEFORE_SEND')) AS unsent_at
+        FROM trading_intents i WHERE i.account_id=$1 AND (i.entry_key=$2 OR starts_with(i.entry_key,$3))")
+        .bind(account_id).bind(base).bind(&prefix).fetch_all(pool).await?;
+    if rows.is_empty() {
+        return Ok(EntryAttempt::Ready(base.to_string()));
+    }
+    let mut last = None;
+    let mut serial = 1usize;
+    for row in &rows {
+        let Some(at) = row.get::<Option<DateTime<Utc>>, _>("unsent_at") else {
+            return Ok(EntryAttempt::Held);
+        };
+        last = Some(last.map_or(at, |old: DateTime<Utc>| old.max(at)));
+        let key: String = row.get("entry_key");
+        if key != base {
+            let Some(n) = key
+                .strip_prefix(&prefix)
+                .and_then(|n| n.parse::<usize>().ok())
+            else {
+                return Ok(EntryAttempt::Held);
+            };
+            serial = serial.max(n);
+        }
+    }
+    let retry_at = last.unwrap() + chrono::Duration::seconds(60);
+    if now < retry_at {
+        return Ok(EntryAttempt::WaitUntil(retry_at));
+    }
+    Ok(EntryAttempt::Ready(format!(
+        "{prefix}{}",
+        serial.saturating_add(1)
+    )))
+}
+
 /// One execution message.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EventRow {
@@ -159,6 +213,7 @@ pub const FULL_FILL_KINDS: &[&str] = &["ORDER_FILLED", "RECONCILED_FILL"];
 /// `RECONCILED_ABSENT`: reconcile found it neither filled nor pending at the
 /// broker after its grace.
 pub const END_KINDS: &[&str] = &[
+    "REFUSED_BEFORE_SEND",
     "ORDER_REJECTED",
     "ORDER_CANCELLED",
     "ORDER_EXPIRED",
@@ -214,7 +269,10 @@ pub async fn open_intents_unresolved(
          FROM trading_intents i
          WHERE i.account_id = $1 AND i.kind = 'open'
            AND NOT EXISTS (SELECT 1 FROM trading_events e
-                           WHERE e.entry_key = i.entry_key AND e.kind = ANY($2))
+                           WHERE e.entry_key = i.entry_key AND e.kind = ANY($2)
+                             AND (e.kind <> 'REFUSED_BEFORE_SEND' OR NOT EXISTS
+                               (SELECT 1 FROM trading_events other WHERE other.entry_key=i.entry_key
+                                AND other.kind <> 'REFUSED_BEFORE_SEND')))
          ORDER BY i.id",
     )
     .bind(account_id)

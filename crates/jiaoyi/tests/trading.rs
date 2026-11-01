@@ -456,7 +456,32 @@ async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
         .unwrap();
     assert_eq!(
         events,
-        vec!["ORDER_ACCEPTED", "ORDER_FILLED", "ORDER_REPLACED"]
+        vec![
+            "ENTRY_VALIDATED_BEFORE_SEND",
+            "ORDER_ACCEPTED",
+            "ORDER_FILLED",
+            "ORDER_REPLACED"
+        ]
+    );
+    let receipt: Vec<u8> = sqlx::query_scalar(
+        "SELECT raw FROM trading_events WHERE kind='ENTRY_VALIDATED_BEFORE_SEND'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let snapshot: serde_json::Value = serde_json::from_slice(&receipt).unwrap();
+    let budget_ms = jiaoyi_ctrader::entry_guard::MAX_QUOTE_AGE.as_millis() as u64;
+    let remaining_ms = snapshot["remaining_dispatch_ms"].as_u64().unwrap();
+    let elapsed_upper_ms = budget_ms - remaining_ms;
+    // The receipt floors remaining milliseconds; the subtraction is an
+    // upper bound within one millisecond, not network or fill latency.
+    eprintln!(
+        "S1_DISPATCH_BENCH {}",
+        json!({"policy":snapshot["policy"],"initial_budget_ms":budget_ms,
+            "selected_to_final_guard_ms_lower":elapsed_upper_ms.saturating_sub(1),
+            "selected_to_final_guard_ms_upper":elapsed_upper_ms,
+            "remaining_dispatch_ms":remaining_ms,"broker_frames":orders.len(),
+            "source":"existing full S1 PostgreSQL/wire-broker control; not production"})
     );
     // A restart after the position was stopped out: the same completed day's
     // entry key is recorded, so nothing is sent again.
@@ -799,7 +824,10 @@ async fn an_accepted_only_open_is_adopted_after_a_restart(pool: PgPool) {
     let key = trading::entry_key(DEMO, ETH, Utc::now().date_naive() - Days::days(1));
     assert_eq!(
         event_kinds(&pool).await,
-        vec![(Some(key.clone()), "ORDER_ACCEPTED".to_string())]
+        vec![
+            (Some(key.clone()), "ENTRY_VALIDATED_BEFORE_SEND".to_string()),
+            (Some(key.clone()), "ORDER_ACCEPTED".to_string()),
+        ]
     );
     // It filled while the service was down: the position is there at restart.
     f.positions.lock().unwrap().push(ProtoOaPosition {

@@ -1,6 +1,6 @@
-//! Strategy 3 (intraday momentum, tick-triggered on the noise band) against a
-//! real PostgreSQL and the scripted broker: the band from the broker's M30
-//! bars, the entry on the first quote beyond it between 30-minute marks,
+//! Strategy 3 against PostgreSQL and a wire-scripted broker: the band from
+//! broker M30 bars, the first eligible midpoint decision at 30-minute marks,
+//! and the final entry dispatch guard,
 //! TP2 at the broker, the TP1 partial close, the session-end close, the
 //! budget, the live single minimum, the holiday skip and the records.
 // Claude · № 17,020 25-Oct (ordered: owner's Strategy 3 v2 approval, "Tick-triggered only")
@@ -333,17 +333,79 @@ async fn broker_proves_silent_fill(pool: &PgPool, f: &FakeBroker, position: i64,
     });
 }
 
+/// Exercise the independent connection quote cache as well as the actor. The
+/// final dispatch guard must see the same broker observation, not a direct
+/// actor-only test injection that never existed on the connection.
+struct WireTrader<'a, 'c> {
+    inner: strategy3::Trader<'a, 'c>,
+    quote_sender: tokio::sync::broadcast::Sender<jiaoyi_ctrader::messages::ProtoOaSpotEvent>,
+}
+
+impl<'a, 'c> std::ops::Deref for WireTrader<'a, 'c> {
+    type Target = strategy3::Trader<'a, 'c>;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl std::ops::DerefMut for WireTrader<'_, '_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl WireTrader<'_, '_> {
+    async fn on_quote(
+        &mut self,
+        symbol: i64,
+        bid: Option<f64>,
+        ask: Option<f64>,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        let mut wire = self.session.connection().spot_events();
+        let event = jiaoyi_ctrader::messages::ProtoOaSpotEvent {
+            ctid_trader_account_id: self.session.account().id(),
+            symbol_id: symbol,
+            bid: bid.map(|x| e5(x) as u64),
+            ask: ask.map(|x| e5(x) as u64),
+            ..Default::default()
+        };
+        self.quote_sender.send(event.clone()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let received = wire.recv().await.unwrap();
+                if received.event == event {
+                    break;
+                }
+            }
+        })
+        .await
+        .expect("the fake quote must pass through the connection reader");
+        self.inner.on_quote(symbol, bid, ask, now).await
+    }
+}
+
 /// Drive a trader on `f`: `steps` gets the trader and the fake's log.
 macro_rules! with_trader {
     ($pool:expr, $f:expr, $env:expr, |$t:ident, $log:ident| $body:block) => {{
-        let (conn, $log) = $f.clone().spawn();
+        let mut fake = $f.clone();
+        let quote_sender = fake
+            .spot_events
+            .clone()
+            .unwrap_or_else(|| tokio::sync::broadcast::channel(64).0);
+        fake.spot_events = Some(quote_sender.clone());
+        let (conn, $log) = fake.spawn();
         let session = loader::authorise($pool, &conn, &broker(), &permitted())
             .await
             .unwrap();
         let list = allowlist();
-        let mut $t = strategy3::Trader::new($pool, &list, $env, &session)
+        let inner = strategy3::Trader::new($pool, &list, $env, &session)
             .await
             .unwrap();
+        let mut $t = WireTrader {
+            inner,
+            quote_sender,
+        };
         reconcile_with_scoped_recovery(&mut $t, Utc::now()).await;
         $body
     }};
@@ -376,6 +438,111 @@ fn orders(log: &Arc<Mutex<FakeLog>>) -> Vec<Sent> {
 
 fn at(min: i64) -> DateTime<Utc> {
     today().open + Duration::minutes(min)
+}
+
+/// Measurement-only fixture, explicitly run before changing dispatch policy.
+/// Rates apply to this declared scenario mix, never to production traffic.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+#[ignore = "manual bounded dispatch benchmark; production impact needs separate evidence"]
+async fn dispatch_policy_benchmark(pool: PgPool) {
+    loaded(&pool).await;
+    sqlx::raw_sql(
+        "CREATE TABLE dispatch_bench_control(ledger_delay_ms bigint NOT NULL);
+         INSERT INTO dispatch_bench_control VALUES(0);
+         CREATE FUNCTION dispatch_bench_delay() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN PERFORM pg_sleep((SELECT ledger_delay_ms::double precision/1000 FROM dispatch_bench_control));
+         RETURN NEW; END $$;
+         CREATE TRIGGER dispatch_bench_delay BEFORE INSERT ON trading_intents
+         FOR EACH ROW EXECUTE FUNCTION dispatch_bench_delay();",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    // (label, quote offset after mark, first account-read delay, intent delay,
+    // prepared cache, repetitions). All prices, risks and fills are synthetic.
+    let scenarios = [
+        ("normal_early", 0_i64, 0_u64, 0_i64, true, 3),
+        ("normal_late_4500ms", 4500, 0, 0, true, 3),
+        ("normal_late_4900ms", 4900, 0, 0, true, 3),
+        ("normal_late_4990ms", 4990, 0, 0, true, 3),
+        ("account_250ms_early", 0, 250, 0, true, 3),
+        ("account_250ms_late_4500ms", 4500, 250, 0, true, 3),
+        ("account_250ms_late_4900ms", 4900, 250, 0, true, 3),
+        ("ledger_250ms_early", 0, 0, 250, true, 3),
+        ("ledger_250ms_late_4500ms", 4500, 0, 250, true, 3),
+        ("ledger_250ms_late_4900ms", 4900, 0, 250, true, 3),
+        ("ledger_5100ms_early", 0, 0, 5100, true, 1),
+        ("cold_preparation_early", 0, 0, 0, false, 3),
+    ];
+    for (label, offset, account_delay, ledger_delay, prepared, repetitions) in scenarios {
+        for repetition in 0..repetitions {
+            // Only this sqlx test's disposable isolated database is reset.
+            sqlx::raw_sql("TRUNCATE strategy3_orders,strategy3_fills,trading_intents,trading_events,trading_decisions;")
+                .execute(&pool).await.unwrap();
+            sqlx::query("UPDATE dispatch_bench_control SET ledger_delay_ms=$1")
+                .bind(ledger_delay)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let f = fake((60_455.0, 60_462.0));
+            with_trader!(&pool, f, Environment::Demo, |t, log| {
+                if prepared {
+                    t.prepare(BTC, today(), at(25)).await.unwrap();
+                }
+                f.trader_reply_delays
+                    .lock()
+                    .unwrap()
+                    .push_back(std::time::Duration::from_millis(account_delay));
+                let checked_from = Utc::now();
+                let started = std::time::Instant::now();
+                t.on_quote(
+                    BTC,
+                    Some(60_455.0),
+                    Some(60_462.0),
+                    at(30) + Duration::milliseconds(offset),
+                )
+                .await
+                .unwrap();
+                let completed_us = started.elapsed().as_micros();
+                let receipts: Vec<(String, Option<String>, Vec<u8>)> = sqlx::query_as(
+                    "SELECT kind,error_code,raw FROM trading_events WHERE kind IN ('ENTRY_VALIDATED_BEFORE_SEND','REFUSED_BEFORE_SEND') ORDER BY id",
+                ).fetch_all(&pool).await.unwrap();
+                assert_eq!(
+                    receipts.len(),
+                    1,
+                    "{label}: require exact final validation evidence; {:?}",
+                    decisions(&pool).await
+                );
+                let (kind, error, bytes) = &receipts[0];
+                let raw: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+                let snapshot = if kind == "REFUSED_BEFORE_SEND" {
+                    &raw["evidence"]
+                } else {
+                    &raw
+                };
+                let checked_at: DateTime<Utc> =
+                    serde_json::from_value(snapshot["checked_at"].clone()).unwrap();
+                let frames = orders(&log).len();
+                assert_eq!(frames, usize::from(kind == "ENTRY_VALIDATED_BEFORE_SEND"));
+                if frames == 0 {
+                    assert_eq!(error.as_deref(), Some("ENTRY_EXPIRED"));
+                }
+                eprintln!(
+                    "DISPATCH_BENCH {}",
+                    json!({
+                        "scenario":label,"repetition":repetition,"quote_offset_ms":offset,
+                        "initial_dispatch_budget_ms":5000-offset,"first_account_reply_delay_ms":account_delay,
+                        "intent_delay_ms":ledger_delay,"preparation_warmed":prepared,
+                        "decision_to_final_guard_us":(checked_at-checked_from).num_microseconds(),
+                        "quote_call_completed_us":completed_us,"broker_frames":frames,
+                        "receipt_kind":kind,"error_code":error,
+                        "remaining_dispatch_ms":snapshot["remaining_dispatch_ms"],
+                        "source":"isolated local PostgreSQL + in-memory real-protobuf broker; not production"
+                    })
+                );
+            });
+        }
+    }
 }
 
 /// v5 hangs each stop from the best executable quote by the original R,
@@ -415,9 +582,13 @@ async fn trail_keeps_original_r(pool: &PgPool, buy: bool) {
             t.reconcile(now).await.unwrap();
         }
         assert_eq!(t.own[&pid].stop, Some(entry));
-        let mut restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
+        let restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
+        let mut restarted = WireTrader {
+            inner: restarted,
+            quote_sender: t.quote_sender.clone(),
+        };
         reconcile_with_scoped_recovery(&mut restarted, at(33)).await;
         assert_eq!(restarted.own[&pid].stop, Some(entry));
         let price = entry + direction * 500.0;
@@ -545,9 +716,13 @@ async fn fractional_trail_precision(pool: &PgPool, buy: bool) {
             assert_eq!(saved.1["r"], basis.r);
             t.reconcile(at(33)).await.unwrap();
         }
-        let mut restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
+        let restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
+        let mut restarted = WireTrader {
+            inner: restarted,
+            quote_sender: t.quote_sender.clone(),
+        };
         reconcile_with_scoped_recovery(&mut restarted, at(34)).await;
         assert_eq!(restarted.own[&pid].plan_basis.unwrap().r, basis.r);
         let (b, a, stop) = if buy {
@@ -992,10 +1167,14 @@ async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: 
                 orders(&log).is_empty(),
                 "the inside decision must consume this mark"
             );
-            let mut restarted =
+            let restarted =
                 strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
                     .await
                     .unwrap();
+            let mut restarted = WireTrader {
+                inner: restarted,
+                quote_sender: t.quote_sender.clone(),
+            };
             restarted
                 .on_quote(
                     BTC,
@@ -1062,10 +1241,14 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
             assert_eq!(detail["label"], "jiaoyi-s3");
             assert_eq!(detail["prereg_hash"], strategy3::prereg_hash());
 
-            let mut restarted =
+            let restarted =
                 strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
                     .await
                     .unwrap();
+            let mut restarted = WireTrader {
+                inner: restarted,
+                quote_sender: t.quote_sender.clone(),
+            };
             assert_eq!(restarted.syms[&BTC].cost_skip_session, None);
             restarted
                 .on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
@@ -1276,10 +1459,13 @@ async fn durable_cost_veto_keeps_one_entry_per_session_after_restart(pool: PgPoo
         // Simulate a broker-flat restart; the durable open receipt, rather
         // than the former in-memory ownership cache, must block re-entry.
         f.positions.lock().unwrap().clear();
-        let mut restarted =
-            strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
-                .await
-                .unwrap();
+        let restarted = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+            .await
+            .unwrap();
+        let mut restarted = WireTrader {
+            inner: restarted,
+            quote_sender: t.quote_sender.clone(),
+        };
         assert!(restarted.own.is_empty());
         assert_eq!(restarted.syms[&BTC].entered_session, None);
         restarted
@@ -3700,6 +3886,8 @@ async fn preopen_is_prepared_before_open_without_quotes_or_orders(pool: PgPool) 
         10,
     ));
     f.m30_bars.insert(BTC, full);
+    let (quote_sender, _) = tokio::sync::broadcast::channel(64);
+    f.spot_events = Some(quote_sender.clone());
     let (conn, log) = f.spawn();
     let session = loader::authorise(&pool, &conn, &broker(), &permitted())
         .await
@@ -3765,9 +3953,13 @@ async fn preopen_is_prepared_before_open_without_quotes_or_orders(pool: PgPool) 
     // Reconnect after the deadline retains the original receipt and does
     // not repeat the historical download or misreport preparation as late.
     let list2 = allowlist();
-    let mut restored = strategy3::Trader::new(&pool, &list2, Environment::Demo, &session)
+    let restored = strategy3::Trader::new(&pool, &list2, Environment::Demo, &session)
         .await
         .unwrap();
+    let mut restored = WireTrader {
+        inner: restored,
+        quote_sender,
+    };
     assert!(
         restored.syms[&BTC]
             .preopen
