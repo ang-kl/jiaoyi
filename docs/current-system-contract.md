@@ -83,3 +83,15 @@ one-second account assessment, incident observation and trade protection remain
 independent of browser activity. This changes display behaviour only; no worker
 permission, strategy, risk limit or order authority changes. By <Codex (GPT-6),
 effort: not exposed>.
+
+[§CURRENT.19] The owner requested a card-based homepage and the first 20 rows
+with scrolling and paging for **Distance to trigger** (№18,165–18,167, 2 November
+2026, 05:15–05:19 SGT). The homepage has expandable section cards, an account-card
+grid, individual S3 account cards and a visible SGT snapshot time. Each S1/S3
+trigger table has independent 20-row Previous/Next controls, row/page counts,
+sticky column headings and bounded horizontal/vertical scrolling. Collapsing a
+card preserves its page; without JavaScript all rows remain scrollable. Paging
+only navigates the displayed snapshot; it makes no requests, refreshes or trading
+changes. Bot-trade reference: `Card.jsx`, `LiveMarketCard.jsx`, `StdTradeTable.jsx`
+and `index.css` at `20bca9026a84d65c4d08f03b4f1674aa86222063`. The active-page
+restrictions in §CURRENT.18 remain intact. By <Codex (GPT-6), effort: not exposed>.

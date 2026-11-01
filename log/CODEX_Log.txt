@@ -862,3 +862,35 @@ focus/visibility events were simulated in headless Chromium; synthetic fixtures
 are not production broker proof. Required updated CI, merge and deployed identity,
 privacy/display/continued-background-progress checks still gate closure; consult
 this implementation PR's final description for actual receipt and later serials.
+
+
+[§LOG.80] №18,154–18,164 §§1–3; entry 2 November 2026, 05:19 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR149 merged07ec6b924aaa5c8f83557fd319f1757870ce30da green:656 Rust/PostgreSQL,
+188 coordinator,eight Node lifecycle tests and both images. Exact trading release
+a41367c3-e943-4de4-bb55-2acbabbf7095 verified, predecessor removed; engineering
+source/deployment/permissions unchanged. Focused release checks56/56 and applicable
+production browser checks13/13 passed. After browser teardown all4 assessment
+counters and8 exit-check counters advanced. Production browser used a read-only
+proxy forwarding unchanged responses and simulated headless focus/visibility.
+Five observed positions had unknown broker schedules and no verified open-market
+window; zero polling verifies unknown-market suppression, not market closure or
+observed live repaint. See PR149 final receipt at1Nov21:09SGT for qualifications.
+
+
+[§LOG.81] №18,165–18,167 §§1–2; entry 2 November 2026, 05:19 SGT; by <Codex (GPT-6), effort: not exposed>.
+Owner requests20-rowscrolling/paging forDistance totrigger andcardUI learned from
+bot-trade. Read origin/main07ec6b9 and GROK_Log unchanged through№17,703; check
+GROK_Log.txt again before choosing future serials. №18,165's displayed05:17 was
+corrected in№18,166 to actualapproximately05:15SGT. Inspected bot-trade commit
+20bca9026a84d65c4d08f03b4f1674aa86222063 Card.jsx/LiveMarketCard.jsx/StdTradeTable.jsx
+and index.css. Reused bounded card surfaces, native collapse preserving DOM state,
+contained scrolling and explicit paging controls without importing React/polling.
+Root homepage now has section/account cards, goal/snapshot context and independent
+S1/S3 trigger tables with20-rowpages,stickyheaders,keyboardcontrols andno-JS scroll
+fallback. No data/strategy/risk/worker/active-owner-refresh changes. Eight existing
+render tests,three HTTPintegrationtests andworkspace/all-targetClippy pass.
+ActualRust-rendered Chromium fixtures pass30 checks acrossempty/20/41/45-rowcases,
+independentpaging,boundaries,collapse/mobile/dark/escaping andzero paging requests.
+Review identified clippedkeyboardfocus oncollapsedcards; insetsummaryfocusfixed.
+RequiredCI,merge anddeployedhomepage/componentchecks remainreleasegates; consult
+the implementationPR's finalreceipt forcompletion andsubsequentchatserials.
