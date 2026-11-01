@@ -267,14 +267,14 @@ fn distance_cell(d: &Value, reason: &Value) -> String {
 /// to it in ATR (negative once through it).
 fn s1_trigger_table(accounts: &[Value]) -> String {
     let mut h = String::from(
-        r#"<h3>Distance to trigger</h3><p class="note">At each symbol's last quote: the 50-day level on the side the EMA filter allows, and how far the ask (long) or bid (short) is from it in ATR. Negative means through it.</p><div class="scroll"><table><thead><tr><th>Account</th><th>Symbol</th><th>Filter</th><th class="num">50-day level</th><th class="num">ATR</th><th class="num">Quote</th><th class="num">Distance (ATR)</th><th>At</th></tr></thead><tbody>"#,
+        r#"<h3>Distance to trigger</h3><p class="note">At each symbol's last quote: the 50-day level on the side the EMA filter allows, and how far the ask (long) or bid (short) is from it in ATR. Negative means through it.</p><div class="trigger-pager" data-trigger-pager><div class="scroll trigger-scroll" tabindex="0" role="region" aria-label="Distance to trigger"><table><thead><tr><th>Account</th><th>Symbol</th><th>Filter</th><th class="num">50-day level</th><th class="num">ATR</th><th class="num">Quote</th><th class="num">Distance (ATR)</th><th>At</th></tr></thead><tbody>"#,
     );
     let mut any = false;
     for a in accounts {
         for (symbol, t) in a["trigger_distance"].as_object().into_iter().flatten() {
             any = true;
             h.push_str(&format!(
-                "<tr><td class=\"mono\">{}</td><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"mono\">{}</td></tr>",
+                "<tr data-trigger-row><td class=\"mono\">{}</td><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"mono\">{}</td></tr>",
                 txt(&a["account_id"]),
                 esc(symbol),
                 txt(&t["filter"]),
@@ -289,7 +289,7 @@ fn s1_trigger_table(accounts: &[Value]) -> String {
     if !any {
         h.push_str(r#"<tr><td colspan="8" class="empty">No quote processed yet.</td></tr>"#);
     }
-    h.push_str("</tbody></table></div>");
+    h.push_str("</tbody></table></div></div>");
     h
 }
 
@@ -299,13 +299,13 @@ fn s1_trigger_table(accounts: &[Value]) -> String {
 /// is none (outside the entry window, no band).
 fn s3_trigger_table(a: &Value) -> String {
     let mut h = String::from(
-        r#"<div class="scroll"><table><thead><tr><th>Symbol</th><th class="num">Band lower</th><th class="num">Band upper</th><th class="num">σ</th><th class="num">Bid</th><th class="num">Ask</th><th>Nearer edge</th><th class="num">Distance (half-widths)</th><th>At</th></tr></thead><tbody>"#,
+        r#"<div class="trigger-pager" data-trigger-pager><div class="scroll trigger-scroll" tabindex="0" role="region" aria-label="Distance to trigger"><table><thead><tr><th>Symbol</th><th class="num">Band lower</th><th class="num">Band upper</th><th class="num">σ</th><th class="num">Bid</th><th class="num">Ask</th><th>Nearer edge</th><th class="num">Distance (half-widths)</th><th>At</th></tr></thead><tbody>"#,
     );
     let mut any = false;
     for (symbol, t) in a["trigger_distance"].as_object().into_iter().flatten() {
         any = true;
         h.push_str(&format!(
-            "<tr><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"mono\">{}</td></tr>",
+            "<tr data-trigger-row><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"mono\">{}</td></tr>",
             esc(symbol),
             num(&t["lower"], 5),
             num(&t["upper"], 5),
@@ -320,7 +320,7 @@ fn s3_trigger_table(a: &Value) -> String {
     if !any {
         h.push_str(r#"<tr><td colspan="9" class="empty">No quote processed yet.</td></tr>"#);
     }
-    h.push_str("</tbody></table></div>");
+    h.push_str("</tbody></table></div></div>");
     h
 }
 
@@ -329,8 +329,13 @@ fn s3_trigger_table(a: &Value) -> String {
 pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) -> String {
     let mut h = String::new();
     h.push_str(HEAD);
-    h.push_str(r#"<main><header><h1>jiaoyi</h1><p class="sub">Service status · read-only</p>"#);
-    h.push_str(r#"<dl class="facts">"#);
+    h.push_str(r#"<main><header class="dashboard-header"><p class="eyebrow">TRADING OPERATIONS</p><h1>jiaoyi</h1><p class="sub">Service status · read-only snapshot</p>"#);
+    h.push_str(&format!(
+        r#"<p class="note">Snapshot {} SGT · Reload for current figures.</p>"#,
+        now.with_timezone(&chrono_tz::Asia::Singapore)
+            .format("%d-%m-%Y %H:%M:%S")
+    ));
+    h.push_str(r#"<p class="goal-note"><strong>Goal</strong> · Risk:reward 1:1.38 · ≥73% net wins over the latest 20 qualified closes, per strategy and account. Setup checks do not establish an edge.</p><dl class="facts">"#);
     for (k, v) in [
         ("Service", txt(&health["service"])),
         (
@@ -355,10 +360,10 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     ] {
         h.push_str(&format!("<div><dt>{k}</dt><dd>{v}</dd></div>"));
     }
-    h.push_str("</dl></header>");
+    h.push_str(r##"</dl><nav class="dashboard-nav" aria-label="Dashboard sections"><a href="#accounts">Accounts</a><a href="#strategy-1">Strategy 1</a><a href="#strategy-3">Strategy 3</a><a href="/owner/assessments">Trade assessments</a><a href="/operations">Goal evidence</a></nav></header>"##);
 
     // Accounts: grant state and last load.
-    h.push_str(r#"<section><h2>Accounts</h2><div class="scroll"><table><thead><tr><th>Account</th><th>Environment</th><th>Grant</th><th>Last load</th><th>Status</th><th>Finished</th><th>Errors</th></tr></thead><tbody>"#);
+    h.push_str(r#"<details class="dashboard-card" id="accounts" open><summary><h2>Accounts</h2></summary><div class="card-body"><div class="account-grid">"#);
     let grants = rows(&health["token_grants"]);
     let loads = rows(&health["last_loads"]);
     let mut ids: Vec<i64> = grants
@@ -369,7 +374,7 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     ids.sort_unstable();
     ids.dedup();
     if ids.is_empty() {
-        h.push_str(r#"<tr><td colspan="7" class="empty">No account recorded yet.</td></tr>"#);
+        h.push_str(r#"<p class="empty">No account recorded yet.</p>"#);
     }
     for id in ids {
         let g = grants.iter().find(|r| r["account_id"].as_i64() == Some(id));
@@ -407,13 +412,13 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             None => ("—".into(), "—".into(), "—".into(), "—".into()),
         };
         h.push_str(&format!(
-            "<tr><td class=\"mono\">{id}</td><td>{env}</td><td>{grant}</td><td class=\"mono\">{run}</td><td>{status}</td><td class=\"mono\">{finished}</td><td>{errors}</td></tr>"
+            r#"<article class="account-card"><div class="account-heading"><h3 class="mono">{id}</h3><span class="pill">{env}</span></div><dl class="account-facts"><div><dt>Grant</dt><dd>{grant}</dd></div><div><dt>Last load</dt><dd class="mono">{run}</dd></div><div><dt>Status</dt><dd>{status}</dd></div><div><dt>Finished</dt><dd class="mono">{finished}</dd></div><div><dt>Errors</dt><dd>{errors}</dd></div></dl></article>"#
         ));
     }
-    h.push_str("</tbody></table></div></section>");
+    h.push_str("</div></div></details>");
 
     // Tick recorders.
-    h.push_str(r#"<section><h2>Tick recorders</h2><div class="scroll"><table><thead><tr><th>Account</th><th class="num">Written (this run)</th><th class="num">Last hour (stored)</th><th>Last tick received</th><th class="num">Symbols</th><th class="num">Sessions</th><th>Last flush</th><th>Last error</th></tr></thead><tbody>"#);
+    h.push_str(r#"<details class="dashboard-card" id="tick-recorders" open><summary><h2>Tick recorders</h2></summary><div class="card-body"><div class="scroll"><table><thead><tr><th>Account</th><th class="num">Written (this run)</th><th class="num">Last hour (stored)</th><th>Last tick received</th><th class="num">Symbols</th><th class="num">Sessions</th><th>Last flush</th><th>Last error</th></tr></thead><tbody>"#);
     let recorders = health["tick_recorders"].as_object();
     let ticks = rows(&health["ticks"]);
     let mut rec_ids: Vec<i64> = recorders
@@ -446,14 +451,14 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             get("last_flush_at"),
         ));
     }
-    h.push_str("</tbody></table></div></section>");
+    h.push_str("</tbody></table></div></div></details>");
 
     // Strategy 1 per account: whether it trades (demo at once, live once the
     // edge gate passes or the owner lifts it), the gate, the minimum-volume rule, the open-risk
     // budget, the last decision, whether the loop is alive (its reconcile
     // runs and last quote, recorded or not) and the positions it found that
     // it did not open. No money.
-    h.push_str(r#"<section><h2>Strategy 1: tick-triggered trend</h2><div class="scroll"><table><thead><tr><th>Account</th><th>Environment</th><th>Trades</th><th>Edge gate</th><th>Minimum volume</th><th class="num">Open-risk budget</th><th>Last decision</th><th>Loop</th><th class="num">External positions</th></tr></thead><tbody>"#);
+    h.push_str(r#"<details class="dashboard-card" id="strategy-1" open><summary><h2>Strategy 1: tick-triggered trend</h2></summary><div class="card-body"><div class="scroll"><table><thead><tr><th>Account</th><th>Environment</th><th>Trades</th><th>Edge gate</th><th>Minimum volume</th><th class="num">Open-risk budget</th><th>Last decision</th><th>Loop</th><th class="num">External positions</th></tr></thead><tbody>"#);
     let trading = rows(&health["trading"]);
     if trading.is_empty() {
         h.push_str(r#"<tr><td colspan="9" class="empty">No account recorded yet.</td></tr>"#);
@@ -519,12 +524,12 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     }
     h.push_str("</tbody></table></div>");
     h.push_str(&orders_link("s1"));
-    h.push_str("</section>");
+    h.push_str("</div></details>");
 
     // Claude · № 17,020 25-Oct (owner's Strategy 3 v2: a section per account)
     // Strategy 3 per account: its open positions, today's decisions and
     // today's trades. Prices and volumes only, no money.
-    h.push_str(r#"<section><h2>Strategy 3: intraday momentum</h2>"#);
+    h.push_str(r#"<details class="dashboard-card" id="strategy-3" open><summary><h2>Strategy 3: intraday momentum</h2></summary><div class="card-body">"#);
     let s3 = rows(&health["strategy3"]);
     if s3.is_empty() {
         h.push_str(r#"<p class="sub">No account recorded yet.</p>"#);
@@ -570,7 +575,7 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
         // Claude · № 17,074 25-Oct (ordered: owner "merge when green and
         // deploy"; Strategy 3's heartbeat, as #16 gave Strategy 1)
         h.push_str(&format!(
-            r#"<h3 class="mono">{} <span class="sub">{} · {}</span></h3><div class="note">Loop: {}</div><p class="note">Open: {pos}</p><p class="note">Decisions today: {}</p>"#,
+            r#"<article class="account-card strategy-account"><h3 class="mono">{} <span class="sub">{} · {}</span></h3><div class="note">Loop: {}</div><p class="note">Open: {pos}</p><p class="note">Decisions today: {}</p>"#,
             txt(&a["account_id"]),
             txt(&a["environment"]),
             txt(&a["sizing"]),
@@ -588,13 +593,13 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
         for t in trades {
             h.push_str(&trade_row(None, t));
         }
-        h.push_str("</tbody></table></div>");
+        h.push_str("</tbody></table></div></article>");
     }
     h.push_str(&orders_link("s3"));
-    h.push_str("</section>");
+    h.push_str("</div></details>");
 
     // Research jobs, with their trial's verdict.
-    h.push_str(r#"<section><h2>Research jobs</h2>"#);
+    h.push_str(r#"<details class="dashboard-card" id="research-jobs" open><summary><h2>Research jobs</h2></summary><div class="card-body">"#);
     h.push_str(&format!(
         r#"<p class="sub">Pre-registration <span class="mono">{}</span>, hash <span class="mono">{}</span>.</p>"#,
         txt(&jobs["prereg_file"]),
@@ -661,10 +666,10 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             .unwrap_or_else(|| "—".into()),
         ));
     }
-    h.push_str("</tbody></table></div></section>");
+    h.push_str("</tbody></table></div></div></details>");
 
     // Links to the JSON routes.
-    h.push_str(r#"<section><h2>JSON routes</h2><ul class="routes">"#);
+    h.push_str(r#"<details class="dashboard-card" id="json-routes" open><summary><h2>JSON routes</h2></summary><div class="card-body"><ul class="routes">"#);
     for (path, what) in ROUTES {
         let href = path.split('?').next().unwrap_or(path);
         h.push_str(&format!(
@@ -674,11 +679,14 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
             esc(what)
         ));
     }
-    h.push_str("</ul></section>");
+    h.push_str("</ul></div></details>");
     h.push_str(&format!(
-        r#"<footer>Generated {} UTC. Read-only: this page and the routes it links write nothing.</footer></main></body></html>"#,
+        r#"<footer>Generated {} UTC. Read-only: this page and the routes it links write nothing.</footer></main>"#,
         now.format("%Y-%m-%d %H:%M:%S")
     ));
+    h.push_str("<script>");
+    h.push_str(include_str!("trigger_pager.js"));
+    h.push_str("</script></body></html>");
     h
 }
 
@@ -692,9 +700,9 @@ const HEAD: &str = r#"<!doctype html>
 :root[data-theme="dark"]{--bg:#151514;--fg:#ececea;--muted:#a0a09a;--line:#33332f;--card:#1d1d1b;--good:#6fcf97;--warn:#f2c94c;--bad:#f28b82;--good-bg:#173323;--warn-bg:#3a2f12;--bad-bg:#3d1c1a;--link:#8ab4f8;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}
+main{max-width:1400px;margin:0 auto;padding:24px 16px 48px}
 h1{font-size:28px;margin:0}
-h2{font-size:18px;margin:32px 0 8px}
+h2{font-size:18px;margin:0}h3{font-size:16px;margin:20px 0 10px}
 .sub,.note,footer{color:var(--muted)}
 .note{font-size:13px}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
@@ -712,7 +720,37 @@ tr:last-child td{border-bottom:0}
 .pill.good{color:var(--good);background:var(--good-bg)}.pill.warn{color:var(--warn);background:var(--warn-bg)}.pill.bad{color:var(--bad);background:var(--bad-bg)}
 .routes{padding-left:18px}.routes li{margin:4px 0}
 a{color:var(--link)}
-footer{margin-top:40px;font-size:13px}
+.dashboard-header,.dashboard-card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 3px 16px #00000005;margin-bottom:20px;min-width:0}
+.dashboard-header{padding:24px;border-top:4px solid var(--link)}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;color:var(--muted);margin:0 0 6px}
+.goal-note{font-size:13px;padding:12px 14px;border-left:3px solid var(--link);background:var(--bg);border-radius:4px;overflow-wrap:anywhere}
+.dashboard-nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.dashboard-nav a{padding:7px 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:13px}
+.dashboard-nav a:hover{background:var(--bg)}
+.dashboard-card{scroll-margin-top:16px;overflow:hidden}
+.dashboard-card>summary{padding:18px 22px;cursor:pointer;display:flex;align-items:center;gap:12px;list-style:none}
+.dashboard-card>summary::-webkit-details-marker{display:none}
+.dashboard-card>summary:focus-visible{outline-offset:-4px}
+.dashboard-card>summary::after{content:"+";margin-left:auto;color:var(--muted);font-size:22px}
+.dashboard-card[open]>summary::after{content:"−"}
+.dashboard-card[open]>summary{border-bottom:1px solid var(--line)}
+.card-body{padding:20px 22px;min-width:0}
+.account-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px}
+.account-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0;overflow-wrap:anywhere}
+.account-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.account-heading h3{margin:0}
+.account-facts{display:grid;gap:12px;margin:16px 0 0}.account-facts dd{font-weight:400}
+.strategy-account{margin-top:20px;border-top:3px solid var(--link)}.strategy-account>h3{margin-top:0}
+.trigger-pager{margin:12px 0 20px;min-width:0}
+.trigger-scroll{max-height:28rem;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+.trigger-scroll thead th{position:sticky;top:0;z-index:1;background:var(--card);box-shadow:0 1px 0 var(--line)}
+.trigger-pager tr[hidden]{display:none}
+.trigger-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 10px;font-size:13px;color:var(--muted)}
+.trigger-pagination button{font:inherit;padding:7px 14px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--fg);cursor:pointer}
+.trigger-pagination button:disabled{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--link);outline-offset:3px}
+@media(max-width:600px){main{padding:12px 8px 24px}.dashboard-header{padding:18px 14px}.dashboard-card>summary{padding:16px 14px}.card-body{padding:14px 10px}.account-card{padding:12px}.trigger-pagination{gap:8px}.trigger-pagination [data-page-status]{order:3;flex-basis:100%;text-align:center}}
+@media print{.trigger-scroll{max-height:none;overflow:visible}.trigger-pager tr[hidden]{display:table-row}.trigger-pagination{display:none}}
+footer{margin-top:24px;font-size:13px}
 </style></head><body>
 "#;
 
