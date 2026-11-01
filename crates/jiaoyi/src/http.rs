@@ -41,6 +41,7 @@ fn router_with_owner_access(
 ) -> Router {
     Router::new()
         .route("/", get(status_page))
+        .route("/status-page.js", get(status_page_script))
         .route("/health", get(health))
         .route("/phase1/report", get(report))
         .route("/research/inventory", get(inventory))
@@ -283,7 +284,40 @@ async fn operations_page(State(s): State<AppState>) -> Response {
 
 /// `/`: the read-only status page, drawn from the same values as `/health`,
 /// `/research/jobs` and `/research/trials`.
-async fn status_page(State(s): State<AppState>) -> Response {
+#[derive(Default, serde::Deserialize)]
+struct DashboardQuery {
+    owner: Option<u8>,
+}
+
+async fn status_page_script() -> Response {
+    crate::owner_assessments::private_response(
+        (
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/javascript; charset=utf-8",
+            )],
+            crate::status_page::SCRIPT,
+        )
+            .into_response(),
+    )
+}
+
+async fn status_page(
+    State(s): State<AppState>,
+    Extension(access): Extension<crate::owner_assessments::OwnerAccess>,
+    Query(query): Query<DashboardQuery>,
+    headers: HeaderMap,
+) -> Response {
+    // An explicit sign-in challenges at /, so the browser can retain the
+    // existing owner Basic credentials for future visits to the homepage.
+    let owner = query.owner == Some(1) || headers.contains_key(axum::http::header::AUTHORIZATION);
+    if owner {
+        if let Err(status) = access.authorise(&headers) {
+            return crate::owner_assessments::refusal(status);
+        }
+    }
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    let positions = crate::setup_assessment::report(&accounts, owner);
     let recorders = s.recorders.lock().unwrap().clone();
     let loops = s.trading_loops.lock().unwrap().clone();
     let s3_loops = s.strategy3_loops.lock().unwrap().clone();
@@ -302,17 +336,17 @@ async fn status_page(State(s): State<AppState>) -> Response {
     };
     match values.await {
         Ok((health, jobs, trials)) => {
-            Html(crate::status_page::page(&health, &jobs, &trials, chrono::Utc::now()))
-                .into_response()
+            crate::owner_assessments::private_response(Html(crate::status_page::page_with_positions(
+                &health, &jobs, &trials, chrono::Utc::now(), &positions, owner,
+            )).into_response())
         }
-        Err(e) => (
+        Err(e) => crate::owner_assessments::private_response((
             StatusCode::SERVICE_UNAVAILABLE,
             Html(format!(
                 "<!doctype html><meta charset=\"utf-8\"><title>jiaoyi status</title><p>The status is unavailable: {}</p><p><a href=\"/health\">/health</a></p>",
                 crate::status_page::esc(&e.to_string())
             )),
-        )
-            .into_response(),
+        ).into_response()),
     }
 }
 
@@ -550,11 +584,18 @@ mod tests {
     use super::*;
 
     fn owner_test_router(password: Option<&str>) -> Router {
+        owner_test_router_with_pool(
+            password,
+            jiaoyi_store::sqlx::postgres::PgPoolOptions::new()
+                .connect_lazy("postgres://jiaoyi@127.0.0.1:5432/postgres")
+                .unwrap(),
+        )
+    }
+
+    fn owner_test_router_with_pool(password: Option<&str>, pool: PgPool) -> Router {
         router_with_owner_access(
             AppState {
-                pool: jiaoyi_store::sqlx::postgres::PgPoolOptions::new()
-                    .connect_lazy("postgres://jiaoyi@127.0.0.1:5432/postgres")
-                    .unwrap(),
+                pool,
                 loading: Arc::new(AtomicBool::new(false)),
                 recorders: Default::default(),
                 history: Default::default(),
@@ -564,6 +605,88 @@ mod tests {
             },
             crate::owner_assessments::OwnerAccess::new(password),
         )
+    }
+
+    #[jiaoyi_store::sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn homepage_owner_sign_in_keeps_private_scope_and_scripts_under_csp(pool: PgPool) {
+        use axum::body::Body;
+        use axum::http::Request;
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+        for (path, auth, status, private) in [
+            ("/", None, StatusCode::OK, false),
+            ("/?owner=1", None, StatusCode::UNAUTHORIZED, false),
+            ("/", Some("Bearer wrong"), StatusCode::UNAUTHORIZED, false),
+            (
+                "/?owner=1",
+                Some("Basic b3duZXI6c2VjcmV0"),
+                StatusCode::OK,
+                true,
+            ),
+            ("/", Some("Bearer secret"), StatusCode::OK, true),
+        ] {
+            let mut req = Request::builder().uri(path);
+            if let Some(value) = auth {
+                req = req.header("authorization", value);
+            }
+            let response = owner_test_router_with_pool(Some("secret"), pool.clone())
+                .oneshot(req.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status, "{path}");
+            assert_eq!(response.headers()["cache-control"], "no-store");
+            assert_eq!(response.headers()["vary"], "Authorization");
+            assert!(!response.headers()["content-security-policy"]
+                .to_str()
+                .unwrap()
+                .contains("script-src 'unsafe-inline'"));
+            let body = String::from_utf8(
+                response
+                    .into_body()
+                    .collect()
+                    .await
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec(),
+            )
+            .unwrap();
+            if status == StatusCode::OK {
+                assert!(!body.contains("<script>"));
+                assert!(body.contains("src=\"/status-page.js\""));
+                assert_eq!(body.contains("src=\"/owner/assessments.mjs\""), private);
+                assert_eq!(body.contains("Sign in to view all open trades"), !private);
+                assert!(
+                    body.find("id=\"open-trades\"").unwrap()
+                        < body.find("class=\"dashboard-header\"").unwrap()
+                );
+            }
+        }
+        let response = owner_test_router(None)
+            .oneshot(
+                Request::builder()
+                    .uri("/?owner=1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let script = owner_test_router(None)
+            .oneshot(
+                Request::builder()
+                    .uri("/status-page.js")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(script.status(), StatusCode::OK);
+        assert_eq!(
+            script.headers()["content-type"],
+            "text/javascript; charset=utf-8"
+        );
+        let bytes = script.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(bytes.as_ref(), crate::status_page::SCRIPT.as_bytes());
     }
 
     #[tokio::test]

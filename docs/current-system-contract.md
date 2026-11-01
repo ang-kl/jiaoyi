@@ -95,3 +95,33 @@ only navigates the displayed snapshot; it makes no requests, refreshes or tradin
 changes. Bot-trade reference: `Card.jsx`, `LiveMarketCard.jsx`, `StdTradeTable.jsx`
 and `index.css` at `20bca9026a84d65c4d08f03b4f1674aa86222063`. The active-page
 restrictions in §CURRENT.18 remain intact. By <Codex (GPT-6), effort: not exposed>.
+
+[§CURRENT.20] Following the missing-live-trades report and card-placement request
+(№18,178–18,183, 2 November 2026, 07:32–07:48 SGT), **Open trades** is the first
+homepage card. It uses the independent whole-account broker inventory, including
+S1, S3 and external/manual positions; S3's persisted reconciliation is labelled
+as historical strategy evidence. Public visitors see aggregate counts and an
+owner sign-in link. `/?owner=1` challenges with the existing owner credentials;
+authenticated visits to `/` show private position cards with account identity,
+ownership, quantity, entry, bid/ask, SL/TP and source times. Real-money accounts
+with positions precede demo accounts. Both root variants use no-store and
+Vary: Authorization; scripts are same-origin resources permitted by the CSP.
+
+Initial position visibility is independent of live-refresh eligibility. Missing
+or stale evidence is not a zero-position certificate. Live price direction
+compares consecutive displayed, newer executable exit quotes (bid for buys, ask
+for sells); it is not profit/loss, momentum or an entry signal. Active styling
+and direction clear on blur, hiding, collapsed inventory, failure or expiry.
+The browser retains one request at a time and five-second spacing after completion.
+
+Display eligibility now evaluates IANA broker schedules and applicable holidays
+in their own timezone. Irrelevant historical holidays cannot disable today's
+display; applicable malformed data remain unknown. A cached offset boundary
+stops a display lease at session/day/DST boundaries. This does not change the
+existing execution calendar or new-entry checks. One bounded, active-page status
+read may revalidate an expired previously known-open window; only fresh evidence
+of an open market permits repaint. Confirmed closed/unknown windows stop polling;
+initially unknown schedules do not start a polling loop. Fresh complete books
+can remove broker-confirmed closed positions. No ownership, risk, entry/exit,
+worker permission or financial-goal change is authorised by this UI repair.
+By <Codex (GPT-6), effort: not exposed>.

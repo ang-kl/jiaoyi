@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLiveUpdater } from '../../src/owner_assessments.mjs';
+import { createLiveUpdater, priceDirection } from '../../src/owner_assessments.mjs';
 
 const flush = async () => {
   for (let i = 0; i < 12; i += 1) await Promise.resolve();
@@ -45,6 +45,7 @@ function harness({ active = true, market = true } = {}) {
   const requests = [];
   const applied = [];
   const statuses = [];
+  const pauses = [];
   const controller = createLiveUpdater({
     isActive: () => state.active,
     canPoll: () => state.market,
@@ -59,11 +60,12 @@ function harness({ active = true, market = true } = {}) {
     },
     applyUpdate: value => applied.push(value),
     status: (...values) => statuses.push(values),
+    onPause: () => pauses.push(timer.now()),
     setTimer: timer.set,
     clearTimer: timer.clear,
     now: timer.now,
   });
-  return { timer, state, requests, applied, statuses, controller };
+  return { timer, state, requests, applied, statuses, pauses, controller };
 }
 
 test('inactive pages and closed/unknown markets make no automatic requests', async () => {
@@ -199,4 +201,37 @@ test('pagehide stop stays stopped after late completion even if the document sti
   assert.deepEqual(h.applied, []);
   assert.equal(h.requests.length, 1);
   assert.equal(h.timer.count(), 0);
+});
+
+test('a market closing between requests clears live presentation without making another request', async () => {
+  const h = harness();
+  h.controller.sync();
+  h.requests[0].resolve({ current: true });
+  await flush();
+  assert.equal(h.pauses.length, 0);
+  h.state.market = false;
+  await h.timer.advance(5_000);
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.pauses.length, 1);
+  assert.equal(h.timer.count(), 0);
+  assert.match(h.statuses.at(-1)[0], /Updates paused/);
+});
+
+test('price direction uses a newer comparable exit-side quote, never entry price or inferred P&L', () => {
+  const before = {side: 'buy', bid: '100', ask: '102', quoteAt: '2026-11-02T00:00:00Z'};
+  const after = {...before, bid: '101', ask: '101.5', quoteAt: '2026-11-02T00:00:01Z'};
+  assert.deepEqual(priceDirection(before, after), {direction: 'up', text: 'Price ↑ +1'});
+  assert.deepEqual(priceDirection({...before, side: 'sell'}, {...after, side: 'sell'}),
+    {direction: 'down', text: 'Price ↓ −0.5'});
+  assert.equal(priceDirection(before, {...after, bid: '100'}).direction, 'unchanged');
+  for (const current of [
+    {...after, quoteAt: before.quoteAt},
+    {...after, quoteAt: '2026-11-01T23:59:59Z'},
+    {...after, quoteAt: 'invalid'},
+    {...after, side: 'sell'},
+    {...after, bid: ''},
+    {...after, bid: 'NaN'},
+  ]) assert.equal(priceDirection(before, current).direction, 'unknown');
+  assert.equal(priceDirection(undefined, after).direction, 'unknown');
+  assert.equal(priceDirection({...before, bid: ''}, after).direction, 'unknown');
 });

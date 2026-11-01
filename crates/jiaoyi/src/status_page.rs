@@ -327,9 +327,26 @@ fn s3_trigger_table(a: &Value) -> String {
 /// The page, from the `/health`, `/research/jobs` and `/research/trials`
 /// values.
 pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) -> String {
+    page_with_positions(health, jobs, trials, now, &serde_json::json!({}), false)
+}
+
+pub const SCRIPT: &str = include_str!("trigger_pager.js");
+
+pub fn page_with_positions(
+    health: &Value,
+    jobs: &Value,
+    trials: &Value,
+    now: DateTime<Utc>,
+    positions: &Value,
+    owner: bool,
+) -> String {
     let mut h = String::new();
     h.push_str(HEAD);
-    h.push_str(r#"<main><header class="dashboard-header"><p class="eyebrow">TRADING OPERATIONS</p><h1>jiaoyi</h1><p class="sub">Service status · read-only snapshot</p>"#);
+    h.push_str(r#"<main><div class="site-heading"><h1>jiaoyi</h1><span class="sub">Trading dashboard</span></div>"#);
+    h.push_str(&crate::owner_assessments::home_card(
+        positions, health, owner,
+    ));
+    h.push_str(r#"<header class="dashboard-header"><p class="eyebrow">SYSTEM SNAPSHOT</p><p class="sub">Service status · read-only snapshot</p>"#);
     h.push_str(&format!(
         r#"<p class="note">Snapshot {} SGT · Reload for current figures.</p>"#,
         now.with_timezone(&chrono_tz::Asia::Singapore)
@@ -360,7 +377,7 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     ] {
         h.push_str(&format!("<div><dt>{k}</dt><dd>{v}</dd></div>"));
     }
-    h.push_str(r##"</dl><nav class="dashboard-nav" aria-label="Dashboard sections"><a href="#accounts">Accounts</a><a href="#strategy-1">Strategy 1</a><a href="#strategy-3">Strategy 3</a><a href="/owner/assessments">Trade assessments</a><a href="/operations">Goal evidence</a></nav></header>"##);
+    h.push_str(r##"</dl><nav class="dashboard-nav" aria-label="Dashboard sections"><a href="#open-trades">Open trades</a><a href="#accounts">Accounts</a><a href="#strategy-1">Strategy 1</a><a href="#strategy-3">Strategy 3</a><a href="/owner/assessments">Trade assessments</a><a href="/operations">Goal evidence</a></nav></header>"##);
 
     // Accounts: grant state and last load.
     h.push_str(r#"<details class="dashboard-card" id="accounts" open><summary><h2>Accounts</h2></summary><div class="card-body"><div class="account-grid">"#);
@@ -549,7 +566,7 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
     for a in s3 {
         let positions = rows(&a["open_positions"]);
         let pos = if positions.is_empty() {
-            "none".to_string()
+            "none recorded in this strategy snapshot".to_string()
         } else {
             positions
                 .iter()
@@ -575,11 +592,12 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
         // Claude · № 17,074 25-Oct (ordered: owner "merge when green and
         // deploy"; Strategy 3's heartbeat, as #16 gave Strategy 1)
         h.push_str(&format!(
-            r#"<article class="account-card strategy-account"><h3 class="mono">{} <span class="sub">{} · {}</span></h3><div class="note">Loop: {}</div><p class="note">Open: {pos}</p><p class="note">Decisions today: {}</p>"#,
+            r#"<article class="account-card strategy-account"><h3 class="mono">{} <span class="sub">{} · {}</span></h3><div class="note">Loop: {}</div><p class="note">Last recorded S3 positions: {pos} · Reconciled {}. The Open trades card above shows the whole-account broker inventory.</p><p class="note">Decisions today: {}</p>"#,
             txt(&a["account_id"]),
             txt(&a["environment"]),
             txt(&a["sizing"]),
             loop_cell(&a["liveness"]),
+            txt(&a["last_reconcile_at"]),
             if counts.is_empty() { "none".to_string() } else { counts },
         ));
         // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
@@ -684,9 +702,11 @@ pub fn page(health: &Value, jobs: &Value, trials: &Value, now: DateTime<Utc>) ->
         r#"<footer>Generated {} UTC. Read-only: this page and the routes it links write nothing.</footer></main>"#,
         now.format("%Y-%m-%d %H:%M:%S")
     ));
-    h.push_str("<script>");
-    h.push_str(include_str!("trigger_pager.js"));
-    h.push_str("</script></body></html>");
+    h.push_str(r#"<script src="/status-page.js" defer></script>"#);
+    if owner {
+        h.push_str(r#"<script type="module" src="/owner/assessments.mjs"></script>"#);
+    }
+    h.push_str("</body></html>");
     h
 }
 
@@ -740,6 +760,8 @@ a{color:var(--link)}
 .account-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.account-heading h3{margin:0}
 .account-facts{display:grid;gap:12px;margin:16px 0 0}.account-facts dd{font-weight:400}
 .strategy-account{margin-top:20px;border-top:3px solid var(--link)}.strategy-account>h3{margin-top:0}
+.open-trades-card{border-top:3px solid var(--link)}.position-account{margin:16px 0}.position-account .scroll{max-height:36rem;overflow:auto}.position-account small{color:var(--muted)}.position-checks>summary{cursor:pointer;white-space:nowrap}.position-checks{font-size:12px;max-width:34rem}.owner-sign-in{display:inline-block;padding:9px 14px;border-radius:8px;background:var(--link);color:var(--card);font-weight:600;text-decoration:none}
+.site-heading{display:flex;align-items:center;gap:16px;margin-bottom:16px}.position-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:14px}.live-trade-card{border:1px solid var(--line);border-top:3px solid var(--muted);border-radius:10px;padding:16px;min-width:0;overflow-wrap:anywhere}.live-trade-card>header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}.live-trade-card h3{margin:0}.position-price{display:flex;align-items:center;justify-content:space-between;gap:10px}.position-price strong{font-size:26px;font-variant-numeric:tabular-nums}.position-levels{display:grid;grid-template-columns:1fr 1fr;gap:12px}.position-live{border-top-color:var(--good)}.position-live [data-update-status]{background:var(--good-bg);color:var(--good)}[data-direction="up"]{color:var(--good)}[data-direction="down"]{color:var(--bad)}[data-direction="unchanged"],[data-direction="unknown"]{color:var(--muted)}
 .trigger-pager{margin:12px 0 20px;min-width:0}
 .trigger-scroll{max-height:28rem;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
 .trigger-scroll thead th{position:sticky;top:0;z-index:1;background:var(--card);box-shadow:0 1px 0 var(--line)}
