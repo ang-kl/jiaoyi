@@ -776,3 +776,41 @@ risk-limit change or worker permission renewal. Missing exact №18,083 remains 
 scope item, not a blocker to known work. Re-read origin/main95e631a and GROK_Log
 unchanged through№17,703 before numbering. See docs/all-trades-assessment-release-
 2026-11-01.md and its economic disposition. Private evidence stays outside Git.
+
+
+[§LOG.75] №18,103–18,111 §§1–2; entry 1 November 2026, 19:26 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR148 https://github.com/ang-kl/jiaoyi/pull/148 first headf28a3ab passed643 Rust,
+178 coordinator and all three CI jobs. Final plan audit nevertheless identified
+four omissions: permission explanations, bounded deadline incidents, dispatch
+impact measurements and component recovery instructions. These are corrected in
+the same PR before merge; earlier green does not certify the amended source.
+The actual incident store is32/32 with no closed record; bounded factual overflow
+retains new observer episodes without deleting unresolved incidents or spending
+model sessions. Its coordinator component needs an exact-source release, with
+existing expired mutation window and session ceiling retained. Historical queue
+records outside the public latest20 remain unverified, not falsely completed.
+A full S3/PostgreSQL/protobuf benchmark completed34 synthetic admissions across
+12 declared scenarios: ordinary warm cases16–31ms, cold1.53–1.55s; late/delayed
+expired attempts emitted zero frames. Historical selected intents include1/6
+and2/8 already beyond five seconds; broader cohorts lack registration/decision
+clocks, so these are conditional bounds, not measured v7 rejection rates. Main
+review retains versioned deadline under owner execution authority; no zero-impact
+or financial PASS claim. See dispatch benchmark/release docs. Amended integrated
+checks, exact trading/worker source and30-minute observation remain pending; see
+PR148 final receipt for closure and subsequent serials. GROK_Log unchanged through
+№17,703; recheck before allocating future serials.
+
+
+[§LOG.76] №18,112–18,114 §§1–2; entry 1 November 2026, 19:30 SGT; by <Codex (GPT-6), effort: not exposed>.
+Amended PR148 closes the four known plan gaps. Observer32 tests and coordinator188
+pass; saturated-projection recurrence, overflow/restart/recovery and entry-blocker
+provenance are checked. Deadline accounting now uses the scheduled tick's one-second
+completion budget and explicit skipped intervals, replacing the1.5s heuristic;
+event-triggered publications cannot conceal a skipped timer. S1's three full-path
+controls measured7–10ms with one opening frame and over5.99s budget remaining.
+Component recovery procedures retain ledger compatibility and exit protection.
+Final integrated suite/updated requiredCI/merge/deployed readback are still gates;
+follow PR148 final receipt for actual completion and latest subsequent serial.
+The first integrated source had643 passing Rust tests; amended totals will be
+recorded from their final log. No financial
+PASS, forced order or renewal of worker authority.

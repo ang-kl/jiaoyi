@@ -118,6 +118,27 @@ fn checks(value: &Value) -> String {
     }
 }
 
+fn incidents(value: &Value) -> String {
+    let Some(rows) = value.as_array() else {
+        return "Observer incident state unavailable".into();
+    };
+    if rows.is_empty() {
+        return "No observer incident reported".into();
+    }
+    rows.iter()
+        .take(3)
+        .map(|item| {
+            format!(
+                "<div><b>{}: {}</b> — {} <small>(opened {})</small></div>",
+                text(&item["kind"]),
+                text(&item["state"]),
+                text(&item["reason"]),
+                text(&item["opened_at"])
+            )
+        })
+        .collect()
+}
+
 pub fn page(report: &Value) -> String {
     let generated = chrono::Utc::now()
         .with_timezone(&chrono_tz::Asia::Singapore)
@@ -142,11 +163,11 @@ pub fn page(report: &Value) -> String {
             rows.push_str("<tr><td colspan=5>No objects reported. Check source completeness before treating this as an empty account.</td></tr>");
         }
         sections.push_str(&format!(
-            "<section><h2>Account {}</h2><p>Assessment: {} · Broker book: {} · Evidence complete: {} · Revision: {}</p><p>Positions: {} · Pending entries: {} · Protective orders: {} · Breaches: {} · Unknown checks: {}</p><div class=checks>{}</div><div class=scroll><table><thead><tr><th>Instrument / object</th><th>Side / quantity</th><th>Entry / trigger</th><th>SL / TP</th><th>Checks and reasons</th></tr></thead><tbody>{}</tbody></table></div></section>",
+            "<section><h2>Account {}</h2><p>Assessment: {} · Broker book: {} · Evidence complete: {} · Revision: {}</p><p>Positions: {} · Pending entries: {} · Protective orders: {} · Breaches: {} · Blocked new-entry checks: {} · Unknown checks: {}</p><p>Completed evaluations: {} · Scheduled evaluations: {} · Missed deadlines: {} · p99 completion interval: {} ms</p><div class=checks>{}</div><div class=checks>{}</div><div class=scroll><table><thead><tr><th>Instrument / object</th><th>Side / quantity</th><th>Entry / trigger</th><th>SL / TP</th><th>Checks and reasons</th></tr></thead><tbody>{}</tbody></table></div></section>",
             text(&account["account_id"]), text(&account["assessed_at"]), text(&account["book_at"]),
             text(&account["evidence_complete"]), text(&account["revision"]), text(&account["position_count"]),
             text(&account["pending_entry_count"]), text(&account["protective_order_count"]),
-            text(&account["breach_count"]), text(&account["unknown_count"]), checks(&account["account_checks"]), rows
+            text(&account["breach_count"]), text(&account["blocked_entry_check_count"]), text(&account["unknown_count"]), text(&account["timing"]["completed"]), text(&account["timing"]["scheduled_evaluations"]), text(&account["timing"]["missed_deadlines"]), text(&account["timing"]["p99_interval_ms"]), checks(&account["account_checks"]), incidents(&account["incidents"]), rows
         ));
     }
     format!(

@@ -3,6 +3,8 @@
 //! Ownership controls management, not observation. Nothing here can send an order.
 
 mod evaluate;
+mod health;
+mod permissions;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -50,16 +52,20 @@ pub fn report(accounts: &[i64], private: bool) -> Value {
             "evidence_complete":x["evidence_complete"],"position_count":x["position_count"],
             "pending_entry_count":x["pending_entry_count"],"protective_order_count":x["protective_order_count"],
             "breach_count":x["breach_count"],"unknown_count":x["unknown_count"],
+            "blocked_entry_check_count":x["blocked_entry_check_count"],"incidents":x["incidents"],
             "timing":x["timing"],"source_state":x["source_state"],
             "persistence_state":x["persistence_state"],"no_trade_authority":true})
     }).collect();
     json!({"schema_version":1,"mode":"read_only_setup_assessment","interval_ms":1000,
+        "incident_recovery_max_age_secs":health::RECOVERY_MAX_AGE_SECS,
         "evidence_note":"cached streaming evidence; a timer does not certify fresh broker truth",
         "accounts":rows})
 }
 
 struct State {
     input: Input,
+    incidents: health::Incidents,
+    started_at: DateTime<Utc>,
     event_seq: u64,
     source_error: Option<&'static str>,
     quotes_received: u64,
@@ -74,6 +80,12 @@ struct State {
     persistence_state: &'static str,
     completions: u64,
     missed_deadlines: u64,
+    skipped_scheduled_intervals: u64,
+    scheduled_evaluations: u64,
+    last_scheduled: Option<Instant>,
+    last_deadline_lateness_ms: u128,
+    max_deadline_lateness_ms: u128,
+    last_evaluation_duration_ms: u128,
     last_completed: Option<Instant>,
     max_interval_ms: u128,
     intervals: VecDeque<u128>,
@@ -101,7 +113,10 @@ impl State {
                 equity_at: None,
                 gross_pnl_by_position: HashMap::new(),
                 pending_margin: None,
+                permissions: HashMap::new(),
             },
+            incidents: health::Incidents::default(),
+            started_at: Utc::now(),
             event_seq: 0,
             source_error: Some("awaiting_initial_book"),
             quotes_received: 0,
@@ -116,6 +131,12 @@ impl State {
             persistence_state: "not_yet_persisted",
             completions: 0,
             missed_deadlines: 0,
+            skipped_scheduled_intervals: 0,
+            scheduled_evaluations: 0,
+            last_scheduled: None,
+            last_deadline_lateness_ms: 0,
+            max_deadline_lateness_ms: 0,
+            last_evaluation_duration_ms: 0,
             last_completed: None,
             max_interval_ms: 0,
             intervals: VecDeque::new(),
@@ -130,6 +151,7 @@ impl State {
         self.input.gross_pnl_by_position.clear();
         self.input.pending_margin = None;
         self.input.strategy.clear();
+        self.input.permissions.clear();
         self.source_error = Some(reason);
     }
 
@@ -298,6 +320,7 @@ impl State {
         self.input.positions = positions;
         self.input.orders = book.order;
         self.input.strategy.clear();
+        self.input.permissions.clear();
         self.input.pending_margin = None;
         self.input.book_at = Some(at);
         self.input.complete = true;
@@ -394,24 +417,63 @@ fn material(v: &Value) -> Value {
         "kind":o["kind"],"id":o["id"],"side":o["side"],"volume":o["volume"],"entry":o["entry"],
         "stop_loss":o["stop_loss"],"take_profit":o["take_profit"],"strategy_key":o["strategy"]["entry_key"],
         "checks":checks(&o["checks"])})).collect()).unwrap_or_default();
-    json!({"state":v["state"],"source_state":v["source_state"],"objects":objects,"checks":checks(&v["account_checks"])})
+    let incidents: Vec<Value> = v["incidents"].as_array().into_iter().flatten()
+        .map(|i| json!({"id":i["id"],"kind":i["kind"],"state":i["state"],"episode":i["episode"],"reason":i["reason"]})).collect();
+    json!({"state":v["state"],"source_state":v["source_state"],"objects":objects,"checks":checks(&v["account_checks"]),"incidents":incidents})
+}
+
+/// Budget belongs to the scheduled tick, not the previous event publication.
+/// Normal scheduling jitter is allowed within this tick's one-second interval.
+fn deadline_observation(
+    previous: Option<Instant>,
+    scheduled: Instant,
+    completed: Instant,
+) -> (u64, u64, u128) {
+    let skipped = previous.map_or(0, |last| {
+        (scheduled.saturating_duration_since(last).as_millis() / 1000).saturating_sub(1) as u64
+    });
+    let deadline = scheduled + Duration::from_secs(1);
+    let overdue = completed > deadline;
+    let lateness_ms = completed
+        .saturating_duration_since(deadline)
+        .as_nanos()
+        .div_ceil(1_000_000);
+    (
+        skipped.saturating_add(u64::from(overdue)),
+        skipped,
+        lateness_ms,
+    )
 }
 
 fn publish(shared: &Shared) {
+    publish_scheduled(shared, None);
+}
+
+fn publish_scheduled(shared: &Shared, scheduled: Option<Instant>) {
+    let started = Instant::now();
     let mut s = shared.lock().unwrap();
     s.input.now = Utc::now();
     let mut input = s.input.clone();
     conversion_rates(&mut input);
     let mut value = serde_json::to_value(evaluate::evaluate(&input)).unwrap();
     let now = Instant::now();
+    let missed_before = s.missed_deadlines;
+    s.last_evaluation_duration_ms = now
+        .saturating_duration_since(started)
+        .as_nanos()
+        .div_ceil(1_000_000);
+    if let Some(scheduled) = scheduled {
+        let (missed, skipped, lateness_ms) = deadline_observation(s.last_scheduled, scheduled, now);
+        s.missed_deadlines = s.missed_deadlines.saturating_add(missed);
+        s.skipped_scheduled_intervals = s.skipped_scheduled_intervals.saturating_add(skipped);
+        s.scheduled_evaluations = s.scheduled_evaluations.saturating_add(1);
+        s.last_scheduled = Some(scheduled);
+        s.last_deadline_lateness_ms = lateness_ms;
+        s.max_deadline_lateness_ms = s.max_deadline_lateness_ms.max(lateness_ms);
+    }
     if let Some(last) = s.last_completed {
         let elapsed = now.duration_since(last).as_millis();
         s.max_interval_ms = s.max_interval_ms.max(elapsed);
-        if elapsed > 1500 {
-            s.missed_deadlines = s
-                .missed_deadlines
-                .saturating_add((elapsed / 1000).saturating_sub(1) as u64);
-        }
         s.intervals.push_back(elapsed);
         while s.intervals.len() > 300 {
             s.intervals.pop_front();
@@ -428,6 +490,34 @@ fn publish(shared: &Shared) {
     });
     value["source_state"] = json!(s.source_error.unwrap_or("observed"));
     value["last_event_at"] = json!(s.last_event_at);
+    let fresh_book = input.book_at.is_some_and(|at| {
+        at <= input.now && (input.now - at).num_seconds() <= evaluate::MAX_BOOK_AGE_SECS
+    });
+    let source_failed = input.connected
+        && (matches!(
+            s.source_error,
+            Some(
+                "source_read_failed"
+                    | "execution_decode_gap"
+                    | "execution_stream_gap"
+                    | "account_event_decode_gap"
+                    | "book_exceeds_bounded_capacity"
+                    | "invalid_book_identity"
+            )
+        ) || (input.now - input.book_at.unwrap_or(s.started_at)).num_seconds()
+            > evaluate::MAX_BOOK_AGE_SECS);
+    let healthy = input.connected && input.complete && fresh_book && s.source_error.is_none();
+    let missed = s.missed_deadlines > missed_before;
+    s.incidents.observe(
+        input.account_id,
+        input.now,
+        input.revision,
+        healthy,
+        missed,
+        source_failed,
+        input.connected,
+    );
+    value["incidents"] = json!(s.incidents.rows());
     let sig = material(&value);
     let current: HashMap<String, Value> = value["objects"]
         .as_array()
@@ -479,6 +569,9 @@ fn publish(shared: &Shared) {
             .copied()
     };
     value["timing"] = json!({"completed":s.completions,"missed_deadlines":s.missed_deadlines,
+        "scheduled_evaluations":s.scheduled_evaluations,"skipped_scheduled_intervals":s.skipped_scheduled_intervals,
+        "deadline_budget_ms":1000,"last_deadline_lateness_ms":s.last_deadline_lateness_ms,
+        "max_deadline_lateness_ms":s.max_deadline_lateness_ms,"last_evaluation_duration_ms":s.last_evaluation_duration_ms,
         "max_interval_ms":s.max_interval_ms,"p95_interval_ms":pct(95),"p99_interval_ms":pct(99),
         "quotes_received":s.quotes_received,"interval_sample_count":intervals.len(),
         "last_event_to_assessment_ms":s.last_event_latency_ms,
@@ -910,15 +1003,12 @@ async fn pending_margins(
 async fn context(pool: &PgPool, state: &Shared, wake: &Notify, mut stop: Shutdown) {
     loop {
         tokio::select! {_=stop.wait()=>return,_=wake.notified()=>{}}
-        let (account, revision, positions) = {
-            let s = state.lock().unwrap();
-            (
-                s.input.account_id,
-                s.input.revision,
-                s.input.positions.clone(),
-            )
-        };
-        let strategy = strategy_evidence(pool, account, &positions).await;
+        let mut input = state.lock().unwrap().input.clone();
+        let account = input.account_id;
+        let revision = input.revision;
+        let strategy = strategy_evidence(pool, account, &input.positions).await;
+        input.strategy = strategy.clone();
+        let permissions = permissions::collect(pool, &input).await;
         let floor = jiaoyi_store::settings::snapshot(pool, Some(account))
             .await
             .ok()
@@ -926,6 +1016,7 @@ async fn context(pool: &PgPool, state: &Shared, wake: &Notify, mut stop: Shutdow
         let mut s = state.lock().unwrap();
         if s.input.revision == revision {
             s.input.strategy = strategy;
+            s.input.permissions = permissions;
             s.input.margin_floor_pct = floor;
         }
     }
@@ -957,7 +1048,8 @@ async fn persist(pool: &PgPool, state: &Shared, mut stop: Shutdown) {
             prior.pop_front();
         }
         s.changes = prior;
-        // Only historical transitions are restored. A saved book never
+        s.incidents.restore(account, &detail["incidents"]);
+        // Only historical transitions and incident episodes are restored. A saved book never
         // certifies current positions or acquires management authority.
     }
     // Make restored history part of the first durable replacement, even if
@@ -1001,13 +1093,15 @@ async fn persist(pool: &PgPool, state: &Shared, mut stop: Shutdown) {
 /// The lifetime guard marks evidence disconnected on cancellation or reconnect.
 pub async fn run_session(pool: &PgPool, session: &AccountSession<'_>, mut shutdown: Shutdown) {
     let account = session.account().id();
-    let generation = {
+    let (generation, prior_incidents) = {
         let mut m = reports().lock().unwrap();
         let p = m.entry(account).or_default();
         p.generation = p.generation.saturating_add(1);
-        p.generation
+        (p.generation, p.latest["incidents"].clone())
     };
-    let shared = Arc::new(Mutex::new(State::new(account, generation)));
+    let mut initial = State::new(account, generation);
+    initial.incidents.restore(account, &prior_incidents);
+    let shared = Arc::new(Mutex::new(initial));
     let _guard = SessionGuard {
         state: shared.clone(),
     };
@@ -1038,7 +1132,7 @@ pub async fn run_session(pool: &PgPool, session: &AccountSession<'_>, mut shutdo
             _=&mut save=>return,
             _=&mut evidence=>return,
             _=&mut margin=>return,
-            _=tick.tick()=>publish(&shared),
+            scheduled=tick.tick()=>publish_scheduled(&shared, Some(scheduled)),
             e=ends.recv()=>match e {Ok(e) if e.affects(account)=>return,Err(RecvError::Closed)=>return,_=>{}},
             q=spots.recv()=>match q {
                 Ok(q)=>shared.lock().unwrap().quote(&q.event,q.received_at),
@@ -1342,11 +1436,91 @@ mod tests {
         assert!(!fresh.input.complete);
     }
 
+    #[test]
+    fn deadline_uses_scheduled_budget_and_counts_skipped_intervals_without_jitter_false_alarm() {
+        let t = Instant::now();
+        // 12ms normal scheduler jitter still finishes within its scheduled interval.
+        assert_eq!(
+            deadline_observation(
+                Some(t),
+                t + Duration::from_secs(1),
+                t + Duration::from_millis(1012)
+            ),
+            (0, 0, 0)
+        );
+        // A 1.2-second delayed completion misses the one-second budget by 200ms.
+        assert_eq!(
+            deadline_observation(
+                Some(t),
+                t + Duration::from_secs(1),
+                t + Duration::from_millis(2200)
+            ),
+            (1, 0, 200)
+        );
+        // Tokio Skip may omit two ticks: retain both even when current work is fast.
+        assert_eq!(
+            deadline_observation(
+                Some(t),
+                t + Duration::from_secs(3),
+                t + Duration::from_millis(3005)
+            ),
+            (2, 2, 0)
+        );
+        assert_eq!(
+            deadline_observation(None, t, t + Duration::from_secs(1)),
+            (0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn deadline_and_source_failures_publish_bounded_incidents_without_tick_writes() {
+        let account = 706;
+        reports().lock().unwrap().insert(
+            account,
+            Published {
+                generation: 1,
+                latest: Value::Null,
+            },
+        );
+        let shared = Arc::new(Mutex::new(State::new(account, 1)));
+        {
+            let mut s = shared.lock().unwrap();
+            let mut b = book(100);
+            b.ctid_trader_account_id = account;
+            assert!(s.install(0, b, Utc::now()));
+        }
+        publish_scheduled(&shared, Some(Instant::now() - Duration::from_millis(1200)));
+        let first = report(&[account], true)["accounts"][0].clone();
+        assert_eq!(first["incidents"][0]["kind"], "deadline_missed");
+        assert_eq!(first["incidents"][0]["state"], "active");
+        publish(&shared);
+        let second = report(&[account], true)["accounts"][0].clone();
+        assert_eq!(material(&first), material(&second));
+        // Closed-market/missing quotes are not a broken account-book source.
+        assert_eq!(second["incidents"].as_array().unwrap().len(), 1);
+        {
+            let mut s = shared.lock().unwrap();
+            s.source_error = Some("source_read_failed");
+        }
+        publish(&shared);
+        let public = report(&[account], false);
+        let incidents = public["accounts"][0]["incidents"].as_array().unwrap();
+        assert_eq!(incidents.len(), 2);
+        assert_eq!(public["incident_recovery_max_age_secs"], 15);
+        assert!(incidents
+            .iter()
+            .all(|i| i.get("position_id").is_none() && i.get("volume").is_none()));
+        assert!(material(&first) != material(&report(&[account], true)["accounts"][0]));
+    }
+
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
     async fn bounded_history_survives_restart_without_restoring_broker_state(pool: PgPool) {
         let account = 705;
+        let mut incidents = health::Incidents::default();
+        incidents.observe(account, Utc::now(), 50, false, true, false, true);
+        let saved_incidents = json!(incidents.rows());
         sqlx::query("INSERT INTO setup_assessment_snapshots(account_id,observed_at,detail) VALUES($1,now(),$2)")
-            .bind(account).bind(json!({"transitions":[{"kind":"previous_close","source":"historical"}],"objects":[{"id":999}]}))
+            .bind(account).bind(json!({"transitions":[{"kind":"previous_close","source":"historical"}],"objects":[{"id":999}],"incidents":saved_incidents}))
             .execute(&pool).await.unwrap();
         reports().lock().unwrap().insert(
             account,
@@ -1383,6 +1557,11 @@ mod tests {
             .iter()
             .any(|v| v["kind"] == "previous_close"));
         assert!(detail["objects"].as_array().unwrap().is_empty());
+        assert_eq!(
+            detail["incidents"][0]["episode"],
+            saved_incidents[0]["episode"]
+        );
+        assert_eq!(detail["incidents"][0]["state"], "active");
         assert!(!detail["evidence_complete"].as_bool().unwrap());
         assert!(shared.lock().unwrap().input.positions.is_empty());
     }

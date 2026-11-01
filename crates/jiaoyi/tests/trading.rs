@@ -463,6 +463,26 @@ async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
             "ORDER_REPLACED"
         ]
     );
+    let receipt: Vec<u8> = sqlx::query_scalar(
+        "SELECT raw FROM trading_events WHERE kind='ENTRY_VALIDATED_BEFORE_SEND'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let snapshot: serde_json::Value = serde_json::from_slice(&receipt).unwrap();
+    let budget_ms = jiaoyi_ctrader::entry_guard::MAX_QUOTE_AGE.as_millis() as u64;
+    let remaining_ms = snapshot["remaining_dispatch_ms"].as_u64().unwrap();
+    let elapsed_upper_ms = budget_ms - remaining_ms;
+    // The receipt floors remaining milliseconds; the subtraction is an
+    // upper bound within one millisecond, not network or fill latency.
+    eprintln!(
+        "S1_DISPATCH_BENCH {}",
+        json!({"policy":snapshot["policy"],"initial_budget_ms":budget_ms,
+            "selected_to_final_guard_ms_lower":elapsed_upper_ms.saturating_sub(1),
+            "selected_to_final_guard_ms_upper":elapsed_upper_ms,
+            "remaining_dispatch_ms":remaining_ms,"broker_frames":orders.len(),
+            "source":"existing full S1 PostgreSQL/wire-broker control; not production"})
+    );
     // A restart after the position was stopped out: the same completed day's
     // entry key is recorded, so nothing is sent again.
     f.positions.lock().unwrap().clear();

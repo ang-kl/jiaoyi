@@ -46,6 +46,17 @@ pub struct PendingMargin {
 }
 
 #[derive(Debug, Clone)]
+pub struct PermissionEvidence {
+    pub observed_at: DateTime<Utc>,
+    pub book_revision: u64,
+    pub owner_paused: Option<bool>,
+    pub cost_veto_by_symbol: HashMap<i64, bool>,
+    pub entry_recorded_by_symbol: HashMap<i64, bool>,
+    pub live_single_position_blocked: Option<bool>,
+    pub s1_edge_passed: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Input {
     pub account_id: i64,
     pub generation: u64,
@@ -65,6 +76,7 @@ pub struct Input {
     pub equity_at: Option<DateTime<Utc>>,
     pub gross_pnl_by_position: HashMap<i64, f64>,
     pub pending_margin: Option<PendingMargin>,
+    pub permissions: HashMap<String, PermissionEvidence>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -128,6 +140,8 @@ pub struct Assessment {
     pub stop_loss_reserve: Option<f64>,
     pub breach_count: usize,
     pub unknown_count: usize,
+    /// Entry exclusions are separate from current setup/protection breaches.
+    pub blocked_entry_check_count: usize,
 }
 
 fn positive(v: Option<f64>) -> Option<f64> {
@@ -257,6 +271,78 @@ fn strategy_check(e: Option<&StrategyEvidence>, side: &str, quote: Option<(f64, 
         Some(false) => check("direction", "breach", "current quote no longer supports original frozen entry benchmark; registered exits still govern", None),
         None => check("direction", "unknown", "original benchmark inputs are unavailable or unsupported", None),
     }
+}
+
+fn permission_checks(
+    input: &Input,
+    strategy: Option<&StrategyEvidence>,
+    symbol: i64,
+) -> Vec<Check> {
+    let key = strategy.and_then(|e| {
+        if matches!(e.strategy.as_str(), "s1" | "strategy1" | "jiaoyi-s1")
+            || e.strategy == crate::trading::STRATEGY
+        {
+            Some("s1")
+        } else if matches!(e.strategy.as_str(), "s3" | "strategy3" | "jiaoyi-s3")
+            || e.strategy == crate::strategy3::STRATEGY
+        {
+            Some("s3")
+        } else {
+            None
+        }
+    });
+    let Some(key) = key else {
+        return vec![check(
+            "entry_permission",
+            "unknown",
+            "no evidenced governing strategy; permission for another entry is not inferred",
+            None,
+        )];
+    };
+    let source = input.permissions.get(key).filter(|p| {
+        input.complete
+            && input.connected
+            && p.book_revision == input.revision
+            && fresh(Some(p.observed_at), input.now, MAX_BOOK_AGE_SECS)
+            && fresh(input.book_at, input.now, MAX_BOOK_AGE_SECS)
+    });
+    let verdict = |name: &str, blocked: Option<bool>, yes: &str, no: &str| {
+        match blocked {
+        Some(true) => check(name, "blocked", yes, None),
+        Some(false) => check(name, "pass", no, None),
+        None => check(name, "unknown", "fresh same-revision permission evidence unavailable; existing exits remain governed by their rules", None),
+    }
+    };
+    let observed_owned_position =
+        (input.complete && input.connected && fresh(input.book_at, input.now, MAX_BOOK_AGE_SECS))
+            .then_some(true);
+    let mut out = vec![
+        verdict("strategy_symbol_exposure_new_entry", observed_owned_position,
+            "an evidenced position of this strategy already occupies the symbol; another entry is blocked while registered exits continue",
+            "no evidenced strategy exposure blocks another entry"),
+        verdict("owner_pause_new_entry", source.and_then(|p| p.owner_paused),
+            "owner pause blocks new entries only; existing position exits continue",
+            "owner pause does not block new entries; all other entry gates still apply"),
+        verdict("live_capacity_new_entry", source.and_then(|p| p.live_single_position_blocked),
+            "whole-account live single-position gate blocks another entry; existing exits continue",
+            "live single-position gate does not block this account snapshot; other capacity checks still apply"),
+    ];
+    if key == "s3" {
+        out.push(verdict("durable_cost_veto_new_entry", source.and_then(|p| p.cost_veto_by_symbol.get(&symbol).copied()),
+            "registered durable session cost veto blocks a new entry; it is not an exit instruction",
+            "no durable cost veto recorded for the applicable symbol/session; current entry cost checks still apply"));
+        out.push(verdict("session_entry_new_entry", source.and_then(|p| p.entry_recorded_by_symbol.get(&symbol).copied()),
+            "a recorded entry already consumed this symbol/session; repeat entry is blocked while existing exits continue",
+            "no prior entry recorded for the applicable symbol/session; other entry rules still apply"));
+    } else {
+        out.push(verdict(
+            "s1_edge_new_entry",
+            source.and_then(|p| p.s1_edge_passed.map(|pass| !pass)),
+            "S1 edge gate blocks new entries; existing registered exits continue",
+            "S1 edge gate permits assessment of a new entry; this is not a profitability guarantee",
+        ));
+    }
+    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -414,6 +500,7 @@ fn assess_object(
         ),
     });
     checks.push(strategy_check(evidence, side, quote));
+    checks.extend(permission_checks(input, evidence, trade.symbol_id));
     if let Some(e) = evidence {
         checks.push(check("plan_quantity", if e.original_volume == trade.volume { "pass" } else { "unknown" },
             if e.original_volume == trade.volume { "observed quantity equals original instruction" } else { "quantity changed since entry; partial exit or external edit requires lifecycle evidence" }, None));
@@ -718,6 +805,7 @@ pub fn evaluate(input: &Input) -> Assessment {
     };
     let breach_count = checks().filter(|c| c.state == "breach").count();
     let unknown_count = checks().filter(|c| c.state == "unknown").count();
+    let blocked_entry_check_count = checks().filter(|c| c.state == "blocked").count();
     Assessment {
         account_id: input.account_id,
         generation: input.generation,
@@ -736,6 +824,7 @@ pub fn evaluate(input: &Input) -> Assessment {
         stop_loss_reserve,
         breach_count,
         unknown_count,
+        blocked_entry_check_count,
     }
 }
 
@@ -818,6 +907,7 @@ mod tests {
             equity_at: Some(now),
             gross_pnl_by_position: HashMap::from([(10, 50.0)]),
             pending_margin: None,
+            permissions: HashMap::new(),
         }
     }
 
@@ -1171,5 +1261,103 @@ mod tests {
                 "{state}"
             );
         }
+    }
+
+    fn with_permission_evidence() -> Input {
+        let mut i = input();
+        i.strategy.insert(
+            10,
+            StrategyEvidence {
+                strategy: "s3".into(),
+                side: "buy".into(),
+                detail: json!({"band":{"lower":99.0,"upper":104.0}}),
+                recorded_at: i.now,
+                original_volume: 1000,
+                entry_key: "owned-s3".into(),
+            },
+        );
+        i.permissions.insert(
+            "s3".into(),
+            PermissionEvidence {
+                observed_at: i.now,
+                book_revision: i.revision,
+                owner_paused: Some(true),
+                cost_veto_by_symbol: HashMap::from([(7, true)]),
+                entry_recorded_by_symbol: HashMap::from([(7, true)]),
+                live_single_position_blocked: Some(true),
+                s1_edge_passed: None,
+            },
+        );
+        i
+    }
+
+    #[test]
+    fn entry_exclusions_do_not_mislabel_a_supported_protected_position() {
+        let i = with_permission_evidence();
+        let r = evaluate(&i);
+        let o = &r.objects[0];
+        assert_eq!(verdict(o, "direction"), "pass");
+        assert_eq!(verdict(o, "stop_loss"), "pass");
+        for name in [
+            "strategy_symbol_exposure_new_entry",
+            "owner_pause_new_entry",
+            "live_capacity_new_entry",
+            "durable_cost_veto_new_entry",
+            "session_entry_new_entry",
+        ] {
+            assert_eq!(verdict(o, name), "blocked");
+        }
+        assert_eq!(r.blocked_entry_check_count, 5);
+        assert_eq!(r.breach_count, 0);
+        assert!(r.no_trade_authority);
+    }
+
+    #[test]
+    fn demo_owned_position_still_blocks_repeat_entry_after_session_rollover() {
+        let mut i = with_permission_evidence();
+        let p = i.permissions.get_mut("s3").unwrap();
+        p.owner_paused = Some(false);
+        p.cost_veto_by_symbol.insert(7, false);
+        p.entry_recorded_by_symbol.insert(7, false);
+        p.live_single_position_blocked = Some(false);
+        let r = evaluate(&i);
+        assert_eq!(
+            verdict(&r.objects[0], "strategy_symbol_exposure_new_entry"),
+            "blocked"
+        );
+        assert_eq!(r.blocked_entry_check_count, 1);
+        assert_eq!(verdict(&r.objects[0], "direction"), "pass");
+        assert_eq!(r.breach_count, 0);
+    }
+
+    #[test]
+    fn permission_evidence_must_be_fresh_scoped_and_never_assigned_to_manual_trades() {
+        let i = with_permission_evidence();
+        for state in ["age", "revision", "symbol"] {
+            let mut changed = i.clone();
+            let permissions = changed.permissions.get_mut("s3").unwrap();
+            match state {
+                "age" => permissions.observed_at -= Duration::seconds(121),
+                "revision" => permissions.book_revision += 1,
+                _ => {
+                    permissions.cost_veto_by_symbol.clear();
+                    permissions.entry_recorded_by_symbol.clear();
+                }
+            }
+            let r = evaluate(&changed);
+            for name in ["durable_cost_veto_new_entry", "session_entry_new_entry"] {
+                assert_eq!(verdict(&r.objects[0], name), "unknown", "{state}");
+            }
+            assert_eq!(verdict(&r.objects[0], "stop_loss"), "pass");
+        }
+        let mut manual = i;
+        manual.strategy.clear();
+        let r = evaluate(&manual);
+        assert_eq!(verdict(&r.objects[0], "entry_permission"), "unknown");
+        assert_eq!(r.blocked_entry_check_count, 0);
+        assert!(!r.objects[0]
+            .checks
+            .iter()
+            .any(|c| c.name == "owner_pause_new_entry"));
     }
 }

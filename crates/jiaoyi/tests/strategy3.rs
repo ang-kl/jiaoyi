@@ -440,6 +440,111 @@ fn at(min: i64) -> DateTime<Utc> {
     today().open + Duration::minutes(min)
 }
 
+/// Measurement-only fixture, explicitly run before changing dispatch policy.
+/// Rates apply to this declared scenario mix, never to production traffic.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+#[ignore = "manual bounded dispatch benchmark; production impact needs separate evidence"]
+async fn dispatch_policy_benchmark(pool: PgPool) {
+    loaded(&pool).await;
+    sqlx::raw_sql(
+        "CREATE TABLE dispatch_bench_control(ledger_delay_ms bigint NOT NULL);
+         INSERT INTO dispatch_bench_control VALUES(0);
+         CREATE FUNCTION dispatch_bench_delay() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN PERFORM pg_sleep((SELECT ledger_delay_ms::double precision/1000 FROM dispatch_bench_control));
+         RETURN NEW; END $$;
+         CREATE TRIGGER dispatch_bench_delay BEFORE INSERT ON trading_intents
+         FOR EACH ROW EXECUTE FUNCTION dispatch_bench_delay();",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    // (label, quote offset after mark, first account-read delay, intent delay,
+    // prepared cache, repetitions). All prices, risks and fills are synthetic.
+    let scenarios = [
+        ("normal_early", 0_i64, 0_u64, 0_i64, true, 3),
+        ("normal_late_4500ms", 4500, 0, 0, true, 3),
+        ("normal_late_4900ms", 4900, 0, 0, true, 3),
+        ("normal_late_4990ms", 4990, 0, 0, true, 3),
+        ("account_250ms_early", 0, 250, 0, true, 3),
+        ("account_250ms_late_4500ms", 4500, 250, 0, true, 3),
+        ("account_250ms_late_4900ms", 4900, 250, 0, true, 3),
+        ("ledger_250ms_early", 0, 0, 250, true, 3),
+        ("ledger_250ms_late_4500ms", 4500, 0, 250, true, 3),
+        ("ledger_250ms_late_4900ms", 4900, 0, 250, true, 3),
+        ("ledger_5100ms_early", 0, 0, 5100, true, 1),
+        ("cold_preparation_early", 0, 0, 0, false, 3),
+    ];
+    for (label, offset, account_delay, ledger_delay, prepared, repetitions) in scenarios {
+        for repetition in 0..repetitions {
+            // Only this sqlx test's disposable isolated database is reset.
+            sqlx::raw_sql("TRUNCATE strategy3_orders,strategy3_fills,trading_intents,trading_events,trading_decisions;")
+                .execute(&pool).await.unwrap();
+            sqlx::query("UPDATE dispatch_bench_control SET ledger_delay_ms=$1")
+                .bind(ledger_delay)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let f = fake((60_455.0, 60_462.0));
+            with_trader!(&pool, f, Environment::Demo, |t, log| {
+                if prepared {
+                    t.prepare(BTC, today(), at(25)).await.unwrap();
+                }
+                f.trader_reply_delays
+                    .lock()
+                    .unwrap()
+                    .push_back(std::time::Duration::from_millis(account_delay));
+                let checked_from = Utc::now();
+                let started = std::time::Instant::now();
+                t.on_quote(
+                    BTC,
+                    Some(60_455.0),
+                    Some(60_462.0),
+                    at(30) + Duration::milliseconds(offset),
+                )
+                .await
+                .unwrap();
+                let completed_us = started.elapsed().as_micros();
+                let receipts: Vec<(String, Option<String>, Vec<u8>)> = sqlx::query_as(
+                    "SELECT kind,error_code,raw FROM trading_events WHERE kind IN ('ENTRY_VALIDATED_BEFORE_SEND','REFUSED_BEFORE_SEND') ORDER BY id",
+                ).fetch_all(&pool).await.unwrap();
+                assert_eq!(
+                    receipts.len(),
+                    1,
+                    "{label}: require exact final validation evidence; {:?}",
+                    decisions(&pool).await
+                );
+                let (kind, error, bytes) = &receipts[0];
+                let raw: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+                let snapshot = if kind == "REFUSED_BEFORE_SEND" {
+                    &raw["evidence"]
+                } else {
+                    &raw
+                };
+                let checked_at: DateTime<Utc> =
+                    serde_json::from_value(snapshot["checked_at"].clone()).unwrap();
+                let frames = orders(&log).len();
+                assert_eq!(frames, usize::from(kind == "ENTRY_VALIDATED_BEFORE_SEND"));
+                if frames == 0 {
+                    assert_eq!(error.as_deref(), Some("ENTRY_EXPIRED"));
+                }
+                eprintln!(
+                    "DISPATCH_BENCH {}",
+                    json!({
+                        "scenario":label,"repetition":repetition,"quote_offset_ms":offset,
+                        "initial_dispatch_budget_ms":5000-offset,"first_account_reply_delay_ms":account_delay,
+                        "intent_delay_ms":ledger_delay,"preparation_warmed":prepared,
+                        "decision_to_final_guard_us":(checked_at-checked_from).num_microseconds(),
+                        "quote_call_completed_us":completed_us,"broker_frames":frames,
+                        "receipt_kind":kind,"error_code":error,
+                        "remaining_dispatch_ms":snapshot["remaining_dispatch_ms"],
+                        "source":"isolated local PostgreSQL + in-memory real-protobuf broker; not production"
+                    })
+                );
+            });
+        }
+    }
+}
+
 /// v5 hangs each stop from the best executable quote by the original R,
 /// including after broker reconciliation and restart at break-even.
 async fn trail_keeps_original_r(pool: &PgPool, buy: bool) {

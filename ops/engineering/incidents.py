@@ -21,7 +21,15 @@ MAX_ANALYSIS_BATCH = 8
 # Grok 4.7 · № 17,703. Other models: do not clear sources_unavailable sooner.
 SOURCE_RECOVERY_POLLS = 6
 SOURCE_TIMEOUT_SECONDS = 12
+ASSESSMENT_RECOVERY_MAX_AGE_SECONDS = 15
+ASSESSMENT_REASONS = {
+    "deadline_missed": "assessment_completion_deadline_missed",
+    "source_unavailable": "broker_source_unavailable",
+    "disconnected": "broker_session_disconnected",
+}
 STATE_EVENT = "incident_state"
+ASSESSMENT_OVERFLOW_EVENT = "assessment_incident_overflow"
+MAX_ASSESSMENT_OVERFLOW = 3 * 8  # Three known kinds per bounded account row.
 COVERAGE = {
     "actor_progress": "public liveness and fast-monitor observations",
     "s3_protection": "last stored owned-position stop; missing means unverified, not broker absence",
@@ -30,6 +38,7 @@ COVERAGE = {
     "preparation": "current session deadline state when exposed",
     "goal_windows": "qualified per-account assessment; not complete one-day instrument P&L",
     "whole_day_instrument_outcomes": "unavailable from direction/copy episode rows alone",
+    "setup_assessment": "bounded explicit observer episodes; recovery requires fresh resolved evidence",
 }
 
 
@@ -78,7 +87,62 @@ def _candidate(kind, severity, account=None, strategy=None, symbol=None, **evide
             "strategy": strategy, "symbol": symbol, "evidence": safe}
 
 
-def candidates(health, operations, clock, source_receipts=None):
+def _assessment_episodes(health, clock):
+    """Allowlisted public facts only; malformed/ambiguous rows cannot prove recovery."""
+    assessment = health.get("setup_assessment") if isinstance(health, dict) else None
+    rows = assessment.get("accounts") if isinstance(assessment, dict) else None
+    if not isinstance(rows, list) or len(rows) > 8:
+        return {}
+    accounts = [_positive(row.get("account_id")) for row in rows if isinstance(row, dict)]
+    found = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        account = _positive(row.get("account_id"))
+        entries = row.get("incidents")
+        if account is None or accounts.count(account) != 1 or not isinstance(entries, list) or len(entries) > 3:
+            continue
+        kinds = [item.get("kind") for item in entries if isinstance(item, dict)]
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+            kind = item.get("kind")
+            if not isinstance(kind, str) or kind not in ASSESSMENT_REASONS or kinds.count(kind) != 1:
+                continue
+            identity = f"setup-assessment:{account}:{kind}"
+            episode = _positive(item.get("episode"))
+            opened = _stamp(item.get("opened_at"))
+            observed = _stamp(item.get("last_observed_at"))
+            resolved = _stamp(item.get("resolved_at"))
+            if (item.get("id") != identity or item.get("reason") != ASSESSMENT_REASONS[kind]
+                    or episode is None or episode > 2 ** 64 - 1 or item.get("state") not in ("active", "resolved")
+                    or opened is None or observed is None or not _clock(opened) <= _clock(observed) <= clock):
+                continue
+            if item["state"] == "resolved" and (resolved is None or not _clock(opened) <= _clock(resolved) <= _clock(observed)):
+                continue
+            found[(account, kind)] = {"id": identity, "kind": kind, "episode": episode,
+                "reason": ASSESSMENT_REASONS[kind], "state": item["state"],
+                "opened_at": opened, "last_observed_at": observed, "resolved_at": resolved,
+                "assessed_at": _stamp(row.get("assessed_at")), "account_state": row.get("state"),
+                "evidence_complete": row.get("evidence_complete") is True,
+                "recovery_max_age_secs": assessment.get("incident_recovery_max_age_secs")}
+    return found
+
+
+def _assessment_recovered(prior, source, clock):
+    if not source or source["state"] != "resolved" or source["account_state"] != "assessed" or not source["evidence_complete"]:
+        return False
+    evidence = prior.get("evidence") or {}
+    if source["id"] != evidence.get("source_incident_id") or source["episode"] != evidence.get("source_episode"):
+        return False
+    maximum = _number(source["recovery_max_age_secs"])
+    if maximum is None or not 0 < maximum <= ASSESSMENT_RECOVERY_MAX_AGE_SECONDS:
+        return False
+    return all(stamp is not None and 0 <= (clock - _clock(stamp)).total_seconds() <= maximum
+               for stamp in (source["assessed_at"], source["last_observed_at"]))
+
+
+def candidates(health, operations, clock, source_receipts=None, *, bounded=True):
     """Project known source facts; absent source fields never become zero or a fault."""
     found = []
     hashes = {}
@@ -92,6 +156,13 @@ def candidates(health, operations, clock, source_receipts=None):
     operations = operations if isinstance(operations, dict) else {}
     if health.get("status") not in (None, "ok"):
         found.append(_candidate("service_unhealthy", "critical", source_state=_tag(health.get("status"))))
+    for (account, kind), episode in _assessment_episodes(health, clock).items():
+        if episode["state"] == "active":
+            # Only an actual episode/reason change is material. Source clocks,
+            # completion counters and permanent historical misses are not jobs.
+            found.append(_candidate("setup_assessment_" + kind, "critical", account,
+                source_incident_id=episode["id"], source_kind=kind,
+                source_episode=episode["episode"], source_reason=episode["reason"]))
     for section, strategy in (("trading", "s1"), ("strategy3", "s3")):
         rows = health.get(section)
         for row in rows[:8] if isinstance(rows, list) else []:
@@ -200,7 +271,8 @@ def candidates(health, operations, clock, source_receipts=None):
             combined["evidence"] = {"observations": [x["evidence"] for x in ordered[:50]],
                 "observation_count": len(ordered)}
         canonical.append(combined)
-    return sorted(canonical, key=lambda item: (0 if item["severity"] == "critical" else 1, item["key"]))[:MAX_INCIDENTS]
+    ordered = sorted(canonical, key=lambda item: (0 if item["severity"] == "critical" else 1, item["key"]))
+    return ordered[:MAX_INCIDENTS] if bounded else ordered
 
 
 class IncidentManager:
@@ -211,21 +283,24 @@ class IncidentManager:
         self.source_status = "not_polled"
         self.last_observed_at = None
         self.source_receipts = {}
+        self.capacity = {"limit": MAX_INCIDENTS, "retained": 0, "projection_omitted": 0,
+                         "state_rejected": 0, "rejected_kinds": [], "overflow_rejected": 0}
         with self.store.connect() as db:
             for incident in self._load(db).values():
                 if incident.get("kind") == "sources_unavailable":
                     self.source_receipts = incident.get("source_receipts") or {}
 
-    def _load(self, db):
-        row = db.execute("SELECT detail FROM events WHERE kind=? ORDER BY id DESC LIMIT 1", (STATE_EVENT,)).fetchone()
+    def _load(self, db, event=STATE_EVENT):
+        row = db.execute("SELECT detail FROM events WHERE kind=? ORDER BY id DESC LIMIT 1", (event,)).fetchone()
         try:
             state = json.loads(row[0]) if row else {}
         except (TypeError, ValueError):
             state = {}
-        return state if isinstance(state, dict) and len(state) <= MAX_INCIDENTS else {}
+        limit = MAX_ASSESSMENT_OVERFLOW if event == ASSESSMENT_OVERFLOW_EVENT else MAX_INCIDENTS
+        return state if isinstance(state, dict) and len(state) <= limit else {}
 
-    def _save(self, db, state, stamp):
-        db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,NULL,?,?)", (stamp, STATE_EVENT, _json(state)))
+    def _save(self, db, state, stamp, event=STATE_EVENT):
+        db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,NULL,?,?)", (stamp, event, _json(state)))
 
     def _enqueue(self, db, task, stamp):
         if len(task) > 16000:
@@ -342,20 +417,22 @@ class IncidentManager:
                 self._save(db, state, stamp)
         return {"batched_jobs": len(groups), "incidents": len(members), "superseded_jobs": superseded}
 
-    def _publish(self, incident):
+    def _publish(self, incident, state_event=STATE_EVENT):
         """Delivery runs after transaction; uncertain outcomes are never replayed automatically."""
         report_id = _fingerprint({"id": incident["id"], "version": incident["version"], "phase": incident.get("report_phase", "initial")})
         with self.lock, self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            state = self._load(db)
+            state = self._load(db, state_event)
             current = state.get(incident["id"])
             if current is None or current.get("version") != incident.get("version"):
                 return
             if current.get("last_report_id") == report_id and current.get("delivery_state") not in ("pending", "attempting"):
                 return
+            if current.get("last_report_id") != report_id:
+                current.pop("delivery_key", None)
             current["last_report_id"] = report_id
             current["delivery_state"] = "attempting"
-            self._save(db, state, _clock().isoformat())
+            self._save(db, state, _clock().isoformat(), state_event)
         receipt = None
         try:
             receipt = self.c.reporter.publish_incident({**incident, "defer_delivery": True})
@@ -368,7 +445,7 @@ class IncidentManager:
             delivery = {"state": "uncertain" if getattr(error, "uncertain", False) else "failed", "error_type": type(error).__name__}
         with self.lock, self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            state = self._load(db)
+            state = self._load(db, state_event)
             current = state.get(incident["id"])
             if current and current.get("last_report_id") == report_id:
                 current["delivery_state"] = _tag(delivery["state"]) or "unknown"
@@ -377,7 +454,36 @@ class IncidentManager:
                     current["delivery_key"] = receipt["key"]
                 db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,'incident_report_receipt',?)",
                     (_clock().isoformat(), incident.get("analysis_job"), _json({"id": incident["id"], **delivery})))
-                self._save(db, state, _clock().isoformat())
+                self._save(db, state, _clock().isoformat(), state_event)
+
+    def _hold_assessment(self, overflow, item, source, stamp):
+        """Factual overflow receipt, never a queue reservation or fake closure."""
+        identity = _fingerprint({"key": item["key"]})[:24]
+        fingerprint = _fingerprint(item)
+        old = overflow.get(identity)
+        if old and old.get("evidence", {}).get("source_episode", 0) >= item["evidence"]["source_episode"]:
+            # A resolved episode cannot become active again without a new
+            # source episode; an older HTTP body must not reopen it.
+            return None
+        if old is None and len(overflow) >= MAX_ASSESSMENT_OVERFLOW:
+            recovered = next((key for key, value in overflow.items()
+                              if value.get("condition_present") is False), None)
+            if recovered is None:
+                self.capacity["overflow_rejected"] += 1
+                return None
+            del overflow[recovered]
+        incident = {**item, "id": identity, "fingerprint": fingerprint,
+            "version": (old or {}).get("version", 0) + 1,
+            "first_received_at": (old or {}).get("first_received_at", stamp),
+            "received_at": stamp, "source_at": source["assessed_at"], "event_at": source["opened_at"],
+            "state": "capacity_blocked", "disposition": None, "condition_present": True,
+            "analysis_job": None, "repair_job": None, "delivery_state": "pending",
+            "report_phase": "capacity_blocked",
+            "next_action": "Factual observer receipt retained; retry normal admission when an existing closed incident frees capacity. No analysis session dispatched."}
+        incident["material_signature"] = fingerprint + ":" + str(incident["version"])
+        incident["evidence_ids"] = [incident["material_signature"]]
+        overflow[identity] = incident
+        return dict(incident)
 
     def observe(self, health, operations, clock=None, source_receipts=None):
         at = _clock(clock)
@@ -387,20 +493,60 @@ class IncidentManager:
                 previous = self.source_receipts.get(route) or {}
                 receipt["last_success_at"] = receipt.get("observed_at") if receipt.get("ok") else previous.get("last_success_at")
             self.source_receipts = source_receipts
-        found = candidates(health, operations, at, source_receipts)
+        projection = candidates(health, operations, at, source_receipts, bounded=False)
+        found = projection[:MAX_INCIDENTS]
+        assessment_episodes = _assessment_episodes(health, at)
         self.last_observed_at = stamp
         available = sum(isinstance(value, dict) for value in (health, operations))
         self.source_status = "available" if available == 2 else "partial" if available else "unavailable"
         publish = []
+        publish_overflow = []
         with self.lock, self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             state = self._load(db)
+            overflow = self._load(db, ASSESSMENT_OVERFLOW_EVENT)
+            overflow_changed = False
+            omitted = projection[MAX_INCIDENTS:]
+            rejected_kinds = {item["kind"] for item in omitted}
+            self.capacity = {"limit": MAX_INCIDENTS, "retained": len(state),
+                "projection_omitted": len(omitted), "state_rejected": 0, "rejected_kinds": [],
+                "overflow_rejected": 0}
+            if omitted:
+                self.source_status = "incident_capacity_reached"
             changed = False
             # Absence is source-condition recovery, never repair verification.
             # Missing/partial snapshots and capped projections cannot prove it.
             present_keys = {item["key"] for item in found}
             complete = isinstance(health, dict) and health.get("status") == "ok" and isinstance(operations, dict) and isinstance(operations.get("reports"), list) and len(found) < MAX_INCIDENTS
+            for prior in overflow.values():
+                source_kind = (prior.get("evidence") or {}).get("source_kind")
+                source = assessment_episodes.get((prior.get("account_id"), source_kind))
+                if (prior.get("condition_present") is not False and isinstance(health, dict)
+                        and health.get("status") == "ok" and _assessment_recovered(prior, source, at)):
+                    prior.update(condition_present=False, last_absent_at=stamp,
+                        state="source_recovered", report_phase="source_recovered",
+                        delivery_state="pending",
+                        next_action="Source condition recovered; no repair verified and no analysis session dispatched.")
+                    prior["source_recovery"] = {"resolved_at": source["resolved_at"],
+                        "assessed_at": source["assessed_at"], "episode": source["episode"]}
+                    publish_overflow.append(dict(prior))
+                    overflow_changed = True
             for prior in state.values():
+                if prior.get("kind", "").startswith("setup_assessment_"):
+                    # This source emits explicit bounded lifecycle receipts.
+                    # Absence, aggregate counters, an old body or restart never
+                    # proves recovery; unrelated report failures do not erase
+                    # independent, fresh observer recovery evidence.
+                    source_kind = (prior.get("evidence") or {}).get("source_kind")
+                    source = assessment_episodes.get((prior.get("account_id"), source_kind))
+                    if (prior.get("condition_present") is not False and isinstance(health, dict)
+                            and health.get("status") == "ok" and _assessment_recovered(prior, source, at)):
+                        prior["condition_present"] = False
+                        prior["last_absent_at"] = stamp
+                        prior["source_recovery"] = {"resolved_at": source["resolved_at"],
+                            "assessed_at": source["assessed_at"], "episode": source["episode"]}
+                        changed = True
+                    continue
                 if not complete or prior.get("kind") == "review_proven_defect" or prior.get("key") in present_keys or prior.get("condition_present") is False:
                     continue
                 if prior.get("account_id"):
@@ -452,12 +598,27 @@ class IncidentManager:
                     prior["source_recovery"] = {"observed_at": stamp, "routes": self.source_receipts}
                     prior["source_receipts"] = self.source_receipts
                 changed = True
-            for item in found:
+            # A capped projection must not hide a new episode of an observer
+            # incident already occupying a retained slot. Updating that slot
+            # adds no retained identity and does not reorder other priorities.
+            updates = found + [item for item in omitted
+                if item["kind"].startswith("setup_assessment_")
+                and _fingerprint({"key": item["key"]})[:24] in state]
+            for item in updates:
                 # Identity is stable across observer clocks; source session, hash,
                 # position and action evidence make substantive changes material.
                 identity = _fingerprint({"key": item["key"]})[:24]
                 fingerprint = _fingerprint(item)
                 old = state.get(identity)
+                held = overflow.get(identity)
+                if item["kind"].startswith("setup_assessment_"):
+                    prior = old or held
+                    if prior:
+                        previous_episode = prior.get("evidence", {}).get("source_episode", 0)
+                        incoming_episode = item["evidence"]["source_episode"]
+                        if previous_episode > incoming_episode or (previous_episode == incoming_episode
+                                and (old is not None or prior.get("condition_present") is False)):
+                            continue
                 if old and item["kind"] == "sources_unavailable" and old.get("available_streak"):
                     old["available_streak"] = 0
                     if old.get("fingerprint") == fingerprint and old.get("condition_present", True):
@@ -472,11 +633,19 @@ class IncidentManager:
                     if not settled:
                         # Keep open incidents rather than silently replacing them.
                         self.source_status = "incident_capacity_reached"
+                        self.capacity["state_rejected"] += 1
+                        rejected_kinds.add(item["kind"])
+                        if item["kind"].startswith("setup_assessment_"):
+                            source = assessment_episodes[(item["account_id"], item["evidence"]["source_kind"])]
+                            receipt = self._hold_assessment(overflow, item, source, stamp)
+                            if receipt:
+                                publish_overflow.append(receipt)
+                                overflow_changed = True
                         continue
                     del state[settled[0]]
                 incident = {**item, "id": identity, "fingerprint": fingerprint,
-                    "version": (old or {}).get("version", 0) + 1,
-                    "first_received_at": (old or {}).get("first_received_at", stamp),
+                    "version": (old or held or {}).get("version", 0) + 1,
+                    "first_received_at": (old or held or {}).get("first_received_at", stamp),
                     "received_at": stamp, "source_at": _stamp(operations.get("as_of")) if isinstance(operations, dict) else None,
                     "event_at": item["evidence"].get("action_at") or item["evidence"].get("last_closed_at"),
                     "report_due_at": (at + dt.timedelta(seconds=60)).isoformat(),
@@ -487,6 +656,10 @@ class IncidentManager:
                     "condition_present": True}
                 if item["kind"] == "sources_unavailable":
                     incident["source_receipts"] = self.source_receipts
+                if item["kind"].startswith("setup_assessment_"):
+                    source = assessment_episodes[(item["account_id"], item["evidence"]["source_kind"])]
+                    incident["source_at"] = source["assessed_at"]
+                    incident["event_at"] = source["opened_at"]
                 if old and old.get("state") != "closed" and old.get("repair_job"):
                     incident["repair_job"] = old["repair_job"]
                     incident["repair_evidence_ids"] = old.get("repair_evidence_ids", old.get("evidence_ids", []))
@@ -505,12 +678,32 @@ class IncidentManager:
                 db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,?,'incident_detected',?)",
                     (stamp, incident["analysis_job"], _json({"id": identity, "kind": incident["kind"], "evidence_id": fingerprint})))
                 state[identity] = incident
+                if held is not None:
+                    del overflow[identity]
+                    overflow_changed = True
                 publish.append(dict(incident))
                 changed = True
+            for item in omitted:
+                if not item["kind"].startswith("setup_assessment_"):
+                    continue
+                identity = _fingerprint({"key": item["key"]})[:24]
+                if identity in state:
+                    continue
+                source = assessment_episodes[(item["account_id"], item["evidence"]["source_kind"])]
+                receipt = self._hold_assessment(overflow, item, source, stamp)
+                if receipt:
+                    publish_overflow.append(receipt)
+                    overflow_changed = True
             if changed:
                 self._save(db, state, stamp)
+            if overflow_changed:
+                self._save(db, overflow, stamp, ASSESSMENT_OVERFLOW_EVENT)
+            self.capacity["retained"] = len(state)
+            self.capacity["rejected_kinds"] = sorted(rejected_kinds)
         for incident in publish:
             self._publish(incident)
+        for incident in publish_overflow:
+            self._publish(incident, ASSESSMENT_OVERFLOW_EVENT)
         self.tick(clock=at)
         return self.status()
 
@@ -747,8 +940,24 @@ class IncidentManager:
     def tick(self, clock=None):
         at = _clock(clock)
         publish = []
+        publish_overflow = []
         with self.lock, self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            overflow = self._load(db, ASSESSMENT_OVERFLOW_EVENT)
+            overflow_changed = False
+            for incident in overflow.values():
+                receipt_key = incident.get("delivery_key")
+                receipt_reader = getattr(self.c.reporter, "incident_delivery_receipt", None)
+                if receipt_key and callable(receipt_reader):
+                    receipt = receipt_reader(receipt_key)
+                    if (isinstance(receipt, dict) and receipt.get("state") in ("created", "sending", "delivered", "failed", "uncertain")
+                            and receipt["state"] != incident.get("delivery_state") and incident.get("delivery_state") != "pending"):
+                        incident["delivery_state"] = receipt["state"]
+                        overflow_changed = True
+                if incident.get("delivery_state") in ("pending", "attempting"):
+                    publish_overflow.append(dict(incident))
+            if overflow_changed:
+                self._save(db, overflow, at.isoformat(), ASSESSMENT_OVERFLOW_EVENT)
             state = self._load(db)
             changed = False
             for incident in state.values():
@@ -822,11 +1031,14 @@ class IncidentManager:
                 self._save(db, state, at.isoformat())
         for incident in publish:
             self._publish(incident)
+        for incident in publish_overflow:
+            self._publish(incident, ASSESSMENT_OVERFLOW_EVENT)
         return self.status()
 
     def status(self):
         with self.lock, self.store.connect() as db:
             state = self._load(db)
+            overflow = self._load(db, ASSESSMENT_OVERFLOW_EVENT)
         counts = {}
         for incident in state.values():
             counts[incident["state"]] = counts.get(incident["state"], 0) + 1
@@ -842,6 +1054,13 @@ class IncidentManager:
         except (AttributeError, TypeError):
             pending_reason = "queued_for_bounded_analysis"
         return {"enabled": True, "poll_seconds": 10, "source_status": self.source_status,
+            "capacity": {**self.capacity, "retained": len(state),
+                "observer_overflow_limit": MAX_ASSESSMENT_OVERFLOW,
+                "observer_overflow_retained": len(overflow),
+                "observer_overflow_blocked": sum(item.get("condition_present") is not False for item in overflow.values())},
+            "observer_overflow": [{key: item.get(key) for key in
+                ("id", "kind", "state", "condition_present", "received_at", "last_absent_at", "delivery_state", "analysis_job", "next_action")}
+                for item in overflow.values()],
             "source_timeout_seconds": SOURCE_TIMEOUT_SECONDS,
             "source_receipts": self.source_receipts,
             "pending_analysis_reason": pending_reason,

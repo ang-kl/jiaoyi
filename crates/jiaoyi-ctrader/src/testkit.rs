@@ -85,6 +85,8 @@ pub struct FakeBroker {
     pub margin_calls_reply: Option<pb::ProtoOaMarginCallListRes>,
     /// Ordered account-read replies; empty queues use the normal fake state.
     pub scripted_traders: Arc<Mutex<VecDeque<pb::ProtoOaTrader>>>,
+    /// Test-only delays for successive trader responses; other traffic keeps flowing.
+    pub trader_reply_delays: Arc<Mutex<VecDeque<Duration>>>,
     pub scripted_books: Arc<Mutex<VecDeque<pb::ProtoOaReconcileRes>>>,
     pub scripted_pnl: Arc<Mutex<VecDeque<pb::ProtoOaGetPositionUnrealizedPnLRes>>>,
     /// The token's grant (`ProtoOAGetAccountListByAccessTokenRes`). `None`:
@@ -791,7 +793,7 @@ impl FakeBroker {
                                 money_digits: Some(2),
                                 ..Default::default()
                             });
-                        out.push(reply(
+                        let message = reply(
                             id,
                             Oa::ProtoOaTraderRes as i32,
                             pb::ProtoOaTraderRes {
@@ -800,7 +802,22 @@ impl FakeBroker {
                                 trader,
                             }
                             .encode_to_vec(),
-                        ));
+                        );
+                        let delay = self
+                            .trader_reply_delays
+                            .lock()
+                            .unwrap()
+                            .pop_front()
+                            .unwrap_or_default();
+                        if delay.is_zero() {
+                            out.push(message);
+                        } else {
+                            let writer = wr.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(delay).await;
+                                let _ = write_frame(&mut *writer.lock().await, &message).await;
+                            });
+                        }
                     } else if self.silent_orders
                         && (pt == Oa::ProtoOaNewOrderReq as i32
                             || pt == Oa::ProtoOaAmendPositionSltpReq as i32
