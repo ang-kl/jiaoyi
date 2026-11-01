@@ -824,3 +824,41 @@ runtime behaviour unchanged. Recheck the relocated fixtures/limits and require
 all updated CI jobs before merging PR148. Earlier green is not accepted for this
 head. Exact release/observation remains pending; final PR description records
 closure, remaining evidence and later chat serials.
+
+
+[§LOG.78] №18,117–18,149 §§1–3; closure entry 1 November 2026, 20:17 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR148 merged cfccf2907590424b543d97bdf245e1a57db57ae9 with all three CI jobs
+green (651 Rust,188 coordinator tests and both images). Exact trading and worker
+source verified; old deployments removed. Final qualified engineering receipt
+passes51/51. Thirty-minute observation across four accounts recorded1822 scheduled
+completions each, zero scheduled misses/skipped intervals, p99 1000–1001ms and
+maximum1232–1266ms completion gaps. Actual inventory reconciliation retained
+seven positions,two pending entries and seven protective orders. One coverage
+query503 recovered on a bounded retry; original failure retained. Economic
+coverage has92780 bid/ask rows and17/17 requested windows, but E1 remains partial,
+E2 is frozen/unactivated, E3 insufficient and E4 no promotion. No financial PASS,
+new trade authority or worker-window renewal. Missing exact №18,083 remains an
+explicit scope gap. See PR148 final description for full private-evidence receipt
+qualification and the subsequently observed live-account margin warning.
+
+
+[§LOG.79] №18,150–18,153 §§1–2; entry 1 November 2026, 20:54 SGT; by <Codex (GPT-6), effort: not exposed>.
+Owner requests merge when green and live browser updates only while present on
+the active webpage for existing trades in currently open markets. Optional scope
+clarification asked once; no answer at implementation time, so all accounts are
+included as stated in chat. Re-read origin/main cfccf290 and GROK_Log through
+№17,703 (30Oct04:29SGT), unchanged. Remember to check GROK_Log.txt for file changes
+and choose a new serial accordingly before future work. Replaced unconditional
+owner five-second/operations sixty-second reloads with authenticated cached row
+updates controlled by visibility, focus, broker schedule and evidence freshness.
+Cancellation generations prevent late repaint and overlapping requests; pending
+entries/account summaries/closed markets remain timestamped snapshots. Explicit
+Recheck covers market reopening and unknown schedules. Independent one-second
+assessment and all trade protection continue. No SQL/broker/model request is
+added to browser refresh; no risk/strategy/worker permission change. Parallel
+market-helper review and browser testing:175 Rust library tests, Clippy all-targets,
+eight Node lifecycle tests and23 actual Chromium fixture assertions pass. Browser
+focus/visibility events were simulated in headless Chromium; synthetic fixtures
+are not production broker proof. Required updated CI, merge and deployed identity,
+privacy/display/continued-background-progress checks still gate closure; consult
+this implementation PR's final description for actual receipt and later serials.

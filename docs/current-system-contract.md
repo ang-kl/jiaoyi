@@ -63,3 +63,23 @@ window. Trace №18,065 §§1–2, 31 October 2026, 15:53 SGT; by <Codex (GPT-6)
 [§CURRENT.16] The final entry guard runs after ledger/transport waits and preserves the original selected side and signal context. A proven zero-byte refusal is distinct from an uncertain transmission; only the former releases an unsent intent, without key reuse. The new dispatch deadline is explicit policy, not a reinterpretation of the old quote-eligibility window. No guard applies to existing stop/close commands. The [calibration evidence](assessment-calibration-evidence-2026-11-01.md) separately freezes a research-only exit comparison and records missing historical path coverage. It does not activate a reversal, new target or sizing rule, or establish financial progress. The exact №18,083 message remains unrecovered; do not claim that reference's complete scope has been implemented.
 
 [§CURRENT.17] Assessment health incidents use three bounded, stable episode kinds per account: completion deadline, unavailable broker source and disconnect. They are consumed by the existing coordinator without per-tick model calls. The normal incident store remains capped at32; observer overflow has a separate maximum24 factual receipts, explicitly capacity-blocked and without analysis dispatch until a legitimate slot is available. Repeated clocks/counters do not create work, and fresh source recovery does not certify a repair. Existing unresolved incidents, worker permissions and session ceilings remain intact. [The dispatch benchmark](entry-dispatch-benchmark-2026-11-01.md) records controlled latency/expiry rates and selected historical timing limits; it is not a production rejection-rate or profitability claim.
+
+[§CURRENT.18] Owner instruction and trace №18,150–18,152 §§1–2, 1 November 2026,
+20:38–20:52 SGT: automatic browser updates are limited to the visible, focused
+`/owner/assessments` page and existing open positions on all accounts whose broker
+schedule currently proves the market open. A read starts five seconds after the
+previous read completes; at most one request is in flight. Blur, hiding or leaving
+the page cancels it, and late responses cannot repaint rows. Fresh, complete book
+and two-sided quote evidence is required to repaint a position. Close-only
+instruments can be observed without granting entry permission. Pending entries,
+closed/unknown-market rows and account summaries retain their explicit snapshot
+times; use **Recheck all snapshots** after a market opens or for fresh inventory.
+An open-market row can wait for fresh quotes without presenting stale values as
+live. Read failures stop automatic retries until reactivation or manual recheck.
+The operations page is also a manual-refresh snapshot. The private script and
+small position-row endpoint share the existing owner authentication and no-store
+policy; browser refresh makes no database, broker or model call. Background
+one-second account assessment, incident observation and trade protection remain
+independent of browser activity. This changes display behaviour only; no worker
+permission, strategy, risk limit or order authority changes. By <Codex (GPT-6),
+effort: not exposed>.

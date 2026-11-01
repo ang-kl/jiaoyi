@@ -68,6 +68,7 @@ pub mod messages {
         ProtoOaGetTickDataRes,
         ProtoOaGetTrendbarsReq,
         ProtoOaGetTrendbarsRes,
+        ProtoOaHoliday,
         ProtoOaInterval,
         ProtoOaLightSymbol,
         ProtoOaMarginCall,

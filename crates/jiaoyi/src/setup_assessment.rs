@@ -2,6 +2,7 @@
 //! supplies broker evidence; a pure one-second evaluator never awaits IO.
 //! Ownership controls management, not observation. Nothing here can send an order.
 
+mod display;
 mod evaluate;
 mod health;
 mod permissions;
