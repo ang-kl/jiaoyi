@@ -814,3 +814,13 @@ follow PR148 final receipt for actual completion and latest subsequent serial.
 The first integrated source had643 passing Rust tests; amended totals will be
 recorded from their final log. No financial
 PASS, forced order or renewal of worker authority.
+
+
+[§LOG.77] №18,115–18,116 §§1–2; entry 1 November 2026, 19:34 SGT; by <Codex (GPT-6), effort: not exposed>.
+Amended integratedCI caught the source-scanning no-pause-writer invariant reading
+new inline test fixtures as production writers. Relocated only the permission
+fixtures to crate test_support; kept their assertions, the safety scan and all
+runtime behaviour unchanged. Recheck the relocated fixtures/limits and require
+all updated CI jobs before merging PR148. Earlier green is not accepted for this
+head. Exact release/observation remains pending; final PR description records
+closure, remaining evidence and later chat serials.
