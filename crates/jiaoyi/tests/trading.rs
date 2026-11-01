@@ -456,7 +456,12 @@ async fn a_demo_account_sends_one_entry_at_once_and_trails_it(pool: PgPool) {
         .unwrap();
     assert_eq!(
         events,
-        vec!["ORDER_ACCEPTED", "ORDER_FILLED", "ORDER_REPLACED"]
+        vec![
+            "ENTRY_VALIDATED_BEFORE_SEND",
+            "ORDER_ACCEPTED",
+            "ORDER_FILLED",
+            "ORDER_REPLACED"
+        ]
     );
     // A restart after the position was stopped out: the same completed day's
     // entry key is recorded, so nothing is sent again.
@@ -799,7 +804,10 @@ async fn an_accepted_only_open_is_adopted_after_a_restart(pool: PgPool) {
     let key = trading::entry_key(DEMO, ETH, Utc::now().date_naive() - Days::days(1));
     assert_eq!(
         event_kinds(&pool).await,
-        vec![(Some(key.clone()), "ORDER_ACCEPTED".to_string())]
+        vec![
+            (Some(key.clone()), "ENTRY_VALIDATED_BEFORE_SEND".to_string()),
+            (Some(key.clone()), "ORDER_ACCEPTED".to_string()),
+        ]
     );
     // It filled while the service was down: the position is there at restart.
     f.positions.lock().unwrap().push(ProtoOaPosition {

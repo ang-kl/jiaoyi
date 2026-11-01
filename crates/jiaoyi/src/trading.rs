@@ -1191,6 +1191,7 @@ struct Pending {
 /// Strategy 1's book on one session.
 #[derive(Default)]
 struct Book {
+    entry_retry_at: HashMap<i64, DateTime<Utc>>,
     own: HashMap<i64, Own>,
     /// Unresolved opens, by entry key.
     pending: HashMap<String, Pending>,
@@ -2278,6 +2279,16 @@ async fn on_quote(
     let Some(side) = triggered(l, sym.bid, sym.ask) else {
         return Ok(());
     };
+    let entry_guard = jiaoyi_ctrader::entry_guard::EntryGuard {
+        connection_generation: session.connection().entry_generation(),
+        account_id,
+        symbol_id: sym.id,
+        side,
+        signal: jiaoyi_ctrader::entry_guard::Signal::Trend { level: l.level },
+        cost: None,
+        expires: tokio::time::Instant::now() + jiaoyi_ctrader::entry_guard::MAX_QUOTE_AGE,
+        account_revision: session.connection().entry_revision(account_id),
+    };
     // An unresolved open on this symbol may still fill: one per symbol.
     if book.pending.values().any(|p| p.symbol_id == Some(sym.id)) {
         d.note(
@@ -2289,16 +2300,36 @@ async fn on_quote(
         .await;
         return Ok(());
     }
-    let key = entry_key(account_id, sym.id, l.last_completed);
-    if tried.contains(&key) || ts::intent_exists(pool, &key).await? {
-        tried.insert(key);
+    let base_key = entry_key(account_id, sym.id, l.last_completed);
+    if tried.contains(&base_key)
+        || book
+            .entry_retry_at
+            .get(&sym.id)
+            .is_some_and(|at| Utc::now() < *at)
+    {
+        return Ok(());
+    }
+    let key = match ts::next_entry_attempt(pool, account_id, &base_key, Utc::now()).await? {
+        ts::EntryAttempt::Ready(key) => key,
+        ts::EntryAttempt::WaitUntil(at) => {
+            book.entry_retry_at.insert(sym.id, at);
+            return Ok(());
+        }
+        ts::EntryAttempt::Held => {
+            tried.insert(base_key);
+            return Ok(());
+        }
+    };
+    if tried.contains(&key) {
         return Ok(());
     }
     tried.insert(key.clone());
     let r = rules(pool, account_id, ctx.env).await?;
     let detail = json!({"strategy": STRATEGY, "level": l.level, "atr": l.atr,
         "ema_fast": l.ema_fast, "ema_slow": l.ema_slow, "bid": sym.bid, "ask": sym.ask,
-        "side": side.as_str(), "after": l.last_completed});
+        "side": side.as_str(), "after": l.last_completed,
+        "dispatch_policy": jiaoyi_ctrader::entry_guard::POLICY,
+        "dispatch_max_age_secs": 6});
     // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
     // the owner's pause ("only human can pause trade"): no new entry, the
     // signal kept for when the owner lifts it. Exits above are untouched.
@@ -2416,7 +2447,7 @@ async fn on_quote(
         quote_to_deposit: Some(rate),
         label: LABEL.into(),
     };
-    match gate::send(
+    match gate::send_entry(
         session,
         allowlist,
         &ledger,
@@ -2424,6 +2455,7 @@ async fn on_quote(
         cmd,
         &key,
         Duration::from_secs(r.order_wait_secs),
+        &entry_guard,
     )
     .await
     {
@@ -2496,6 +2528,13 @@ async fn on_quote(
             record_fill(pool, fill, ledger.sent_at(), &sent).await?;
         }
         Err(SendError::Refused(x)) => {
+            if x.reason.starts_with("ENTRY_") {
+                // The final guard persisted proof that this attempt sent no
+                // bytes. A later quote may decide again with a new key.
+                tried.remove(&key);
+                book.entry_retry_at
+                    .insert(sym.id, Utc::now() + chrono::Duration::seconds(60));
+            }
             let mut detail = detail;
             detail["entry_key"] = json!(key);
             d.note(Some(name), "refused", &x.reason, detail).await;

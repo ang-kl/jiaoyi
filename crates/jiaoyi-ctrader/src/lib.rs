@@ -19,6 +19,7 @@ mod pb {
 }
 
 pub mod client;
+pub mod entry_guard;
 pub mod frame;
 pub mod payload;
 pub mod tickdata;
@@ -72,6 +73,7 @@ pub mod messages {
         ProtoOaMarginCall,
         ProtoOaMarginCallListReq,
         ProtoOaMarginCallListRes,
+        ProtoOaMarginChangedEvent,
         ProtoOaMinCommissionType,
         ProtoOaOrder,
         ProtoOaOrderDetailsRes,
@@ -98,7 +100,9 @@ pub mod messages {
         ProtoOaTrader,
         ProtoOaTraderReq,
         ProtoOaTraderRes,
+        ProtoOaTraderUpdatedEvent,
         ProtoOaTradingMode,
+        ProtoOaTrailingSlChangedEvent,
         ProtoOaTrendbar,
         ProtoOaTrendbarPeriod,
         ProtoOaUnsubscribeSpotsReq,

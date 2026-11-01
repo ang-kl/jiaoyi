@@ -29,6 +29,9 @@ struct MemLedger {
     fail: bool,
     fail_fill_receipt: bool,
     margin_unavailable: bool,
+    intent_delay: Duration,
+    fail_unsent_receipt: bool,
+    fail_guard_receipt: bool,
 }
 
 impl MemLedger {
@@ -62,14 +65,23 @@ impl Ledger for MemLedger {
         if self.fail {
             return Err("database down".into());
         }
-        let mut v = self.intents.lock().unwrap();
-        if v.iter().any(|x| x.entry_key == i.entry_key) {
-            return Ok(IntentWrite::AlreadyRecorded);
+        {
+            let mut v = self.intents.lock().unwrap();
+            if v.iter().any(|x| x.entry_key == i.entry_key) {
+                return Ok(IntentWrite::AlreadyRecorded);
+            }
+            v.push(i.clone());
         }
-        v.push(i.clone());
+        tokio::time::sleep(self.intent_delay).await;
         Ok(IntentWrite::Recorded)
     }
     async fn record_event(&self, e: &EventRecord) -> Result<(), String> {
+        if self.fail_guard_receipt && e.kind == "ENTRY_VALIDATED_BEFORE_SEND" {
+            return Err("injected validation receipt failure after write".into());
+        }
+        if self.fail_unsent_receipt && e.kind == "REFUSED_BEFORE_SEND" {
+            return Err("injected unsent receipt failure".into());
+        }
         if self.fail_fill_receipt && e.kind == "ORDER_FILLED" {
             return Err("injected durable fill write failure".into());
         }
@@ -1605,4 +1617,199 @@ async fn shared_gate_absence_revokes_authority_before_same_shape_reappearance() 
     assert!(matches!(result, Err(SendError::Refused(_))));
     assert!(log.lock().unwrap().closes.is_empty());
     assert_eq!(f.positions.lock().unwrap()[0].stop_loss, Some(90.0));
+}
+
+#[tokio::test]
+async fn entry_guard_rejects_after_slow_intent_write_and_persists_only_proven_unsent() {
+    use jiaoyi_ctrader::entry_guard::{EntryGuard, Signal};
+    for fail_unsent_receipt in [false, true] {
+        let f = FakeBroker {
+            quotes: HashMap::from([(ETH, vec![(Some(300_000_000), Some(300_100_000))])]),
+            ..fake()
+        };
+        let (conn, log) = f.spawn();
+        let session = session_on(&conn).await;
+        let mut quotes = conn.spot_events();
+        session.subscribe_spots(&[ETH]).await.unwrap();
+        quotes.recv().await.unwrap();
+        let ledger = MemLedger {
+            intent_delay: Duration::from_millis(80),
+            fail_unsent_receipt,
+            ..Default::default()
+        };
+        let guard = EntryGuard {
+            connection_generation: conn.entry_generation(),
+            account_id: ACCOUNT,
+            symbol_id: ETH,
+            side: Side::Buy,
+            signal: Signal::Trend { level: 2990.0 },
+            cost: None,
+            expires: tokio::time::Instant::now() + Duration::from_millis(40),
+            account_revision: conn.entry_revision(ACCOUNT),
+        };
+        let result = jiaoyi_ctrader::trading::send_entry(
+            &session,
+            &allow(),
+            &ledger,
+            &on(),
+            open(1, 28_457_000),
+            "expired-persisted",
+            Duration::from_secs(1),
+            &guard,
+        )
+        .await;
+        assert_eq!(orders(&log), 0);
+        assert_eq!(ledger.intents.lock().unwrap().len(), 1);
+        if fail_unsent_receipt {
+            assert!(matches!(result, Err(SendError::Evidence(_))));
+            assert!(
+                ledger.events.lock().unwrap().is_empty(),
+                "failed terminal receipt leaves intent unresolved"
+            );
+        } else {
+            assert!(
+                matches!(result, Err(SendError::Refused(e)) if e.reason.contains("ENTRY_EXPIRED"))
+            );
+            assert_eq!(ledger.events.lock().unwrap()[0].kind, "REFUSED_BEFORE_SEND");
+            let receipt: serde_json::Value =
+                serde_json::from_slice(&ledger.events.lock().unwrap()[0].raw).unwrap();
+            assert_eq!(receipt["evidence"]["bid"]["price"], 3000.0);
+            assert_eq!(receipt["evidence"]["ask"]["price"], 3001.0);
+            assert_eq!(receipt["evidence"]["deadline_elapsed"], true);
+            assert_eq!(receipt["evidence"]["stage"], "after_writer_lock");
+            assert!(
+                receipt["evidence"]["bid"]["receipt_age_ms"]
+                    .as_i64()
+                    .unwrap()
+                    >= 40
+            );
+            let repeated = jiaoyi_ctrader::trading::send_entry(
+                &session,
+                &allow(),
+                &ledger,
+                &on(),
+                open(1, 28_457_000),
+                "expired-persisted",
+                Duration::from_secs(1),
+                &guard,
+            )
+            .await;
+            assert!(
+                matches!(repeated, Err(SendError::Refused(e)) if e.reason.contains("already recorded"))
+            );
+            assert_eq!(orders(&log), 0);
+            let control = MemLedger::default();
+            let valid = EntryGuard {
+                expires: tokio::time::Instant::now() + Duration::from_secs(1),
+                ..guard
+            };
+            let normal_started = std::time::Instant::now();
+            let sent = jiaoyi_ctrader::trading::send_entry(
+                &session,
+                &allow(),
+                &control,
+                &on(),
+                open(1, 28_457_000),
+                "next-permitted",
+                Duration::from_secs(1),
+                &valid,
+            )
+            .await
+            .unwrap();
+            assert!(matches!(sent.outcome, Outcome::Filled { .. }));
+            assert!(
+                sent.events
+                    .iter()
+                    .all(|e| e.kind != "ENTRY_VALIDATED_BEFORE_SEND"),
+                "returned event list remains broker executions only"
+            );
+            let recorded = control.events.lock().unwrap();
+            let validated: Vec<_> = recorded
+                .iter()
+                .filter(|e| e.kind == "ENTRY_VALIDATED_BEFORE_SEND")
+                .collect();
+            assert_eq!(validated.len(), 1);
+            let snapshot: serde_json::Value = serde_json::from_slice(&validated[0].raw).unwrap();
+            assert_eq!(snapshot["result"], "passed");
+            assert_eq!(snapshot["deadline_elapsed"], false);
+            assert_eq!(snapshot["bid"]["price"], 3000.0);
+            assert_eq!(snapshot["ask"]["price"], 3001.0);
+            assert_eq!(snapshot["connection_generation"], conn.entry_generation());
+            assert_eq!(snapshot["stage"], "after_writer_lock");
+            eprintln!(
+                "valid guarded fake-broker open including acknowledgement: {} ms",
+                normal_started.elapsed().as_millis()
+            );
+            assert_eq!(orders(&log), 1);
+        }
+    }
+}
+
+#[tokio::test]
+async fn successful_entry_guard_receipt_failure_after_write_is_uncertain_and_not_resent() {
+    use jiaoyi_ctrader::entry_guard::{EntryGuard, Signal};
+    let f = FakeBroker {
+        quotes: HashMap::from([(ETH, vec![(Some(300_000_000), Some(300_100_000))])]),
+        ..fake()
+    };
+    let (conn, log) = f.spawn();
+    let session = session_on(&conn).await;
+    let mut quotes = conn.spot_events();
+    session.subscribe_spots(&[ETH]).await.unwrap();
+    quotes.recv().await.unwrap();
+    let ledger = MemLedger {
+        fail_guard_receipt: true,
+        ..Default::default()
+    };
+    let guard = EntryGuard {
+        connection_generation: conn.entry_generation(),
+        account_id: ACCOUNT,
+        symbol_id: ETH,
+        side: Side::Buy,
+        signal: Signal::Trend { level: 2990.0 },
+        cost: None,
+        expires: tokio::time::Instant::now() + Duration::from_secs(1),
+        account_revision: conn.entry_revision(ACCOUNT),
+    };
+    let result = jiaoyi_ctrader::trading::send_entry(
+        &session,
+        &allow(),
+        &ledger,
+        &on(),
+        open(1, 28_457_000),
+        "validation-receipt-failed",
+        Duration::from_secs(1),
+        &guard,
+    )
+    .await;
+    assert!(matches!(result, Err(SendError::Evidence(e)) if e.contains("after write")));
+    for _ in 0..20 {
+        if orders(&log) == 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(orders(&log), 1, "frame preceded the receipt write");
+    assert_eq!(ledger.intents.lock().unwrap().len(), 1);
+    assert!(
+        ledger.events.lock().unwrap().is_empty(),
+        "no false fill or unsent terminal event"
+    );
+    let again = jiaoyi_ctrader::trading::send_entry(
+        &session,
+        &allow(),
+        &ledger,
+        &on(),
+        open(1, 28_457_000),
+        "validation-receipt-failed",
+        Duration::from_secs(1),
+        &guard,
+    )
+    .await;
+    assert!(matches!(again, Err(SendError::Refused(_))));
+    assert_eq!(
+        orders(&log),
+        1,
+        "uncertain attempt cannot emit a duplicate frame"
+    );
 }

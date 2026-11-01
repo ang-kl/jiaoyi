@@ -9,9 +9,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use axum::extract::{Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Json, Response};
 use axum::routing::get;
+use axum::Extension;
 use axum::Router;
 use jiaoyi_store::sqlx::{PgPool, Row};
 use serde_json::json;
@@ -31,6 +32,13 @@ pub struct AppState {
 }
 
 pub fn router(state: AppState) -> Router {
+    router_with_owner_access(state, crate::owner_assessments::OwnerAccess::from_env())
+}
+
+fn router_with_owner_access(
+    state: AppState,
+    access: crate::owner_assessments::OwnerAccess,
+) -> Router {
     Router::new()
         .route("/", get(status_page))
         .route("/health", get(health))
@@ -47,7 +55,71 @@ pub fn router(state: AppState) -> Router {
         .route("/operations/stop-loss-reviews", get(stop_loss_reviews))
         .route("/operations/trailing-receipts", get(trailing_receipts))
         .route("/operations", get(operations_page))
+        .route("/operations/setup-assessments", get(setup_assessments))
+        .route("/owner/setup-assessments", get(owner_setup_assessments))
+        .route("/owner/assessments", get(owner_setup_page))
+        .route("/owner/quote-coverage", get(owner_quote_coverage))
+        .layer(Extension(access))
         .with_state(state)
+}
+
+async fn setup_assessments(State(s): State<AppState>) -> Response {
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    Json(crate::setup_assessment::report(&accounts, false)).into_response()
+}
+
+async fn owner_setup_assessments(
+    State(s): State<AppState>,
+    Extension(access): Extension<crate::owner_assessments::OwnerAccess>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(status) = access.authorise(&headers) {
+        return crate::owner_assessments::refusal(status);
+    }
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    crate::owner_assessments::private_response(
+        Json(crate::setup_assessment::report(&accounts, true)).into_response(),
+    )
+}
+
+async fn owner_setup_page(
+    State(s): State<AppState>,
+    Extension(access): Extension<crate::owner_assessments::OwnerAccess>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(status) = access.authorise(&headers) {
+        return crate::owner_assessments::refusal(status);
+    }
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    let report = crate::setup_assessment::report(&accounts, true);
+    crate::owner_assessments::private_response(
+        Html(crate::owner_assessments::page(&report)).into_response(),
+    )
+}
+
+async fn owner_quote_coverage(
+    State(s): State<AppState>,
+    Extension(access): Extension<crate::owner_assessments::OwnerAccess>,
+    headers: HeaderMap,
+    Query(query): Query<crate::quote_coverage::Query>,
+) -> Response {
+    if let Err(status) = access.authorise(&headers) {
+        return crate::owner_assessments::refusal(status);
+    }
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    if let Err(reason) = query.validate(&accounts) {
+        return crate::owner_assessments::private_response(
+            (StatusCode::BAD_REQUEST, Json(json!({"reason": reason}))).into_response(),
+        );
+    }
+    let response = match crate::quote_coverage::report(&s.pool, &accounts, &query).await {
+        Ok(report) => Json(report).into_response(),
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"status":"unavailable","reason":"bounded quote coverage read did not complete"})),
+        ).into_response(),
+    };
+    crate::owner_assessments::private_response(response)
 }
 
 fn unavailable(e: impl std::fmt::Display) -> Response {
@@ -77,6 +149,7 @@ async fn health(State(s): State<AppState>) -> Response {
             let base_at = Instant::now();
             v["history_sync"] = serde_json::to_value(history).unwrap_or_default();
             let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+            v["setup_assessment"] = crate::setup_assessment::report(&accounts, false);
             v["supervision"] = match crate::supervisor::reports(&s.pool, &accounts).await {
                 Ok(mut report) => {
                     report.as_object_mut().unwrap().remove("recent_events");
@@ -439,6 +512,145 @@ async fn trials(State(s): State<AppState>) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn owner_test_router(password: Option<&str>) -> Router {
+        router_with_owner_access(
+            AppState {
+                pool: jiaoyi_store::sqlx::postgres::PgPoolOptions::new()
+                    .connect_lazy("postgres://jiaoyi@127.0.0.1:5432/postgres")
+                    .unwrap(),
+                loading: Arc::new(AtomicBool::new(false)),
+                recorders: Default::default(),
+                history: Default::default(),
+                trading_loops: Default::default(),
+                strategy3_loops: Default::default(),
+                allowed_accounts: Arc::new([900_073].into_iter().collect()),
+            },
+            crate::owner_assessments::OwnerAccess::new(password),
+        )
+    }
+
+    #[tokio::test]
+    async fn private_assessment_routes_require_authentication_and_never_offer_writes() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+
+        for path in ["/owner/setup-assessments", "/owner/assessments"] {
+            for (configured, credential, status) in [
+                (None, Some("Bearer secret"), StatusCode::SERVICE_UNAVAILABLE),
+                (Some("secret"), None, StatusCode::UNAUTHORIZED),
+                (
+                    Some("secret"),
+                    Some("Bearer wrong"),
+                    StatusCode::UNAUTHORIZED,
+                ),
+                (Some("secret"), Some("Bearer secret"), StatusCode::OK),
+                (
+                    Some("secret"),
+                    Some("Basic b3duZXI6c2VjcmV0"),
+                    StatusCode::OK,
+                ),
+            ] {
+                let mut req = Request::builder().uri(path);
+                if let Some(credential) = credential {
+                    req = req.header("authorization", credential);
+                }
+                let response = owner_test_router(configured)
+                    .oneshot(req.body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), status);
+                assert_eq!(response.headers()["cache-control"], "no-store");
+                let body = response.into_body().collect().await.unwrap().to_bytes();
+                let body = String::from_utf8(body.to_vec()).unwrap();
+                if status != StatusCode::OK {
+                    assert!(!body.contains("900073"));
+                    assert!(!body.contains("secret"));
+                    assert!(!body.contains("objects"));
+                }
+            }
+            let response = owner_test_router(Some("secret"))
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(path)
+                        .header("authorization", "Bearer secret")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        }
+    }
+
+    #[tokio::test]
+    async fn aggregate_route_cannot_be_switched_to_private_with_a_query_parameter() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+        let response = owner_test_router(None)
+            .oneshot(
+                Request::builder()
+                    .uri("/operations/setup-assessments?private=true")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        for account in body["accounts"].as_array().unwrap() {
+            assert!(account.get("objects").is_none());
+            assert!(account.get("account_checks").is_none());
+            assert!(account.get("transitions").is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn owner_coverage_authenticates_before_account_checks_and_bounds_queries() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+        let base = "/owner/quote-coverage?symbol_id=1&from=2026-11-01T00:00:00Z";
+        for (account, end, auth, expected) in [
+            (
+                900_073,
+                "2026-11-01T01:00:00Z",
+                None,
+                StatusCode::UNAUTHORIZED,
+            ),
+            (7, "2026-11-01T01:00:00Z", None, StatusCode::UNAUTHORIZED),
+            (
+                7,
+                "2026-11-01T01:00:00Z",
+                Some("Bearer secret"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                900_073,
+                "2026-11-03T00:00:00Z",
+                Some("Bearer secret"),
+                StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            let mut request =
+                Request::builder().uri(format!("{base}&account_id={account}&to={end}"));
+            if let Some(auth) = auth {
+                request = request.header("authorization", auth);
+            }
+            let response = owner_test_router(Some("secret"))
+                .oneshot(request.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected);
+            assert_eq!(response.headers()["cache-control"], "no-store");
+        }
+    }
 
     // Claude · № 17,103 25-Oct (ordered: owner approved the instrument plan, "show your instrument design")
     fn params(account: &str, strategy: &str, since: &str, limit: &str) -> OrdersParams {

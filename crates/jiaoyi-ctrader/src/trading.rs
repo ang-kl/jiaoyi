@@ -46,6 +46,7 @@ use prost::Message;
 use serde::Serialize;
 
 use crate::client::{AccountSession, ClientError, ReceivedExecution};
+use crate::entry_guard::EntryGuard;
 use crate::pb::{self, ProtoOaPayloadType as Oa, ProtoPayloadType as Common};
 
 /// A trade's direction.
@@ -747,6 +748,61 @@ pub async fn send<L: Ledger>(
     entry_key: &str,
     wait: Duration,
 ) -> Result<Sent, SendError> {
+    send_inner(
+        session, allowlist, ledger, policy, cmd, entry_key, wait, None,
+    )
+    .await
+}
+
+/// Production entries supply a frozen decision guard. Exits keep using `send`.
+#[allow(clippy::too_many_arguments)]
+pub async fn send_entry<L: Ledger>(
+    session: &AccountSession<'_>,
+    allowlist: &Allowlist,
+    ledger: &L,
+    policy: &Policy,
+    cmd: Command,
+    entry_key: &str,
+    wait: Duration,
+    guard: &EntryGuard,
+) -> Result<Sent, SendError> {
+    match &cmd {
+        Command::Open {
+            symbol_id, side, ..
+        } if guard.account_id == session.account().id()
+            && guard.symbol_id == *symbol_id
+            && guard.side == *side => {}
+        _ => {
+            return Err(Refused {
+                reason: "entry guard does not match the opening command".into(),
+            }
+            .into())
+        }
+    }
+    send_inner(
+        session,
+        allowlist,
+        ledger,
+        policy,
+        cmd,
+        entry_key,
+        wait,
+        Some(guard),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_inner<L: Ledger>(
+    session: &AccountSession<'_>,
+    allowlist: &Allowlist,
+    ledger: &L,
+    policy: &Policy,
+    cmd: Command,
+    entry_key: &str,
+    wait: Duration,
+    guard: Option<&EntryGuard>,
+) -> Result<Sent, SendError> {
     let account_id = session.account().id();
     let (risk, stop_price) = check(account_id, allowlist, ledger, policy, &cmd).await?;
     let _margin_lock = if matches!(cmd, Command::Open { .. }) {
@@ -951,8 +1007,81 @@ pub async fn send<L: Ledger>(
     // Subscribe before writing, so no answer is missed.
     let mut rx = conn.executions();
     let (pt, payload) = frame(account_id, &cmd, entry_key, take_profit);
-    conn.send_trading_frame(pt, payload, client_msg_id.clone())
-        .await?;
+    let written = if guard.is_some() {
+        conn.send_guarded_trading_frame(pt, payload, client_msg_id.clone(), guard)
+            .await
+    } else {
+        conn.send_trading_frame(pt, payload, client_msg_id.clone())
+            .await
+            .map(|_| None)
+    };
+    if let Err(ClientError::EntryRefused(refusal)) = &written {
+        // The transport verified this before arming its write attempt. This
+        // event is local, not a broker rejection; it releases only this proven
+        // unsent intent. Persistence failure keeps the intent unresolved.
+        let event = EventRecord {
+            account_id,
+            client_msg_id: Some(client_msg_id.clone()),
+            entry_key: Some(entry_key.to_string()),
+            payload_type: 0,
+            kind: "REFUSED_BEFORE_SEND".into(),
+            position_id: None,
+            order_id: None,
+            deal_id: None,
+            symbol_id: intent.symbol_id,
+            side: intent.side,
+            price: None,
+            volume: None,
+            stop_loss: None,
+            label: None,
+            error_code: Some(refusal.code.into()),
+            description: Some(refusal.reason.into()),
+            is_server_event: Some(false),
+            raw: serde_json::to_vec(refusal).map_err(|e| SendError::Evidence(e.to_string()))?,
+            received_at: Utc::now(),
+        };
+        ledger
+            .record_event(&event)
+            .await
+            .map_err(SendError::Evidence)?;
+        return Err(Refused {
+            reason: refusal.to_string(),
+        }
+        .into());
+    }
+    if let Some(receipt) = written? {
+        // The frame has already been written and the transport lock released.
+        // This is local validation evidence, not a fill or a zero-byte refusal.
+        // The execution subscription above retains replies during persistence.
+        let event = EventRecord {
+            account_id,
+            client_msg_id: Some(client_msg_id.clone()),
+            entry_key: Some(entry_key.to_string()),
+            payload_type: 0,
+            kind: "ENTRY_VALIDATED_BEFORE_SEND".into(),
+            position_id: None,
+            order_id: None,
+            deal_id: None,
+            symbol_id: intent.symbol_id,
+            side: intent.side,
+            price: None,
+            volume: None,
+            stop_loss: None,
+            label: None,
+            error_code: None,
+            description: Some(
+                "final entry validation passed; this receipt does not establish a fill or edge"
+                    .into(),
+            ),
+            is_server_event: Some(false),
+            raw: serde_json::to_vec(&receipt).map_err(|e| SendError::Evidence(e.to_string()))?,
+            received_at: Utc::now(),
+        };
+        ledger
+            .record_event(&event)
+            .await
+            .map_err(SendError::Evidence)?;
+    }
     let deadline = tokio::time::Instant::now() + wait;
     let mut events = Vec::new();
     let outcome = loop {

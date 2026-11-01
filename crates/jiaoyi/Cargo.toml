@@ -16,6 +16,7 @@ jiaoyi-ctrader.workspace = true
 jiaoyi-store.workspace = true
 anyhow.workspace = true
 axum.workspace = true
+base64 = "0.22"
 chrono.workspace = true
 chrono-tz.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }

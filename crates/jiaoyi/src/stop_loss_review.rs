@@ -61,18 +61,29 @@ LEFT JOIN LATERAL (
  FROM trading_decisions d
  WHERE d.account_id=r.account_id AND d.symbol=s3.symbol AND d.kind='s3_skip'
    AND d.detail->>'session_date'=s3.session_date::text
-   AND d.detail->>'prereg_hash'=s3.prereg_hash AND d.detail->>'label'='jiaoyi-s3'
+   AND (d.detail->>'prereg_hash'=s3.prereg_hash
+        OR (s3.prereg_hash=$5 AND d.detail->>'prereg_hash'=$4))
+   AND d.detail->>'label'='jiaoyi-s3'
    AND (d.detail->>'skip_code'='cost_ge_r'
         OR d.reason LIKE 'cost reserve C (%) >= R (%): barrier too far for a no-drift process; skipped')
    AND d.at<=s3.decided_at
 ) cost_history ON true
 LEFT JOIN LATERAL (
- SELECT bool_or(o.decided_at<s3.decided_at) AS prior_open,
-        bool_or(o.decided_at=s3.decided_at) AS same_time_open
+ SELECT bool_or(o.decided_at<s3.decided_at AND unsent.refused_at IS NULL) AS prior_open,
+        bool_or(o.decided_at=s3.decided_at OR unsent.refused_at=s3.decided_at) AS same_time_open
  FROM strategy3_orders o
+ LEFT JOIN LATERAL (
+   SELECT min(e.received_at) AS refused_at FROM trading_events e
+   WHERE e.account_id=o.account_id AND e.entry_key=o.entry_key
+     AND e.kind='REFUSED_BEFORE_SEND' AND e.received_at<=s3.decided_at
+     AND NOT EXISTS (SELECT 1 FROM trading_events other
+       WHERE other.account_id=o.account_id AND other.entry_key=o.entry_key
+         AND other.kind<>'REFUSED_BEFORE_SEND' AND other.received_at<=s3.decided_at)
+ ) unsent ON s3.prereg_hash=$5
  WHERE o.account_id=r.account_id AND o.symbol_id=s3.symbol_id
    AND o.session_date=s3.session_date AND o.kind='open' AND o.entry_key<>s3.entry_key
    AND o.decided_at<=s3.decided_at
+   AND (unsent.refused_at IS NULL OR unsent.refused_at=s3.decided_at)
 ) entry_history ON true
 ORDER BY r.closed_at DESC,r.id DESC
 "#;
@@ -96,20 +107,22 @@ fn saved_band(v: &Value) -> Option<jiaoyi_core::strategy3::band::Band> {
 /// recorded exits are inspected; position history is fetched only for these.
 pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Error> {
     let now = Utc::now();
+    // Explicit registrations, not whatever becomes current in the future:
+    // v7 inherits v6's session veto and adds proven-unsent attempt recovery.
+    // An old entry is always assessed under its own recorded registration.
+    let admission_hashes = [
+        include_bytes!("../../../docs/preregistration-2026-10-28-strategy3-v6.md").as_slice(),
+        include_bytes!("../../../docs/preregistration-2026-11-01-strategy3-v7.md").as_slice(),
+    ]
+    .map(|text| format!("{:x}", Sha256::digest(text)));
     let rows = sqlx::query(CANDIDATES)
         .bind(accounts)
         .bind(now - Duration::hours(24))
         .bind(now)
+        .bind(&admission_hashes[0])
+        .bind(&admission_hashes[1])
         .fetch_all(pool)
         .await?;
-    // These two admission rules belong to v6. A future current registration
-    // must not retroactively change which historical entries they apply to.
-    let admission_hash = format!(
-        "{:x}",
-        Sha256::digest(include_bytes!(
-            "../../../docs/preregistration-2026-10-28-strategy3-v6.md"
-        ))
-    );
     let mut cases = Vec::new();
     let mut seen = BTreeSet::new();
     for row in rows {
@@ -236,7 +249,9 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         let original_date: Option<NaiveDate> = row.get("original_session_date");
         let original_at: Option<DateTime<Utc>> = row.get("original_decided_at");
         let admission_known = strategy == "s3"
-            && saved_hash.as_deref() == Some(admission_hash.as_str())
+            && saved_hash
+                .as_ref()
+                .is_some_and(|hash| admission_hashes.contains(hash))
             && row.get::<Option<String>, _>("original_label").as_deref() == Some("jiaoyi-s3")
             && row.get::<Option<i64>, _>("original_symbol_id")
                 == row.get::<Option<i64>, _>("symbol_id")
@@ -265,7 +280,9 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         };
         let cost_veto_clear = history_clear("prior_cost_veto", "same_time_cost_veto");
         // The registered one-entry cap counts all prior S3 opens in this
-        // account/symbol/session, including opens under an older hash.
+        // account/symbol/session, including opens under an older hash. Only
+        // v7 excludes an already proven-unsent attempt; later evidence must
+        // not rewrite what was known at the saved original opening.
         let first_entry = history_clear("prior_open", "same_time_open");
         let checks = json!({"gate_risk_recorded":gate,"sizing_within_gate_cap":sizing,
             "preregistration_matches_current_reference":registered,"entry_direction_valid":direction,

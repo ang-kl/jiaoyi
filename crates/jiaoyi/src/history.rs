@@ -66,6 +66,10 @@ pub const RETRY_AFTER: Duration = Duration::from_secs(300);
 pub const DEAL_REFRESH_EVERY: Duration = Duration::from_secs(60);
 /// Overlap catches delayed broker deal/fee updates without replaying all history.
 pub const RECENT_DEAL_DAYS: i64 = 7;
+/// Let an interrupted history window persist its terminal receipt before the
+/// observer's earlier session-end notification triggers reconnect. The outer
+/// shutdown signal still cancels this bounded grace immediately.
+const ASSESSMENT_END_GRACE: Duration = Duration::from_secs(5);
 
 /// The grid windows `[start, end]` (inclusive, milliseconds) that intersect
 /// `[from_ms, to_ms]`, newest first. `width` is the window length.
@@ -755,7 +759,7 @@ pub async fn run_with<C, F>(
         let result = async {
             let conn = connect().await?;
             let session = loader::authorise(&pool, &conn, &broker, &account).await?;
-            maintain_account(
+            let maintained = maintain_account(
                 &pool,
                 &session,
                 &account,
@@ -763,8 +767,27 @@ pub async fn run_with<C, F>(
                 &status,
                 &watcher,
                 DEAL_REFRESH_EVERY,
-            )
-            .await
+            );
+            // Start assessment before the first historical deal request. Both
+            // futures remain polled, so historical work cannot stop its clock.
+            let assessed = crate::setup_assessment::run_session(&pool, &session, watcher.clone());
+            tokio::pin!(maintained, assessed);
+            tokio::select! {
+                result = &mut maintained => result,
+                _ = &mut assessed => {
+                    // Both consumers receive the same broker session end.
+                    // The observer has no history transaction to finish, so it
+                    // can return before maintain_account records the window
+                    // interrupted by that event. Dropping maintained here
+                    // would erase that receipt and its cut-window count.
+                    match tokio::time::timeout(ASSESSMENT_END_GRACE, &mut maintained).await {
+                        Ok(result) => result,
+                        Err(_) => Err(SessionEnded(
+                            "assessment read session ended; history cleanup grace expired".into()
+                        ).into()),
+                    }
+                },
+            }
         };
         let outcome = tokio::select! {
             r = result => r,

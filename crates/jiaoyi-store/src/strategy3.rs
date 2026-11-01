@@ -224,8 +224,8 @@ pub async fn orders_for_position(
     .await
 }
 
-/// The number of Strategy 3 opens decided on a symbol in a session (the next
-/// entry's number).
+/// Admitted/uncertain opening attempts. A durable, proven-unsent refusal
+/// does not consume the session entry allowance; it still consumes its key.
 pub async fn opens_in_session(
     pool: &PgPool,
     account_id: i64,
@@ -233,14 +233,30 @@ pub async fn opens_in_session(
     session_date: NaiveDate,
 ) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT count(*) FROM strategy3_orders
-         WHERE account_id = $1 AND symbol_id = $2 AND session_date = $3 AND kind = 'open'",
+        "SELECT count(*) FROM strategy3_orders o
+         WHERE account_id = $1 AND symbol_id = $2 AND session_date = $3 AND kind = 'open'
+           AND NOT EXISTS (SELECT 1 FROM trading_events e WHERE e.account_id=o.account_id
+              AND e.entry_key=o.entry_key AND e.kind='REFUSED_BEFORE_SEND'
+              AND NOT EXISTS (SELECT 1 FROM trading_events other WHERE other.account_id=o.account_id
+                  AND other.entry_key=o.entry_key AND other.kind <> 'REFUSED_BEFORE_SEND'))",
     )
     .bind(account_id)
     .bind(symbol_id)
     .bind(session_date)
     .fetch_one(pool)
     .await
+}
+
+/// Every persisted opening attempt, including proven-unsent refusals, gets a
+/// unique serial. Never recycle an intent key when the session remains eligible.
+pub async fn attempts_in_session(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+    session_date: NaiveDate,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT count(*) FROM strategy3_orders WHERE account_id=$1 AND symbol_id=$2 AND session_date=$3 AND kind='open'")
+        .bind(account_id).bind(symbol_id).bind(session_date).fetch_one(pool).await
 }
 
 /// The registered session cost veto survives reconnects and process restarts.
