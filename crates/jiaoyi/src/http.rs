@@ -58,6 +58,8 @@ fn router_with_owner_access(
         .route("/operations/setup-assessments", get(setup_assessments))
         .route("/owner/setup-assessments", get(owner_setup_assessments))
         .route("/owner/assessments", get(owner_setup_page))
+        .route("/owner/assessments.mjs", get(owner_setup_script))
+        .route("/owner/live-positions", get(owner_live_positions))
         .route("/owner/quote-coverage", get(owner_quote_coverage))
         .layer(Extension(access))
         .with_state(state)
@@ -94,6 +96,40 @@ async fn owner_setup_page(
     let report = crate::setup_assessment::report(&accounts, true);
     crate::owner_assessments::private_response(
         Html(crate::owner_assessments::page(&report)).into_response(),
+    )
+}
+
+async fn owner_setup_script(
+    Extension(access): Extension<crate::owner_assessments::OwnerAccess>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(status) = access.authorise(&headers) {
+        return crate::owner_assessments::refusal(status);
+    }
+    crate::owner_assessments::private_response(
+        (
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/javascript; charset=utf-8",
+            )],
+            crate::owner_assessments::SCRIPT,
+        )
+            .into_response(),
+    )
+}
+
+async fn owner_live_positions(
+    State(s): State<AppState>,
+    Extension(access): Extension<crate::owner_assessments::OwnerAccess>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(status) = access.authorise(&headers) {
+        return crate::owner_assessments::refusal(status);
+    }
+    let accounts: Vec<i64> = s.allowed_accounts.iter().copied().collect();
+    let report = crate::setup_assessment::report(&accounts, true);
+    crate::owner_assessments::private_response(
+        Json(crate::owner_assessments::live_positions(&report)).into_response(),
     )
 }
 
@@ -537,7 +573,12 @@ mod tests {
         use http_body_util::BodyExt;
         use tower::ServiceExt;
 
-        for path in ["/owner/setup-assessments", "/owner/assessments"] {
+        for path in [
+            "/owner/setup-assessments",
+            "/owner/assessments",
+            "/owner/assessments.mjs",
+            "/owner/live-positions",
+        ] {
             for (configured, credential, status) in [
                 (None, Some("Bearer secret"), StatusCode::SERVICE_UNAVAILABLE),
                 (Some("secret"), None, StatusCode::UNAUTHORIZED),

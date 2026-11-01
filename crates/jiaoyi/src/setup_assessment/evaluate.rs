@@ -118,6 +118,8 @@ pub struct ObjectAssessment {
     pub nominal_pnl_at_stop: Option<f64>,
     pub nominal_reward_at_target: Option<f64>,
     pub quote_at: Option<DateTime<Utc>>,
+    /// Browser-only update eligibility; never an entry or management gate.
+    pub live_update: super::display::LiveUpdate,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -152,7 +154,7 @@ fn fresh(at: Option<DateTime<Utc>>, now: DateTime<Utc>, secs: i64) -> bool {
     at.is_some_and(|at| at <= now && (now - at).num_milliseconds() <= secs * 1_000)
 }
 
-fn executable(q: Option<&Quote>, now: DateTime<Utc>) -> Option<(f64, f64)> {
+pub(super) fn executable(q: Option<&Quote>, now: DateTime<Utc>) -> Option<(f64, f64)> {
     let q = q?;
     if !fresh(q.bid_at, now, MAX_QUOTE_AGE_SECS) || !fresh(q.ask_at, now, MAX_QUOTE_AGE_SECS) {
         return None;
@@ -577,6 +579,7 @@ fn assess_object(
         nominal_pnl_at_stop: pnl_at_stop,
         nominal_reward_at_target: reward,
         quote_at: q.and_then(|q| q.bid_at.zip(q.ask_at).map(|(b, a)| b.min(a))),
+        live_update: super::display::eligibility(kind, input, trade.symbol_id),
     }
 }
 
