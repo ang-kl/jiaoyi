@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLiveUpdater, priceDirection } from '../../src/owner_assessments.mjs';
+import { createLiveUpdater, priceDirection, startOwnerPage } from '../../src/owner_assessments.mjs';
 
 const flush = async () => {
   for (let i = 0; i < 12; i += 1) await Promise.resolve();
@@ -234,4 +234,69 @@ test('price direction uses a newer comparable exit-side quote, never entry price
   ]) assert.equal(priceDirection(before, current).direction, 'unknown');
   assert.equal(priceDirection(undefined, after).direction, 'unknown');
   assert.equal(priceDirection({...before, bid: ''}, after).direction, 'unknown');
+});
+
+// Exercise the actual page's window gate, not a separately modelled canPoll.
+async function boundaryPage(replyWindow) {
+  const timer = clock();
+  const boundary = Date.parse('2026-11-04T00:00:00Z');
+  const originalNow = Date.now;
+  Date.now = () => boundary + timer.now();
+  await timer.advance(100);
+  let reads = 0;
+  const label = {textContent: '', closest: () => null};
+  const row = {
+    dataset: {positionKey: '9:201', marketOpenUntil: new Date(boundary).toISOString()},
+    classList: {contains: () => false, remove: () => {}}, querySelector: () => null,
+  };
+  const container = {dataset: {}, querySelector: () => null};
+  const doc = {
+    visibilityState: 'visible', hasFocus: () => true, addEventListener: () => {},
+    querySelectorAll: () => [row],
+    getElementById: id => id === 'live-update-status' ? label : id === 'positions-9' ? container : null,
+    createElement: () => assert.fail('expired/stale evidence must not render a fresh row'),
+  };
+  const win = {
+    setTimeout: timer.set, clearTimeout: timer.clear, addEventListener: () => {},
+    fetch: async () => {
+      const window = replyWindow(++reads, boundary);
+      return {ok: true, json: async () => ({accounts: [{
+        account_id: 9, evidence_complete: true, position_ids: [201], positions: [{
+          id: 201, live_update: {
+            eligible: false, valid_until: null, market_open_until: window,
+            reason: window ? 'quote_stale' : 'market_closed',
+          },
+        }],
+      }]})};
+    },
+  };
+  const updater = startOwnerPage(doc, win);
+  await flush();
+  return {timer, row, label, reads: () => reads, stop: () => {updater.stop(); Date.now = originalNow;}};
+}
+
+test('a pre-boundary observer snapshot gets one delayed retry and a published future window resumes polling', async () => {
+  const h = await boundaryPage((read, boundary) => new Date(boundary + (read === 1 ? 0 : 60_000)).toISOString());
+  try {
+    assert.equal(h.reads(), 1);
+    await h.timer.advance(4_999);
+    assert.equal(h.reads(), 1, 'retry retains the normal five-second delay');
+    await h.timer.advance(1);
+    assert.equal(h.reads(), 2);
+    assert.ok(Date.parse(h.row.dataset.marketOpenUntil) > Date.now());
+    assert.equal(h.timer.count(), 1, 'the published future window keeps normal polling alive');
+    assert.match(h.label.textContent, /Waiting for fresh evidence/);
+  } finally {h.stop();}
+});
+
+test('expired-window retries are bounded and a closed or unknown reply stops immediately', async () => {
+  for (const mode of ['unchanged', 'closed', 'unknown']) {
+    const h = await boundaryPage((_, boundary) => mode === 'unchanged' ? new Date(boundary).toISOString() : mode === 'closed' ? null : '');
+    try {
+      await h.timer.advance(30_000);
+      assert.equal(h.reads(), mode === 'unchanged' ? 2 : 1, mode);
+      assert.equal(h.timer.count(), 0, mode);
+      assert.match(h.label.textContent, /Updates paused/);
+    } finally {h.stop();}
+  }
 });

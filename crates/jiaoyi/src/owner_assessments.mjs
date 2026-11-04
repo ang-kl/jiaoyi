@@ -87,12 +87,14 @@ export function startOwnerPage(doc, win) {
   };
   const isActive = () => doc.visibilityState === 'visible' && doc.hasFocus() && expanded(label);
   // A known-open window ending (including the UTC-midnight lease boundary)
-  // permits one metadata recheck. Unknown/closed initial windows never poll.
+  // permits at most two metadata reads, five seconds apart. The first may race
+  // the observer's one-second publication. Unknown/closed windows never poll.
   const checkedWindows = new Map();
   const canPoll = () => rows().some(row => {
     const window = row.dataset.marketOpenUntil;
     const until = Date.parse(window);
-    return Number.isFinite(until) && (until > Date.now() || checkedWindows.get(row.dataset.positionKey) !== window);
+    const checked = checkedWindows.get(row.dataset.positionKey);
+    return Number.isFinite(until) && (until > Date.now() || checked?.window !== window || checked.attempts < 2);
   });
   let expiryTimer = null;
   const clearExpiry = () => { if (expiryTimer !== null) win.clearTimeout(expiryTimer); expiryTimer = null; };
@@ -140,12 +142,16 @@ export function startOwnerPage(doc, win) {
     applyUpdate: data => {
       const current = new Map(rows().map(row => [row.dataset.positionKey, row]));
       for (const key of checkedWindows.keys()) if (!current.has(key)) checkedWindows.delete(key);
-      // Consume expired windows before applying new metadata. Only an actually
-      // extended, verified window can resume price repainting after this read.
+      // Count expired-window reads before applying new metadata. A second read
+      // can cross the observer publication boundary; only a verified future
+      // window can resume repainting. Closed/unknown replies stop immediately.
       for (const [key, row] of current) {
         const window = row.dataset.marketOpenUntil;
         const until = Date.parse(window);
-        if (Number.isFinite(until) && until <= Date.now()) checkedWindows.set(key, window);
+        if (Number.isFinite(until) && until <= Date.now()) {
+          const previous = checkedWindows.get(key);
+          checkedWindows.set(key, {window, attempts: previous?.window === window ? previous.attempts + 1 : 1});
+        }
       }
       if (!Array.isArray(data.accounts)) throw new Error('Invalid position response');
       let updated = 0;

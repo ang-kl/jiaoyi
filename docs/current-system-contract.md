@@ -118,8 +118,10 @@ Display eligibility now evaluates IANA broker schedules and applicable holidays
 in their own timezone. Irrelevant historical holidays cannot disable today's
 display; applicable malformed data remain unknown. A cached offset boundary
 stops a display lease at session/day/DST boundaries. This does not change the
-existing execution calendar or new-entry checks. One bounded, active-page status
-read may revalidate an expired previously known-open window; only fresh evidence
+existing execution calendar or new-entry checks. At most two active-page status
+reads, five seconds apart after completion, may revalidate the same expired
+previously known-open window. This covers a first read of the observer's previous
+one-second snapshot at a boundary; only fresh evidence
 of an open market permits repaint. Confirmed closed/unknown windows stop polling;
 initially unknown schedules do not start a polling loop. Fresh complete books
 can remove broker-confirmed closed positions. No ownership, risk, entry/exit,
