@@ -118,6 +118,8 @@ pub struct ObjectAssessment {
     pub nominal_pnl_at_stop: Option<f64>,
     pub nominal_reward_at_target: Option<f64>,
     pub quote_at: Option<DateTime<Utc>>,
+    pub bid: Option<f64>,
+    pub ask: Option<f64>,
     /// Browser-only update eligibility; never an entry or management gate.
     pub live_update: super::display::LiveUpdate,
 }
@@ -579,6 +581,8 @@ fn assess_object(
         nominal_pnl_at_stop: pnl_at_stop,
         nominal_reward_at_target: reward,
         quote_at: q.and_then(|q| q.bid_at.zip(q.ask_at).map(|(b, a)| b.min(a))),
+        bid: quote.map(|q| q.0),
+        ask: quote.map(|q| q.1),
         live_update: super::display::eligibility(kind, input, trade.symbol_id),
     }
 }

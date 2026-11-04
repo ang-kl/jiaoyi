@@ -141,6 +141,133 @@ fn incidents(value: &Value) -> String {
 
 pub const SCRIPT: &str = include_str!("owner_assessments.mjs");
 
+fn current_book(account: &Value) -> bool {
+    let now = chrono::Utc::now();
+    let recent = |field: &str, seconds: i64| {
+        account[field]
+            .as_str()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .is_some_and(|at| {
+                let age = now.signed_duration_since(at);
+                age.num_milliseconds() >= 0 && age.num_milliseconds() < seconds * 1000
+            })
+    };
+    account["evidence_complete"] == true && recent("assessed_at", 15) && recent("book_at", 120)
+}
+
+/// All positions remain visible in the initial owner snapshot, independently
+/// of eligibility for subsequent live repaint. Public callers receive counts only.
+pub fn home_card(report: &Value, health: &Value, owner: bool) -> String {
+    let mut out = String::from(
+        r#"<details class="dashboard-card open-trades-card" id="open-trades" open><summary><h2>Open trades — all accounts</h2></summary><div class="card-body"><p class="note">Whole-account broker inventory: S1, S3 and manual/external positions. Pending orders are separate. Account counts below are snapshot counts.</p>"#,
+    );
+    if owner {
+        out.push_str(r##"<p id="live-update-status" role="status">Snapshot loaded; checking live-update eligibility.</p><p class="note">Open trades remain visible when markets are closed or their schedules are unknown. Live rows refresh only while this page is visible and focused and their market is verified open. <a href="/?owner=1#open-trades">Recheck all snapshots</a> · <a href="/owner/assessments">Detailed setup checks</a>. External/unattributed positions are observed, not adopted or managed by Jiaoyi.</p>"##);
+    } else {
+        out.push_str(r##"<p><a class="owner-sign-in" href="/?owner=1#open-trades">Sign in to view all open trades</a></p><p class="note">Use your existing owner login (username: owner). Trade details require sign-in; the counts below do not mean there are no trades.</p>"##);
+    }
+    let accounts = report["accounts"].as_array();
+    if accounts.is_none_or(|a| a.is_empty()) {
+        out.push_str("<p>Broker inventory unavailable. No zero-position claim is made.</p>");
+    }
+    let environment = |account: &Value| {
+        health["trading"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .chain(health["strategy3"].as_array().into_iter().flatten())
+            .find(|a| a["account_id"] == account["account_id"])
+            .map(|a| text(&a["environment"]))
+            .unwrap_or_else(|| "unknown environment".into())
+    };
+    let mut ordered: Vec<&Value> = accounts.into_iter().flatten().collect();
+    ordered.sort_by_key(|a| {
+        (
+            a["position_count"].as_u64().unwrap_or(0) == 0,
+            environment(a) != "live",
+            a["account_id"].as_i64(),
+        )
+    });
+    for account in ordered {
+        let complete = current_book(account);
+        let environment = environment(account);
+        out.push_str(&format!(r#"<article class="account-card position-account"><h3>Account {} <span class="pill">{environment}</span></h3><p class="note">{} · {} open positions · Book {} · Assessed {}</p>"#,
+            text(&account["account_id"]), if complete { "Verified snapshot" } else { "Last observed / source unverified" },
+            text(&account["position_count"]), text(&account["book_at"]), text(&account["assessed_at"])));
+        if owner {
+            let objects: Vec<&Value> = account["objects"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|o| o["kind"] == "position")
+                .collect();
+            out.push_str(&format!(
+                r#"<div class="position-grid" data-position-layout="cards" id="positions-{}">"#,
+                text(&account["account_id"])
+            ));
+            if objects.is_empty() {
+                let message = if complete
+                    && account["position_count"] == 0
+                    && account["objects"].is_array()
+                {
+                    "No open positions in this verified broker snapshot."
+                } else {
+                    "Position details unavailable; recheck the broker snapshot."
+                };
+                out.push_str(&format!("<p data-empty-position>{message}</p>"));
+            }
+            for object in objects {
+                out.push_str(&position_card(account, object));
+            }
+            out.push_str("</div>");
+        }
+        out.push_str("</article>");
+    }
+    out.push_str("</div></details>");
+    out
+}
+
+fn position_card(account: &Value, object: &Value) -> String {
+    let ownership = object["strategy"]["strategy"]
+        .as_str()
+        .map(crate::status_page::esc)
+        .unwrap_or_else(|| "External / unattributed — observed only".into());
+    let price = match object["side"].as_str() {
+        Some("buy") => &object["bid"],
+        Some("sell") => &object["ask"],
+        _ => &Value::Null,
+    };
+    let count = object["checks"].as_array().map_or(0, Vec::len);
+    format!(
+        r#"<article class="live-trade-card" data-position-key="{}:{}" data-live-eligible="{}" data-market-open-until="{}" data-valid-until="{}" data-bid="{}" data-ask="{}" data-quote-at="{}" data-side="{}" data-assessed-at="{}"><header><h3>{}</h3><span class="pill">Account {}</span></header><p class="note">{} · {} units · {} lots<br>{ownership}</p><div class="position-price"><strong data-current-price>{}</strong><span class="pill" data-update-status>Snapshot</span></div><p data-price-direction data-direction="unknown">Awaiting comparable quote</p><p class="note">Exit-side quote: bid for buys, ask for sells. Arrows compare the previous displayed quote, not profit/loss.</p><dl class="position-levels"><div><dt>Entry</dt><dd>{}</dd></div><div><dt>Stop-loss</dt><dd>{}</dd></div><div><dt>Take-profit</dt><dd>{}</dd></div><div><dt>Bid / ask</dt><dd>{} / {}</dd></div></dl><p class="note">Quote {}<br>Book {}<br>Assessed {}</p><details class="position-checks"><summary>{count} setup checks</summary>{}</details></article>"#,
+        text(&account["account_id"]),
+        text(&object["id"]),
+        object["live_update"]["eligible"] == true,
+        text(&object["live_update"]["market_open_until"]),
+        text(&object["live_update"]["valid_until"]),
+        text(&object["bid"]),
+        text(&object["ask"]),
+        text(&object["quote_at"]),
+        text(&object["side"]),
+        text(&account["assessed_at"]),
+        text(&object["symbol"]),
+        text(&account["account_id"]),
+        text(&object["side"]),
+        text(&object["units"]),
+        text(&object["lots"]),
+        text(price),
+        text(&object["entry"]),
+        text(&object["stop_loss"]),
+        text(&object["take_profit"]),
+        text(&object["bid"]),
+        text(&object["ask"]),
+        text(&object["quote_at"]),
+        text(&account["book_at"]),
+        text(&account["assessed_at"]),
+        checks(&object["checks"])
+    )
+}
+
 fn position_row(account: &Value, object: &Value) -> String {
     let units = object["volume"]
         .as_f64()
@@ -157,10 +284,15 @@ fn position_row(account: &Value, object: &Value) -> String {
     } else {
         String::new()
     };
+    let ownership = object["strategy"]["strategy"]
+        .as_str()
+        .map(crate::status_page::esc)
+        .unwrap_or_else(|| "External / unattributed — observed only".into());
+    let count = object["checks"].as_array().map_or(0, Vec::len);
     format!(
-        "<tr{attributes}><td>{}<br><small>{} · {}<br>As of {} · <span data-update-status>Snapshot</span></small></td><td>{}<br>{} units</td><td>{}</td><td>{}<br>{}</td><td>{}</td></tr>",
+        "<tr{attributes}><td>{}<br><small>{} · {}<br>{ownership}<br>As of {} · <span data-update-status>Snapshot</span></small></td><td>{}<br>{} units<br><small>{} lots</small></td><td>{}<br><small>Bid / ask: {} / {}<br>Quote: {}</small></td><td>SL: {}<br>TP: {}</td><td><details class=position-checks><summary>{count} checks</summary>{}</details></td></tr>",
         text(&object["symbol"]), text(&object["kind"]), text(&object["id"]), text(&account["assessed_at"]),
-        text(&object["side"]), units, text(&object["entry"]), text(&object["stop_loss"]),
+        text(&object["side"]), units, text(&object["lots"]), text(&object["entry"]), text(&object["bid"]), text(&object["ask"]), text(&object["quote_at"]), text(&object["stop_loss"]),
         text(&object["take_profit"]), checks(&object["checks"]))
 }
 
@@ -169,12 +301,10 @@ fn position_row(account: &Value, object: &Value) -> String {
 pub fn live_positions(report: &Value) -> Value {
     let now = chrono::Utc::now();
     let accounts: Vec<Value> = report["accounts"].as_array().into_iter().flatten().map(|account| {
-        let fresh = account["assessed_at"].as_str()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .is_some_and(|at| { let age = now.signed_duration_since(at); age.num_milliseconds() >= 0 && age.num_seconds() < 15 });
-        let complete = fresh && account["evidence_complete"] == true;
         let positions: Vec<&Value> = account["objects"].as_array().into_iter().flatten()
             .filter(|o| o["kind"] == "position").collect();
+        let complete = current_book(account) && account["objects"].is_array()
+            && account["position_count"].as_u64() == Some(positions.len() as u64);
         let ids: Vec<Value> = positions.iter().map(|o| o["id"].clone()).collect();
         let updates: Vec<Value> = positions.into_iter().map(|object| {
             let mut eligibility = object["live_update"].clone();
@@ -183,7 +313,10 @@ pub fn live_positions(report: &Value) -> Value {
                     .is_some_and(|until| until > now);
             if !valid && eligibility.is_object() { eligibility["eligible"] = Value::Bool(false); }
             let mut row = serde_json::json!({"id":object["id"],"live_update":eligibility});
-            if valid { row["html"] = Value::String(position_row(account, object)); }
+            if valid {
+                row["html"] = Value::String(position_row(account, object));
+                row["card_html"] = Value::String(position_card(account, object));
+            }
             row
         }).collect();
         serde_json::json!({"account_id":account["account_id"], "assessed_at":account["assessed_at"],
@@ -269,11 +402,61 @@ mod tests {
     }
 
     #[test]
+    fn homepage_keeps_all_positions_visible_but_never_discloses_them_publicly() {
+        let now = chrono::Utc::now();
+        let report = json!({"accounts":[
+            {"account_id":2,"assessed_at":now,"book_at":now,"evidence_complete":true,"position_count":1,
+             "objects":[{"kind":"position","id":22,"symbol":"S1-private","side":"buy","strategy":{"strategy":"s1"},"live_update":{"eligible":false,"reason":"market_closed"}}]},
+            {"account_id":1,"assessed_at":now,"book_at":now,"evidence_complete":true,"position_count":1,
+             "objects":[{"kind":"position","id":11,"symbol":"<script>external-private</script>","side":"sell","live_update":{"eligible":false,"reason":"market_schedule_unknown"}},
+                        {"kind":"pending_entry","id":33,"symbol":"pending-private"}]}
+        ]});
+        let health = json!({"trading":[{"account_id":2,"environment":"demo"},{"account_id":1,"environment":"live"}]});
+        let public = home_card(&report, &health, false);
+        for secret in [
+            "S1-private",
+            "external-private",
+            "pending-private",
+            "data-position-key",
+        ] {
+            assert!(!public.contains(secret));
+        }
+        assert!(public.contains("Sign in to view all open trades"));
+        let owner = home_card(&report, &health, true);
+        assert!(owner.contains("S1-private"));
+        assert!(owner.contains("&lt;script&gt;external-private&lt;/script&gt;"));
+        assert!(!owner.contains("pending-private"));
+        assert!(!owner.contains("<script>external-private"));
+        assert_eq!(owner.matches("data-position-key=").count(), 2);
+        assert!(
+            owner.find("data-position-key=\"1:11\"").unwrap()
+                < owner.find("data-position-key=\"2:22\"").unwrap()
+        );
+        assert!(owner.contains("External / unattributed — observed only"));
+    }
+
+    #[test]
+    fn homepage_zero_requires_fresh_complete_book_and_explicit_empty_inventory() {
+        let now = chrono::Utc::now();
+        let mut report = json!({"accounts":[{"account_id":1,"assessed_at":now,"book_at":now,"evidence_complete":true,"position_count":0,"objects":[]}]});
+        let zero = "No open positions in this verified broker snapshot.";
+        assert!(home_card(&report, &json!({}), true).contains(zero));
+        report["accounts"][0]["evidence_complete"] = json!(false);
+        assert!(!home_card(&report, &json!({}), true).contains(zero));
+        report["accounts"][0]["evidence_complete"] = json!(true);
+        report["accounts"][0]["book_at"] = json!(now - chrono::Duration::seconds(121));
+        assert!(!home_card(&report, &json!({}), true).contains(zero));
+        report["accounts"][0]["book_at"] = json!(now);
+        report["accounts"][0]["objects"] = Value::Null;
+        assert!(!home_card(&report, &json!({}), true).contains(zero));
+    }
+
+    #[test]
     fn live_projection_updates_only_fresh_positions_and_never_refreshes_static_payloads() {
         let now = chrono::Utc::now();
         let until = (now + chrono::Duration::seconds(5)).to_rfc3339();
         let open = json!({"eligible":true,"valid_until":until,"market_open_until":until,"reason":"observed_open"});
-        let report = json!({"accounts":[{"account_id":7,"assessed_at":now,"evidence_complete":true,
+        let report = json!({"accounts":[{"account_id":7,"assessed_at":now,"book_at":now,"position_count":2,"evidence_complete":true,
             "private_account_totals":"not in row refresh", "objects":[
             {"kind":"position","id":1,"symbol":"<img src=x onerror=alert(1)>","live_update":open},
             {"kind":"position","id":2,"symbol":"closed","live_update":{"eligible":false,"reason":"market_closed"}},

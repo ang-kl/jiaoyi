@@ -894,3 +894,57 @@ independentpaging,boundaries,collapse/mobile/dark/escaping andzero paging reques
 Review identified clippedkeyboardfocus oncollapsedcards; insetsummaryfocusfixed.
 RequiredCI,merge anddeployedhomepage/componentchecks remainreleasegates; consult
 the implementationPR's finalreceipt forcompletion andsubsequentchatserials.
+
+
+[§LOG.82] №18,168–18,177 §§1–2; entry 2 November 2026, 07:48 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR150 merged739e32f7c8adf2eecfc71f878fd0a3f58fa3d8a6 green (656 Rust,188 coordinator,
+eight Node tests,both images). Exact tradingdeploymentedb014c6-782b-46fb-876f-f6035c5f6b70
+verified,predecessorremoved;worker68a7cb2e source/policyunchanged. Actualhomepage
+Chromium22/22 andfocusedrelease21/21pass;actualS1table80rows displayed20withpaging,
+fourS3tables17rowseach. Read-onlyloopbackforwardedunchangedproductionHTML due
+directbrowsertransportfailure. No pagingnetworkrequests; all8exitcheckcounters
+and4assessmentcountersadvancedafterbrowserteardown. FinalPR150receipt05:33SGT
+recordsqualifiedproductionproof andlatestchatserial№18,177.
+
+
+[§LOG.83] №18,178–18,183 §§1–2; entry 2 November 2026, 07:48 SGT; by <Codex (GPT-6), effort: not exposed>.
+Ownercannotseeactualtradesonhomepage andrequestsfirst-positionlivecardswithaccount
+identityandup/downmovement. Freshreadonlybrokerreconcile07:32SGT proves5positions
+matchingall4observerbooks:3S1demo and2external/unattributedreal-moneypositions;
+S3zero. HomepageonlyrenderedpersistedS3positions,omittingS1/manualinventory.
+Readmain739e32f andGROK_Logunchangedthrough№17,703; recheckGROK_Logbeforefuture
+numbering. CurrentbrokerexamplesalluseAmerica/New_York;UTC-onlydisplay and
+irrelevantpastzero-lengthholidaysdisabledrefresh. Parallelbroker/sourceaudit,
+displaycalendarimplementation,JScontrols,independentreview andChromiumvalidation.
+Authenticatedrootnowrenderswholeaccountcardsfirst;publiccounts/sign-inretain
+privacy. Cardskeepmanualownership,showquote/sourceages andcompareexit-sideprices,
+notPnL. Exactdisplay-onlyIANAcalendaraccepts5/5brokerfixtures;3zonecoldmidnight
+scan38–40ms,cached768calls0.011ms. Executioncalendar/risk/strategyunchanged.
+Rootauth/privacy/initialvisibility tests and183Rustlibrarytests pass;Clippygreen,
+10Nodecontroltests andinitial41Chromiumchecks pass. Reviewidentified08:00SGT
+display-leasefreeze; boundedpreviously-known-windowrevalidation andpreserved
+expandedchecks areunderfinalvalidation. RequiredCI/exactmerge/deployment and
+realposition-card/price-refreshproofremainreleasegates. Noorders,adoption,
+workerpermissionrenewal orfinancialPASS. SeethisrepairPR'sfinalreceiptforclosure
+andlaterserials;privatebroker/benchmarkevidencestaysoutsideGit.
+
+[§LOG.84] №18,184–18,188 §§1–2; entry 4 November 2026, 17:55 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR151 passed all three required checks at 2 November 07:56 SGT, but the Codex
+usage-limit interruption left it unmerged. The reset message gave 4 November
+06:57 without a timezone; if UTC, that is 14:57 SGT. Work resumed on 4 November
+at 17:52 SGT. Rechecked origin/main739e32f and GROK_Log through №17,703; no newer
+main change. Recheck other-model logs again before choosing future serials.
+Fresh read-only evidence at 17:53 SGT confirms three broker positions, matching
+all four observer books: two S1 demo and one external/unattributed real-money
+position. Trading and worker deployments/source/policy remain unchanged.
+Earlier actual-renderer Chromium verification passed 49 checks. Resume review
+reproduced a boundary race: the first post-midnight read can receive the previous
+one-second snapshot and exhaust its sole retry. The narrow correction permits
+at most two reads of the same expired known-open window, separated by the
+existing five-second interval. Confirmed closed/unknown markets still stop;
+fresh quotes and a verified future window remain required for live repaint.
+No broker commands, ownership, execution calendar, risk or worker policy changes.
+All 12 Node lifecycle/price/boundary regression checks pass. Required CI on the
+final head, merge and deployed browser/inventory receipts remain release gates;
+see PR151's final receipt for
+closure and later serial references. Private evidence remains outside Git.
