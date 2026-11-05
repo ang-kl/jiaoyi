@@ -9,6 +9,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::{PgPool, Row};
 
+mod entry_cost;
+pub use entry_cost::EntryCost;
+
 /// An intent, as the order gate writes it before the frame.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct IntentRow {
@@ -730,6 +733,8 @@ pub struct OrderView {
     pub slippage: Option<f64>,
     pub spread: Option<f64>,
     pub decision: Option<OrderDecision>,
+    /// Existing final-guard quote versus actual broker deals; absent is unknown.
+    pub entry_cost: Option<EntryCost>,
 }
 
 /// The decision detail's keys an order's `signal` shows: none is money.
@@ -772,6 +777,7 @@ pub async fn orders(pool: &PgPool, q: &OrdersQuery) -> Result<Vec<OrderView>, sq
                 EXISTS (SELECT 1 FROM trading_events e WHERE e.entry_key = i.entry_key
                         AND e.kind IN ('ORDER_FILLED', 'RECONCILED_FILL')) AS full,
                 f.order_kind, f.symbol AS fill_symbol, f.latency_ms, f.slippage, f.spread,
+                f.decision_price, dispatch.raw AS dispatch_raw,
                 d.kind AS d_kind, d.reason AS d_reason, d.at AS d_at, d.detail AS d_detail,
                 (SELECT s.name FROM symbols s WHERE s.account_id = i.account_id
                    AND s.broker_symbol_id = COALESCE(i.symbol_id, sym.symbol_id)) AS symbol_name
@@ -797,11 +803,16 @@ pub async fn orders(pool: &PgPool, q: &OrdersQuery) -> Result<Vec<OrderView>, sq
                               AND e.volume IS NOT NULL
                             ORDER BY e.id DESC LIMIT 1) rc ON true
          LEFT JOIN LATERAL (SELECT * FROM (
-                SELECT kind AS order_kind, symbol, latency_ms, slippage, spread
+                SELECT kind AS order_kind, symbol, latency_ms, slippage, spread, decision_price
                 FROM strategy1_fills WHERE entry_key = i.entry_key
                 UNION ALL
-                SELECT kind, symbol, latency_ms, slippage, spread
+                SELECT kind, symbol, latency_ms, slippage, spread, decision_price
                 FROM strategy3_fills WHERE entry_key = i.entry_key) u LIMIT 1) f ON true
+         LEFT JOIN LATERAL (SELECT e.raw FROM trading_events e
+                            WHERE i.kind = 'open' AND e.account_id = i.account_id
+                              AND e.entry_key = i.entry_key AND e.client_msg_id = i.client_msg_id
+                              AND e.kind = 'ENTRY_VALIDATED_BEFORE_SEND'
+                            ORDER BY e.id DESC LIMIT 1) dispatch ON true
          LEFT JOIN LATERAL (SELECT d.kind, d.reason, d.at, d.detail FROM trading_decisions d
                             WHERE d.account_id = i.account_id AND d.detail ? 'entry_key'
                               AND d.detail->>'entry_key' = i.entry_key
@@ -851,7 +862,20 @@ pub async fn orders(pool: &PgPool, q: &OrdersQuery) -> Result<Vec<OrderView>, sq
                 at: r.get("d_at"),
                 signal: signal_of(r.get("d_detail")),
             });
+            let entry_cost = (kind == "open")
+                .then(|| {
+                    entry_cost::attribute(
+                        r.get::<Option<Vec<u8>>, _>("dispatch_raw").as_deref(),
+                        r.get("account_id"),
+                        r.get("symbol_id"),
+                        r.get::<Option<String>, _>("side").as_deref(),
+                        r.get("decision_price"),
+                        vwap,
+                    )
+                })
+                .flatten();
             OrderView {
+                entry_cost,
                 entry_key: key.clone(),
                 strategy: strategy.into(),
                 label: label_of(strategy).into(),
@@ -904,6 +928,7 @@ pub async fn orders(pool: &PgPool, q: &OrdersQuery) -> Result<Vec<OrderView>, sq
         let at: DateTime<Utc> = r.get("sent_at");
         let detail: Value = r.get("detail");
         out.push(OrderView {
+            entry_cost: None,
             entry_key: r.get("entry_key"),
             label: label_of(&strategy).into(),
             strategy,
