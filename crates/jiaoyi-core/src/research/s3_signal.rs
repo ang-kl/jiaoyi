@@ -31,12 +31,23 @@ pub struct Request {
 }
 impl Request {
     pub fn validate(&self, now: DateTime<Utc>) -> Result<(), String> {
-        if !matches!(self.symbol.as_str(), "BTCUSD" | "NatGas") && !self.is_major_fx() {
+        let class_mode = self
+            .tick_replay
+            .as_ref()
+            .is_some_and(|o| o.entry_rule.class_prediction());
+        if class_mode && super::class_prediction::asset_class(&self.symbol).is_none() {
+            return Err("class prediction requires an exact original-20 symbol".into());
+        }
+        if !class_mode
+            && !matches!(self.symbol.as_str(), "BTCUSD" | "NatGas")
+            && !self.is_major_fx()
+        {
             return Err(
                 "symbol must be BTCUSD, NatGas or an explicitly supported major FX pair".into(),
             );
         }
         if self.is_major_fx()
+            && !class_mode
             && self.tick_replay.as_ref().is_none_or(|o| {
                 o.entry_rule != super::opening_range::EntryRule::FxSessionDiagnostic
             })
@@ -86,7 +97,9 @@ impl Request {
     pub fn rule(&self) -> sessions::SessionRule {
         sessions::rule_for(
             &self.symbol,
-            if self.symbol == "BTCUSD" {
+            if let Some(class) = super::class_prediction::asset_class(&self.symbol) {
+                class
+            } else if self.symbol == "BTCUSD" {
                 AssetClass::Crypto
             } else if self.is_major_fx() {
                 AssetClass::Fx

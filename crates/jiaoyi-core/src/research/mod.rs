@@ -27,5 +27,6 @@ pub mod s3_signal;
 
 pub mod s3_ticks;
 
+pub mod class_prediction;
 pub mod fx_diagnostic;
 pub mod opening_range;

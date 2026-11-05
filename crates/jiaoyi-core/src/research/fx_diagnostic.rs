@@ -112,6 +112,7 @@ pub(super) fn study(req: &Request, quotes: &[Snapshot], quality: Quality) -> Stu
         None
     };
     Study {
+        prediction_features: None,
         mode: "fx_session_diagnostic_v1", quality, marks: vec![], trade: None,
         fx_diagnostic: Some(Diagnostic {
             window: window(req).unwrap(), fresh_snapshots: fresh.len(), half_hour_coverage: coverage,

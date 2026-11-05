@@ -1,0 +1,120 @@
+{
+  "serial": "\u211618,257 \u00a7\u00a71\u20136",
+  "frozen_at_utc": "2026-11-05T11:43:34.416560+00:00",
+  "by": "Codex (GPT-6); effort not exposed",
+  "account": 49236051,
+  "classes": {
+    "equity_index": [
+      "US500",
+      "NAS100",
+      "US30",
+      "GER40",
+      "UK100",
+      "JPN225",
+      "AUS200"
+    ],
+    "fx": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "AUDUSD",
+      "USDCAD",
+      "NZDUSD"
+    ],
+    "metal": [
+      "XAUUSD",
+      "XAGUSD"
+    ],
+    "energy": [
+      "NatGas",
+      "SpotCrude",
+      "SpotBrent"
+    ],
+    "crypto": [
+      "BTCUSD",
+      "ETHUSD"
+    ]
+  },
+  "native_volume": {
+    "NAS100": 10,
+    "US30": 10,
+    "GER40": 10,
+    "UK100": 10,
+    "JPN225": 1000,
+    "AUS200": 10,
+    "GBPUSD": 100000,
+    "USDJPY": 100000,
+    "AUDUSD": 100000,
+    "NZDUSD": 100000,
+    "XAUUSD": 100,
+    "XAGUSD": 5000,
+    "SpotCrude": 100,
+    "NatGas": 10000,
+    "SpotBrent": 100,
+    "BTCUSD": 1,
+    "ETHUSD": 1,
+    "US500": 100,
+    "EURUSD": 100000,
+    "USDCAD": 100000
+  },
+  "development_dates": [
+    "2025-08-05",
+    "2025-08-12"
+  ],
+  "validation_dates": [
+    "2025-08-19",
+    "2025-08-20",
+    "2025-08-21",
+    "2025-08-22",
+    "2025-08-25",
+    "2025-08-26",
+    "2025-08-27",
+    "2025-08-28",
+    "2025-08-29",
+    "2025-09-01",
+    "2025-09-02",
+    "2025-09-03",
+    "2025-09-04",
+    "2025-09-05"
+  ],
+  "validation_warning": "Some historical bars/baseline dates were previously visible; this is separate-time candidate evaluation, not a pristine holdout. Every class and symbol result remains visible. No retuning on validation.",
+  "rules": [
+    "class_momentum1h",
+    "class_reversion1h"
+  ],
+  "feature": "13five-minute fresh snapshots through hour1; first-to-last direction; efficiency>=0.5; observed fresh tick range fixesR; single decision at60min; nextfresh<=5s proxy fill; mandatory close4h",
+  "costs": {
+    "spread": "causal13sample median",
+    "commission_round_trip": 0,
+    "commission_status": "explicit unknown/zero scenario, not certified fees",
+    "slippage_bps_per_side": 24
+  },
+  "scope": "development/research only; no financial qualification, live entries, universe restoration or risk changes",
+  "development_min_closed_per_class": 4,
+  "validation_min_closed_per_class": 20,
+  "validation_min_closed_per_symbol": 5,
+  "validation_min_weeks": 3,
+  "target_net_win_rate": 0.5,
+  "additional_requirements": [
+    "positive mean net R",
+    "PF(R)>1",
+    "positive net price units per symbol; no adding unlike asset price units",
+    "complete episode collection and no censored trades",
+    "validation rule selected only from development; per-symbol >=50% remains required"
+  ],
+  "limits": {
+    "development_max_jobs": 40,
+    "new_jobs_per_invocation": 40,
+    "max_ticks_per_job": 200000,
+    "max_pages_per_job": 120,
+    "episode_hours": 4
+  },
+  "references": [
+    "https://www.nber.org/papers/w24877",
+    "https://doi.org/10.20955/wp.1999.016",
+    "https://www.nber.org/papers/w8959",
+    "https://www.nyse.com/markets/hours-calendars",
+    "https://ir.eia.gov/ngs/ngs.html"
+  ],
+  "hypothesis_limits": "Direction continuation and reversal are competing research controls, not an assumed universal edge. Missing macro/news/consensus/order-flow features prevent claiming a fundamental event model."
+}
