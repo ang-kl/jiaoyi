@@ -948,3 +948,19 @@ All 12 Node lifecycle/price/boundary regression checks pass. Required CI on the
 final head, merge and deployed browser/inventory receipts remain release gates;
 see PR151's final receipt for
 closure and later serial references. Private evidence remains outside Git.
+
+[§LOG.85] №18,230–18,234 §§1–4; 5 November 2026, 08:34 SGT; by <Codex (GPT-6), effort: not exposed>.
+Owner authorised agile experimental code work. V2 reassessment failed: 236
+trades, 39 wins, net -USD824.33, versus 52 trades/net -USD203.60; original 52
+entries and exit times/net outcomes match. Four November simulation enters
+short at 11:00 SGT, exits 11:04, net -USD3.83; the session entry is consumed.
+Reject V2 for deployment under tested assumptions. Charges are cost proxies,
+not verified historical broker fees. Research v3 adds optional consecutive
+same-side half-hour breakout confirmation; OFF reproduces B by design, ON
+is a new unproven entry hypothesis. Prior/missing/session reset and unchanged
+exit/gate source checks reviewed. Pine compilation, baseline parity and
+candidate returns remain pending TradingView. Acceptance and fixed settings
+in research/tradingview/README.md. No production source, rule or worker changes.
+Read GROK_Log through №17,703 before allocating serial; consult other-model
+logs again before future numbering. Private CSVs are not committed. Exact PR
+checks and merge receipt determine repository completion, not a financial PASS.
