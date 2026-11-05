@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         return Err("source checksum/status/request mismatch".into());
     }
-    let momentum = serde_json::to_value(s3_ticks::study(&req, &src)?)?;
+    let momentum = wire_value(&s3_ticks::study(&req, &src)?)?;
     if momentum != job["result"]["study"] {
         return Err("deployed/offline study mismatch".into());
     }
@@ -43,4 +43,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         json!({"symbol":req.symbol,"class":class_prediction::asset_class(&req.symbol),"from":req.from,"to":req.to,"input_sha256":digest,"algorithm_sha256":job["result"]["algorithm_sha256"],"candidates":{"class_momentum1h":momentum,"class_reversion1h":reversion}})
     );
     Ok(())
+}
+
+// Compare both studies after the same JSON wire round trip. A Value built
+// directly from f64 retains the in-memory bits; the JSON parser can round its
+// decimal spelling differently. No numeric tolerance or field omission is used.
+fn wire_value<T: serde::Serialize>(value: &T) -> Result<Value, serde_json::Error> {
+    serde_json::from_slice(&serde_json::to_vec(value)?)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn wire_comparison_accepts_same_decimal_but_rejects_changed_evidence() {
+        let remote: Value =
+            serde_json::from_str(r#"{"return_bps":-30.756127566953722,"side":"sell"}"#).unwrap();
+        let local = json!({"return_bps":-30.756127566953722_f64,"side":"sell"});
+        assert_eq!(wire_value(&local).unwrap(), remote);
+        assert_ne!(
+            wire_value(&json!({"return_bps":-30.75612_f64,"side":"sell"})).unwrap(),
+            remote
+        );
+        assert_ne!(
+            wire_value(&json!({"return_bps":-30.756127566953722_f64,"side":"buy"})).unwrap(),
+            remote
+        );
+    }
 }

@@ -40,6 +40,8 @@ jobs:
         run: node --test crates/jiaoyi/tests/web/owner_assessments.test.mjs
       - name: research scorecards
         run: python3 -m unittest discover -s ops/research -p 'test_*.py'
+      - name: research JSON parity regression
+        run: cargo test -p jiaoyi-core --example class_prediction_study --locked
       - name: test
         run: cargo test --workspace --locked
 
