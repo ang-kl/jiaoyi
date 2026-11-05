@@ -964,3 +964,16 @@ in research/tradingview/README.md. No production source, rule or worker changes.
 Read GROK_Log through №17,703 before allocating serial; consult other-model
 logs again before future numbering. Private CSVs are not committed. Exact PR
 checks and merge receipt determine repository completion, not a financial PASS.
+
+[§LOG.86] №18,235–18,238 §§1–4; 5 November 2026, 10:13 SGT; by <Codex (GPT-6), effort: not exposed>.
+Owner superseded the heuristic confirmation test with ground-up inquiry and
+then selected automated broker-data backtesting in Jiaoyi, including NatGas.
+V3 remains parked. Implemented bounded owner-authenticated broker M30 jobs,
+shared-core signal/horizon analysis, explicit scenario costs, downloadable
+JSON/HTML and offline checksum-verified replay. Existing research seal retained;
+first examples use6–10Oct2025 development dates. No order writer, token refresh,
+strategy/risk mutation, recurring job, paid model call or research SQL archive.
+Five focused local tests and Clippy passed before final adapter additions;
+final CI and deployed BTC/NatGas receipts remain gates. Exact release status is
+recorded on this PR; do not infer connection or financial PASS from this entry.
+Consult other-model logs before the next serial. GROK_Log last read through17,703.
