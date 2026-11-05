@@ -6,19 +6,71 @@ use crate::{
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{extract::State, Extension, Json};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use jiaoyi_core::allowlist::Environment;
 use jiaoyi_core::research::{
     s3_signal::{self, Bar, Request},
     s3_ticks,
 };
 use jiaoyi_ctrader::{decode_bar, messages::ProtoOaTrendbarPeriod};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Default)]
 pub struct Jobs(pub Arc<Mutex<Value>>);
+
+/// Recent, post-holdout quote acquisition. No replay parameters or trading action.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CollectionRequest {
+    pub account: i64,
+    pub symbol: String,
+    pub from: DateTime<Utc>,
+    pub to: DateTime<Utc>,
+}
+impl CollectionRequest {
+    fn validate(&self, now: DateTime<Utc>) -> Result<Request, String> {
+        let first = jiaoyi_core::seal::held_out_to()
+            .succ_opt()
+            .ok_or("date overflow")?
+            .and_hms_opt(0, 0, 0)
+            .ok_or("date overflow")?
+            .and_utc();
+        if self.account <= 0
+            || self.from < first
+            || self.from >= self.to
+            || self
+                .to
+                .checked_add_signed(Duration::seconds(5))
+                .is_none_or(|end| end > now)
+            || self.from.timestamp() % 1800 != 0
+            || self.to.timestamp() % 1800 != 0
+            || self.from.timestamp_subsec_nanos() != 0
+            || self.to.timestamp_subsec_nanos() != 0
+        {
+            return Err("collection requires a closed post-holdout window from 2026-10-24, including its five-second tail".into());
+        }
+        // Reuse the registered session/window validator only. The development
+        // replay's seal stays unchanged, and this request never enters a study.
+        let req = Request {
+            account: self.account,
+            symbol: self.symbol.clone(),
+            from: self.from,
+            to: self.to,
+            spread: 0.0,
+            commission_round_trip: 0.0,
+            slippage_bps_per_side: 24.0,
+            tick_replay: Some(s3_ticks::Options {
+                volume: 1,
+                entry_rule: jiaoyi_core::research::opening_range::EntryRule::ClassMomentum1h,
+            }),
+        };
+        jiaoyi_core::research::class_prediction::validate(&req)?;
+        Ok(req)
+    }
+}
 fn response(status: StatusCode, v: Value) -> Response {
     private_response((status, Json(v)).into_response())
 }
@@ -51,6 +103,41 @@ pub async fn submit(
     if let Err(e) = req.validate(Utc::now()) {
         return response(StatusCode::BAD_REQUEST, json!({"error":e}));
     }
+    let envelope = json!({"request":req});
+    start(state, jobs, req, envelope, false)
+}
+
+pub async fn collect(
+    State(state): State<AppState>,
+    Extension(access): Extension<OwnerAccess>,
+    Extension(jobs): Extension<Jobs>,
+    headers: HeaderMap,
+    Json(collection): Json<CollectionRequest>,
+) -> Response {
+    if let Err(s) = access.authorise(&headers) {
+        return refusal(s);
+    }
+    if !state.allowed_accounts.contains(&collection.account) {
+        return response(
+            StatusCode::FORBIDDEN,
+            json!({"error":"account_not_allowed"}),
+        );
+    }
+    let req = match collection.validate(Utc::now()) {
+        Ok(req) => req,
+        Err(e) => return response(StatusCode::BAD_REQUEST, json!({"error":e})),
+    };
+    let envelope = json!({"request":collection,"kind":"recent_market_data"});
+    start(state, jobs, req, envelope, true)
+}
+
+fn start(
+    state: AppState,
+    jobs: Jobs,
+    req: Request,
+    mut envelope: Value,
+    collection: bool,
+) -> Response {
     let id = Utc::now().timestamp_micros().to_string();
     {
         let mut job = jobs.0.lock().unwrap();
@@ -60,13 +147,17 @@ pub async fn submit(
                 json!({"error":"one_research_job_at_a_time"}),
             );
         }
-        *job = json!({"id":id,"status":"running","phase":"starting","request":req,"started_at":Utc::now()});
+        envelope["id"] = json!(id);
+        envelope["status"] = json!("running");
+        envelope["phase"] = json!("starting");
+        envelope["started_at"] = json!(Utc::now());
+        *job = envelope;
     }
     let task_id = id.clone();
     tokio::spawn(async move {
         let outcome = tokio::time::timeout(
             std::time::Duration::from_secs(240),
-            run(&state, &jobs, &req),
+            run(&state, &jobs, &req, collection),
         )
         .await;
         let mut job = jobs.0.lock().unwrap();
@@ -89,13 +180,18 @@ pub async fn submit(
     });
     response(
         StatusCode::ACCEPTED,
-        json!({"id":id,"status":"running","poll":"/owner/backtests"}),
+        json!({"id":id,"status":"running","poll":if collection {"/owner/market-data"} else {"/owner/backtests"}}),
     )
 }
 fn phase(jobs: &Jobs, name: &str) {
     jobs.0.lock().unwrap()["phase"] = json!(name);
 }
-async fn run(state: &AppState, jobs: &Jobs, req: &Request) -> Result<Value, &'static str> {
+async fn run(
+    state: &AppState,
+    jobs: &Jobs,
+    req: &Request,
+    collection: bool,
+) -> Result<Value, &'static str> {
     let config = crate::config::Config::from_env().map_err(|_| "configuration_unavailable")?;
     let account = config
         .allowlist
@@ -251,6 +347,28 @@ async fn run(state: &AppState, jobs: &Jobs, req: &Request) -> Result<Value, &'st
             }
             jobs.0.lock().unwrap()["tick_pages"] = json!(budget.pages);
         }
+        if collection {
+            phase(jobs, "validating_collection");
+            validate_collection_source(req, &source)?;
+            let digest = format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_vec(&source).map_err(|_| "source_encoding_failed")?)
+            );
+            return Ok(json!({
+                "source":"cTrader Open API separate BID/ASK tick history",
+                "symbol_id":id,"environment":env.as_str(),"input":source,
+                "input_sha256":digest,"tick_pages":budget.pages,"m30_pages":0,
+                "study":null,"qualification":"RECENT_COLLECTION_ONLY_NOT_FINANCIAL_PASS",
+                "collector_sha256":format!("{:x}",Sha256::digest(include_bytes!("broker_backtest.rs"))),
+                "coverage":{"bid_ticks":source.bids.len(),"ask_ticks":source.asks.len(),
+                    "both_sides_present":!source.bids.is_empty() && !source.asks.is_empty(),
+                    "requested_from":req.from,"requested_through":req.to + Duration::seconds(5),
+                    "quote_continuity":"unproven","contract_metadata":"current_snapshot"},
+                "contract_details":{"digits":contract.digits,"min_volume":contract.min_volume,
+                    "step_volume":contract.step_volume,"lot_size":contract.lot_size},
+                "collected_at":Utc::now()
+            }));
+        }
         phase(jobs, "replaying_ticks");
         let study = s3_ticks::study(req, &source).map_err(|_| "tick_replay_input_invalid")?;
         let digest = format!(
@@ -275,6 +393,35 @@ async fn run(state: &AppState, jobs: &Jobs, req: &Request) -> Result<Value, &'st
         "input_sha256":digest,"fetched_pages":pages,"history_from":req.history_from(),"bars":bars,"study":study,
         "qualification":"DIAGNOSTIC_ONLY_NOT_FINANCIAL_PASS","algorithm_version":"s3-mark-followthrough-v1", "algorithm_sha256":format!("{:x}",Sha256::digest(include_bytes!("../../jiaoyi-core/src/research/s3_signal.rs")))}),
     )
+}
+
+fn validate_collection_source(
+    req: &Request,
+    source: &s3_ticks::Source,
+) -> Result<(), &'static str> {
+    if !(0..=5).contains(&source.contract.digits)
+        || source.contract.min_volume <= 0
+        || source.contract.step_volume <= 0
+        || source.bids.len() + source.asks.len() > s3_ticks::MAX_TICKS
+    {
+        return Err("collection_contract_or_size_invalid");
+    }
+    let quantum = 10_i64.pow((5 - source.contract.digits) as u32);
+    for ticks in [&source.bids, &source.asks] {
+        let mut previous = None;
+        for tick in ticks {
+            if previous.is_some_and(|p| tick.ts_ms < p)
+                || tick.ts_ms < req.from.timestamp_millis()
+                || tick.ts_ms > req.to.timestamp_millis() + 5000
+                || tick.price_e5 <= 0
+                || tick.price_e5 % quantum != 0
+            {
+                return Err("collection_tick_invalid");
+            }
+            previous = Some(tick.ts_ms);
+        }
+    }
+    Ok(())
 }
 
 /// Bisection discards truncated responses and fetches disjoint complete leaves.
@@ -344,4 +491,66 @@ fn tick_algorithm_sha256() -> String {
         h.update(b);
     }
     format!("{:x}", h.finalize())
+}
+
+#[cfg(test)]
+mod collection_tests {
+    use super::*;
+    fn request() -> CollectionRequest {
+        CollectionRequest {
+            account: 49236051,
+            symbol: "BTCUSD".into(),
+            from: "2026-11-05T00:00:00Z".parse().unwrap(),
+            to: "2026-11-05T04:00:00Z".parse().unwrap(),
+        }
+    }
+    #[test]
+    fn recent_collection_is_closed_post_holdout_and_never_opens_development_replay() {
+        let mut r = request();
+        let now = "2026-11-06T00:00:00Z".parse().unwrap();
+        let req = r.validate(now).unwrap();
+        assert!(req.validate(now).is_err()); // Original development seal remains.
+        assert!(r.validate(r.to + Duration::seconds(4)).is_err());
+        assert!(r.validate(r.to + Duration::seconds(5)).is_ok());
+        r.from = "2026-10-23T00:00:00Z".parse().unwrap();
+        r.to = r.from + Duration::hours(4);
+        assert!(r.validate(now).is_err());
+        r = request();
+        r.symbol = "UNREGISTERED".into();
+        assert!(r.validate(now).is_err());
+        r = request();
+        r.to += Duration::hours(1);
+        assert!(r.validate(now).is_err());
+    }
+    #[test]
+    fn collection_rejects_bad_grid_order_and_out_of_window_ticks() {
+        let r = request();
+        let req = r.validate(r.to + Duration::seconds(5)).unwrap();
+        let tick = s3_ticks::Tick {
+            ts_ms: r.from.timestamp_millis(),
+            price_e5: 100_000,
+        };
+        let mut src = s3_ticks::Source {
+            bars: vec![],
+            bids: vec![tick.clone()],
+            asks: vec![tick],
+            contract: s3_ticks::Contract {
+                digits: 2,
+                min_volume: 1,
+                step_volume: 1,
+            },
+        };
+        assert!(validate_collection_source(&req, &src).is_ok());
+        src.bids[0].price_e5 += 1;
+        assert!(validate_collection_source(&req, &src).is_err());
+        src.bids[0] = src.asks[0].clone();
+        src.bids.push(s3_ticks::Tick {
+            ts_ms: r.from.timestamp_millis() - 1,
+            price_e5: 100_000,
+        });
+        assert!(validate_collection_source(&req, &src).is_err());
+        src.bids.clear();
+        src.asks.clear();
+        assert!(validate_collection_source(&req, &src).is_ok()); // Empty fetch is explicit coverage, not a price.
+    }
 }
