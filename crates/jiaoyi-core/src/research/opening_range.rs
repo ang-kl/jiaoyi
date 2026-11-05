@@ -19,8 +19,22 @@ pub enum EntryRule {
     CurrentS3,
     OpeningRangeBreakout2h,
     OpeningRangeFailedBreakout2h,
+    OpeningTickRangeBreakout2h,
+    OpeningTickRangeFailedBreakout2h,
 }
 impl EntryRule {
+    pub fn full_ticks(self) -> bool {
+        matches!(
+            self,
+            Self::OpeningTickRangeBreakout2h | Self::OpeningTickRangeFailedBreakout2h
+        )
+    }
+    fn failed_breakout(self) -> bool {
+        matches!(
+            self,
+            Self::OpeningRangeFailedBreakout2h | Self::OpeningTickRangeFailedBreakout2h
+        )
+    }
     pub fn is_current(&self) -> bool {
         *self == Self::CurrentS3
     }
@@ -71,12 +85,25 @@ pub(super) fn study(
         })
     };
     let mut prep = vec![];
-    for minute in [30, 60, 90, 120] {
-        if let Some((_, q)) = quote_at(minute) {
+    let ready = if opts.entry_rule.full_ticks() {
+        let mut covered = [false; 4];
+        for q in quotes.iter().filter(|q| {
+            q.fresh && q.quote.at >= req.from && q.quote.at < req.from + Duration::minutes(120)
+        }) {
+            let block = (q.quote.at - req.from).num_minutes() as usize / 30;
+            covered[block] = true;
             prep.push(mid(q));
         }
-    }
-    let ready = prep.len() == 4;
+        out.notes[1]="Full observed fresh tick-midpoint range over the first120 minutes; at least one fresh observation in every30-minute block. This remains an observed-path range, not a completeness certificate.";
+        covered.into_iter().all(|x| x)
+    } else {
+        for minute in [30, 60, 90, 120] {
+            if let Some((_, q)) = quote_at(minute) {
+                prep.push(mid(q));
+            }
+        }
+        prep.len() == 4
+    };
     let lo = prep.iter().copied().fold(f64::INFINITY, f64::min);
     let hi = prep.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let mut excursion: Option<(Dir, f64)> = None;
@@ -105,10 +132,11 @@ pub(super) fn study(
                 None
             };
             let proposal = match opts.entry_rule {
-                EntryRule::OpeningRangeBreakout2h => {
+                EntryRule::OpeningRangeBreakout2h | EntryRule::OpeningTickRangeBreakout2h => {
                     outside.map(|s| (s, if s == Dir::Buy { lo } else { hi }))
                 }
-                EntryRule::OpeningRangeFailedBreakout2h => {
+                EntryRule::OpeningRangeFailedBreakout2h
+                | EntryRule::OpeningTickRangeFailedBreakout2h => {
                     if inside(p, lo, hi) {
                         excursion.take().map(|(s, peak)| {
                             (if s == Dir::Buy { Dir::Sell } else { Dir::Buy }, peak)
@@ -160,8 +188,7 @@ pub(super) fn study(
                                 && f.quote.at < at + Duration::seconds(5)
                         })
                     {
-                        let trigger = if opts.entry_rule == EntryRule::OpeningRangeFailedBreakout2h
-                        {
+                        let trigger = if opts.entry_rule.failed_breakout() {
                             inside(mid(fq), lo, hi)
                         } else if side == Dir::Buy {
                             mid(fq) > hi
@@ -377,5 +404,40 @@ mod tests {
         );
         r.slippage_bps_per_side = 0.0;
         assert!(s3_ticks::study(&r, &s).is_err());
+    }
+    #[test]
+    fn full_tick_range_handles_sparse_marks_and_includes_between_mark_extremes() {
+        let (mut r, mut s) = fixture(EntryRule::OpeningTickRangeBreakout2h, false);
+        for t in s.bids.iter_mut().chain(s.asks.iter_mut()) {
+            if t.ts_ms < (r.from + Duration::minutes(121)).timestamp_millis() {
+                t.ts_ms -= 29 * 60 * 1000;
+            }
+        }
+        let full = s3_ticks::study(&r, &s).unwrap();
+        assert!(full.trade.is_some());
+        r.tick_replay.as_mut().unwrap().entry_rule = EntryRule::OpeningRangeBreakout2h;
+        assert!(s3_ticks::study(&r, &s).unwrap().trade.is_none());
+        r.tick_replay.as_mut().unwrap().entry_rule = EntryRule::OpeningTickRangeBreakout2h;
+        let at = (r.from + Duration::minutes(80)).timestamp_millis();
+        s.bids.push(Tick {
+            ts_ms: at,
+            price_e5: 10_999_000,
+        });
+        s.asks.push(Tick {
+            ts_ms: at,
+            price_e5: 11_001_000,
+        });
+        s.bids.sort_by_key(|t| t.ts_ms);
+        s.asks.sort_by_key(|t| t.ts_ms);
+        let full = s3_ticks::study(&r, &s).unwrap();
+        assert_eq!(full.marks[0].reason, "candidate_condition_absent");
+        // Removing an entire preparation block is still missing coverage.
+        for ts in [&mut s.bids, &mut s.asks] {
+            ts.retain(|t| {
+                !(t.ts_ms >= (r.from + Duration::minutes(30)).timestamp_millis()
+                    && t.ts_ms < (r.from + Duration::minutes(60)).timestamp_millis())
+            });
+        }
+        assert!(s3_ticks::study(&r, &s).unwrap().trade.is_none());
     }
 }

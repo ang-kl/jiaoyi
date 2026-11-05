@@ -102,6 +102,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             EntryRule::CurrentS3,
             EntryRule::OpeningRangeBreakout2h,
             EntryRule::OpeningRangeFailedBreakout2h,
+            EntryRule::OpeningTickRangeBreakout2h,
+            EntryRule::OpeningTickRangeFailedBreakout2h,
         ] {
             req.tick_replay
                 .as_mut()

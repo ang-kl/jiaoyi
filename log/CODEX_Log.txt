@@ -1007,3 +1007,19 @@ results and final CI/deployed receipts remain pending and must be recorded on
 this PR. No target is claimed from small samples, cheaper costs, censored exits
 or repeated tuning of validation. GROK_Log checked through17,703; check again
 before future serial allocation. Private data stay out of Git.
+
+[§LOG.89] №18,243 §§6–16 / №18,244 §§1–5;5November2026,14:28SGT;
+by <Codex (GPT-6), effort: not exposed>.
+PR155 merged07d3d7f after allCI passed; deployed25f6f4c9. All22 development
+broker episodes completed. BTC sampled breakout1/2 wins but net-0.834211R;
+NatGas9/10 preparations unavailable under exact marks. No candidate passed.
+Frozen a separate full-tick preparation amendment before scoring; unchanged
+costs/targets/horizon, same cached data. Full-tick breakout: BTC1/3, net-1.360327R;
+NatGas0/3, net-1.980942R. Both failed-breakout variants had no entries. All66 old
+results reproduce exactly. Added price-unit P&L gate to prevent R-denominator
+improvements concealing money losses. Validation stayed unopened. Best-recorded
+exit diagnostic still loses after frozen costs in5/6 full-tick trades: do not
+propose exit tuning as a demonstrated solution. Current costs do not certify a
+lower live slippage model. Original73%/1:1.38 goal unchanged;50% research goal NOT
+MET. No live strategy/risk/worker change. GROK_Log last checked17,703; consult
+other-model logs before new serials. Final release receipt belongs on this PR.
