@@ -162,7 +162,16 @@ async fn run(state: &AppState, jobs: &Jobs, req: &Request) -> Result<Value, &'st
         .find(|s| s.symbol_id == id)
         .ok_or("contract_missing")?;
     phase(jobs, "fetching_m30");
-    let mut cursor = req.history_from();
+    let candidate = req
+        .tick_replay
+        .as_ref()
+        .is_some_and(|o| !o.entry_rule.is_current());
+    // Candidate preparation uses only its tick marks, not 50 days of S3 bands.
+    let mut cursor = if candidate {
+        req.to
+    } else {
+        req.history_from()
+    };
     let mut bars = std::collections::BTreeMap::new();
     let mut pages = 0;
     while cursor < req.to {
@@ -206,7 +215,7 @@ async fn run(state: &AppState, jobs: &Jobs, req: &Request) -> Result<Value, &'st
         jobs.0.lock().unwrap()["fetched_pages"] = json!(pages);
     }
     let bars: Vec<_> = bars.into_values().collect();
-    if bars.is_empty() {
+    if bars.is_empty() && !candidate {
         return Err("no_broker_bars_returned");
     }
     if req.tick_replay.is_some() {
@@ -322,6 +331,7 @@ fn tick_algorithm_sha256() -> String {
     let mut h = Sha256::new();
     for b in [
         include_bytes!("../../jiaoyi-core/src/research/s3_ticks.rs").as_slice(),
+        include_bytes!("../../jiaoyi-core/src/research/opening_range.rs").as_slice(),
         include_bytes!("../../jiaoyi-core/src/research/exit_replay.rs").as_slice(),
         include_bytes!("../../jiaoyi-core/src/strategy3/band.rs").as_slice(),
         include_bytes!("../../jiaoyi-core/src/strategy3/targets.rs").as_slice(),

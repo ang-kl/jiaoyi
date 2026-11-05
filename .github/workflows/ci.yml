@@ -38,6 +38,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: browser update lifecycle
         run: node --test crates/jiaoyi/tests/web/owner_assessments.test.mjs
+      - name: research milestone scorecard
+        run: python3 -m unittest discover -s ops/research -p test_milestone.py
       - name: test
         run: cargo test --workspace --locked
 
