@@ -1151,6 +1151,30 @@ impl AccountSession<'_> {
             .await
     }
 
+    /// Bounded research read: one complete day at most. Refuse truncation.
+    /// Unlike legacy m30_bars this never accepts an unresolved hasMore page.
+    pub async fn research_m30_page(
+        &self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<ProtoOaTrendbar>, ClientError> {
+        if to < from || to - from > chrono::Duration::days(1) {
+            return Err(ClientError::Connect(
+                "research window exceeds one day".into(),
+            ));
+        }
+        let (bars, more) = self
+            .trendbars(symbol_id, ProtoOaTrendbarPeriod::M30, from, to)
+            .await?;
+        if more {
+            return Err(ClientError::Connect(
+                "research response truncated (hasMore); no result accepted".into(),
+            ));
+        }
+        Ok(bars)
+    }
+
     /// The M30 trendbars of `[from, to]`, walked back in weekly windows (a
     /// window that reports `hasMore` is split in half). Sorted by open time,
     /// de-duplicated. Strategy 3's session opens and noise band.

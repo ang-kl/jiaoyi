@@ -2,7 +2,7 @@
 //! `/research/inventory`, `/research/bars`, `/research/jobs`,
 //! `/research/trials`, `/trading/costs`, `/trading/orders`, `/trading/executions`
 //! and `/operations/reports`. Read-only: no
-//! route writes.
+//! route writes trading state. Owner backtests start bounded in-memory research jobs.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -62,6 +62,11 @@ fn router_with_owner_access(
         .route("/owner/assessments.mjs", get(owner_setup_script))
         .route("/owner/live-positions", get(owner_live_positions))
         .route("/owner/quote-coverage", get(owner_quote_coverage))
+        .route(
+            "/owner/backtests",
+            get(crate::broker_backtest::latest).post(crate::broker_backtest::submit),
+        )
+        .layer(Extension(crate::broker_backtest::Jobs::default()))
         .layer(Extension(access))
         .with_state(state)
 }
@@ -854,6 +859,50 @@ mod tests {
             params("", "", "yesterday", ""),
         ] {
             assert!(orders_query(&bad).is_err(), "{bad:?}");
+        }
+    }
+    #[tokio::test]
+    async fn backtest_auth_scope_and_seal_are_checked_before_broker_access() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+        let body = serde_json::json!({"account":900073,"symbol":"BTCUSD","from":"2025-10-06T00:00:00Z","to":"2025-10-07T00:00:00Z","spread":15.0,"commission_round_trip":0.0,"slippage_bps_per_side":24.0});
+        let unauth = owner_test_router(Some("secret"))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/owner/backtests")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED);
+        for (field, value, expected) in [
+            ("account", serde_json::json!(123), StatusCode::FORBIDDEN),
+            (
+                "to",
+                serde_json::json!("2026-11-05T00:00:00Z"),
+                StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            let mut bad = body.clone();
+            bad[field] = value;
+            let res = owner_test_router(Some("secret"))
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/owner/backtests")
+                        .header("authorization", "Bearer secret")
+                        .header("content-type", "application/json")
+                        .body(Body::from(bad.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(res.status(), expected);
+            assert_eq!(res.headers()["cache-control"], "no-store");
         }
     }
 }

@@ -22,3 +22,5 @@ pub mod normal;
 pub mod rng;
 pub mod stats;
 pub mod verdict;
+
+pub mod s3_signal;
