@@ -1,0 +1,126 @@
+{
+  "trace": "№18,264 §§1–7 · 06-11-2026 07:12:00 SGT",
+  "account": 49236051,
+  "reuse_only": true,
+  "source_plan_sha256": "300eb7750a7637a4f1682b17945aea0d035baf3b6508449b917e52763319d234",
+  "original_goal": "73% net wins and 1:1.38 per strategy/account; unchanged",
+  "interim_goal": "50% scenario net wins plus positive expectancy/PF>1 and zero data coverage gaps per class and symbol",
+  "classes": {
+    "crypto": [
+      "BTCUSD",
+      "ETHUSD"
+    ],
+    "energy": [
+      "NatGas",
+      "SpotBrent",
+      "SpotCrude"
+    ],
+    "equity_index": [
+      "AUS200",
+      "GER40",
+      "JPN225",
+      "NAS100",
+      "UK100",
+      "US30",
+      "US500"
+    ],
+    "fx": [
+      "AUDUSD",
+      "EURUSD",
+      "GBPUSD",
+      "NZDUSD",
+      "USDCAD",
+      "USDJPY"
+    ],
+    "metal": [
+      "XAGUSD",
+      "XAUUSD"
+    ]
+  },
+  "native_volume": {
+    "BTCUSD": 1,
+    "ETHUSD": 1,
+    "NatGas": 10000,
+    "SpotBrent": 100,
+    "SpotCrude": 100,
+    "AUS200": 100,
+    "GER40": 100,
+    "JPN225": 100,
+    "NAS100": 100,
+    "UK100": 100,
+    "US30": 100,
+    "US500": 100,
+    "AUDUSD": 100000,
+    "EURUSD": 100000,
+    "GBPUSD": 100000,
+    "NZDUSD": 100000,
+    "USDCAD": 100000,
+    "USDJPY": 100000,
+    "XAGUSD": 5000,
+    "XAUUSD": 100
+  },
+  "costs": {
+    "commission_round_trip": 0,
+    "slippage_bps_per_side": 24,
+    "calibrated_slippage_bps_per_side_benchmarks": [
+      2.0,
+      3.74
+    ]
+  },
+  "horizons_minutes": [
+    30,
+    60,
+    180
+  ],
+  "rules": [
+    "own_momentum",
+    "peer_continuation",
+    "peer_reversal",
+    "peer_continuation_or_own_180m",
+    "peer_reversal_unanimous_180m",
+    "peer_reversal_unanimous_30m"
+  ],
+  "class_routing_hypotheses": {
+    "crypto": {
+      "primary_rule": "peer_continuation",
+      "horizon_minutes": 180,
+      "min_peer_coherence": 1.0
+    },
+    "energy": {
+      "primary_rule": "peer_continuation_or_own",
+      "horizon_minutes": 180,
+      "fallback_when_peer_flat": "own_momentum"
+    },
+    "equity_index": {
+      "primary_rule": "own_momentum",
+      "horizon_minutes": 60,
+      "secondary_rule": "peer_continuation",
+      "min_abs_peer_return_bps": 15.0
+    },
+    "fx": {
+      "primary_rule": "peer_reversal",
+      "horizon_minutes": 180,
+      "require_unanimous_usd_peers": true,
+      "min_peer_coherence": 1.0
+    },
+    "metal": {
+      "primary_rule": "peer_reversal",
+      "horizon_minutes": 30,
+      "require_unanimous_usd_peers": true,
+      "min_peer_coherence": 1.0
+    }
+  },
+  "development_dates": [
+    "2025-08-05",
+    "2025-08-12"
+  ],
+  "validation_dates": [
+    "2025-08-19",
+    "2025-08-26",
+    "2025-09-02"
+  ],
+  "development_min_closed_per_class": 4,
+  "validation_min_closed_per_class": 20,
+  "validation_min_closed_per_symbol": 5,
+  "validation_min_weeks": 3
+}
