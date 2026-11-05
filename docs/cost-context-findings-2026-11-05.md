@@ -1,6 +1,6 @@
 # Cost calibration and class-specific predictive context
 
-№18,260 §§1–6 · 05-11-2026, 21:09 SGT · by <Codex (GPT-6), effort: not exposed>.
+№18,260 §§1–6 · 05-11-2026, 21:02:14 SGT · by <Codex (GPT-6), effort: not exposed>.
 
 ## Decision
 
