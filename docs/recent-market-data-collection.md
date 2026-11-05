@@ -58,8 +58,8 @@ outside Git and the database. No scheduler, new service or model API is added.
 
 For 5 November 2026, cash-index windows follow local time/DST: the US window is
 14:30–18:30 UTC, Sydney is 23:00 UTC on 4 November through03:00 on 5 November,
-Tokyo/crypto start00:00 UTC and London/Frankfurt/FX/metals/energy start07:00 UTC
-except Frankfurt's registered09:00 local start is08:00 UTC in November. Actual
+Tokyo/crypto start00:00 UTC; London/Frankfurt start08:00 UTC; FX/metals/energy
+start07:00 UTC. Actual
 request timestamps in the manifest govern; a local session date is not a shared
 UTC start. This is a bounded fresh snapshot, not a full-day or live quote feed.
 
