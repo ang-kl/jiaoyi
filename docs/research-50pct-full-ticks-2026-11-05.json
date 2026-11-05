@@ -1,0 +1,78 @@
+{
+  "serial": "\u211618,243 \u00a7\u00a71\u20135",
+  "target": "50% net wins is interim research, original project goal unchanged",
+  "frozen_before_scoring": true,
+  "candidates": [
+    {
+      "id": "opening_range_breakout_2h",
+      "hypothesis": "A first 30-minute noise estimate is too small relative to costs. Observe the first two hours, enter only a subsequent break of that fixed range, and place the stop beyond its opposite boundary."
+    },
+    {
+      "id": "opening_range_failed_breakout_2h",
+      "hypothesis": "Chasing excursions may lose in mean-reverting sessions. After a post-range outside mark, enter only on a later mark back inside the fixed range, in the opposite direction, with the stop at the failed excursion."
+    },
+    {
+      "id": "opening_tick_range_breakout2h",
+      "hypothesis": "Use all causally observed preparation tick midpoints to avoid undersampling the volatility/range, keeping the breakout rule unchanged."
+    },
+    {
+      "id": "opening_tick_range_failed_breakout2h",
+      "hypothesis": "Use the same full observed preparation range with the previously frozen failed-breakout rule."
+    }
+  ],
+  "fixed": {
+    "prep_minutes": 120,
+    "score_to_minutes": 240,
+    "one_entry_per_session": true,
+    "reward_multiple": 1.38,
+    "slippage_bps_per_side": 24,
+    "spread_btc": 15,
+    "spread_natgas": 0.004,
+    "commission_rt": 0,
+    "volume": "broker minimum",
+    "exits": "existing targets and original-R trail; research window close at four hours",
+    "cost_gate": "C < initial stop distance; refuse that mark, not the whole session; this is part of each new candidate, not promotion of failed v2",
+    "range_definition": "midpoints of first fresh quote within five seconds of minutes30/60/90/120; not intrabar high/low",
+    "candidate_entry_marks": [
+      150,
+      180,
+      210
+    ],
+    "full_tick_range_definition": "All fresh noncrossed grouped tick midpoints from session start inclusive to minute120 exclusive; require coverage in each30-minute block. Four-mark variants remain unchanged comparators."
+  },
+  "development": [
+    "2025-09-08",
+    "2025-09-19"
+  ],
+  "validation": [
+    "2025-09-22",
+    "2025-10-17"
+  ],
+  "reuse_warning": "6\u201310 October baseline M30 studies and 6 October tick admission already inspected; validation is frozen development validation, not pristine holdout",
+  "promotion_screen": {
+    "minimum_closed_positions": 20,
+    "minimum_weeks": 3,
+    "net_win_rate_at_least": 0.5,
+    "positive_mean_net_r": true,
+    "profit_factor_above": 1,
+    "per_symbol": true,
+    "no_censored_or_missing_outcomes": true,
+    "positive_total_net_price_units": true
+  },
+  "stopping": "No retuning on validation. Both candidates and all losses retained. Failure or insufficient evidence must not be called 50% achieved. Tick-qualified validation required before any strategy promotion.",
+  "budget": "Two candidates, one baseline, one development/validation cycle; investigate findings before another registered cycle. No live rule/risk change.",
+  "frozen_at_utc": "2026-11-05T06:24:34.828440+00:00",
+  "development_screen": {
+    "minimum_closed_positions": 5,
+    "minimum_net_win_rate": 0.5,
+    "mean_net_r_above": 0,
+    "profit_factor_above": 1,
+    "positive_total_net_price_units": true
+  },
+  "data_efficiency": "Candidates fetch ticks only; baseline bars fetched once per symbol and attached offline with original input hashes retained.",
+  "parent_plan_sha256": "f3072e249bd61c5f1e52ec4039c3c16273b03f5b94b9cdd68de5071e02832730",
+  "amendment": "Cycle2: full observed fresh tick-midpoint range in first120 minutes, with at least one fresh observation in each30-minute block. Entry/cost/target/horizon unchanged. Original two hypotheses and their failures retained; validation remains unopened.",
+  "reason": "First cycle: BTC breakout1/2 wins but -0.834211R, PF0.040518; NatGas9/10 episodes unavailable under four precise preparation marks. No validation results inspected.",
+  "trial_count": 4,
+  "development_reused": true
+}
