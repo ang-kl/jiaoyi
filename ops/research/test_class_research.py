@@ -1,9 +1,12 @@
 import unittest
-from class_research import score,select,windows
+from class_research import score,select,windows,collect
 
 def rows(symbol,values):
     return [dict(symbol=symbol,**{'from':f'2025-08-{i+1:02}T00:00:00Z'},study={'trade':{'trailing_scenario_net_r':v,'entry':{'initial_r':1}}}) for i,v in enumerate(values)]
 class ClassResearchTests(unittest.TestCase):
+    def test_exploratory_reuse_plan_cannot_fetch_or_open_validation(self):
+        with self.assertRaisesRegex(RuntimeError,"reuses saved sources only"):
+            collect(None,{"reuse_only":True},"unused")
     def test_class_aggregate_cannot_hide_failing_symbol_or_censored_data(self):
         r=score(rows('A',[3,3,3])+rows('B',[-1]),4,4,['A','B'])
         self.assertEqual(r['net_win_rate'],.75);self.assertFalse(r['passes_screen'])
