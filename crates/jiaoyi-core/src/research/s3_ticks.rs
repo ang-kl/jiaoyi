@@ -17,6 +17,11 @@ pub const MAX_PAGES: usize = 120;
 pub struct Options {
     /// Broker cents of units, fixed for this scenario; NOT inferred account sizing.
     pub volume: i64,
+    #[serde(
+        default,
+        skip_serializing_if = "super::opening_range::EntryRule::is_current"
+    )]
+    pub entry_rule: super::opening_range::EntryRule,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -92,14 +97,17 @@ pub fn validate_request(req: &Request) -> Result<(), String> {
             "bounded positive fixed volume and current S3 24bp/side reserve required".into(),
         );
     }
+    if !opts.entry_rule.is_current() && req.to != req.from + Duration::hours(4) {
+        return Err("opening-range research requires a complete fixed four-hour episode".into());
+    }
     Ok(())
 }
 #[derive(Clone, Copy)]
-struct Snapshot {
-    quote: exits::Quote,
-    fresh: bool,
+pub(super) struct Snapshot {
+    pub(super) quote: exits::Quote,
+    pub(super) fresh: bool,
 }
-fn snapshots(req: &Request, src: &Source) -> Result<(Vec<Snapshot>, Quality), String> {
+pub(super) fn snapshots(req: &Request, src: &Source) -> Result<(Vec<Snapshot>, Quality), String> {
     if src.bids.len() + src.asks.len() > MAX_TICKS {
         return Err("tick budget exceeded".into());
     }
@@ -192,7 +200,7 @@ fn executable(q: &exits::Quote, side: Dir) -> f64 {
         q.bid
     }
 }
-fn net(req: &Request, input: &exits::Input, o: &exits::Outcome) -> Option<f64> {
+pub(super) fn net(req: &Request, input: &exits::Input, o: &exits::Outcome) -> Option<f64> {
     let gross = o.scenario_gross_r?;
     let weighted_exit: f64 = o
         .fills
@@ -223,6 +231,9 @@ pub fn study(req: &Request, src: &Source) -> Result<Study, String> {
     // Share the M30 validator: no fabricated warm-up or duplicate bars.
     super::s3_signal::study(req, &src.bars)?;
     let (quotes, quality) = snapshots(req, src)?;
+    if !req.tick_replay.as_ref().unwrap().entry_rule.is_current() {
+        return super::opening_range::study(req, src, &quotes, quality);
+    }
     let session = sessions::session_on(&req.rule(), req.from.date_naive()).unwrap();
     let bars: Vec<_> = src
         .bars
@@ -404,7 +415,10 @@ mod tests {
             spread: 0.02,
             commission_round_trip: 0.0,
             slippage_bps_per_side: 24.0,
-            tick_replay: Some(Options { volume: 4 }),
+            tick_replay: Some(Options {
+                volume: 4,
+                entry_rule: Default::default(),
+            }),
         };
         let mut src = Source {
             bars: vec![],

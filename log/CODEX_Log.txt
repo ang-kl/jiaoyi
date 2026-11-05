@@ -992,3 +992,18 @@ GROK_Log checked through17,703; check it and other-model changes before allocati
 future serials. Private broker data remain outside Git. Focused tests passed;
 final CI/merge/deployment and actual two-symbol tick receipts remain gates and
 will be recorded on the PR rather than inferred from this journal entry.
+
+[§LOG.88] №18,242–18,243 §§1–5; 5 November2026,14:01SGT; by <Codex (GPT-6), effort: not exposed>.
+PR154 deployed2e0c239; BTC60069/NatGas1695 tick updates reproduced offline.
+Both first signals cost-vetoed; no broker-sample exit was exercised. All8 live
+loops connected and engineering deployment unchanged; full receipt on PR154.
+Owner now confirms50% net wins as an INTERIM RESEARCH target; original73%/1:1.38
+per strategy/account remains. Frozen two sampled-range hypotheses before scoring:
+2h-range breakout and failed-breakout return, structure-based stop, four-hour
+research episode, existing Q/24bp costs, one entry and no live policy changes.
+Added cost/coverage-aware scorecard, source checksums, bounded cached collection
+and a faster tick-only candidate fetch. Synthetic paths pass; actual financial
+results and final CI/deployed receipts remain pending and must be recorded on
+this PR. No target is claimed from small samples, cheaper costs, censored exits
+or repeated tuning of validation. GROK_Log checked through17,703; check again
+before future serial allocation. Private data stay out of Git.
