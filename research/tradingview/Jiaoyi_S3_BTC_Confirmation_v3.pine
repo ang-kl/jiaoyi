@@ -1,0 +1,246 @@
+//@version=6
+// №18,234 · 05-Nov-2026 08:35 SGT · by <Codex (GPT-6), effort: not exposed>
+// Reference Rust: ang-kl/jiaoyi main 21fcfa257cdd39f0370bc63e8c216b4b1086ecd1.
+// RESEARCH APPROXIMATION: BTCUSD UTC-day / whole-position-minimum exit case.
+// No alerts/webhooks. No actual broker connection or trading authority.
+// Compilation and historical results must be verified in TradingView.
+strategy("Jiaoyi S3 BTC — v3 entry-confirmation experiment", overlay=true,
+     initial_capital=10000, currency=currency.USD, pyramiding=0,
+     default_qty_type=strategy.fixed, default_qty_value=0.01,
+     commission_type=strategy.commission.percent, commission_value=0.25,
+     slippage=0, margin_long=100, margin_short=100,
+     calc_on_every_tick=false, calc_on_order_fills=false,
+     process_orders_on_close=false, max_bars_back=100)
+
+// Properties commission is an execution-cost PROXY: 25 bp per side,
+// approximately 24 bp slippage + half of a $15 spread at BTC ~$78,500.
+// It is not Pepperstone's actual commission. Keep Properties slippage=0 to
+// avoid charging that proxy twice. C below controls admission/target geometry;
+// it is not an additional cash deduction from Strategy Tester P&L.
+float spreadReserve = input.float(15.0, "Median spread reserve (USD/BTC)", minval=0, group="Frozen cost model")
+float commissionReserve = input.float(0.0, "Round-trip broker commission reserve (USD/BTC)", minval=0, group="Frozen cost model")
+float slipBps = input.float(24.0, "Slippage reserve per side (basis points)", minval=0, group="Frozen cost model")
+float qty = input.float(0.01, "Fixed chart units — verify broker minimum mapping", minval=0.000001, group="Research sizing")
+bool trailEnabled = input.bool(true, "Bar-close best-minus-original-R trailing approximation", group="Exits")
+bool reassessVeto = input.bool(true, "Reassess cost at next mark (experiment)", group="Experiment v2")
+bool requireConfirmation = input.bool(false, "Require two consecutive same-side breakouts", group="Experiment v3")
+int startAt = input.time(timestamp("01 Jan 2026 00:00 +0000"), "First entry time (UTC)", group="Test window")
+int endAt = input.time(timestamp("05 Nov 2026 00:00 +0000"), "Last entry/forced-close time (UTC)", group="Test window")
+
+if barstate.isfirst
+    if not timeframe.isminutes or timeframe.multiplier != 1
+        runtime.error("Use a standard 1-minute BTCUSD candlestick chart. Other timeframes are not supported.")
+    if not str.contains(syminfo.ticker, "BTCUSD") or not chart.is_standard
+        runtime.error("Use standard BTCUSD candles; choose Pepperstone as the data source.")
+    if endAt <= startAt
+        runtime.error("The end time must follow the start time.")
+
+int DAY = 86400000
+int HALF_HOUR = 1800000
+int dayId = int(math.floor(time / DAY))
+int dayStart = dayId * DAY
+int row = dayId % 31
+bool newDay = barstate.isfirst or dayId != dayId[1]
+// Ring stores 31 UTC dates; current date is excluded from all sigma reads.
+// Missing dates/bars remain na. Search at most 30 prior calendar sessions.
+var moves = array.new_float(31 * 48, na)
+var days = array.new_int(31, -1)
+var float sessionOpen = na
+var bool usedEntry = false
+var bool veto = false
+var int previousSignalSide = 0
+var int previousSignalMark = na
+var float activeR = na
+var int tpTicks = na
+var float stopPrice = na
+var float best = na
+var float upper = na
+var float lower = na
+var float lastR = na
+var float lastC = na
+var int sampleCount = 0
+var int totalSignals = 0
+var int totalVetoes = 0
+var int totalEntries = 0
+var int missingBands = 0
+var string explanation = "Warm-up: load at least 14 complete prior UTC sessions"
+
+if newDay
+    array.set(days, row, dayId)
+    for j = 0 to 47
+        array.set(moves, row * 48 + j, na)
+    // A partial first loaded day must not invent the 00:00 session open.
+    sessionOpen := time == dayStart ? open : na
+    usedEntry := false
+    veto := false
+    previousSignalSide := 0
+    previousSignalMark := na
+    upper := na
+    lower := na
+    explanation := na(sessionOpen) ? "Missing 00:00 bar: session excluded" : "Before first half-hour mark"
+
+// Diagnostics reset each bar; codes describe decisions, not fills.
+float diagConfirmed = na
+float diagCode = na
+float diagSide = na
+float diagRisk = na
+float diagCost = na
+float diagSamples = na
+
+bool atMark = time_close > dayStart and (time_close - dayStart) % HALF_HOUR == 0
+bool inDates = time_close >= startAt and time_close < endAt
+bool endOfSession = time_close >= dayStart + DAY
+bool expiredWindow = time_close >= endAt
+
+if atMark
+    diagCode := 0  // Missing session open unless the calculation below succeeds.
+    if na(sessionOpen) or sessionOpen <= 0
+        previousSignalSide := 0
+        previousSignalMark := na
+
+if atMark and not na(sessionOpen) and sessionOpen > 0
+    int slot = int((time_close - dayStart) / HALF_HOUR) - 1
+    if slot >= 0 and slot < 48
+        float sumMove = 0.0
+        sampleCount := 0
+        for lag = 1 to 30
+            int pastDay = dayId - lag
+            int pastRow = pastDay % 31
+            if array.get(days, pastRow) == pastDay and sampleCount < 14
+                float movement = array.get(moves, pastRow * 48 + slot)
+                if not na(movement)
+                    sumMove += movement
+                    sampleCount += 1
+        // Completed current one-minute close approximates M30 bar close.
+        // This value is written only after reading prior dates.
+        array.set(moves, row * 48 + slot, math.abs(close / sessionOpen - 1.0))
+        if sampleCount == 14
+            float sigma = sumMove / 14.0
+            float halfWidth = sessionOpen * sigma
+            upper := sessionOpen + halfWidth
+            lower := sessionOpen - halfWidth
+            float risk = math.round(halfWidth / syminfo.mintick) * syminfo.mintick
+            // Chart close is a price proxy, not a historical executable mid.
+            int side = close > upper ? 1 : close < lower ? -1 : 0
+            float cost = spreadReserve + commissionReserve + 2.0 * slipBps / 10000.0 * close
+            lastR := risk
+            lastC := cost
+            diagSide := side
+            diagRisk := risk
+            diagCost := cost
+            diagSamples := sampleCount
+            bool entryWindow = time_close < dayStart + DAY - HALF_HOUR
+            // Confirmation uses only the immediately preceding completed mark.
+            // A missing/inside/opposite/wide-spread mark or new session breaks it.
+            bool validSignal = inDates and entryWindow and side != 0 and spreadReserve <= 2.0 * halfWidth
+            bool confirmedSignal = validSignal and previousSignalSide == side and not na(previousSignalMark) and time_close - previousSignalMark == HALF_HOUR
+            previousSignalSide := validSignal ? side : 0
+            previousSignalMark := time_close
+            diagConfirmed := confirmedSignal ? 1 : 0
+            bool eligible = inDates and entryWindow and not usedEntry and not veto and strategy.position_size == 0
+            diagCode := not inDates or not entryWindow ? 1 : veto ? 2 : usedEntry ? 3 : strategy.position_size != 0 ? 4 : side == 0 ? 5 : 6
+            if eligible
+                explanation := side == 0 ? "Inside band" : "Signal"
+                // Production rejects quotes wider than the full band. Here
+                // the fixed spread input substitutes for an actual quote.
+                if side != 0 and spreadReserve <= 2.0 * halfWidth
+                    totalSignals += 1
+                    if risk <= 0 or cost >= risk
+                        // The sole experimental execution change: no session latch
+                        // in candidate mode. The next scheduled mark recomputes
+                        // its own band, direction and cost with unchanged inputs.
+                        veto := not reassessVeto
+                        diagCode := 7
+                        totalVetoes += 1
+                        explanation := reassessVeto ? "C >= R: reject this mark; reassess next mark" : "C >= R: veto through next UTC session"
+                    else if requireConfirmation and not confirmedSignal
+                        diagCode := 10
+                        explanation := "Cost passes; waiting for consecutive same-side breakout"
+                    else
+                        diagCode := 8
+                        activeR := risk
+                        tpTicks := int(math.ceil((1.38 * risk + cost) / syminfo.mintick - 1e-8))
+                        int slTicks = int(math.round(risk / syminfo.mintick))
+                        usedEntry := true
+                        totalEntries += 1
+                        best := na
+                        stopPrice := na
+                        strategy.entry("S3", side == 1 ? strategy.long : strategy.short, qty=qty)
+                        // Relative brackets attach to the actual emulator fill,
+                        // not the signal price, and exist before the next bar.
+                        strategy.exit("Bracket", "S3", loss=slTicks, profit=tpTicks)
+                        explanation := "Entry submitted: whole-position TP1 mode"
+                else if side != 0
+                    explanation := "Spread wider than band: no signal admitted"
+            else
+                explanation := veto ? "Session cost veto remains binding" : usedEntry ? "Session entry already used" : not inDates ? "Outside test dates" : "Outside entry window / position exists"
+        else
+            upper := na
+            lower := na
+            previousSignalSide := 0
+            previousSignalMark := na
+            diagCode := 9
+            diagSamples := sampleCount
+            missingBands += 1
+            explanation := "Insufficient same-mark history: " + str.tostring(sampleCount) + "/14"
+
+if strategy.position_size != 0 and not na(activeR)
+    int direction = strategy.position_size > 0 ? 1 : -1
+    float entry = strategy.position_avg_price
+    if na(stopPrice)
+        stopPrice := entry - direction * activeR
+    float extreme = direction == 1 ? high : low
+    best := na(best) ? extreme : direction == 1 ? math.max(best, extreme) : math.min(best, extreme)
+    // Uses completed bar extreme. A revised stop becomes executable only
+    // after this calculation; it cannot retrospectively stop inside this bar.
+    if trailEnabled and time_close <= dayStart + DAY - HALF_HOUR
+        float candidate = math.round((best - direction * activeR) / syminfo.mintick) * syminfo.mintick
+        stopPrice := direction == 1 ? math.max(stopPrice, candidate) : math.min(stopPrice, candidate)
+    float target = entry + direction * tpTicks * syminfo.mintick
+    strategy.exit("Bracket", "S3", stop=stopPrice, limit=target)
+
+// UTC close is explicit. No final-half-hour entries are allowed.
+if (endOfSession or expiredWindow) and strategy.position_size != 0
+    strategy.close_all(comment=endOfSession ? "UTC session end" : "Test window end", immediately=true)
+if strategy.position_size == 0 and strategy.position_size[1] != 0
+    activeR := na
+    stopPrice := na
+    best := na
+
+plot(upper, "Prior-session upper band", color=color.teal, style=plot.style_stepline)
+plot(lower, "Prior-session lower band", color=color.orange, style=plot.style_stepline)
+plot(strategy.position_size != 0 ? stopPrice : na, "Next-bar stop", color=color.red, style=plot.style_linebr)
+bgcolor(veto ? color.new(color.red, 92) : na, title="Durable session cost veto")
+plot(lastR, "R price distance", display=display.data_window)
+plot(lastC, "C reserve", display=display.data_window)
+plot(sampleCount, "Prior sessions at mark", display=display.data_window)
+plot(diagCode, "Audit decision code", display=display.data_window)
+plot(diagSide, "Audit side 1 long -1 short", display=display.data_window)
+plot(diagRisk, "Audit mark R", display=display.data_window)
+plot(diagCost, "Audit mark C", display=display.data_window)
+plot(diagSamples, "Audit mark history count", display=display.data_window)
+plot(veto ? 1 : 0, "Audit session veto", display=display.data_window)
+plot(usedEntry ? 1 : 0, "Audit session entry used", display=display.data_window)
+plot(diagConfirmed, "Audit consecutive breakout confirmed", display=display.data_window)
+var panel = table.new(position.top_right, 2, 9, border_width=1)
+if barstate.islast
+    table.cell(panel, 0, 0, "RESEARCH ONLY")
+    table.cell(panel, 1, 0, "BTC / UTC / whole TP1")
+    table.cell(panel, 0, 1, "State")
+    table.cell(panel, 1, 1, explanation)
+    table.cell(panel, 0, 2, "Signals / entries")
+    table.cell(panel, 1, 2, str.tostring(totalSignals) + " / " + str.tostring(totalEntries))
+    table.cell(panel, 0, 3, "Vetoes / missing bands")
+    table.cell(panel, 1, 3, str.tostring(totalVetoes) + " / " + str.tostring(missingBands))
+    table.cell(panel, 0, 4, "R / C")
+    table.cell(panel, 1, 4, str.tostring(lastR, format.mintick) + " / " + str.tostring(lastC, format.mintick))
+    table.cell(panel, 0, 5, "Cost accounting")
+    table.cell(panel, 1, 5, "Properties default 0.25% per side; proxy")
+    table.cell(panel, 0, 6, "Parity / edge")
+    table.cell(panel, 1, 6, "NOT VERIFIED / NOT ESTABLISHED")
+
+    table.cell(panel, 0, 7, "Veto policy")
+    table.cell(panel, 1, 7, reassessVeto ? "B: reassess each eligible mark" : "A: session-long baseline")
+
+    table.cell(panel, 0, 8, "Entry confirmation")
+    table.cell(panel, 1, 8, requireConfirmation ? "C: two consecutive same-side marks" : "B: first qualifying mark")
