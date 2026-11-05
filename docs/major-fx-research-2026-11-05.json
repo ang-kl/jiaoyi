@@ -1,0 +1,102 @@
+{
+  "serial": "\u211618,245 \u00a7\u00a71\u20137",
+  "prepared_utc": "2026-11-05T07:30:45.931358+00:00",
+  "by": "Codex (GPT-6); effort not exposed",
+  "purpose": "Market-structure pilot before selecting an FX strategy. No entry rule, SL/TP optimisation, 50% claim or promotion.",
+  "symbols": [
+    "EURUSD",
+    "GBPUSD",
+    "USDJPY",
+    "USDCHF",
+    "USDCAD",
+    "AUDUSD",
+    "NZDUSD"
+  ],
+  "account": 49236051,
+  "dates": [
+    "2025-09-08",
+    "2025-09-18"
+  ],
+  "windows": [
+    {
+      "name": "Tokyo",
+      "tz": "Asia/Tokyo",
+      "hour": 9
+    },
+    {
+      "name": "London",
+      "tz": "Europe/London",
+      "hour": 8
+    },
+    {
+      "name": "New York",
+      "tz": "America/New_York",
+      "hour": 8
+    }
+  ],
+  "hours": 4,
+  "mode": "fx_session_diagnostic",
+  "native_volume": 100000,
+  "max_jobs": 42,
+  "current_slippage_bps_per_side": 24,
+  "spread_input": 0,
+  "commission_input": 0,
+  "cost_semantics": "Request spread=0 selects observed sampled spread; commission=0 means unknown/excluded for this diagnostic, NOT zero-cost trading. 48bp RT plus observed spread is reserve excluding commission. No alternate 1/3bp scenario is scored.",
+  "sources": [
+    {
+      "title": "BIS 2025 survey",
+      "url": "https://www.bis.org/statistics/rpfx25_fx.htm",
+      "use_and_limit": "Global OTC FX turnover and currency concentration; not broker-specific volume or a directional signal."
+    },
+    {
+      "title": "Neely and Weller, Intraday Technical Trading in the Foreign Exchange Market",
+      "url": "https://doi.org/10.20955/wp.1999.016",
+      "use_and_limit": "Tested technical rules lacked excess returns after realistic costs/hours. Historical sample does not prove all modern strategies fail."
+    },
+    {
+      "title": "Breedon and Ranaldo, Intraday Patterns in FX Returns and Order Flow",
+      "url": "https://doi.org/10.1111/jmcb.12032",
+      "use_and_limit": "Published abstract supports time-of-day/order-flow effects. Full paper not retrieved; no modern net profitability or identical cTrader execution asserted."
+    },
+    {
+      "title": "Andersen et al., Micro Effects of Macro Announcements",
+      "url": "https://www.nber.org/papers/w8959",
+      "use_and_limit": "Surprises versus expectations cause conditional mean jumps; a calendar alone is not a direction predictor."
+    },
+    {
+      "title": "Menkhoff et al., Currency Momentum Strategies",
+      "url": "https://www.bis.org/publ/work366.htm",
+      "use_and_limit": "Cross-sectional momentum evidence, costs and limits to arbitrage. Does not validate a four-hour opening-range breakout."
+    },
+    {
+      "title": "BIS, FX execution algorithms and market functioning",
+      "url": "https://www.bis.org/publ/mktc13.htm",
+      "use_and_limit": "Fragmented liquidity and execution risk require suitable data and transaction-cost measurement."
+    },
+    {
+      "title": "Pepperstone costs and fees",
+      "url": "https://pepperstone.com/en/trading/costs-and-fees/",
+      "use_and_limit": "Account/platform-specific spread, commission and NY-close funding. Public page entity may differ from owner; current generic wording is not historical account calibration."
+    },
+    {
+      "title": "FX Global Code",
+      "url": "https://www.globalfxc.org/fx-global-code/",
+      "use_and_limit": "Good execution, disclosure and risk practices; no return forecast or strategy validation."
+    }
+  ],
+  "limitations": [
+    "Two dates only: operational/coverage pilot, not representative weekday/regime sample or selection/validation set.",
+    "No economic-event labels, historical consensus vintages, order flow, depth or certified fill costs.",
+    "Range is observed hindsight, not capturable profit. Tick counts are quote activity, not market volume.",
+    "Compare per pair/window only; seven USD pairs are correlated, not independent bets.",
+    "All data precede the research seal. Do not reuse these dates as untouched validation."
+  ],
+  "next_gates": [
+    "Confirm exact symbol, quote quality, units, commission conversion and costs per account.",
+    "Acquire as-of event timing/consensus and broader session/regime history; do not retrospectively relabel using revised data.",
+    "Choose one economically motivated FX hypothesis, freeze controls/cost scenarios/splits before outcomes.",
+    "Replay costs/latency/gaps and compare no-skill/unchanged-rule controls. Preserve failed trials.",
+    "Separate-time validation per instrument with uncertainty, net expectancy/PF and adequate samples; interim >=50% alone insufficient.",
+    "Demo shadow qualification and portfolio USD exposure/margin checks before any proposed live strategy change."
+  ]
+}

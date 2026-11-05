@@ -1023,3 +1023,23 @@ propose exit tuning as a demonstrated solution. Current costs do not certify a
 lower live slippage model. Original73%/1:1.38 goal unchanged;50% research goal NOT
 MET. No live strategy/risk/worker change. GROK_Log last checked17,703; consult
 other-model logs before new serials. Final release receipt belongs on this PR.
+
+[§LOG.90] №18,245 §§1–7 · 05-11-2026, 15:33 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner requested major FX, then explicitly required external research rather
+than assuming the BTC/NatGas setup transfers. Read BIS market structure,
+Neely/Weller intraday findings, Andersen et al. macro surprises, Menkhoff et al.
+momentum, Breedon/Ranaldo published abstract, broker pricing and FX Global Code.
+Sources and limitations: docs/major-fx-research-2026-11-05.md/.json.
+Changed scope to a no-trade session diagnostic: seven majors, Tokyo/London/NY
+local windows with DST, two frozen dates / 42 bounded jobs. Reject FX entry
+candidates; do not select a strategy or score arbitrary 1/3bp costs. Current
+24bp reserve is observed as an assumption excluding unknown commission, not
+certified fees. Scheduled spread samples, coverage, price range and movement
+cannot establish an edge. Tests: 34 core research tests and denied-warning
+Clippy passed. Required CI and deployed broker receipts are pending on this PR.
+Original 73% / 1:1.38 per strategy/account and interim 50% remain unverified.
+GROK_Log checked through17,703; inspect changes before allocating future serials.
+Clarification to LOG.89: candidate validation was not scored; baseline studies
+had exposed some validation dates (see PR156 final receipt), so not pristine.
+No live strategy, risk, registration or engineering-worker permission changed.
