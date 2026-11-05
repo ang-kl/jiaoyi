@@ -1150,3 +1150,26 @@ no evaluationopened, no livecandidate promoted. Measurementfix retained;
 failedcandidates preserved. No extra brokerfetch/modelAPI/storage service.
 GROK_Log last17,703;check changes before nextserial. Time is Money: stop tuning
 these failed price-only candidates; costs and class mechanisms need evidence.
+
+[§LOG.98] №18,260 §§1–6 ·05-11-2026,21:09 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner: do the remaining work. Read main bfb9231 and GROK_Log (last17,703),
+kept prior fixes. Eight bounded order views:1079distinct records,262opens with
+fill price,12dispatch-attributed entries, all demo; live/FX none.51market
+closes and207broker exits use different benchmarks. No certified round-trip
+costs or complete fee lifecycle; retain24bp/side stress and no livecostchange.
+Frozen40source hashes before cross-market diagnostic. Forty native source/
+original-study checks passed.480paired diagnostic records:4arms×3horizons×40
+already-inspected episodes, notindependent trades. Fivefocused tests added;
+all13research tests pass. Three-hour peer continuation:indices1/11stresswins,
+FX0/12,metals1/4,oil2/3,NatGasmissing,crypto2/4butnegative mean. Crypto peer
+adds no direction vs ownmomentum; oil peer adds no direction on2matched cases.
+All20remain visible. No qualifiedclass50%, no livecandidate/fee/lot/SL/TPchange.
+Read EIA oil/gas, NBER currency/crypto, WGC primarymaterial; distinguishcommon
+exposure from predictive lead. Corrected unrelatedinitialNBERURL after title
+check; no conclusionbasedonit. Weather/storage expectations, realyields,
+macro surprise vintages andhistorical costcoverage remainmissing. Studywindows
+are not inventory-eventresearch. docs/cost-context-findings-2026-11-05.md
+records fivefinancial gates; no newbrokerhistory/DBretention/modelAPIcall.
+IncidentTelegrammute/workerpermissions unchanged. Check GROK_Log andlater
+other-model changes before nextserial. Time is Money; no arbitraryretuning.

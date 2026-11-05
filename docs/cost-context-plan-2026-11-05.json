@@ -1,0 +1,104 @@
+{
+  "serial": "\u211618,260 \u00a7\u00a71\u20136",
+  "frozen_at_utc": "2026-11-05T12:54:33.843269+00:00",
+  "scope": "Exploratory context diagnostic on already inspected development dates; not a deployable strategy or independent validation. No future-data input, new broker collection, fee calibration or live promotion.",
+  "classes": {
+    "equity_index": [
+      "US500",
+      "NAS100",
+      "US30",
+      "GER40",
+      "UK100",
+      "JPN225",
+      "AUS200"
+    ],
+    "fx": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "AUDUSD",
+      "USDCAD",
+      "NZDUSD"
+    ],
+    "metal": [
+      "XAUUSD",
+      "XAGUSD"
+    ],
+    "energy": [
+      "NatGas",
+      "SpotCrude",
+      "SpotBrent"
+    ],
+    "crypto": [
+      "BTCUSD",
+      "ETHUSD"
+    ]
+  },
+  "dates": [
+    "2025-08-05",
+    "2025-08-12"
+  ],
+  "horizons_minutes": [
+    30,
+    60,
+    180
+  ],
+  "variants": [
+    "own_momentum",
+    "peer_continuation",
+    "peer_reversal",
+    "always_long"
+  ],
+  "slippage_bps_per_side": 24,
+  "commission": "unknown; zero-additional-fee sensitivity only, never qualified net returns",
+  "feature": "First-hour peer return; FX dollar orientation and target exclusion; same-start window only; no fitted coefficient or threshold. Feature snapshot age<=60s, fresh when recorded; next-quote entry/exit<=5s, quote sides<=6s.",
+  "peer_rules": {
+    "fx": "other original six USD pairs, >=3, equal-weight signed dollar return",
+    "metal": "original six USD pairs, >=3, inverse dollar return (hypothesis only, no real yields)",
+    "energy": "Brent\u2194WTI only; NatGas has no supported peer proxy",
+    "crypto": "BTC\u2194ETH only",
+    "equity_index": "other index with exactly matching source start, >=1"
+  },
+  "input_files": {
+    "AUDUSD-2025-08-05.json": "548b72c0c3eb964476ab44c71fa0a3f7e25efea3fc807127d897f0af2b4dd186",
+    "AUDUSD-2025-08-12.json": "ef0ca84abe94e6aa0d0b80cec3b81cb201619ca96c7395c506e7da40a6c36ba7",
+    "AUS200-2025-08-05.json": "f452d3455b8391eac6b1944b5f91067b9399fa8b77fda0fc5719b345422ad5d6",
+    "AUS200-2025-08-12.json": "9202d8f70b95aea156b996280f40ad43188c2316c2981f9b684eb565548c71f5",
+    "BTCUSD-2025-08-05.json": "59e153780ec2f6ad45e6f8b53875d8f8b0b177a338649d3510707eee675d83ef",
+    "BTCUSD-2025-08-12.json": "cc8dfcef897efe2dc8b2ec2218e126a10834042dda572eb322aae991e7fbe7c1",
+    "ETHUSD-2025-08-05.json": "9e48c4fb20be3bbe3e473b2e9f3d19d3c31c3c5350439a65062695f3b345eabc",
+    "ETHUSD-2025-08-12.json": "de29885323bbcef1edff4ce9ba7c16d5f88c6d1f999f01e84d1d3b71a70d1d16",
+    "EURUSD-2025-08-05.json": "a33d79566591533814e8f2013cb35516483ba4cef2935e58a12369a96dda1315",
+    "EURUSD-2025-08-12.json": "fb2fcaf66bd855a3a867c5fca1826ab6516b8445c3bbb14f55e63cf6d4f45ba2",
+    "GBPUSD-2025-08-05.json": "67a540059a8c02af960a1757389bc5109f48ffb1ae037fa9973d7c506b164ba6",
+    "GBPUSD-2025-08-12.json": "5ad3b71dd80f9e133721d452c58ae20592f3a8fcd84402ec81278a074e512f06",
+    "GER40-2025-08-05.json": "6c10e237c8ae647ed082282c0b75acc7e5530a3f376661304451ce86ac5a72a5",
+    "GER40-2025-08-12.json": "1b127b050136eda8bf47b6a2312fbe98bc4777d738950853082dbf602a77c81b",
+    "JPN225-2025-08-05.json": "abccab68778ffaba263c6a5aea967f8aab100597e516e2e9f9ed638e0c0aaa46",
+    "JPN225-2025-08-12.json": "65de0e13777d549e2f039018894ba93976ed1e54276e8f622706a70eb0c455b6",
+    "NAS100-2025-08-05.json": "1f94b406ff6bf1e973e202482ac15ba76d7671e0e97914429e376773420694c4",
+    "NAS100-2025-08-12.json": "1ff65fce574059de3330a838f5f12ac15ebee29f9816d3f83311e41a53bb32d9",
+    "NZDUSD-2025-08-05.json": "5e87006148d6d4cb14399f8dc034d111ed03634781c1c4d19042dfc3200c05d0",
+    "NZDUSD-2025-08-12.json": "5251fb52d49f45296ce51cbd841bb21a1f0eabed6ed2d411f38d1d4bab55be5c",
+    "NatGas-2025-08-05.json": "7b682effe87b9ad7ca1f424b465e026a707bc04b1f77a6b4b9cd16178c1c99e1",
+    "NatGas-2025-08-12.json": "a92885c6a398595de2dc323e6968e5c739246e44e1d51cded43469484c6c6d46",
+    "SpotBrent-2025-08-05.json": "cab81fff47928ca11c010730c2197b2364f275d6e1050844a536b69fd14d8cd0",
+    "SpotBrent-2025-08-12.json": "b9fe1bd55106a9231cddb9cdf0a12077f13ca872a9fa07b20f15af759558af29",
+    "SpotCrude-2025-08-05.json": "29cd0dabe688e77330123513cbdfde27c31b89dcf31e9ab2ad499fabb7c94935",
+    "SpotCrude-2025-08-12.json": "b5d6ef2b77b4f08ba5247a98e6c86b48ac6a6d3d0cd7df12fe7bbc9a45684cf1",
+    "UK100-2025-08-05.json": "bbb04f914eaa0828f6ef98f6de105d633036676f47789b6c123463d93999f16e",
+    "UK100-2025-08-12.json": "f8b0847681488467e91b9116a9e2decbc02ddc64ac4a3699532e1dee4fff7bc0",
+    "US30-2025-08-05.json": "6213eaf5b5d6dfad9096a7aa97956c57179ea73edd6f91a54e927a76f91794fe",
+    "US30-2025-08-12.json": "60a0c7d93ca390e8aad5a84bc92e17bb31afa7bcf1d22a35fcc24810e67ccc16",
+    "US500-2025-08-05.json": "66e24423a76bce10d3818f78774b244a112a7c79b12ace31f0e074f867b2880c",
+    "US500-2025-08-12.json": "e4775cba04533524aa90745096ae14879f5dc0fbdff0c7df6b3f0187593f0323",
+    "USDCAD-2025-08-05.json": "a1baeb017ab3abeb33333ced3a39a912e4b4133e401ff34160c4a3be3e2b4fad",
+    "USDCAD-2025-08-12.json": "d0849c0c0eb173e6caf2bd4bb3d48d528381dbf2403e127b1f00a8ed96859ace",
+    "USDJPY-2025-08-05.json": "d6de58deb7d2b0b4463b0f9b096814e4971141dc81d33b10a713d69b708ab582",
+    "USDJPY-2025-08-12.json": "b63c82fd78dbe300c6179774219fd751f204c53779ef641c54950d56c3b45d2e",
+    "XAGUSD-2025-08-05.json": "2ef9dc031053d72390ed3e571e51ce2b48ca264ce8a0877559f6349c3a3e7d2a",
+    "XAGUSD-2025-08-12.json": "9863fbae513f0c005f6d2ff853aa0923a69f613ecb51fdfd3e40e67c824a4b77",
+    "XAUUSD-2025-08-05.json": "8e8c543abfd60579d36326431095730f99947461e3f280dfaab67cb98db98257",
+    "XAUUSD-2025-08-12.json": "b88048915c1c8e4d676759ba111822e5e1584ef62316e21bc68e4319a6a7974b"
+  }
+}
