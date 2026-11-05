@@ -21,6 +21,10 @@ pub enum EntryRule {
     FxSessionDiagnostic,
     ClassMomentum1h,
     ClassReversion1h,
+    ClassChopReversion1h,
+    ClassMomentumObserved1h,
+    ClassReversionObserved1h,
+    ClassChopReversionObserved1h,
     OpeningRangeBreakout2h,
     OpeningRangeFailedBreakout2h,
     OpeningTickRangeBreakout2h,
@@ -28,7 +32,32 @@ pub enum EntryRule {
 }
 impl EntryRule {
     pub fn class_prediction(self) -> bool {
-        matches!(self, Self::ClassMomentum1h | Self::ClassReversion1h)
+        matches!(
+            self,
+            Self::ClassMomentum1h
+                | Self::ClassReversion1h
+                | Self::ClassChopReversion1h
+                | Self::ClassMomentumObserved1h
+                | Self::ClassReversionObserved1h
+                | Self::ClassChopReversionObserved1h
+        )
+    }
+    pub fn observed_features(self) -> bool {
+        matches!(
+            self,
+            Self::ClassMomentumObserved1h
+                | Self::ClassReversionObserved1h
+                | Self::ClassChopReversionObserved1h
+        )
+    }
+    pub fn chop_reversion(self) -> bool {
+        matches!(
+            self,
+            Self::ClassChopReversion1h | Self::ClassChopReversionObserved1h
+        )
+    }
+    pub fn follows(self) -> bool {
+        matches!(self, Self::ClassMomentum1h | Self::ClassMomentumObserved1h)
     }
     pub fn full_ticks(self) -> bool {
         matches!(
@@ -155,7 +184,11 @@ pub(super) fn study(
                 EntryRule::CurrentS3
                 | EntryRule::FxSessionDiagnostic
                 | EntryRule::ClassMomentum1h
-                | EntryRule::ClassReversion1h => {
+                | EntryRule::ClassReversion1h
+                | EntryRule::ClassChopReversion1h
+                | EntryRule::ClassMomentumObserved1h
+                | EntryRule::ClassReversionObserved1h
+                | EntryRule::ClassChopReversionObserved1h => {
                     return Err("this mode uses its own evaluator".into());
                 }
             };

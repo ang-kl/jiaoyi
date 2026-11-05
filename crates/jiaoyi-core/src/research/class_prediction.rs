@@ -2,7 +2,6 @@
 //! Research only: no evidence of a live edge, no account or order authority.
 use super::{
     exit_replay as exits,
-    opening_range::EntryRule,
     s3_signal::Request,
     s3_ticks::{self, Mark, Quality, Snapshot, Source, Study, Trade},
 };
@@ -76,6 +75,8 @@ pub struct Features {
     pub asset_class: AssetClass,
     pub decision_at: DateTime<Utc>,
     pub sampled_points: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_sample_times: Option<Vec<DateTime<Utc>>>,
     pub first_hour_return_bps: f64,
     pub path_efficiency: f64,
     pub observed_mid_range: f64,
@@ -118,13 +119,27 @@ pub(super) fn study(
         r: None,
         cost: None,
     };
+    let observed = opts.entry_rule.observed_features();
+    if observed {
+        out.notes[1] = "Observed-feature ablation: first fresh snapshot in minute one; at minutes5..55 use the last previously fresh snapshot at/before the mark, no older than60seconds. Minute60 still requires a new fresh quote within5seconds. Observations remain dated features, never fresh execution quotes. Same efficiency/range calculation; no future interpolation.";
+    }
+    if opts.entry_rule.chop_reversion() {
+        out.notes[0] = "Exploratory low-efficiency reversal hypothesis: fade first-hour displacement only when sampled path efficiency<0.5. Compared with frozen high-efficiency continuation/reversal; no validated class edge or live change.";
+    }
     let samples: Vec<_> = (0..=60)
         .step_by(5)
         .filter_map(|minute| {
             let time = req.from + Duration::minutes(minute);
-            quotes.iter().enumerate().find(|(_, q)| {
-                q.fresh && q.quote.at >= time && q.quote.at < time + Duration::seconds(5)
-            })
+            if observed && minute > 0 && minute < 60 {
+                quotes.iter().enumerate().rev().find(|(_, q)| {
+                    q.fresh && q.quote.at <= time && q.quote.at >= time - Duration::seconds(60)
+                })
+            } else {
+                let window = if observed && minute == 0 { 60 } else { 5 };
+                quotes.iter().enumerate().find(|(_, q)| {
+                    q.fresh && q.quote.at >= time && q.quote.at < time + Duration::seconds(window)
+                })
+            }
         })
         .collect();
     if samples.len() != 13 {
@@ -156,17 +171,24 @@ pub(super) fn study(
         asset_class: asset_class(&req.symbol).unwrap(),
         decision_at: q.quote.at,
         sampled_points: 13,
+        observed_sample_times: observed.then(|| samples.iter().map(|(_, s)| s.quote.at).collect()),
         first_hour_return_bps: change / mid(samples[0].1) * 10000.0,
         path_efficiency: efficiency,
         observed_mid_range: range,
         sampled_spread_median: spreads[6],
     });
     mark.reason = "first_hour_not_directionally_coherent";
-    if efficiency < 0.5 || change == 0.0 || range <= 0.0 {
+    let regime_absent = if opts.entry_rule.chop_reversion() {
+        mark.reason = "first_hour_not_low_efficiency";
+        efficiency >= 0.5
+    } else {
+        efficiency < 0.5
+    };
+    if regime_absent || change == 0.0 || range <= 0.0 {
         out.marks.push(mark);
         return Ok(out);
     }
-    let follow = opts.entry_rule == EntryRule::ClassMomentum1h;
+    let follow = opts.entry_rule.follows();
     let side = if (change > 0.0) == follow {
         Dir::Buy
     } else {
@@ -265,6 +287,7 @@ pub(super) fn study(
 
 #[cfg(test)]
 mod tests {
+    use super::super::opening_range::EntryRule;
     use super::super::s3_ticks::{Contract, Options, Tick};
     use super::*;
     fn fixture() -> (Request, Source) {
@@ -392,5 +415,49 @@ mod tests {
         let t = s3_ticks::study(&req, &src).unwrap().trade.unwrap();
         assert_eq!(t.trailing_scenario_net_r, None);
         assert_eq!(t.exit_comparison.candidate.qualified_gross_r, None);
+    }
+    #[test]
+    fn observed_features_use_only_past_points_without_relaxing_entry_freshness() {
+        let (mut req, mut src) = fixture();
+        // Move the minute10 sample to9:30: strict sampling cannot see it, as-of may.
+        src.bids[2].ts_ms -= 30000;
+        src.asks[2].ts_ms -= 30000;
+        assert!(s3_ticks::study(&req, &src).unwrap().trade.is_none());
+        req.tick_replay.as_mut().unwrap().entry_rule = EntryRule::ClassMomentumObserved1h;
+        let study = s3_ticks::study(&req, &src).unwrap();
+        assert!(study.trade.is_some());
+        let times = study
+            .prediction_features
+            .unwrap()
+            .observed_sample_times
+            .unwrap();
+        assert_eq!(times[2], req.from + Duration::seconds(570));
+        assert!(times.windows(2).all(|w| w[1] > w[0]));
+        // A feature may be old; an entry quote may not. Remove the mark quote/fill.
+        src.bids.retain(|t| {
+            t.ts_ms < req.from.timestamp_millis() + 3600000
+                || t.ts_ms >= req.from.timestamp_millis() + 3605000
+        });
+        src.asks.retain(|t| {
+            t.ts_ms < req.from.timestamp_millis() + 3600000
+                || t.ts_ms >= req.from.timestamp_millis() + 3605000
+        });
+        assert!(s3_ticks::study(&req, &src).unwrap().trade.is_none());
+    }
+    #[test]
+    fn low_efficiency_reversal_is_separate_from_original_coherent_modes() {
+        let (mut req, mut src) = fixture();
+        for i in 1..12 {
+            src.bids[i].price_e5 = if i % 2 == 0 { 10_000_000 } else { 10_240_000 };
+            src.asks[i].price_e5 = src.bids[i].price_e5 + 2000;
+        }
+        src.bids[12].price_e5 = 10_040_000;
+        src.asks[12].price_e5 = 10_042_000;
+        src.bids[13].price_e5 = 10_041_000;
+        src.asks[13].price_e5 = 10_043_000;
+        assert!(s3_ticks::study(&req, &src).unwrap().trade.is_none());
+        req.tick_replay.as_mut().unwrap().entry_rule = EntryRule::ClassChopReversion1h;
+        let t = s3_ticks::study(&req, &src).unwrap().trade.unwrap();
+        assert_eq!(t.entry.side, exits::Side::Short);
     }
 }

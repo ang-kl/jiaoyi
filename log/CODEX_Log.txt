@@ -1134,3 +1134,19 @@ studies afteridenticalJSONwire roundtrip;no tolerance/field omission. One
 regression verifies same decimal acceptance and changed value/direction refusal.
 Earlier160candidate outcomes reproducedunchanged. Keep provenfixes. GROK_Log
 last17,703;check changes before nextserial. No economic50%claim before results.
+
+[§LOG.97] №18,258 §6; №18,259 §§1–5 ·05-11-2026,20:18 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+40/40broker source episodes completed and reproduced. PR161 JSON-boundary fix
+mergedgreen2b212e9 at12:16:37UTC after collection finished; no interruptedjob.
+Original two candidates yielded onlyETHclosednegative andJPNcensored. Reasons
+percandidate:22notcoherent,12missingfeatures,4costveto,2entries.
+Freezeone exploratory follow-up, reusesame40sources:low-efficiency reversal and
+bounded as-of features, retaining firsttwo controls. Plan d085bfd8d86fe30d0cbdaa0865238e49c792fc368011837cbcb2c23daed1d970.
+Missingfeatures12→2; executionguard unchanged.240paired scenario records;
+all80original outcomesunchanged. Observed/chop reversal:indices0/6,energy0/2,
+crypto0/1netwins;FX/metalsnoentries. Fixedstops alsono netwins. No classpassed,
+no evaluationopened, no livecandidate promoted. Measurementfix retained;
+failedcandidates preserved. No extra brokerfetch/modelAPI/storage service.
+GROK_Log last17,703;check changes before nextserial. Time is Money: stop tuning
+these failed price-only candidates; costs and class mechanisms need evidence.

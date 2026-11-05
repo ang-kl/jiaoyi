@@ -36,11 +36,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if momentum != job["result"]["study"] {
         return Err("deployed/offline study mismatch".into());
     }
-    req.tick_replay.as_mut().unwrap().entry_rule = EntryRule::ClassReversion1h;
-    let reversion = s3_ticks::study(&req, &src)?;
+    let mut candidates = serde_json::Map::new();
+    candidates.insert("class_momentum1h".into(), momentum);
+    for rule in [
+        EntryRule::ClassReversion1h,
+        EntryRule::ClassChopReversion1h,
+        EntryRule::ClassMomentumObserved1h,
+        EntryRule::ClassReversionObserved1h,
+        EntryRule::ClassChopReversionObserved1h,
+    ] {
+        req.tick_replay.as_mut().unwrap().entry_rule = rule;
+        let name = serde_json::to_value(rule)?.as_str().unwrap().to_string();
+        candidates.insert(name, serde_json::to_value(s3_ticks::study(&req, &src)?)?);
+    }
     println!(
         "{}",
-        json!({"symbol":req.symbol,"class":class_prediction::asset_class(&req.symbol),"from":req.from,"to":req.to,"input_sha256":digest,"algorithm_sha256":job["result"]["algorithm_sha256"],"candidates":{"class_momentum1h":momentum,"class_reversion1h":reversion}})
+        json!({"symbol":req.symbol,"class":class_prediction::asset_class(&req.symbol),"from":req.from,"to":req.to,"input_sha256":digest,"source_algorithm_sha256":job["result"]["algorithm_sha256"],"replay_algorithm_sha256":replay_algorithm_sha256(),"candidates":candidates})
     );
     Ok(())
 }
@@ -69,4 +80,23 @@ mod tests {
             remote
         );
     }
+}
+
+fn replay_algorithm_sha256() -> String {
+    let mut h = Sha256::new();
+    for bytes in [
+        include_bytes!("../src/research/s3_signal.rs").as_slice(),
+        include_bytes!("../src/research/fx_diagnostic.rs").as_slice(),
+        include_bytes!("../src/research/class_prediction.rs").as_slice(),
+        include_bytes!("../src/research/s3_ticks.rs").as_slice(),
+        include_bytes!("../src/research/opening_range.rs").as_slice(),
+        include_bytes!("../src/research/exit_replay.rs").as_slice(),
+        include_bytes!("../src/strategy3/band.rs").as_slice(),
+        include_bytes!("../src/strategy3/targets.rs").as_slice(),
+        include_bytes!("../src/strategy3/sessions.rs").as_slice(),
+        include_bytes!("../src/strategy3/mod.rs").as_slice(),
+    ] {
+        h.update(bytes);
+    }
+    format!("{:x}", h.finalize())
 }

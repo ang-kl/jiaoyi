@@ -51,6 +51,8 @@ def select(summary):
     return chosen
 
 def collect(a,plan,digest):
+    if plan.get("reuse_only"):
+        raise RuntimeError("this exploratory amendment reuses saved sources only; no new broker jobs")
     out=a.output/a.stage;out.mkdir(parents=True,exist_ok=True)
     receipt=out/'plan-sha256.txt'
     if receipt.exists() and receipt.read_text().strip()!=digest:raise RuntimeError('frozen plan changed')
@@ -88,7 +90,7 @@ def collect(a,plan,digest):
 def analyse(a,plan,digest):
     out=a.output/a.stage
     if (out/'plan-sha256.txt').read_text().strip()!=digest:raise RuntimeError('plan receipt mismatch')
-    rows=[];failed=[]
+    rows=[];failed=[];provenance=set()
     allowed={(s,start):request(plan,s,start,end) for ss in plan['classes'].values() for s in ss for _,start,end in windows(plan,a.stage,s)}
     for path in sorted(out.glob('*.json')):
         if path.name in ('summary.json','replays.json'):continue
@@ -97,7 +99,11 @@ def analyse(a,plan,digest):
         if job['status']!='complete':failed.append(dict(symbol=req['symbol'],start=req['from'],error=job.get('error')));continue
         completed=subprocess.run([str(a.binary),str(path)],capture_output=True,text=True,check=True)
         result=json.loads(completed.stdout)
-        for rule,study in result['candidates'].items():rows.append(dict(symbol=result['symbol'],asset_class=result['class'],**{'from':result['from']},rule=rule,input_sha256=result['input_sha256'],study=study))
+        if not set(plan['rules']).issubset(result['candidates']):raise RuntimeError('binary missing a frozen candidate')
+        provenance.add((result['source_algorithm_sha256'],result['replay_algorithm_sha256']))
+        for rule,study in result['candidates'].items():
+            if rule not in plan['rules']:continue
+            rows.append(dict(symbol=result['symbol'],asset_class=result['class'],**{'from':result['from']},rule=rule,input_sha256=result['input_sha256'],study=study))
     classes={};symbols={};selected={}
     if a.stage=='validation':
         prior=json.loads((a.output/'development/summary.json').read_text())
@@ -116,7 +122,7 @@ def analyse(a,plan,digest):
                 if len(weeks)<plan['validation_min_weeks']:result['reasons'].append('fewer than three validation weeks')
             result['passes_screen']=not result['reasons'];classes[cls][rule]=result
             for s in ss:symbols[s+':'+rule]=score([r for r in subset if r['symbol']==s],1 if a.stage=='development' else plan['validation_min_closed_per_symbol'],dates,[s])
-    summary=dict(stage=a.stage,plan_sha256=digest,classes=classes,symbols=symbols,failed_jobs=failed,complete_jobs=len(rows)//2,expected_jobs=dates*20,selected_from_development=selected,financial_pass=False,original_goal='73% /1:1.38 per strategy/account unchanged; interim50% per class plus per-symbol checks')
+    summary=dict(stage=a.stage,plan_sha256=digest,classes=classes,symbols=symbols,failed_jobs=failed,complete_jobs=len(rows)//len(plan['rules']),expected_jobs=dates*20,selected_from_development=selected,financial_pass=False,code_provenance=[{'source_algorithm_sha256':x,'replay_algorithm_sha256':y} for x,y in sorted(provenance)],original_goal='73% /1:1.38 per strategy/account unchanged; interim50% per class plus per-symbol checks')
     (out/'replays.json').write_text(json.dumps(rows));(out/'summary.json').write_text(json.dumps(summary,indent=2))
     esc=lambda x:html.escape(str(x));tr=[]
     for cls,rs in classes.items():
@@ -124,15 +130,15 @@ def analyse(a,plan,digest):
     detail=[]
     for key,v in symbols.items():detail.append('<tr>'+''.join('<td>'+esc(x)+'</td>' for x in [key,v['closed'],v['wins'],'N/A' if v['net_win_rate'] is None else f"{v['net_win_rate']:.1%}",v['mean_net_r']])+'</tr>')
     reasons=collections.Counter(m['reason'] for r in rows for m in r['study']['marks'])
-    body=f'''<!doctype html><html lang="en"><meta charset="utf-8"><title>Jiaoyi class prediction</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{{font:16px/1.5 system-ui;max-width:1250px;margin:30px auto;padding:20px}}table{{border-collapse:collapse;width:100%;font-size:14px}}td,th{{text-align:left;padding:9px;border-bottom:1px solid #ddd}}.scroll{{overflow:auto}}pre{{white-space:pre-wrap}}</style><h1>All-class predictive research — {a.stage}</h1><p>№18,257 §§1–6 · {dt.datetime.now(ZoneInfo('Asia/Singapore')).strftime('%d-%m-%Y %H:%M SGT')} · by Codex (GPT-6), effort not exposed.</p><h2>TLDR</h2><p>{sum(v['passes_screen'] for rs in classes.values() for v in rs.values())} class/candidate preliminary screens passed; zero qualified financial passes. {summary['complete_jobs']}/{summary['expected_jobs']} expected source episodes reproduced offline. The program tests two frozen first-hour predictions across all20 symbols; it does not promise50% or auto-promote a strategy.</p><p>Costs retain24bp per side and executable bid/ask; commission=0 is an unverified scenario. One simulated entry at hour1 after13fresh samples and efficiency≥0.5. Original observed range fixesR; Q1.38 and existing trailing/target exits; force-close at hour4 or retain censoring. No live policy changed.</p><h2>Class results</h2><div class="scroll"><table><tr><th>Class</th><th>Candidate</th><th>Episodes</th><th>Closed</th><th>Censored</th><th>Net wins</th><th>Mean netR</th><th>Gate</th></tr>{''.join(tr)}</table></div><h2>Every symbol</h2><div class="scroll"><table><tr><th>Symbol/candidate</th><th>Closed</th><th>Wins</th><th>Net win rate</th><th>Mean netR</th></tr>{''.join(detail)}</table></div><h2>Why a candidate did not trade</h2><pre>{esc(json.dumps(reasons,indent=2))}</pre><p>Counts include both candidate arms on shared episodes; they are not independent opportunities. The corpus is bounded and samples few dates. Price-only continuation/reversal tests do not include macro surprise vintages or order flow. No failure proves that every possible strategy in a class fails.</p><h2>Next gate and target</h2><p>Only a class passing development can open its separate-time candidate evaluation; select by development mean netR once, without retuning. Validation needs≥20class closes,≥5per symbol, three weeks,≥50% net wins at class and symbol level, positive expectancy/PF and positive price-unit outcomes separately per symbol. A class aggregate cannot hide a losing member. Wilson intervals, censoring and failures remain in summaryJSON. Intervals are descriptive IID approximations; correlated symbols/dates reduce effective sample size. Current contract/quote continuity and actual fees remain unqualified, so even a passing screen is not authority to deploy.</p><p>Original goal73%/1:1.38 per strategy/account remains unchanged. Plan SHA256:{digest}. No separate model API spend. Draft for review.</p></html>'''
+    body=f'''<!doctype html><html lang="en"><meta charset="utf-8"><title>Jiaoyi class prediction</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{{font:16px/1.5 system-ui;max-width:1250px;margin:30px auto;padding:20px}}table{{border-collapse:collapse;width:100%;font-size:14px}}td,th{{text-align:left;padding:9px;border-bottom:1px solid #ddd}}.scroll{{overflow:auto}}pre{{white-space:pre-wrap}}</style><h1>All-class predictive research — {a.stage}</h1><p>№18,257 §§1–6 · {dt.datetime.now(ZoneInfo('Asia/Singapore')).strftime('%d-%m-%Y %H:%M SGT')} · by Codex (GPT-6), effort not exposed.</p><h2>TLDR</h2><p>{sum(v['passes_screen'] for rs in classes.values() for v in rs.values())} class/candidate preliminary screens passed; zero qualified financial passes. {summary['complete_jobs']}/{summary['expected_jobs']} expected source episodes reproduced offline. The program tests {len(plan['rules'])} frozen first-hour variants across all20 symbols; it does not promise50% or auto-promote a strategy.</p><p>Costs retain24bp per side and executable bid/ask; commission=0 is an unverified scenario. One simulated entry at hour1 after13causal observations; variants separately test fresh scheduled versus bounded as-of features, and high-efficiency continuation/reversal versus low-efficiency reversal. Execution freshness is unchanged. Original observed range fixesR; Q1.38 and existing trailing/target exits; force-close at hour4 or retain censoring. No live policy changed.</p><h2>Class results</h2><div class="scroll"><table><tr><th>Class</th><th>Candidate</th><th>Episodes</th><th>Closed</th><th>Censored</th><th>Net wins</th><th>Mean netR</th><th>Gate</th></tr>{''.join(tr)}</table></div><h2>Every symbol</h2><div class="scroll"><table><tr><th>Symbol/candidate</th><th>Closed</th><th>Wins</th><th>Net win rate</th><th>Mean netR</th></tr>{''.join(detail)}</table></div><h2>Why a candidate did not trade</h2><pre>{esc(json.dumps(reasons,indent=2))}</pre><p>Counts include both candidate arms on shared episodes; they are not independent opportunities. The corpus is bounded and samples few dates. Price-only continuation/reversal tests do not include macro surprise vintages or order flow. No failure proves that every possible strategy in a class fails.</p><h2>Next gate and target</h2><p>Only a class passing development can open its separate-time candidate evaluation; select by development mean netR once, without retuning. Validation needs≥20class closes,≥5per symbol, three weeks,≥50% net wins at class and symbol level, positive expectancy/PF and positive price-unit outcomes separately per symbol. A class aggregate cannot hide a losing member. Wilson intervals, censoring and failures remain in summaryJSON. Intervals are descriptive IID approximations; correlated symbols/dates reduce effective sample size. Current contract/quote continuity and actual fees remain unqualified, so even a passing screen is not authority to deploy.</p><p>Original goal73%/1:1.38 per strategy/account remains unchanged. Plan SHA256:{digest}. No separate model API spend. Draft for review.</p></html>'''
     (out/'Jiaoyi_Class_Prediction_Report.html').write_text(body)
     print(json.dumps({'complete_jobs':summary['complete_jobs'],'classes':classes,'failed_jobs':failed},indent=2))
 def main():
-    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--stage',choices=['development','validation'],default='development');p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);p.add_argument('--max-new-jobs',type=int,default=40);p.add_argument('--base',default='https://jiaoyi.up.railway.app');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--stage',choices=['development','validation'],default='development');p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);p.add_argument('--plan',type=Path,default=PLAN);p.add_argument('--max-new-jobs',type=int,default=40);p.add_argument('--base',default='https://jiaoyi.up.railway.app');a=p.parse_args()
     u=urlsplit(a.base)
     if u.scheme!='https' or u.username or u.password or u.path not in ('','/') or u.query or u.fragment:raise SystemExit('HTTPS origin without credentials/path required')
     if not 1<=a.max_new_jobs<=40:raise SystemExit('one invocation permits1..40jobs')
-    a.base=a.base.rstrip('/');plan=json.loads(PLAN.read_text());digest=hashlib.sha256(PLAN.read_bytes()).hexdigest()
+    a.base=a.base.rstrip('/');plan=json.loads(a.plan.read_text());digest=hashlib.sha256(a.plan.read_bytes()).hexdigest()
     if a.action=='collect':collect(a,plan,digest)
     else:
         if a.binary is None:raise SystemExit('--binary required for offline parity')
