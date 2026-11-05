@@ -1120,3 +1120,17 @@ Check GROK_Log and other-model changes before next serial. Time is Money; keep
 proven fixes; prepare to win by measuring predictive value and costs separately.
 Pre-collection review excludes25Aug/1Sep cash-market holiday dates from later
 evaluation; no outcomes inspected,40development episodes unchanged.
+
+[§LOG.96] №18,258 §§1–6 ·05-11-2026,20:07 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+PR160 exacthead c44988f passedall3CI; merged76dc74e at11:58:59UTC. Railway
+8a690f52 releaseSUCCESS,8loopsconnected;production17names/livepolicy/worker
+settings andincidentTelegrammute unchanged.40development episodes collecting
+fromdemo49236051 underfrozenplan8c8cb376d2bbe25a61567c55cb6187dd2616c2b6fd08baaaefda608f597e88ac.
+Source/offlineguard found JSON parsing representation difference: original
+first-hourreturn -30.756127566953722 parsed as-30.75612756695372 in RustValue.
+Computed value matches savedbrokerJSON; prediction notchanged. Compare both
+studies afteridenticalJSONwire roundtrip;no tolerance/field omission. One
+regression verifies same decimal acceptance and changed value/direction refusal.
+Earlier160candidate outcomes reproducedunchanged. Keep provenfixes. GROK_Log
+last17,703;check changes before nextserial. No economic50%claim before results.
