@@ -5,6 +5,10 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub const MAJOR_FX: [&str; 7] = [
+    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD",
+];
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Bar {
@@ -27,8 +31,20 @@ pub struct Request {
 }
 impl Request {
     pub fn validate(&self, now: DateTime<Utc>) -> Result<(), String> {
-        if !matches!(self.symbol.as_str(), "BTCUSD" | "NatGas") {
-            return Err("symbol must be BTCUSD or NatGas".into());
+        if !matches!(self.symbol.as_str(), "BTCUSD" | "NatGas") && !self.is_major_fx() {
+            return Err(
+                "symbol must be BTCUSD, NatGas or an explicitly supported major FX pair".into(),
+            );
+        }
+        if self.is_major_fx()
+            && self.tick_replay.as_ref().is_none_or(|o| {
+                o.entry_rule != super::opening_range::EntryRule::FxSessionDiagnostic
+            })
+        {
+            return Err(
+                "major FX currently supports session diagnostics only; no entry setup is validated"
+                    .into(),
+            );
         }
         if self.to > crate::seal::seal_instant() {
             return Err("sealed research interval: this runner accepts development data ending by 2025-10-24T00:00:00Z only".into());
@@ -64,11 +80,16 @@ impl Request {
         }
         Ok(())
     }
+    pub fn is_major_fx(&self) -> bool {
+        MAJOR_FX.contains(&self.symbol.as_str())
+    }
     pub fn rule(&self) -> sessions::SessionRule {
         sessions::rule_for(
             &self.symbol,
             if self.symbol == "BTCUSD" {
                 AssetClass::Crypto
+            } else if self.is_major_fx() {
+                AssetClass::Fx
             } else {
                 AssetClass::Energy
             },

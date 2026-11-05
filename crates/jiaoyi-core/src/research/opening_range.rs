@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 pub enum EntryRule {
     #[default]
     CurrentS3,
+    /// Read-only market structure observations, with no entry/exit candidate.
+    FxSessionDiagnostic,
     OpeningRangeBreakout2h,
     OpeningRangeFailedBreakout2h,
     OpeningTickRangeBreakout2h,
@@ -67,7 +69,7 @@ pub(super) fn study(
     quality: Quality,
 ) -> Result<Study, String> {
     let opts = req.tick_replay.as_ref().ok_or("options missing")?;
-    let mut out=Study{mode:"opening_sampled_range_research_v1",quality,marks:vec![],trade:None,notes:vec![
+    let mut out=Study{mode:"opening_sampled_range_research_v1",quality,marks:vec![],trade:None,fx_diagnostic:None,notes:vec![
         "Experimental entry rules only; current S3/live settings unchanged. Not an economic or account-goal PASS.",
         "First fresh midpoint at minutes 30/60/90/120 defines the fixed sampled range. This is not an intrabar high/low range. Missing any preparation mark excludes the episode.",
         "At minutes 150/180/210, breakout follows the range break; failed-breakout enters opposite only after an outside mark returns inside. A missing mark resets the failed excursion.",
@@ -145,7 +147,9 @@ pub(super) fn study(
                         None
                     }
                 }
-                EntryRule::CurrentS3 => return Err("current S3 uses its own evaluator".into()),
+                EntryRule::CurrentS3 | EntryRule::FxSessionDiagnostic => {
+                    return Err("this mode uses its own evaluator".into());
+                }
             };
             if let Some(s) = outside {
                 excursion = Some(match excursion {

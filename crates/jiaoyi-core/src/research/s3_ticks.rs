@@ -77,6 +77,8 @@ pub struct Study {
     pub quality: Quality,
     pub marks: Vec<Mark>,
     pub trade: Option<Trade>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fx_diagnostic: Option<super::fx_diagnostic::Diagnostic>,
     pub notes: Vec<&'static str>,
 }
 pub fn validate_request(req: &Request) -> Result<(), String> {
@@ -87,6 +89,9 @@ pub fn validate_request(req: &Request) -> Result<(), String> {
         .tick_replay
         .as_ref()
         .ok_or("tick_replay options required")?;
+    if opts.entry_rule == super::opening_range::EntryRule::FxSessionDiagnostic {
+        return super::fx_diagnostic::validate(req);
+    }
     let s = sessions::session_on(&req.rule(), req.from.date_naive())
         .ok_or("no session on this date")?;
     if req.from != s.open || req.to > s.close || req.to - req.from > Duration::days(1) {
@@ -229,6 +234,15 @@ pub fn study(req: &Request, src: &Source) -> Result<Study, String> {
         return Err("invalid contract or fixed scenario volume".into());
     }
     // Share the M30 validator: no fabricated warm-up or duplicate bars.
+    if req.tick_replay.as_ref().unwrap().entry_rule
+        == super::opening_range::EntryRule::FxSessionDiagnostic
+    {
+        if !src.bars.is_empty() {
+            return Err("FX session diagnostics require tick-only sources".into());
+        }
+        let (quotes, quality) = snapshots(req, src)?;
+        return Ok(super::fx_diagnostic::study(req, &quotes, quality));
+    }
     super::s3_signal::study(req, &src.bars)?;
     let (quotes, quality) = snapshots(req, src)?;
     if !req.tick_replay.as_ref().unwrap().entry_rule.is_current() {
@@ -250,7 +264,7 @@ pub fn study(req: &Request, src: &Source) -> Result<Study, String> {
         .iter()
         .find(|b| b.at == session.open)
         .map(|b| b.open);
-    let mut result=Study{mode:"bounded_s3_tick_replay_v1",quality,marks:vec![],trade:None,notes:vec![
+    let mut result=Study{mode:"bounded_s3_tick_replay_v1",quality,marks:vec![],trade:None,fx_diagnostic:None,notes:vec![
         "DEVELOPMENT SCENARIO ONLY: no orders, no per-account financial PASS or goal progress claimed.",
         "Current shared S3 bands, mid-price mark decision, rounded R, cost reserve, durable session veto, one entry/session and target planner; current 30-second original-R trail cadence, no proposals in final 30 minutes.",
         "Fixed requested native volume and current contract snapshot; historical Kelly, margin, portfolio conflicts, ownership/restarts and historical contract changes are not reconstructed.",
