@@ -342,6 +342,9 @@ class Reporter:
         from market_validation import MarketValidation
         self.market_validation = MarketValidation(coordinator)
 
+    def incident_telegram_enabled(self):
+        return self.env.get("ENGINEERING_INCIDENT_TELEGRAM_ENABLED", "1") == "1"
+
     def publish_incident(self, incident):
         """Create a factual HTML report before optional receipt-backed delivery.
 
@@ -375,7 +378,7 @@ class Reporter:
         # severity. A failed protective action has its own incident kind.
         internal = incident.get("internal_only") is True or incident.get("kind") in (
             "stop_loss", "stop_loss_review", "normal_sl", "normal_loss")
-        notify = (str(incident.get("severity", "")).lower() in ("critical", "high") and not internal
+        notify = (self.incident_telegram_enabled() and str(incident.get("severity", "")).lower() in ("critical", "high") and not internal
                   and self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID"))
         deferred = bool(notify and incident.get("defer_delivery") is True)
         receipt = {"key": key, "incident_id": str(incident["id"])[:200], "state": "pending",
@@ -397,7 +400,8 @@ class Reporter:
                        (created_at, json.dumps(receipt, sort_keys=True)))
             receipt["state"] = "sending" if notify and not deferred else "created"
             if not notify:
-                receipt["reason"] = "internal_only" if internal or str(incident.get("severity", "")).lower() not in ("critical", "high") else "telegram_not_configured"
+                receipt["reason"] = ("incident_telegram_disabled" if not self.incident_telegram_enabled() else
+                                     "internal_only" if internal or str(incident.get("severity", "")).lower() not in ("critical", "high") else "telegram_not_configured")
             db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,NULL,'incident_report_delivery',?)",
                        (created_at, json.dumps(receipt, sort_keys=True)))
         if notify and not deferred:
@@ -423,6 +427,10 @@ class Reporter:
         return json.loads(row["detail"]) if row else None
 
     def _send_incident(self, receipt, document=None):
+        if not self.incident_telegram_enabled():
+            receipt.update(state="created", notification_pending=False, reason="incident_telegram_disabled")
+            self.store.event("incident_report_delivery", detail=json.dumps(receipt, sort_keys=True))
+            return receipt
         path = Path(receipt["path"])
         # A receipt never grants access to arbitrary private files.
         expected = self.store.private / "incident-reports" / ("incident-" + receipt["key"][:24] + ".html")
@@ -447,7 +455,8 @@ class Reporter:
 
     def incident_delivery_tick(self):
         """Claim one safely queued file; observation/creation never waits here."""
-        if not (self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")):
+        muted = not self.incident_telegram_enabled()
+        if not muted and not (self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")):
             return None
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -462,10 +471,12 @@ class Reporter:
             if row is None:
                 return None
             receipt = json.loads(row["detail"])
-            receipt.update(state="sending", notification_pending=False)
+            receipt.update(state="created" if muted else "sending", notification_pending=False)
+            if muted:
+                receipt["reason"] = "incident_telegram_disabled"
             db.execute("INSERT INTO events(at,job,kind,detail) VALUES(?,NULL,'incident_report_delivery',?)",
                        (dt.datetime.now(dt.timezone.utc).isoformat(), json.dumps(receipt, sort_keys=True)))
-        return self._send_incident(receipt)
+        return receipt if muted else self._send_incident(receipt)
 
     def incident_delivery_loop(self):
         """One independent transport lane; no model session or observer lock."""
@@ -485,6 +496,9 @@ class Reporter:
         with self.store.connect() as db:
             row = dict(db.execute("SELECT next_due,state,message_id,last_error FROM engineering_report_delivery WHERE id=1").fetchone())
         return {"configured": bool(self.env.get("TELEGRAM_BOT_TOKEN") and self.env.get("TELEGRAM_OWNER_CHAT_ID")),
+                "incident_telegram_enabled": self.incident_telegram_enabled(),
+                "incident_report_destination": "telegram" if self.incident_telegram_enabled() else "saved_for_chat_review",
+                "chat_push_configured": False,
                 "interval_seconds": self.interval, "delivery": row,
                 "market_validation": self.market_validation.status(),
                 "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
