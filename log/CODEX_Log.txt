@@ -1043,3 +1043,24 @@ GROK_Log checked through17,703; inspect changes before allocating future serials
 Clarification to LOG.89: candidate validation was not scored; baseline studies
 had exposed some validation dates (see PR156 final receipt), so not pristine.
 No live strategy, risk, registration or engineering-worker permission changed.
+
+[§LOG.91] №18,246–18,250 §§1–5 · 05-11-2026, 17:24 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner requests limited meaningful unit tests and preservation of proven fixes.
+PR157 deployed eeacfce; 42/42 FX diagnostic jobs reproduced offline, no strategy
+or win-rate improvement established. BTC remains1/3 and NatGas0/3 in the small
+full-tick development candidate samples; no validated economic improvement.
+The inherited24bp FX reserve originated in bot-trade's two proposal-relative
+observations/TP1 policy, not a certified two-sided execution calibration. Found
+existing final-guard receipt already stores dispatch quote. Add read-only entry
+cost decomposition to orders instead of new telemetry; preserve historical
+metric semantics and treat missing receipt/deals as unknown. Three focused unit
+tests and one DB integration test; exact CI/deployed proof remains on the PR.
+No live trading/risk, replay candidate, worker allowance or cost reserve changed.
+Storage audit:150GB volume around80.6GB at prior snapshot; actual table/index/WAL
+attribution unverified. Owner explicitly says NO BACKUP NEEDED: remove proposed
+backup/restore prerequisites, do not add backup routines or PITR. No purge was
+executed; preserve research, decisions, fills and loss evidence.
+GROK_Log checked through17,703; inspect it and other-model changes before next
+serial allocation. Time is Money: retain a proven correction until new evidence
+justifies changing it. No repeated parameter tuning to manufacture target wins.
