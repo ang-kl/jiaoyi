@@ -24,3 +24,5 @@ pub mod stats;
 pub mod verdict;
 
 pub mod s3_signal;
+
+pub mod s3_ticks;

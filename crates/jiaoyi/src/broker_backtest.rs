@@ -8,7 +8,10 @@ use axum::response::{IntoResponse, Response};
 use axum::{extract::State, Extension, Json};
 use chrono::{Duration, Utc};
 use jiaoyi_core::allowlist::Environment;
-use jiaoyi_core::research::s3_signal::{self, Bar, Request};
+use jiaoyi_core::research::{
+    s3_signal::{self, Bar, Request},
+    s3_ticks,
+};
 use jiaoyi_ctrader::{decode_bar, messages::ProtoOaTrendbarPeriod};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -206,6 +209,53 @@ async fn run(state: &AppState, jobs: &Jobs, req: &Request) -> Result<Value, &'st
     if bars.is_empty() {
         return Err("no_broker_bars_returned");
     }
+    if req.tick_replay.is_some() {
+        phase(jobs, "fetching_bounded_ticks");
+        let mut budget = TickBudget::default();
+        let mut source = s3_ticks::Source {
+            bars,
+            bids: vec![],
+            asks: vec![],
+            contract: s3_ticks::Contract {
+                digits: contract.digits,
+                min_volume: contract.min_volume.ok_or("minimum_volume_missing")?,
+                step_volume: contract.step_volume.ok_or("volume_step_missing")?,
+            },
+        };
+        for side in [
+            jiaoyi_ctrader::tickdata::QuoteSide::Bid,
+            jiaoyi_ctrader::tickdata::QuoteSide::Ask,
+        ] {
+            let ticks = bounded_ticks(
+                &session,
+                id,
+                side,
+                req.from.timestamp_millis(),
+                req.to.timestamp_millis() + 5000,
+                &mut budget,
+            )
+            .await?;
+            if side == jiaoyi_ctrader::tickdata::QuoteSide::Bid {
+                source.bids = ticks;
+            } else {
+                source.asks = ticks;
+            }
+            jobs.0.lock().unwrap()["tick_pages"] = json!(budget.pages);
+        }
+        phase(jobs, "replaying_ticks");
+        let study = s3_ticks::study(req, &source).map_err(|_| "tick_replay_input_invalid")?;
+        let digest = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&source).map_err(|_| "source_encoding_failed")?)
+        );
+        return Ok(
+            json!({"source":"cTrader Open API separate BID/ASK tick history + M30 warm-up",
+            "symbol_id":id,"environment":env.as_str(),"input":source,"study":study,
+            "input_sha256":digest,"m30_pages":pages,"tick_pages":budget.pages,
+            "qualification":"DEVELOPMENT_SCENARIO_NOT_FINANCIAL_PASS", "algorithm_version":"bounded-s3-tick-replay-v1",
+            "algorithm_sha256":tick_algorithm_sha256()}),
+        );
+    }
     phase(jobs, "analysing");
     let study = s3_signal::study(req, &bars).map_err(|_| "study_input_invalid")?;
     let bytes = serde_json::to_vec(&bars).map_err(|_| "source_encoding_failed")?;
@@ -216,4 +266,69 @@ async fn run(state: &AppState, jobs: &Jobs, req: &Request) -> Result<Value, &'st
         "input_sha256":digest,"fetched_pages":pages,"history_from":req.history_from(),"bars":bars,"study":study,
         "qualification":"DIAGNOSTIC_ONLY_NOT_FINANCIAL_PASS","algorithm_version":"s3-mark-followthrough-v1", "algorithm_sha256":format!("{:x}",Sha256::digest(include_bytes!("../../jiaoyi-core/src/research/s3_signal.rs")))}),
     )
+}
+
+/// Bisection discards truncated responses and fetches disjoint complete leaves.
+/// Never skip an oldest timestamp or quietly accept an empty hasMore response.
+#[derive(Default)]
+pub struct TickBudget {
+    pub pages: usize,
+    pub rows: usize,
+}
+pub async fn bounded_ticks(
+    session: &jiaoyi_ctrader::AccountSession<'_>,
+    id: i64,
+    side: jiaoyi_ctrader::tickdata::QuoteSide,
+    from: i64,
+    to: i64,
+    budget: &mut TickBudget,
+) -> Result<Vec<s3_ticks::Tick>, &'static str> {
+    if from < 0 || to < from || to - from > 86_405_000 {
+        return Err("tick_window_invalid");
+    }
+    let mut pending = vec![(from, to)];
+    let mut out = vec![];
+    while let Some((a, b)) = pending.pop() {
+        if budget.pages >= s3_ticks::MAX_PAGES {
+            return Err("tick_page_budget_exceeded_no_result");
+        }
+        budget.pages += 1;
+        let (ticks, more) = session
+            .tick_page(id, side, a, b)
+            .await
+            .map_err(|_| "tick_fetch_or_decode_failed")?;
+        if more {
+            if ticks.is_empty() || a == b {
+                return Err("tick_truncation_not_resolvable_no_result");
+            }
+            let mid = a + (b - a) / 2;
+            pending.push((mid + 1, b));
+            pending.push((a, mid));
+        } else {
+            budget.rows += ticks.len();
+            if budget.rows > s3_ticks::MAX_TICKS {
+                return Err("tick_row_budget_exceeded_no_result");
+            }
+            out.extend(ticks.into_iter().rev().map(|t| s3_ticks::Tick {
+                ts_ms: t.ts_ms,
+                price_e5: t.price_e5,
+            }));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+    }
+    Ok(out)
+}
+fn tick_algorithm_sha256() -> String {
+    let mut h = Sha256::new();
+    for b in [
+        include_bytes!("../../jiaoyi-core/src/research/s3_ticks.rs").as_slice(),
+        include_bytes!("../../jiaoyi-core/src/research/exit_replay.rs").as_slice(),
+        include_bytes!("../../jiaoyi-core/src/strategy3/band.rs").as_slice(),
+        include_bytes!("../../jiaoyi-core/src/strategy3/targets.rs").as_slice(),
+        include_bytes!("../../jiaoyi-core/src/strategy3/sessions.rs").as_slice(),
+        include_bytes!("../../jiaoyi-core/src/strategy3/mod.rs").as_slice(),
+    ] {
+        h.update(b);
+    }
+    format!("{:x}", h.finalize())
 }

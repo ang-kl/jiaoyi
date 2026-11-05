@@ -977,3 +977,18 @@ Five focused local tests and Clippy passed before final adapter additions;
 final CI and deployed BTC/NatGas receipts remain gates. Exact release status is
 recorded on this PR; do not infer connection or financial PASS from this entry.
 Consult other-model logs before the next serial. GROK_Log last read through17,703.
+
+[§LOG.87] №18,239–18,241 §§1–5; 5 November 2026, 10:50 SGT; by <Codex (GPT-6), effort: not exposed>.
+PR153 merged after all three CI jobs passed; deployed main0c463fa on jiaoyi.
+Read-only BTC/NatGas M30 development jobs completed and reproduced offline.
+Owner now explicitly scopes the next engineering change to bounded tick-data
+replay for BTC and NatGas. Added optional read-only tick mode to the existing
+job, hard page/row/time bounds, strict truncation handling, quote-quality counts,
+shared S3 band/cost/targets, session veto, one simulated entry and original-R
+30-second trailing comparison. Current contract/fixed volume and next-quote
+fills are explicit scenarios; no historical account parity or goal PASS claimed.
+No production trading rule, worker, risk limit or paid-model route changed.
+GROK_Log checked through17,703; check it and other-model changes before allocating
+future serials. Private broker data remain outside Git. Focused tests passed;
+final CI/merge/deployment and actual two-symbol tick receipts remain gates and
+will be recorded on the PR rather than inferred from this journal entry.

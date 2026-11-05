@@ -93,3 +93,78 @@ test confirms `hasMore` refusal and no orders/amends/closes. Clippy and required
 repository CI remain release gates. Actual deployed BTC and NatGas result
 receipts must be recorded separately; successful compilation is not a broker
 connection or financial PASS.
+
+## Bounded BTC / NatGas tick replay
+
+№18,241 §§1–5 · 5 November 2026, 10:50 SGT · by <Codex (GPT-6), effort: not exposed>.
+
+Supply `tick_replay: {"volume": ...}` in the existing owner-authenticated job.
+`btc.ticks.example.json` and `natgas.ticks.example.json` start with four-hour
+**development** windows. Volume is broker cents of units (BTC 1 and NatGas
+10000 in the current demo metadata); it is not lots or inferred account sizing.
+The normal client creates the HTML report and JSON; the same offline Rust
+example verifies the source checksum and recomputes the tick study:
+
+```bash
+python ops/research/broker_backtest.py ops/research/btc.ticks.example.json --output /tmp/btc-ticks
+cargo run --locked -p jiaoyi-core --example s3_signal_study < /tmp/btc-ticks/result.json
+```
+
+This runs in the existing **jiaoyi** service, using its separate read-only
+broker session. No engineering worker, schedule, paid model call, account link,
+order writer, token refresh, live strategy change or research SQL archive is
+introduced. The previously established development-data seal remains in force.
+One owner job at a time; latest job only, in memory; download before replacement
+or deployment. Source ticks stay private and out of Git.
+
+Limits: start at the registered UTC session open; maximum one session / 24
+hours; 50 calendar days of M30 warm-up; at most 120 tick requests and 200,000
+returned bid+ask rows; overall timeout 240 seconds. Each historical call is
+followed by 750 ms pacing. Truncated tick responses are discarded and their
+interval bisected into disjoint inclusive windows. A truncated single
+millisecond, empty `hasMore`, decode failure, cap or timeout fails the job;
+partial output is never presented as complete. Shorten the end time to fit a
+budget, keeping the same session start. Never split a day into independent
+fresh-state runs and then add the results.
+
+The pure replay reuses S3 session/band, cost-reserve and target arithmetic.
+It evaluates the first fresh quote within each five-second decision window,
+retains C≥R for the rest of that session, and consumes one entry per session.
+It models entry on the next strictly later fresh quote before the mark deadline,
+with direction rechecked. This dispatch/fill timing is a stated approximation.
+Current 24 bp/side reserve is fixed; spread and commission are explicit scenarios.
+The original rounded R and target distances are frozen at decision time and
+shift with the simulated fill, as relative brackets do.
+
+For a fixed entry, the report compares fixed stop versus the current original-R
+trailing method: a 30-second proposal interval and no new proposals in the final
+30 minutes. Stops never loosen. Old server brackets precede pending amendments
+and TP1 closes; acknowledgement/market-close occurs on the next snapshot.
+Whole-minimum positions use TP1 as broker target; split positions use the shared
+partial/runner planner. Gaps through stops fill at the observed executable side;
+targets fill at their level. No real liquidity or acceptance claim is made.
+Partial windows censor remaining legs; only a full-session run uses the five
+seconds of extra history to attempt a session-end close.
+
+Separate bid/ask histories cannot reconstruct cross-side event sequence.
+Same-millisecond updates are grouped into one final snapshot and counted;
+within-millisecond extremes may be lost. Stale sides (>6 seconds), long event
+intervals, crossed quotes and initially missing sides are reported. Quiet time
+is not proof of a missing broker tick. Quote continuity remains unproven even
+when API pagination completes. Gross and cost-adjusted values are **scenarios**;
+qualified net R stays null. Spread is already in bid/ask fills and is not deducted
+twice. Slippage is a post-fill adverse cost scenario, not a path/trigger change.
+
+Missing from account parity: historical contract metadata, actual original
+volume/Kelly/margin state, portfolio conflicts, manual trades, funding/retries,
+restarts, latency, slippage, broker stop-distance rejection, swaps and currency
+conversion. Current contract metadata is exported explicitly. This deliverable
+is an execution-path diagnostic, not an account backtest or edge certification.
+It contributes **zero qualifying trades** towards ≥73% wins / 1:1.38 R:R over
+20 positions per strategy/account. No candidate rule is promoted by this PR.
+
+Verification covers both long and short partial/trailing paths, causal entry,
+per-session veto, censored positions, malformed/stale/crossed input and capped
+broker pagination preserving duplicate ticks without any order writes. Final
+CI and deployed two-symbol receipts belong on the PR; compilation alone does
+not prove historical broker availability or an economic edge.
