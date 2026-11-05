@@ -332,6 +332,7 @@ fn tick_algorithm_sha256() -> String {
     for b in [
         include_bytes!("../../jiaoyi-core/src/research/s3_signal.rs").as_slice(),
         include_bytes!("../../jiaoyi-core/src/research/fx_diagnostic.rs").as_slice(),
+        include_bytes!("../../jiaoyi-core/src/research/class_prediction.rs").as_slice(),
         include_bytes!("../../jiaoyi-core/src/research/s3_ticks.rs").as_slice(),
         include_bytes!("../../jiaoyi-core/src/research/opening_range.rs").as_slice(),
         include_bytes!("../../jiaoyi-core/src/research/exit_replay.rs").as_slice(),

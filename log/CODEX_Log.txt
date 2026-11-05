@@ -1090,3 +1090,33 @@ and watch observation without Telegram. Final CI/deployment proof is on PR.
 No automatic Railway-to-chat connector exists: report saved incidents during
 active chat work; do not claim unattended push delivery. GROK_Log last17,703;
 check changes before assigning future serials. No new AI spend route/service.
+
+[§LOG.94] №18,255 §§1–3; №18,256 §§1–5 ·05-11-2026,19:32 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+All20 fundamentals/coverage audit:17active, US500/EURUSD/USDCAD removed by owner;
+nine durable session cost vetoes, four outside-session, four inside-band at19:24.
+Thirteen current-session preparations on time each account. Bounded strategy
+experiments onlyBTC/NatGas;6originalFX diagnostic-only;12others unsupported.
+32existing tick episodes reproduced quality summaries. BTC119/119eligible mark
+windows; Nat43/105eligible,43noevent,19staleside;18eligible lack secondfresh proxy.
+BTC30min direction diagnostic2/7grosswins,1/7net;alwayslong4/7gross,1/7net.
+No edge established;24bp/side remains an uncalibrated policy assumption. Full
+report/evidence in /workspace/jiaoyi-20-symbol-assessment-20261105; GitHub journal
+PR158 comment6656908501. Inventory read timed out; fulltickcoverage unverified.
+No live/risk/universe changes. GROK_Log checked through17,703.
+
+[§LOG.95] №18,257 §§1–6 ·05-11-2026,19:46 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner requests more predictive tests/tweaks and50%perclass. Implement research-
+only first-hour continuation/reversal across original20; retain proven live
+protections,17production names and original73%/1:1.38 perstrategy/account goal.
+Freeze40development episodes and later evaluation dates; no new API spending,
+worker allowance or scheduled automation. Three causal/contract/missing-data
+Rust tests andthree scorecard/timezone Python tests;37core research checks and
+workspaceClippy pass locally. ExactCI/deployed/sourceparity results onPR.
+Classscreen cannot hide losing symbols, smallsamples, missing/censored outcomes,
+negative expectancy or unlike-unit aggregation. No promise or invented50%PASS.
+Check GROK_Log and other-model changes before next serial. Time is Money; keep
+proven fixes; prepare to win by measuring predictive value and costs separately.
+Pre-collection review excludes25Aug/1Sep cash-market holiday dates from later
+evaluation; no outcomes inspected,40development episodes unchanged.
