@@ -66,6 +66,10 @@ fn router_with_owner_access(
             "/owner/backtests",
             get(crate::broker_backtest::latest).post(crate::broker_backtest::submit),
         )
+        .route(
+            "/owner/market-data",
+            get(crate::broker_backtest::latest).post(crate::broker_backtest::collect),
+        )
         .layer(Extension(crate::broker_backtest::Jobs::default()))
         .layer(Extension(access))
         .with_state(state)
@@ -862,6 +866,34 @@ mod tests {
             assert!(orders_query(&bad).is_err(), "{bad:?}");
         }
     }
+    #[tokio::test]
+    async fn collection_auth_scope_and_holdout_are_checked_before_broker_access() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+        for (account, auth, expected) in [
+            (900073, None, StatusCode::UNAUTHORIZED),
+            (123, Some("Bearer secret"), StatusCode::FORBIDDEN),
+            (900073, Some("Bearer secret"), StatusCode::BAD_REQUEST),
+        ] {
+            let body = serde_json::json!({"account":account,"symbol":"BTCUSD",
+                "from":"2026-10-23T00:00:00Z","to":"2026-10-23T04:00:00Z"});
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/owner/market-data")
+                .header("content-type", "application/json");
+            if let Some(auth) = auth {
+                request = request.header("authorization", auth);
+            }
+            let res = owner_test_router(Some("secret"))
+                .oneshot(request.body(Body::from(body.to_string())).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(res.status(), expected);
+            assert_eq!(res.headers()["cache-control"], "no-store");
+        }
+    }
+
     #[tokio::test]
     async fn backtest_auth_scope_and_seal_are_checked_before_broker_access() {
         use axum::body::Body;
