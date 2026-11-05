@@ -473,7 +473,7 @@ pub fn orders_body(rows: &[jiaoyi_store::trading::OrderView]) -> serde_json::Val
             "fill_price": "the deals' volume-weighted price, or the adopted position's",
             "latency_ms": "from the intent's record, just before the frame, to the broker's fill answer",
             "slippage": "the fill against the quote at the decision (the ask for a buy, the bid for a sell), or a broker exit against the level it executed; positive is adverse",
-            "entry_cost": "entry only, actual broker deal VWAP versus existing final-guard quote after the writer lock; null means unavailable, never zero. Positive bps are adverse; all components use dispatch_price as denominator and add to decision_to_fill_bps. Quote age is local receipt age. Dispatch-to-fill includes market movement and execution, excludes commission, is not a calibrated round-trip cost; no estimate from adopted position prices",
+            "entry_cost": "entry only, actual broker deal VWAP versus existing final-guard quote after the writer lock; null means unavailable, never zero. Positive bps are adverse; all components use dispatch_price as denominator and add to decision_to_fill_bps. Quote age is local receipt age. Dispatch-to-fill includes market movement and execution, excludes fees, is not a calibrated round-trip cost; no estimate from adopted position prices",
             "decision": "the newest decision recorded with the order's entry key: its kind, reason, time and the signal's inputs",
         },
         "count": rows.len(),
