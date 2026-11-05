@@ -1,0 +1,12 @@
+{
+  "account": 49236051,
+  "symbol": "BTCUSD",
+  "from": "2025-10-06T00:00:00Z",
+  "to": "2025-10-06T04:00:00Z",
+  "spread": 15,
+  "commission_round_trip": 0,
+  "slippage_bps_per_side": 24,
+  "tick_replay": {
+    "volume": 1
+  }
+}

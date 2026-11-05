@@ -22,6 +22,8 @@ pub struct Request {
     pub spread: f64,
     pub commission_round_trip: f64,
     pub slippage_bps_per_side: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tick_replay: Option<super::s3_ticks::Options>,
 }
 impl Request {
     pub fn validate(&self, now: DateTime<Utc>) -> Result<(), String> {
@@ -56,6 +58,9 @@ impl Request {
             if !n.is_finite() || !(0.0..=100_000.0).contains(&n) {
                 return Err("cost assumptions must be finite, nonnegative and <=100000".into());
             }
+        }
+        if self.tick_replay.is_some() {
+            super::s3_ticks::validate_request(self)?;
         }
         Ok(())
     }
@@ -237,6 +242,7 @@ mod tests {
             spread: 0.02,
             commission_round_trip: 0.01,
             slippage_bps_per_side: 2.0,
+            tick_replay: None,
         };
         let mut bars = vec![];
         let mut at = req.history_from();

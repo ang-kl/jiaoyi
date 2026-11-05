@@ -36,6 +36,8 @@ impl Side {
 pub enum TrailCadence {
     /// Fixed preregistered assumption; deliberately no tunable interval.
     AssumedS1SixtySeconds,
+    /// Current S3 cadence; next-quote acknowledgement remains a simulation assumption.
+    S3ThirtySeconds,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -492,15 +494,21 @@ impl ExitReplay {
                 _ => price,
             });
             let stop = arm.best.unwrap() - input.side.sign() * risk;
-            let due = arm
-                .last_proposal
-                .is_none_or(|at| quote.at.signed_duration_since(at) >= Duration::seconds(60));
+            let due = arm.last_proposal.is_none_or(|at| {
+                quote.at.signed_duration_since(at)
+                    >= Duration::seconds(match input.cadence {
+                        TrailCadence::AssumedS1SixtySeconds => 60,
+                        TrailCadence::S3ThirtySeconds => 30,
+                    })
+            });
             if stop > 0
                 && input.side.reached(stop, arm.stop)
                 && stop != arm.stop
                 && input.side.reached(price, stop)
                 && price != stop
                 && due
+                && (input.cadence != TrailCadence::S3ThirtySeconds
+                    || input.session_end - quote.at >= Duration::minutes(30))
             {
                 arm.trail_pending = Some(stop);
                 arm.last_proposal = Some(quote.at);
@@ -538,7 +546,7 @@ impl ExitReplay {
         let net_delta_r = baseline.net_r.zip(candidate.net_r).map(|(b, c)| c - b);
         Comparison{baseline,candidate,scenario_delta_r,qualified_delta_r,net_delta_r,quotes_processed:self.processed,coverage,
             scope:"fixed original entries and registered volume/targets only; conditional exit scenarios, not a full strategy backtest or financial PASS",
-            assumptions:"candidate original-R trail; sixty-second S1 cadence assumed for simulation, no measured S3 amend latency/rejections; next-quote TP1/amend; scheduled session close at first quote>=end; old server bracket first; no entry/portfolio feedback"}
+            assumptions: match self.input.cadence { TrailCadence::S3ThirtySeconds => "S3 30-second proposal cadence, no new proposal in final 30 minutes; next-quote assumed acknowledgement/TP1; old server bracket first; quote-path scenario only", TrailCadence::AssumedS1SixtySeconds => "candidate original-R trail; sixty-second S1 cadence assumed for simulation, no measured S3 amend latency/rejections; next-quote TP1/amend; scheduled session close at first quote>=end; old server bracket first; no entry/portfolio feedback"}}
     }
 
     fn outcome(
