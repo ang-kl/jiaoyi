@@ -909,6 +909,10 @@ class Coordinator:
         self.store.event("watch_reading", detail=json.dumps(watches.watches(health, operations), default=str))
         if not emitted:
             return
+        if not self.reporter.incident_telegram_enabled():
+            for event in emitted:
+                self.store.event("watch_telegram_suppressed", detail=event["event"])
+            return
         token = self.reporter.env.get("TELEGRAM_BOT_TOKEN")
         chat = self.reporter.env.get("TELEGRAM_OWNER_CHAT_ID")
         for event in emitted:

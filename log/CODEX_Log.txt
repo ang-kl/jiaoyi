@@ -1064,3 +1064,29 @@ executed; preserve research, decisions, fills and loss evidence.
 GROK_Log checked through17,703; inspect it and other-model changes before next
 serial allocation. Time is Money: retain a proven correction until new evidence
 justifies changing it. No repeated parameter tuning to manufacture target wins.
+
+[§LOG.92] №18,251 §§1–8 / №18,252–18,253 §§1–7;
+05-11-2026,18:31 SGT; by <Codex (GPT-6), effort: not exposed>.
+Additional DEVELOPMENT backtest1–5Sep2025:10 four-hour episodes,331812 bid/ask
+updates,50 existing-rule outputs. Frozen plan111da854a57c6f57af6ada8148afad9da34209933b7c66dbe9f64c8067559345;
+all ten service studies reproduced offline. Full-tick BTC0/4,-1.973103R;
+NatGas no entries. Combined development BTC1/7,-3.333430R; NatGas0/3,-1.980942R.
+No candidate passed or validation opened. Financial qualification remains
+unknown; historical quote reconstruction and all-in costs need evidence.
+PR158 comment6655333344 records the experiment. Fundamental concern: no
+established economic edge; cost<R is not positive expected return. Do not keep
+retuning failed candidates or cheapening costs to meet a win-rate target.
+
+[§LOG.93] №18,254 §§1–5 ·05-11-2026,18:31 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner asks to stop Telegram incident reports and report here. Add an incident-
+only delivery switch covering immediate, queued and final-send paths plus watch
+alerts. Preserve private incident records/analysis and separately scheduled
+reports. Suppress queued delivery durably; no backlog replay after re-enable.
+Deploy with ENGINEERING_INCIDENT_TELEGRAM_ENABLED=0, preserving every other
+worker setting and the separate trading service. Three focused regression
+checks cover stored reports/scheduled delivery, queued/restarted suppression
+and watch observation without Telegram. Final CI/deployment proof is on PR.
+No automatic Railway-to-chat connector exists: report saved incidents during
+active chat work; do not claim unattended push delivery. GROK_Log last17,703;
+check changes before assigning future serials. No new AI spend route/service.

@@ -659,3 +659,20 @@ Chat №17,743–17,747 §§1–2,29-10-2026 SGT, by <Codex (GPT-6), effort not 
 The validator samples existing read-only health/goal/preparation/trailing/SL-review views once a minute and keeps only baseline/latest, bounded event identities/counters and applicable preparation receipts. It uses `ENGINEERING_VALIDATION_DATABASE_URL` privately for fixed PostgreSQL read-only transactions against the existing generated account-report and execution ledgers. Railway may reference `${{Postgres.DATABASE_URL}}`; this value is excluded from every model process. No new broker connection, trading control, schema or paid model route is added.
 
 The report separates verified checks, failures, unknown evidence and behavior not exercised by the market. It covers each allowed account's known balance/float, original setup and entry receipts, intended versus recorded SL/TP, explicit-cost closing evidence and any proven close/reverse linkage. It does not infer a reverse from opposite trades or a loss, accept stale/partial valuations as zero, count old acknowledgements as new tests, reset the latest20 window or claim predictive improvement from software checks. Preparing/reporting after the07:30SGT engineering cutoff remains read-only. A persisted sending/delivered/uncertain receipt prevents blind replay after restart or lost acknowledgement; public status exposes schedule/coverage metadata only.
+
+### Incident delivery preference — 5 November 2026
+
+Owner instruction №18,254 §§1–5: report incidents in the active Codex chat,
+not through Telegram. Set `ENGINEERING_INCIDENT_TELEGRAM_ENABLED=0` on
+`jiaoyi-engineering`. This mutes immediate/deferred incident HTML documents and
+watch alerts. Incident detection, analysis, private reports and receipts remain
+active; previously queued documents are marked suppressed so a later restart
+or re-enable does not replay them. Scheduled engineering reports, trading daily
+reports and API-cost notices retain their separate delivery policies.
+
+The switch defaults to `1` for compatibility; this project's explicit setting is
+`0`. `/status.telegram_reporting` exposes the effective switch, destination
+`saved_for_chat_review` and `chat_push_configured=false`. There is no automatic
+Railway-to-Codex chat channel. The main agent retrieves saved incident status
+and reports material findings here while a session is active; do not promise
+unattended chat delivery. No new service, model route or subscription is added.
