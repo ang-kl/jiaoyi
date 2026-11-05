@@ -66,12 +66,10 @@
     "2025-08-20",
     "2025-08-21",
     "2025-08-22",
-    "2025-08-25",
     "2025-08-26",
     "2025-08-27",
     "2025-08-28",
     "2025-08-29",
-    "2025-09-01",
     "2025-09-02",
     "2025-09-03",
     "2025-09-04",
@@ -116,5 +114,9 @@
     "https://www.nyse.com/markets/hours-calendars",
     "https://ir.eia.gov/ngs/ngs.html"
   ],
-  "hypothesis_limits": "Direction continuation and reversal are competing research controls, not an assumed universal edge. Missing macro/news/consensus/order-flow features prevent claiming a fundamental event model."
+  "hypothesis_limits": "Direction continuation and reversal are competing research controls, not an assumed universal edge. Missing macro/news/consensus/order-flow features prevent claiming a fundamental event model.",
+  "pre_collection_amendment": {
+    "prior_plan_sha256": "0c16a951e9453903311d9db6992214d433177e3f0906719bacde8694cd991050",
+    "reason": "Before any source collection or outcome inspection, exclude25Aug/1Sep from all validation classes to avoid UK summer-bank-holiday/US Labor-Day cash-session assumptions. Development dates and candidate rules unchanged."
+  }
 }

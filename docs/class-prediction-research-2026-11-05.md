@@ -43,7 +43,7 @@ calls for a documented causal redesign, not parameter hunting on evaluation date
 ## Frozen batch and gates
 
 `class-prediction-plan-2026-11-05.json` fixes all20 symbols, account49236051,
-volumes, two development dates,14 later evaluation dates, candidate definitions,
+volumes, two development dates,12 later evaluation dates, candidate definitions,
 costs and sample gates. Forty initial source episodes produce80paired candidate
 results. Historical baseline/bar exposure is disclosed; later dates are separate
 time evaluation, not claimed pristine unseen history.
@@ -88,3 +88,7 @@ censoring failures. Three Python tests cover class/member gates, loss/censor/
 duplicate handling and UTC/DST dates. All37core research tests passed locally;
 workspace Clippy with denied warnings passed. Required exact-head CI and deployed
 broker/offline parity are recorded on the PR before economic conclusions.
+
+Pre-collection review removed25Aug/1Sep from evaluation to avoid cash-market
+holiday assumptions; no outcome was inspected. Wilson intervals are descriptive
+IID approximations, not calibrated confidence for correlated class trades.

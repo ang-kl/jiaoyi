@@ -1118,3 +1118,5 @@ Classscreen cannot hide losing symbols, smallsamples, missing/censored outcomes,
 negative expectancy or unlike-unit aggregation. No promise or invented50%PASS.
 Check GROK_Log and other-model changes before next serial. Time is Money; keep
 proven fixes; prepare to win by measuring predictive value and costs separately.
+Pre-collection review excludes25Aug/1Sep cash-market holiday dates from later
+evaluation; no outcomes inspected,40development episodes unchanged.
