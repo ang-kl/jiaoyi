@@ -51,7 +51,7 @@
 
 pub mod preopen;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -67,7 +67,7 @@ use jiaoyi_ctrader::trading::{
     Side, VolumeLimits,
 };
 use jiaoyi_ctrader::{AccountSession, Connection, ReceivedExecution};
-use jiaoyi_store::sqlx::{PgPool, Row};
+use jiaoyi_store::sqlx::{self, PgPool, Row};
 use jiaoyi_store::strategy3 as s3s;
 use jiaoyi_store::trading as ts;
 use rust_decimal::prelude::ToPrimitive;
@@ -270,6 +270,70 @@ pub fn session_already_entered(opens: i64) -> bool {
 /// A later mark does not decide the cost again. Grok 4.7 · № 17,682.
 pub fn cost_skip_stands(remembered: Option<chrono::NaiveDate>, session: chrono::NaiveDate) -> bool {
     remembered == Some(session)
+}
+
+pub fn should_query_closed_trades_for_kelly(possible_closes: usize) -> bool {
+    possible_closes >= jiaoyi_core::strategy3::kelly::MIN_CLOSES
+}
+
+/// None means history was not queried, not that zero closes were observed.
+async fn kelly_sample(
+    pool: &PgPool,
+    account_id: i64,
+    keys: &[String],
+) -> Result<Option<Vec<f64>>, sqlx::Error> {
+    if keys.is_empty() {
+        return Ok(None);
+    }
+    if !should_query_closed_trades_for_kelly(keys.len()) {
+        // Outcomes are per position, not per entry key. Check a cheap upper
+        // bound so split/multiple position receipts cannot bypass active Kelly.
+        let positions: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM (
+                SELECT DISTINCT position_id FROM trading_events
+                WHERE account_id=$1 AND entry_key=ANY($2) AND kind=ANY($3)
+                  AND position_id IS NOT NULL LIMIT $4
+             ) possible",
+        )
+        .bind(account_id)
+        .bind(keys)
+        .bind(ts::FILL_KINDS)
+        .bind(jiaoyi_core::strategy3::kelly::MIN_CLOSES as i64)
+        .fetch_one(pool)
+        .await?;
+        if !should_query_closed_trades_for_kelly(positions as usize) {
+            return Ok(None);
+        }
+    }
+    let (closed, _) = ts::closed_trades(pool, account_id, "s3:").await?;
+    let key_set: HashSet<&str> = keys.iter().map(String::as_str).collect();
+    Ok(Some(
+        closed
+            .iter()
+            .filter(|t| key_set.contains(t.entry_key.as_str()))
+            .map(|t| t.r)
+            .collect(),
+    ))
+}
+
+/// Offline research helper only; no production signal or order decision uses it.
+/// Returns (coherence, mean signed bps, strict sign unanimity).
+pub fn peer_coherence(peer_returns_bps: &[f64]) -> Option<(f64, f64, bool)> {
+    if peer_returns_bps.is_empty() || peer_returns_bps.iter().any(|x| !x.is_finite()) {
+        return None;
+    }
+    let signed: f64 = peer_returns_bps.iter().sum();
+    let absolute: f64 = peer_returns_bps.iter().map(|x| x.abs()).sum();
+    if !signed.is_finite() || !absolute.is_finite() || absolute <= f64::EPSILON {
+        return None;
+    }
+    let unanimous =
+        peer_returns_bps.iter().all(|&x| x > 0.0) || peer_returns_bps.iter().all(|&x| x < 0.0);
+    Some((
+        (signed.abs() / absolute).clamp(0.0, 1.0),
+        signed / peer_returns_bps.len() as f64,
+        unanimous,
+    ))
 }
 
 /// A finished trade in original R. Profit is positive. A stop from the
@@ -2538,16 +2602,15 @@ impl<'a, 'c> Trader<'a, 'c> {
         // after a loss.
         let keys =
             s3s::open_keys_for_hash(self.pool, self.account_id(), symbol_id, &self.hash).await?;
-        let (closed, _) = ts::closed_trades(self.pool, self.account_id(), "s3:").await?;
-        let rs: Vec<f64> = closed
-            .iter()
-            .filter(|t| keys.iter().any(|k| k == &t.entry_key))
-            .map(|t| t.r)
-            .collect();
-        let kelly = jiaoyi_core::strategy3::kelly::read(&rs);
+        let rs = kelly_sample(self.pool, self.account_id(), &keys).await?;
+        let queried = rs.is_some();
+        let kelly = jiaoyi_core::strategy3::kelly::read(rs.as_deref().unwrap_or_default());
         detail["kelly"] = json!({
-            "n": kelly.n,
-            "wins": kelly.wins,
+            "n": queried.then_some(kelly.n),
+            "wins": queried.then_some(kelly.wins),
+            "history_queried": queried,
+            "history_status": if queried { "queried" } else { "below_minimum_possible_positions" },
+            "eligible_open_keys": keys.len(),
             "p": kelly.p,
             "b": kelly.b,
             "f_star": kelly.f_star,
@@ -3444,6 +3507,61 @@ pub(crate) fn episodes_from_rows(rows: &[jiaoyi_store::sqlx::postgres::PgRow]) -
 
 #[cfg(test)]
 mod tests {
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn test_kelly_short_circuit_under_min_closes(pool: PgPool) {
+        assert!(!should_query_closed_trades_for_kelly(0));
+        assert!(!should_query_closed_trades_for_kelly(19));
+        assert!(should_query_closed_trades_for_kelly(20));
+        assert!(!jiaoyi_core::strategy3::kelly::skip(
+            &jiaoyi_core::strategy3::kelly::read(&[])
+        ));
+        let keys: Vec<String> = (0..20).map(|n| format!("s3:9:{n}")).collect();
+        // Make the full outcome query impossible while testing the shortcut.
+        sqlx::query("ALTER TABLE deals RENAME TO hidden_deals")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(kelly_sample(&pool, 9, &[]).await.unwrap(), None);
+        assert_eq!(kelly_sample(&pool, 9, &keys[..19]).await.unwrap(), None);
+        sqlx::query("ALTER TABLE hidden_deals RENAME TO deals")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(kelly_sample(&pool, 9, &keys).await.unwrap(), Some(vec![]));
+        // One entry key can identify many position receipts in the outcome
+        // schema: never infer an upper bound from key count alone.
+        sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,position_id,raw,received_at)
+            SELECT 9,'s3:9:0',2126,'ORDER_FILLED',n,''::bytea,now() FROM generate_series(1,20) n")
+            .execute(&pool).await.unwrap();
+        assert_eq!(
+            kelly_sample(&pool, 9, &keys[..1]).await.unwrap(),
+            Some(vec![])
+        );
+    }
+
+    #[test]
+    fn test_peer_coherence_unanimity() {
+        let (c, mean, unanimous) =
+            peer_coherence(&[-9.39, -18.46, -0.20, -5.92, -3.37, -10.63]).unwrap();
+        assert_eq!(c, 1.0);
+        assert!((mean - (-47.97 / 6.0)).abs() < 1e-12);
+        assert!(unanimous);
+        let (c, mean, unanimous) = peer_coherence(&[-2.0, 1.0]).unwrap();
+        assert!((c - 1.0 / 3.0).abs() < 1e-12);
+        assert_eq!(mean, -0.5);
+        assert!(!unanimous);
+        assert!(!peer_coherence(&[0.0, 1.0]).unwrap().2);
+        for invalid in [
+            &[][..],
+            &[0.0, 0.0],
+            &[f64::NAN],
+            &[f64::INFINITY],
+            &[f64::MAX, f64::MAX],
+        ] {
+            assert_eq!(peer_coherence(invalid), None);
+        }
+    }
+
     #[test]
     fn review_existing_three_r_plan_keeps_its_original_close_allocation() {
         let detail = json!({"entry":{"side":"buy","entry_price":60460.0,"r":450.0,"cost":{"total":301.208}},"order":{"tp1_distance":1651.21}});
