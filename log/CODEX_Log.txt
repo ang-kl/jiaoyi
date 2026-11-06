@@ -1314,3 +1314,32 @@ link fromhandover in samePR169beforemerge. Preserve netexpectancy/costgate,
 no hindsightretuning, explicit raw-reproductionlimits, actualvsproposedgates,
 atmostonejustifiedamendmentperclass andsixqualificationcheckpoints.
 No code or researchresultchange. Await refreshedexact-headCI beforemerge.
+
+[§LOG.106] №18,283 §§1–6 · 06-11-2026 14:56:16 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner proceeds with cost-evidence assessment and frozen oil replication plan.
+Read main b1c1f81 and GROK_Log latest17,703 before numbering. Nine read-only
+views:1,114 orders,263 filled opens,13 attributed entries—all demos; live0/22,
+oil5/31,metals0/22. Oil five sells on3Nov, all linked exits but no verified
+paired exit benchmarks/fee lifecycles. Aggregate commission median is diagnostic;
+closing-deal position_money accounting remains intact. No calibrated cost cut.
+Freeze20oil episodes/10dates before collection at900eb0f; plan SHA
+647bb800945e47130293006667626289449b7ff53a017c876fa2e2cd6a54a1ea.
+Primary24bp trailing peer continuation; own/always-long controls; >=5closes and
+>=3closed ISOweeks per symbol, >=50% wins and positive expectancy/PF per symbol
+and class. No replacement dates, auto retries, validation opening or live promotion.
+Offline assessment+two regression tests;22tests pass,1optional corpus skip.
+Hashes/date separation/arithmetic/source bounds verified; requiredCIpending.
+Remaining work explicitly adapter+two-episode preflight, then bounded20 collection;
+no jobs started/queued in this delivery. No risk, worker, API spending or Telegram
+change. Original73%/1:1.38 latest20 goal and interim50% remain unproven.
+Time is Money: preserve proven rules; do not retune failed outcomes.
+
+[§LOG.107] №18,283 §8 · 06-11-2026 14:59:58 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+PR170 review identified valid nullable decision benchmarks in entry attribution.
+Regression reproduced TypeError before fix; mandatory dispatch/fill evidence is
+now checked independently, unavailable decision components remain unknown.
+23tests pass/1optional skip; saved snapshots reproduce all assessment fields
+except analysis code hash. Preserve frozen assessment/plan bytes; verification
+records original1d8819f and repaired code hashes. CI reruns on new head.

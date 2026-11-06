@@ -1,0 +1,36 @@
+{
+  "trace": "\u211618,283 \u00a7\u00a71\u20136",
+  "checked_at_utc": "2026-11-06T06:56:16.276542+00:00",
+  "plan_sha256": "647bb800945e47130293006667626289449b7ff53a017c876fa2e2cd6a54a1ea",
+  "assessment_sha256": "c3b4d4a07eda16fda0b30a9a1d4b00a245b538dddc3abb28005e26977c217043",
+  "checks": {
+    "plan_and_parent_hashes": "PASS",
+    "reference_code_hashes": "PASS",
+    "assessment_code_hashes": "PASS",
+    "reported_counts": "PASS",
+    "twenty_bounded_requests": "PASS",
+    "weekday_dates_four_iso_weeks": "PASS",
+    "no_previous_development_or_validation_overlap": "PASS",
+    "relative_links": "PASS"
+  },
+  "local_python_suite": {
+    "ran": 24,
+    "passed": 23,
+    "skipped": 1,
+    "skip_reason": "Optional earlier raw-corpus reproduction; no new corpus collected."
+  },
+  "new_market_jobs_submitted": 0,
+  "validation_opened": false,
+  "production_code_changed": false,
+  "ci": "pending at commit; see PR closure for final status",
+  "qualified_cost_estimate": null,
+  "post_review_recheck": {
+    "checked_at_utc": "2026-11-06T07:00:19.454400+00:00",
+    "original_assessment_commit": "1d8819fda9b2272a0f43a2fcf21e02296eaae7d8",
+    "original_analysis_sha256": "6095176c127abf7da4f212be1c9aa0ba7da6e588a42cad1a75720f6b9cb545e5",
+    "current_analysis_sha256": "892bf2538dd4836f147f9eabecc9837433f9aef7eff6bdccc9fd16af0c4c7f86",
+    "all_assessment_fields_except_analysis_hash_identical": true,
+    "regression": "Nullable decision benchmark retains dispatch/fill evidence; failed before fix and passed after.",
+    "frozen_plan_and_assessment_unchanged": true
+  }
+}
