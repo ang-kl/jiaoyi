@@ -14,8 +14,8 @@
     "relative_links": "PASS"
   },
   "local_python_suite": {
-    "ran": 23,
-    "passed": 22,
+    "ran": 24,
+    "passed": 23,
     "skipped": 1,
     "skip_reason": "Optional earlier raw-corpus reproduction; no new corpus collected."
   },
@@ -23,5 +23,14 @@
   "validation_opened": false,
   "production_code_changed": false,
   "ci": "pending at commit; see PR closure for final status",
-  "qualified_cost_estimate": null
+  "qualified_cost_estimate": null,
+  "post_review_recheck": {
+    "checked_at_utc": "2026-11-06T07:00:19.454400+00:00",
+    "original_assessment_commit": "1d8819fda9b2272a0f43a2fcf21e02296eaae7d8",
+    "original_analysis_sha256": "6095176c127abf7da4f212be1c9aa0ba7da6e588a42cad1a75720f6b9cb545e5",
+    "current_analysis_sha256": "892bf2538dd4836f147f9eabecc9837433f9aef7eff6bdccc9fd16af0c4c7f86",
+    "all_assessment_fields_except_analysis_hash_identical": true,
+    "regression": "Nullable decision benchmark retains dispatch/fill evidence; failed before fix and passed after.",
+    "frozen_plan_and_assessment_unchanged": true
+  }
 }

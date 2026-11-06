@@ -5,6 +5,20 @@ import cost_evidence_assessment as audit
 
 
 class CostEvidenceTests(unittest.TestCase):
+    def test_missing_decision_keeps_valid_dispatch_fill_evidence(self):
+        row={'kind':'open','side':'buy','fill_price':101,'entry_cost':{
+            'decision_price':None,'dispatch_price':100,'fill_price':101,'dispatch_spread':0.2,
+            'dispatch_quote_age_ms':20,'decision_to_dispatch_bps':None,
+            'dispatch_to_fill_bps':100,'decision_to_fill_bps':None}}
+        result=audit.verified_entry(row)
+        self.assertEqual(result['dispatch_to_fill_bps'],100)
+        self.assertIsNone(result['decision_price'])
+        self.assertIsNone(result['decision_to_fill_bps'])
+        wrong=copy.deepcopy(row);wrong['entry_cost']['decision_to_fill_bps']=0
+        with self.assertRaises(ValueError):audit.verified_entry(wrong)
+        wrong=copy.deepcopy(row);wrong['entry_cost']['dispatch_to_fill_bps']=-100
+        with self.assertRaises(ValueError):audit.verified_entry(wrong)
+
     def test_signed_attribution_is_independently_recomputed(self):
         row={'kind':'open','side':'sell','fill_price':99,'entry_cost':{
             'decision_price':101,'dispatch_price':100,'fill_price':99,'dispatch_spread':0.2,

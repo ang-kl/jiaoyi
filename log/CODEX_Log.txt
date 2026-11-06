@@ -1334,3 +1334,12 @@ Remaining work explicitly adapter+two-episode preflight, then bounded20 collecti
 no jobs started/queued in this delivery. No risk, worker, API spending or Telegram
 change. Original73%/1:1.38 latest20 goal and interim50% remain unproven.
 Time is Money: preserve proven rules; do not retune failed outcomes.
+
+[§LOG.107] №18,283 §8 · 06-11-2026 14:59:58 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+PR170 review identified valid nullable decision benchmarks in entry attribution.
+Regression reproduced TypeError before fix; mandatory dispatch/fill evidence is
+now checked independently, unavailable decision components remain unknown.
+23tests pass/1optional skip; saved snapshots reproduce all assessment fields
+except analysis code hash. Preserve frozen assessment/plan bytes; verification
+records original1d8819f and repaired code hashes. CI reruns on new head.

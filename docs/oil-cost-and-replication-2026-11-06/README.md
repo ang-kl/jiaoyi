@@ -158,3 +158,10 @@ Exact independent raw reproduction requires those source files; derived JSON
 inspection alone is not a complete source reproduction. No ZIP, additional
 production telemetry, model API call, trading-rule change or worker-policy
 change is introduced. CI/merge status is recorded on the linked PR after checks.
+
+Post-review verification: the script now also accepts the broker's valid nullable
+decision benchmark while retaining dispatch/fill evidence. One regression failed
+before the fix and passed after; the suite now has 23 passes and one optional
+skip. Replaying the same snapshots reproduces every assessment field except the
+script hash. The frozen assessment retains its original code hash from commit
+`1d8819f`; the verification receipt records both hashes. The plan is unchanged.

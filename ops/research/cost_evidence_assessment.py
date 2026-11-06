@@ -19,22 +19,31 @@ def verified_entry(row):
         return None
     if row['kind'] != 'open' or row['side'] not in ('buy', 'sell'):
         raise ValueError('entry attribution on incompatible order')
-    fields = ('decision_price', 'dispatch_price', 'fill_price', 'dispatch_spread',
-              'decision_to_dispatch_bps', 'dispatch_to_fill_bps', 'decision_to_fill_bps')
+    fields = ('dispatch_price', 'fill_price', 'dispatch_spread', 'dispatch_to_fill_bps')
     if any(not math.isfinite(value[k]) for k in fields):
         raise ValueError('non-finite attribution')
-    if min(value[k] for k in ('decision_price','dispatch_price','fill_price')) <= 0:
+    if min(value[k] for k in ('dispatch_price','fill_price')) <= 0:
         raise ValueError('invalid attribution price')
     if value['dispatch_spread'] < 0 or not 0 <= value['dispatch_quote_age_ms'] <= 6000:
         raise ValueError('invalid attribution spread/age')
     sign = 1 if row['side'] == 'buy' else -1
-    dispatch = sign*(value['dispatch_price']-value['decision_price'])/value['dispatch_price']*10000
     execution = sign*(value['fill_price']-value['dispatch_price'])/value['dispatch_price']*10000
-    if not all(math.isclose(a,b,abs_tol=1e-8) for a,b in [
-        (dispatch,value['decision_to_dispatch_bps']),
-        (execution,value['dispatch_to_fill_bps']),
-        (dispatch+execution,value['decision_to_fill_bps']),
-        (row['fill_price'],value['fill_price'])]):
+    comparisons = [(execution,value['dispatch_to_fill_bps']),
+                   (row['fill_price'],value['fill_price'])]
+    decision = value['decision_price']
+    if decision is None:
+        if any(value[k] is not None for k in ('decision_to_dispatch_bps','decision_to_fill_bps')):
+            raise ValueError('decision attribution without decision benchmark')
+    else:
+        if not math.isfinite(decision) or decision <= 0:
+            raise ValueError('invalid decision benchmark')
+        if any(value[k] is None or not math.isfinite(value[k])
+               for k in ('decision_to_dispatch_bps','decision_to_fill_bps')):
+            raise ValueError('missing or invalid decision attribution')
+        dispatch = sign*(value['dispatch_price']-decision)/value['dispatch_price']*10000
+        comparisons.extend([(dispatch,value['decision_to_dispatch_bps']),
+                            (dispatch+execution,value['decision_to_fill_bps'])])
+    if not all(math.isclose(a,b,abs_tol=1e-8) for a,b in comparisons):
         raise ValueError('attribution arithmetic mismatch')
     return value
 
