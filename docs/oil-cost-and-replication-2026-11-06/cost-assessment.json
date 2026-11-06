@@ -1,0 +1,1409 @@
+{
+  "trace": "\u211618,283 \u00a7\u00a71\u20136; by Codex (GPT-6), effort not exposed",
+  "source_manifest": [
+    {
+      "file": "orders-s1-43002148.json",
+      "endpoint": "/trading/orders?account=43002148&strategy=s1&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:23.683793+00:00",
+      "sha256": "8271714b411a89361381cc9618548fae2ba804e89bb5c5e4ad398837301dd18e",
+      "rows": 1,
+      "bytes": 2219
+    },
+    {
+      "file": "orders-s3-43002148.json",
+      "endpoint": "/trading/orders?account=43002148&strategy=s3&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:23.690798+00:00",
+      "sha256": "6cc4bd8422111c81cf85019d63de5db3f26396cd86163a912450a0fc50580602",
+      "rows": 74,
+      "bytes": 45093
+    },
+    {
+      "file": "orders-s1-46130058.json",
+      "endpoint": "/trading/orders?account=46130058&strategy=s1&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:23.708354+00:00",
+      "sha256": "e4642c4d81fc90c03c739a7ed48c99cde752749171de73078912c6e37b396bd6",
+      "rows": 47,
+      "bytes": 28860
+    },
+    {
+      "file": "orders-s3-46130058.json",
+      "endpoint": "/trading/orders?account=46130058&strategy=s3&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:24.037867+00:00",
+      "sha256": "9619bf4a9d9679bebfeb306c243eb5e8a841ed3d6008dbe8c68d9f7a8aaabd58",
+      "rows": 354,
+      "bytes": 204681
+    },
+    {
+      "file": "orders-s1-47790949.json",
+      "endpoint": "/trading/orders?account=47790949&strategy=s1&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:24.007599+00:00",
+      "sha256": "e496e9fbc37289893622d17a6952f45b12f774b164aae2bd19e93937803fdad0",
+      "rows": 12,
+      "bytes": 8694
+    },
+    {
+      "file": "orders-s3-47790949.json",
+      "endpoint": "/trading/orders?account=47790949&strategy=s3&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:24.069319+00:00",
+      "sha256": "88ec39535588808ad02f4b5952dceb34ef0b02e9395cf872f3cf2026234789f4",
+      "rows": 381,
+      "bytes": 233124
+    },
+    {
+      "file": "orders-s1-49236051.json",
+      "endpoint": "/trading/orders?account=49236051&strategy=s1&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:24.329116+00:00",
+      "sha256": "7fccaebb542cca77a8c8f76f5ee5a3e72b0a532c51b4f60fdb68f33c50170c72",
+      "rows": 0,
+      "bytes": 1362
+    },
+    {
+      "file": "orders-s3-49236051.json",
+      "endpoint": "/trading/orders?account=49236051&strategy=s3&limit=500",
+      "fetched_at_utc": "2026-11-06T06:42:24.562442+00:00",
+      "sha256": "a471e3b9a36d14842bec5c3ee2bc0fe7ff70ee20289673a79dadba30d2107b03",
+      "rows": 245,
+      "bytes": 148184
+    },
+    {
+      "file": "costs.json",
+      "endpoint": "/trading/costs",
+      "fetched_at_utc": "2026-11-06T06:42:24.418890+00:00",
+      "sha256": "21e45793843c71765abb402152aef4300bfb30580b68efafee613d230fa55836",
+      "rows": 63,
+      "bytes": 36167
+    }
+  ],
+  "newest_order_at_utc": "2026-11-05T23:00:07.356046Z",
+  "scope": "Eight newest500 order views plus one aggregate view; not a certified complete/unbiased cohort.",
+  "page_limit_reached_sources": [],
+  "coverage": {
+    "scope": "Eight bounded newest-500 order views; not an unbiased or complete execution sample.",
+    "unique_rows": 1114,
+    "filled_opens": 263,
+    "measured_entries": 13,
+    "groups": [
+      {
+        "strategy": "s1",
+        "account": 43002148,
+        "symbol": "NatGas",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s1",
+        "account": 46130058,
+        "symbol": "EURUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s1",
+        "account": 46130058,
+        "symbol": "GER40",
+        "filled_opens": 1,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": -0.3755163349605708,
+        "dispatch_slippage_bps_max": -0.3755163349605708,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s1",
+        "account": 46130058,
+        "symbol": "NatGas",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s1",
+        "account": 46130058,
+        "symbol": "SpotBrent",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s1",
+        "account": 47790949,
+        "symbol": "GER40",
+        "filled_opens": 1,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 0.0,
+        "dispatch_slippage_bps_max": 0.0,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 43002148,
+        "symbol": "AUDUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 43002148,
+        "symbol": "AUS200",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 43002148,
+        "symbol": "BTCUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 43002148,
+        "symbol": "ETHUSD",
+        "filled_opens": 15,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 43002148,
+        "symbol": "SpotCrude",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 43002148,
+        "symbol": "USDJPY",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "AUDUSD",
+        "filled_opens": 4,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "AUS200",
+        "filled_opens": 5,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "BTCUSD",
+        "filled_opens": 14,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": -0.6623197325733148,
+        "dispatch_slippage_bps_max": -0.6623197325733148,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "ETHUSD",
+        "filled_opens": 17,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "EURUSD",
+        "filled_opens": 3,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "GBPUSD",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "GER40",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "JPN225",
+        "filled_opens": 9,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "NAS100",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "NZDUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "NatGas",
+        "filled_opens": 3,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 3.7383177570105945,
+        "dispatch_slippage_bps_max": 3.7383177570105945,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "SpotBrent",
+        "filled_opens": 4,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "SpotCrude",
+        "filled_opens": 4,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": -0.0,
+        "dispatch_slippage_bps_max": -0.0,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "USDCAD",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "USDJPY",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "XAGUSD",
+        "filled_opens": 7,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 46130058,
+        "symbol": "XAUUSD",
+        "filled_opens": 4,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "AUDUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "AUS200",
+        "filled_opens": 5,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "BTCUSD",
+        "filled_opens": 13,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 0.018040646607626238,
+        "dispatch_slippage_bps_max": 0.018040646607626238,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "ETHUSD",
+        "filled_opens": 16,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "EURUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "GBPUSD",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "GER40",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "JPN225",
+        "filled_opens": 8,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "NAS100",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "NZDUSD",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "NatGas",
+        "filled_opens": 5,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 0.0,
+        "dispatch_slippage_bps_max": 0.0,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "SpotBrent",
+        "filled_opens": 4,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": -1.3775749171159613,
+        "dispatch_slippage_bps_max": -1.3775749171159613,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "SpotCrude",
+        "filled_opens": 5,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 2.474481905351161,
+        "dispatch_slippage_bps_max": 2.474481905351161,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "US500",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "USDCAD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "USDJPY",
+        "filled_opens": 3,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "XAGUSD",
+        "filled_opens": 6,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 47790949,
+        "symbol": "XAUUSD",
+        "filled_opens": 3,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "filled_opens": 4,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "AUS200",
+        "filled_opens": 5,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "filled_opens": 10,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "filled_opens": 17,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 4.435981670190622,
+        "dispatch_slippage_bps_max": 4.435981670190622,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "filled_opens": 3,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "filled_opens": 3,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "NatGas",
+        "filled_opens": 7,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 0.0,
+        "dispatch_slippage_bps_max": 0.0,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "filled_opens": 6,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": 0.9149047126746431,
+        "dispatch_slippage_bps_max": 0.9149047126746431,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "filled_opens": 6,
+        "measured_entries": 1,
+        "dispatch_slippage_bps_median": -0.6299874002520189,
+        "dispatch_slippage_bps_max": -0.6299874002520189,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "UK100",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "US500",
+        "filled_opens": 2,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "filled_opens": 3,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      },
+      {
+        "strategy": "s3",
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "filled_opens": 1,
+        "measured_entries": 0,
+        "dispatch_slippage_bps_median": null,
+        "dispatch_slippage_bps_max": null,
+        "round_trip_calibrated": false
+      }
+    ],
+    "legacy_market_closes": 52,
+    "broker_exits": 208,
+    "calibrated_per_side_bps": null,
+    "blockers": [
+      "No certified exit-dispatch distribution or complete paired fee lifecycle in these views.",
+      "Legacy close slippage and broker SL/TP-level gaps are different benchmarks; do not pool them with entry dispatch slippage.",
+      "Selected demo entries cannot calibrate live, other symbols, or unobserved sizes/regimes."
+    ]
+  },
+  "summary": {
+    "all": {
+      "filled_opens": 263,
+      "measured_entries": 13,
+      "measured_dates_utc": [
+        "2026-11-02",
+        "2026-11-03",
+        "2026-11-04",
+        "2026-11-05"
+      ],
+      "measured_sides": [
+        "buy",
+        "sell"
+      ],
+      "measured_native_volumes": [
+        10,
+        21,
+        26,
+        500,
+        800,
+        8200,
+        10000,
+        10800,
+        22000,
+        320000,
+        340000
+      ],
+      "min_dispatch_to_fill_bps": -1.3775749171159613,
+      "max_dispatch_to_fill_bps": 4.435981670190622,
+      "entries_with_linked_exit_records": 11,
+      "verified_round_trip_samples_in_this_review": 0
+    },
+    "live": {
+      "filled_opens": 22,
+      "measured_entries": 0,
+      "measured_dates_utc": [],
+      "measured_sides": [],
+      "measured_native_volumes": [],
+      "min_dispatch_to_fill_bps": null,
+      "max_dispatch_to_fill_bps": null,
+      "entries_with_linked_exit_records": 0,
+      "verified_round_trip_samples_in_this_review": 0
+    },
+    "demo": {
+      "filled_opens": 241,
+      "measured_entries": 13,
+      "measured_dates_utc": [
+        "2026-11-02",
+        "2026-11-03",
+        "2026-11-04",
+        "2026-11-05"
+      ],
+      "measured_sides": [
+        "buy",
+        "sell"
+      ],
+      "measured_native_volumes": [
+        10,
+        21,
+        26,
+        500,
+        800,
+        8200,
+        10000,
+        10800,
+        22000,
+        320000,
+        340000
+      ],
+      "min_dispatch_to_fill_bps": -1.3775749171159613,
+      "max_dispatch_to_fill_bps": 4.435981670190622,
+      "entries_with_linked_exit_records": 11,
+      "verified_round_trip_samples_in_this_review": 0
+    },
+    "oil": {
+      "filled_opens": 31,
+      "measured_entries": 5,
+      "measured_dates_utc": [
+        "2026-11-03"
+      ],
+      "measured_sides": [
+        "sell"
+      ],
+      "measured_native_volumes": [
+        500,
+        800,
+        8200,
+        10800,
+        22000
+      ],
+      "min_dispatch_to_fill_bps": -1.3775749171159613,
+      "max_dispatch_to_fill_bps": 2.474481905351161,
+      "entries_with_linked_exit_records": 5,
+      "verified_round_trip_samples_in_this_review": 0
+    },
+    "metals": {
+      "filled_opens": 22,
+      "measured_entries": 0,
+      "measured_dates_utc": [],
+      "measured_sides": [],
+      "measured_native_volumes": [],
+      "min_dispatch_to_fill_bps": null,
+      "max_dispatch_to_fill_bps": null,
+      "entries_with_linked_exit_records": 0,
+      "verified_round_trip_samples_in_this_review": 0
+    }
+  },
+  "attributed_entries": [
+    {
+      "strategy": "s1",
+      "account_id": 46130058,
+      "entry_key": "s1:46130058:10003:2026-11-02",
+      "symbol": "GER40",
+      "position_id": 258055230,
+      "created_at": "2026-11-04T19:00:23.410667Z",
+      "side": "buy",
+      "requested_volume": 10,
+      "filled_volume": 10,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-04T19:00:23.414123681Z",
+        "decision_price": 26630.0,
+        "decision_to_dispatch_bps": 0.0,
+        "decision_to_fill_bps": -0.3755163349605708,
+        "dispatch_price": 26630.0,
+        "dispatch_quote_age_ms": 347,
+        "dispatch_spread": 0.9000000000014552,
+        "dispatch_to_fill_bps": -0.3755163349605708,
+        "fill_price": 26629.0
+      },
+      "linked_exit_records": [],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s1",
+      "account_id": 47790949,
+      "entry_key": "s1:47790949:10003:2026-11-02:retry:2",
+      "symbol": "GER40",
+      "position_id": 258058043,
+      "created_at": "2026-11-04T19:04:10.653455Z",
+      "side": "buy",
+      "requested_volume": 10,
+      "filled_volume": 10,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-04T19:04:10.657115947Z",
+        "decision_price": 26630.0,
+        "decision_to_dispatch_bps": 0.3755022342382937,
+        "decision_to_fill_bps": 0.3755022342382937,
+        "dispatch_price": 26631.0,
+        "dispatch_quote_age_ms": 793,
+        "dispatch_spread": 0.9000000000014552,
+        "dispatch_to_fill_bps": 0.0,
+        "fill_price": 26631.0
+      },
+      "linked_exit_records": [],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 46130058,
+      "entry_key": "s3:46130058:10055:2026-11-04:2",
+      "symbol": "NatGas",
+      "position_id": 257991398,
+      "created_at": "2026-11-04T17:30:04.953585Z",
+      "side": "buy",
+      "requested_volume": 320000,
+      "filled_volume": 320000,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-04T17:30:04.964175674Z",
+        "decision_price": 2.675,
+        "decision_to_dispatch_bps": 0.0,
+        "decision_to_fill_bps": 3.7383177570105945,
+        "dispatch_price": 2.675,
+        "dispatch_quote_age_ms": 5119,
+        "dispatch_spread": 0.0029999999999996696,
+        "dispatch_to_fill_bps": 3.7383177570105945,
+        "fill_price": 2.676
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:46130058:257991398:330656425",
+          "created_at": "2026-11-04T19:13:44.596389Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 320000,
+          "fill_price": 2.674,
+          "slippage": 0.002000000000000224
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 46130058,
+      "entry_key": "s3:46130058:10054:2026-11-03:8",
+      "symbol": "SpotCrude",
+      "position_id": 257230036,
+      "created_at": "2026-11-03T16:30:09.727232Z",
+      "side": "sell",
+      "requested_volume": 8200,
+      "filled_volume": 8200,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-03T16:30:09.775722100Z",
+        "decision_price": 96.269,
+        "decision_to_dispatch_bps": -0.10387451957936678,
+        "decision_to_fill_bps": -0.10387451957936678,
+        "dispatch_price": 96.27,
+        "dispatch_quote_age_ms": 624,
+        "dispatch_spread": 0.028000000000005798,
+        "dispatch_to_fill_bps": -0.0,
+        "fill_price": 96.27
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-end:46130058:257230036:1",
+          "created_at": "2026-11-03T20:00:00.483866Z",
+          "kind": "close",
+          "order": "session_end",
+          "filled_volume": 8200,
+          "fill_price": 97.214,
+          "slippage": -0.0049999999999954525
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 46130058,
+      "entry_key": "s3:46130058:10028:2026-11-02:8",
+      "symbol": "BTCUSD",
+      "position_id": 256468373,
+      "created_at": "2026-11-02T18:30:04.779330Z",
+      "side": "sell",
+      "requested_volume": 21,
+      "filled_volume": 21,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-02T18:30:04.837052960Z",
+        "decision_price": 76853.17,
+        "decision_to_dispatch_bps": 0.26935203269600994,
+        "decision_to_fill_bps": -0.3929676998773049,
+        "dispatch_price": 76851.1,
+        "dispatch_quote_age_ms": 393,
+        "dispatch_spread": 15.0,
+        "dispatch_to_fill_bps": -0.6623197325733148,
+        "fill_price": 76856.19
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-end:46130058:256468373:1",
+          "created_at": "2026-11-03T00:00:00.660095Z",
+          "kind": "close",
+          "order": "session_end",
+          "filled_volume": 21,
+          "fill_price": 76714.37,
+          "slippage": -0.020000000004074536
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 47790949,
+      "entry_key": "s3:47790949:10055:2026-11-04:2",
+      "symbol": "NatGas",
+      "position_id": 257991393,
+      "created_at": "2026-11-04T17:30:04.753177Z",
+      "side": "buy",
+      "requested_volume": 340000,
+      "filled_volume": 340000,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-04T17:30:04.767600865Z",
+        "decision_price": 2.675,
+        "decision_to_dispatch_bps": 0.0,
+        "decision_to_fill_bps": 0.0,
+        "dispatch_price": 2.675,
+        "dispatch_quote_age_ms": 4928,
+        "dispatch_spread": 0.0029999999999996696,
+        "dispatch_to_fill_bps": 0.0,
+        "fill_price": 2.675
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:47790949:257991393:330656424",
+          "created_at": "2026-11-04T19:13:44.603636Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 340000,
+          "fill_price": 2.674,
+          "slippage": 0.002000000000000224
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 47790949,
+      "entry_key": "s3:47790949:10054:2026-11-03:6",
+      "symbol": "SpotCrude",
+      "position_id": 257188563,
+      "created_at": "2026-11-03T15:30:04.664217Z",
+      "side": "sell",
+      "requested_volume": 10800,
+      "filled_volume": 10800,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-03T15:30:04.720414274Z",
+        "decision_price": 97.006,
+        "decision_to_dispatch_bps": 1.6496546035679291,
+        "decision_to_fill_bps": 4.12413650891909,
+        "dispatch_price": 96.99,
+        "dispatch_quote_age_ms": 760,
+        "dispatch_spread": 0.028000000000005798,
+        "dispatch_to_fill_bps": 2.474481905351161,
+        "fill_price": 96.966
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-end:47790949:257188563:1",
+          "created_at": "2026-11-03T20:00:00.359160Z",
+          "kind": "close",
+          "order": "session_end",
+          "filled_volume": 10800,
+          "fill_price": 97.214,
+          "slippage": -0.0049999999999954525
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 47790949,
+      "entry_key": "s3:47790949:10053:2026-11-03:4",
+      "symbol": "SpotBrent",
+      "position_id": 257083550,
+      "created_at": "2026-11-03T13:00:04.804485Z",
+      "side": "sell",
+      "requested_volume": 22000,
+      "filled_volume": 22000,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-03T13:00:04.852131144Z",
+        "decision_price": 108.877,
+        "decision_to_dispatch_bps": -0.9183832780777427,
+        "decision_to_fill_bps": -2.295958195193704,
+        "dispatch_price": 108.887,
+        "dispatch_quote_age_ms": 211,
+        "dispatch_spread": 0.031999999999996476,
+        "dispatch_to_fill_bps": -1.3775749171159613,
+        "fill_price": 108.902
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:47790949:257083550:330231770",
+          "created_at": "2026-11-03T13:27:28.036114Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 22000,
+          "fill_price": 108.62,
+          "slippage": 0.0010000000000047748
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 47790949,
+      "entry_key": "s3:47790949:10028:2026-11-02:2",
+      "symbol": "BTCUSD",
+      "position_id": 256217469,
+      "created_at": "2026-11-02T13:30:04.593316Z",
+      "side": "sell",
+      "requested_volume": 26,
+      "filled_volume": 26,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-02T13:30:04.639672723Z",
+        "decision_price": 77563.23,
+        "decision_to_dispatch_bps": -5.065555843919242,
+        "decision_to_fill_bps": -5.047515197311616,
+        "dispatch_price": 77602.54,
+        "dispatch_quote_age_ms": 137,
+        "dispatch_spread": 17.25,
+        "dispatch_to_fill_bps": 0.018040646607626238,
+        "fill_price": 77602.4
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:47790949:256217469:329960339",
+          "created_at": "2026-11-02T13:38:12.912119Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 26,
+          "fill_price": 78047.91,
+          "slippage": 15.339999999996508
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 49236051,
+      "entry_key": "s3:49236051:10029:2026-11-05:1",
+      "symbol": "ETHUSD",
+      "position_id": 258721368,
+      "created_at": "2026-11-05T13:00:06.915551Z",
+      "side": "sell",
+      "requested_volume": 21,
+      "filled_volume": 21,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-05T13:00:06.932726246Z",
+        "decision_price": 2389.84,
+        "decision_to_dispatch_bps": 1.2136176267496541,
+        "decision_to_fill_bps": 5.649599296940275,
+        "dispatch_price": 2389.55,
+        "dispatch_quote_age_ms": 21,
+        "dispatch_spread": 2.519999999999982,
+        "dispatch_to_fill_bps": 4.435981670190622,
+        "fill_price": 2388.49
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:49236051:258721368:331005468",
+          "created_at": "2026-11-05T15:02:00.475790Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 9,
+          "fill_price": 2320.32,
+          "slippage": -1.2199999999998
+        },
+        {
+          "entry_key": "s3-tp1:49236051:258721368:1",
+          "created_at": "2026-11-05T14:55:42.847499Z",
+          "kind": "close",
+          "order": "tp1",
+          "filled_volume": 12,
+          "fill_price": 2343.82,
+          "slippage": 0.4800000000000182
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 49236051,
+      "entry_key": "s3:49236051:10055:2026-11-04:1",
+      "symbol": "NatGas",
+      "position_id": 257968264,
+      "created_at": "2026-11-04T17:00:04.859431Z",
+      "side": "buy",
+      "requested_volume": 10000,
+      "filled_volume": 10000,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-04T17:00:04.888065720Z",
+        "decision_price": 2.67,
+        "decision_to_dispatch_bps": 3.743916136278135,
+        "decision_to_fill_bps": 3.743916136278135,
+        "dispatch_price": 2.671,
+        "dispatch_quote_age_ms": 1504,
+        "dispatch_spread": 0.0040000000000000036,
+        "dispatch_to_fill_bps": 0.0,
+        "fill_price": 2.671
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:49236051:257968264:330648299",
+          "created_at": "2026-11-04T18:44:52.820343Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 10000,
+          "fill_price": 2.679,
+          "slippage": 0.0
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 49236051,
+      "entry_key": "s3:49236051:10054:2026-11-03:3",
+      "symbol": "SpotCrude",
+      "position_id": 257128578,
+      "created_at": "2026-11-03T14:00:04.823014Z",
+      "side": "sell",
+      "requested_volume": 500,
+      "filled_volume": 500,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-03T14:00:04.860500991Z",
+        "decision_price": 95.207,
+        "decision_to_dispatch_bps": -3.4649307013861037,
+        "decision_to_fill_bps": -4.094918101638123,
+        "dispatch_price": 95.24,
+        "dispatch_quote_age_ms": 354,
+        "dispatch_spread": 0.028000000000005798,
+        "dispatch_to_fill_bps": -0.6299874002520189,
+        "fill_price": 95.246
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:49236051:257128578:330248018",
+          "created_at": "2026-11-03T14:06:48.509562Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 500,
+          "fill_price": 96.141,
+          "slippage": 0.0010000000000047748
+        }
+      ],
+      "round_trip_qualified": false
+    },
+    {
+      "strategy": "s3",
+      "account_id": 49236051,
+      "entry_key": "s3:49236051:10053:2026-11-03:1",
+      "symbol": "SpotBrent",
+      "position_id": 256977862,
+      "created_at": "2026-11-03T10:00:04.947820Z",
+      "side": "sell",
+      "requested_volume": 800,
+      "filled_volume": 800,
+      "environment": "demo",
+      "entry_cost": {
+        "checked_at": "2026-11-03T10:00:05.021783474Z",
+        "decision_price": 109.437,
+        "decision_to_dispatch_bps": 12.442704092368384,
+        "decision_to_fill_bps": 13.357608805043029,
+        "dispatch_price": 109.301,
+        "dispatch_quote_age_ms": 117,
+        "dispatch_spread": 0.031999999999996476,
+        "dispatch_to_fill_bps": 0.9149047126746431,
+        "fill_price": 109.291
+      },
+      "linked_exit_records": [
+        {
+          "entry_key": "s3-broker:49236051:256977862:330194527",
+          "created_at": "2026-11-03T10:22:06.843632Z",
+          "kind": "broker_exit",
+          "order": "broker_exit",
+          "filled_volume": 800,
+          "fill_price": 109.785,
+          "slippage": 0.028999999999996362
+        }
+      ],
+      "round_trip_qualified": false
+    }
+  ],
+  "aggregate_fee_diagnostics": [
+    {
+      "account_id": 46130058,
+      "strategy": "s1",
+      "symbol": "SpotBrent",
+      "entries_filled": 1,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 43002148,
+      "strategy": "s3",
+      "symbol": "SpotCrude",
+      "entries_filled": 1,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 46130058,
+      "strategy": "s3",
+      "symbol": "SpotBrent",
+      "entries_filled": 4,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 46130058,
+      "strategy": "s3",
+      "symbol": "SpotCrude",
+      "entries_filled": 4,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 46130058,
+      "strategy": "s3",
+      "symbol": "XAGUSD",
+      "entries_filled": 7,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 46130058,
+      "strategy": "s3",
+      "symbol": "XAUUSD",
+      "entries_filled": 4,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 47790949,
+      "strategy": "s3",
+      "symbol": "SpotBrent",
+      "entries_filled": 4,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 47790949,
+      "strategy": "s3",
+      "symbol": "SpotCrude",
+      "entries_filled": 5,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 47790949,
+      "strategy": "s3",
+      "symbol": "XAGUSD",
+      "entries_filled": 6,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 47790949,
+      "strategy": "s3",
+      "symbol": "XAUUSD",
+      "entries_filled": 3,
+      "commission_round_trip_per_unit_median": 0.07,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 49236051,
+      "strategy": "s3",
+      "symbol": "SpotBrent",
+      "entries_filled": 6,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 49236051,
+      "strategy": "s3",
+      "symbol": "SpotCrude",
+      "entries_filled": 6,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 49236051,
+      "strategy": "s3",
+      "symbol": "XAGUSD",
+      "entries_filled": 1,
+      "commission_round_trip_per_unit_median": 0.0,
+      "commission_pending": 0
+    },
+    {
+      "account_id": 49236051,
+      "strategy": "s3",
+      "symbol": "XAUUSD",
+      "entries_filled": 1,
+      "commission_round_trip_per_unit_median": 0.08,
+      "commission_pending": 0
+    }
+  ],
+  "aggregate_fee_warning": "All stored commissions so far per position, not a settled closing-fee lifecycle; no quantity-completion or swap proof. Do not fit from this median or add opening commission again to broker closing commissions.",
+  "calibrated_per_side_bps": null,
+  "verified_round_trip_samples_in_this_review": 0,
+  "brokerwide_complete_cost_sample_count": null,
+  "financial_pass": false,
+  "policy_change": false,
+  "maintained_research_reserve_bps_per_side": 24,
+  "qualifications": {
+    "entry_arithmetic": "PASS for 13 retained entries",
+    "representative_live_entry_costs": "NOT_VERIFIABLE",
+    "paired_exit_dispatch_costs": "NOT_VERIFIABLE",
+    "complete_commission_swap_conversion_lifecycle": "NOT_VERIFIABLE",
+    "historical_2025_cost_transfer": "NOT_VERIFIABLE"
+  },
+  "analysis_sha256": "6095176c127abf7da4f212be1c9aa0ba7da6e588a42cad1a75720f6b9cb545e5",
+  "coverage_helper_sha256": "dd4bae3893a0c23175590f5f397bee074461eb247e0a678fd086a667b8a68eed"
+}
