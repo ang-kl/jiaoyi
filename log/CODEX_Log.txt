@@ -1252,3 +1252,18 @@ Readonlypre-release:trading7ae2e64 deployment17c1d7d1 successful,8/8loopsconnect
 livepolicy/workerbaseline savedlocally. No brokerorders, paidAPI, orworkerchange.
 FullSL/TP/trailingcandidatereplay isfollow-on, notclaimedcompletebyPhaseA.
 CheckcurrentGROK_Log andchat before nextserial. TimeisMoney:retainprovenfixes.
+
+[§LOG.102] №18,278 §§10–12 · 06-11-2026 11:42:56 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+PR166 merged d006d081362cbf41a244707a374daf33c93dd2ad after all three CI jobs
+passed on99d4c65. Automated review4488766123 was read only after merge;
+its missing native no_fresh_quote_in_mark_window reason is valid. Correct the
+shared coverage whitelist and add an independent literal regression: five
+otherwise passing closes plus this missing-decision episode must fail both
+scorecards. Test failed before the fix, passed afterward. The same emitter
+audit also found missing_band/missing_session_open in s3_ticks; include both
+with explicit literal regression cases rather than testing only the whitelist.
+Research
+suite17passed/one optional corpus reproduction skipped (already run inPR166).
+No Rust, live order/risk, worker or collection changes. Required follow-up CI
+pending. CheckGROK_Log17,703 andcurrentchat before allocatingnextserial.
