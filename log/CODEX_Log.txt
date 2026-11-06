@@ -1401,3 +1401,89 @@ analysis,26tests pass/1optional skip. PublishHTML/JSON/README/verification in
 /docs/oil-replication-results-2026-11-06; no rawarchive/ZIP. FinalheadCIpending.
 Stopbatch; no retuning/secondbatch/livepromotion. Interim50% gap16.7ppscenario;
 originalaccountgoalnotverified. TimeisMoney: preserve negativeevidence.
+
+Recovery note, №18,304: the following §LOG.111–112 entries are recovered from
+this conversation's earlier local work. Their original commits69d9cfd/83a05d9
+were never pushed and were not restored into the replacement environment.
+They describe historical observations, not checks rerun in the new machine.
+
+[§LOG.111] №18,292 §§1–7 · 06-11-2026 19:54 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner says continue the amended №18,291 audit, following the scope corrections
+in №18,289–290. PR172 was merged by owner; base main8ee512e. Checked current
+GROK_Log: latest17,703, unchanged. Existing20oil sources only; no new dates,
+collection jobs, held-out validation, predictor search, live/risk/exit changes.
+Production S3 uses14-session noise bands/M30 decisions/band R/07–20UTC;
+the experiment uses first-hour direction/range R/08UTC decision/11UTC close.
+It is a research candidate, not an end-to-end production S3 backtest. All20
+inputs lack historical bars and full-session ticks. Declining its deployment
+does not disprove production S3, oil momentum, Rust or AI-assisted coding.
+Offline audit publishes method, JSON, Markdown and HTML under
+docs/oil-experiment-audit-2026-11-06, plus reusable auditor and two focused tests.
+Slippage assumption supplies91.0–94.6%ofC;11costvetos;spreadalonevetos0.
+All20fixed-horizon before-fee returns improve at120/180min, but9admitted
+episodes have negative mean at all30/60/120/180min. Missing observations and
+all horizons retained; no hindsight horizon selected. Admission interaction
+is an inference, not causal proof or permission to weaken the gate.
+Trailing improves4/worsens1/unchanged4; mean paired−0.098183R, dominated by
+CrudeAug1. Neither exit arm passes24bp. Prior2/3.74bp sensitivities retain
+24bp admission/geometry; costs remain uncalibrated. Original3/9wins33.3%,
+−0.725599R,PF0.196433 unchanged; interim50%unproven; original73%/1:1.38
+latest20 perstrategy/account unchanged; zero qualifying account trades added.
+20sourcehash/quality/fresh-sequence checks pass. Native flags differ from
+researchadapter fresh-gap flags; conservative union offlags reproduces all9
+complete native outputs exactly. No financial or qualification impact here.
+No proof broker dropped ticks; quietmarket/asynchronous updates unresolved.
+Five next checkpoints: production identity, evidence, focused parity checks,
+frozen development, untouched validation/shadow. No new batch authorised by
+this audit. Research suite29tests:28pass/1existing optional skip. HTML headings,
+tables/local links and auditor hash verified. Frozen evidence and Rust unchanged.
+GitHub GH_TOKEN remains invalid; publication/merge pending authentication.
+Time is Money: fix the research question before spending another collection batch.
+
+[§LOG.112] №18,293–18,300 §§1–2 · 07-11-2026 00:31 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner reports replacement GH_TOKEN expires7February2027 and was updated in
+Railway jiaoyi-engineering. Expiry and Railway update are owner-reported, not
+independently verified. No token values read, copied or recorded. Cloud access
+remains separate: gh reports invalid GH_TOKEN; git push cannot obtain HTTPS
+credentials. Public git reads still work. Audit commit69d9cfd remains local.
+Prepared additive cloud GH_TOKEN requirement for api.github.com/github.com;
+draft saved, but latest metadata says has_saved_binding=false. No secret value
+has been saved to that cloud draft. Saving the declaration alone does not apply
+or publish credentials. No PR created/merged or trading change. GROK_Log latest
+17,703 unchanged. Next prerequisite is secure cloud value entry and application;
+Railway's worker token does not transfer this local branch or authenticate it.
+
+[§LOG.113] №18,301–18,304 §§1–16 · 07-11-2026 04:25 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner requests exhaustive past24h journal/PR before archiving this chat. Window
+06Nov04:14–07Nov04:14SGT; subsequent restoration/publication labelled separately.
+Screenshots show stale environment editor conflicts with newer saved settings;
+not evidence a replacement PAT was invalid. Earlier 'missing token' wording
+was imprecise: process GH_TOKEN existed but was rejected; absent binding alone
+cannot prove absence of platform GitHub authentication. No further draft edits.
+Replacement environment waited to ready. New publishedversion6aee054c attached;
+GitHub auth and authenticated push dry-run succeed. Revision1belongs to this
+newinstance, not a rollback from oldinstance27. One environment-editor chat
+recommended; archiving does not itself repair auth or stop Railway workers.
+Main8ee512e fetched. Verified9mergedPRs164–172 and27successful head CI jobs.
+Issue147closednot_planned (notPR); olderqueuedjobcompletion not inferred.
+Historical release receipts164/166/168 linked; no currentlivehealthclaim.
+Recomputed156stored oil fill/cost values; pairedtraildelta−0.098183R;4better,
+1worse,4unchanged;costreserve slipshare91.043–94.604%. Rawdata not rerun.
+Oldlocal69d9cfd/83a05d9objects and phase-a/oilraw directories not restored.
+Prior promises of local durability did not prove snapshot restoration. Recover
+their narrative above and full findings in doc/CODEX-24h-journal-18304-2026-11-07.md;
+do notclaim originalauditor/tests/JSON recovered. Detailed horizon/flag checks
+remain conversation evidence; no fresh raw-replay ornewbrokerjobs. Existing
+dirty /workspace/jiaoyi preserved; useclean existingmajor-fx checkout fordocs.
+Companion docs/handover-18304-2026-11-07/evidence.json retains PR/head/merge/check
+identities,17sourcehashes,derivedarithmetic andrestoration limits. Nextagent
+prompt, all five checkpoints and existinggoal/risk/serial invariants included.
+No livecode/rule/worker/environment change, ZIP, modelAPI route or newtest.
+No candidatepromoted. Thetwenty-jobbatch remainsclosed despite missinglocal
+ledger; reconstructevidence, neverresetallowance byusinganemptydirectory.
+Documentlinks/JSON/hash/chronology/whitespace checks beforePR; requiredCI and
+merge receipts belong to the handoverPR. Next serial18,305onlyifotherAIhasnot
+advanced it; GROK_Log latest17,703unchanged. TimeisMoney; one durablehandover.
