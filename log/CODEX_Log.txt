@@ -1487,3 +1487,35 @@ ledger; reconstructevidence, neverresetallowance byusinganemptydirectory.
 Documentlinks/JSON/hash/chronology/whitespace checks beforePR; requiredCI and
 merge receipts belong to the handoverPR. Next serial18,305onlyifotherAIhasnot
 advanced it; GROK_Log latest17,703unchanged. TimeisMoney; one durablehandover.
+
+[§LOG.114] №18,305–18,306 §§1–11 · 07-11-2026 07:28 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner proceeds with production-S3 oil specification/evidence inventory.
+Reviewed main 6693e960cf0af8c5a6ce1efb982bfff049d70cd3; Grok latest 17,703 unchanged.
+Existing native S3 replay is reusable, but current-S3 validator excludes oil,
+research history 50 days differs from production 45 days, source lacks open-bar
+tick volume and as-of costs, and final dispatch cost recheck is absent. Account
+admission/connection/rejection/acknowledgement state cannot come from ticks alone.
+Specify smallest offline adapter and 3 test groups: causal signal/marks;
+cost/dispatch/admission; full exits/quality. No implementation in this PR.
+Inventoried 66 raw job files (BTC 13, NatGas 11, 7 FX pairs × 6), 6 with M30,
+0 oil; file hashes rechecked, source hashes recorded, not recanonicalised.
+Ten evidence roots searched; no claim all storage was exhaustively inspected.
+Original oil raw directory not restored. Twenty old collection jobs remain spent.
+Seven read-only HTTP GETs: health ok/settings 47; latest backtest null (empty
+slot); bounded 246-row demo 49236051 order page; 4 bounded quote-coverage queries.
+Jul 21 IDs 10054/10053 have 0 rows and no historical mapping. Nov 6 names linked;
+Crude 82,629 live/163,856 history side updates, Brent 62,068/123,561. No cap
+truncation; history fetch records do not certify full coverage. All 24 recent
+eligible calendar windows have updates; 3 stored S3 marks each does not prove
+21 missed trades. Recent date beyond development seal; availability only,
+no outcome evaluation. Other dates unprobed.
+Retained cost review: 5 measured demo oil entries/1 date, 0 verified round trips.
+24 bp scenario unchanged; no calibration from entry-only sample or lower cost fit.
+docs/s3-oil-replay-spec-18306-2026-11-07.md and companion inventory retain
+18 reviewed source hashes, 66 file hashes, 7 response hashes and explicit unknowns.
+Zero new broker history requests/backtests/qualified trades. 50% interim and
+73%/1:1.38 latest 20 per strategy/account remain unverified. No live code/risk,
+environment, worker, database, Telegram, ZIP or new model API route change.
+Docs/JSON/link/hash/arithmetic/scope checks before PR; required CI and merge
+receipt on PR. Next serial 18,307 only after checking other AI logs. Time is Money.
