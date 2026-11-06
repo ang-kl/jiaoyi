@@ -1267,3 +1267,25 @@ Research
 suite17passed/one optional corpus reproduction skipped (already run inPR166).
 No Rust, live order/risk, worker or collection changes. Required follow-up CI
 pending. CheckGROK_Log17,703 andcurrentchat before allocatingnextserial.
+
+[§LOG.103] №18,279–18,280 §§1–8 · 06-11-2026 13:08:47 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner authorises oil momentum/metals reversal/index momentum full SL/TP/trailing
+experiment, frozen before separate validation. Read main56e5ae3/GROK_Log17,703.
+Freeze plan9384ccf, SHA b202c9a5c9f4603576f48c9ea9dafc374a422581177beb7b32114a5edf14464b
+before outcomes. Reuse40 verified sealed source jobs on5/12Aug2025;22target episodes,
+52candidate/control rows;20admitted. Native adapter reuses targets::plan and
+ExitReplay, fixed-stop/trailing, Q1.38, originalnative volumes,24bp geometry.
+Realised2/3.74/24bp sensitivities holdgeometryfixed, unknownzeroadditionalfees;
+qualifiedreturnsnull. No productionrule/permissions or recentcollection guardchange.
+Oil2/2primarywins+0.3264Rmean, sameAug5date, matchedowncontrolidentical; too few.
+Metals0entries(two disagreement/twocostveto). Indices1/6primarywins−0.7670Rmean,
+1censored/1missingfill/6costveto. At2bp3/6wins but−0.0501Rmean/PF0.80.
+No candidatepasses; validationdatesunopened,50%goalunproven. Cost-veto precedence
+correction changesonlyskipclassification, all20entry/outcomesunchanged.
+113core+2adapter+21Pythonpass, includingrawreproduction;fmt/Clippypass.
+Independent108costchecksagree; noTPtriggerinactualcorpus, partial/runnercovered
+onlybysyntheticnativetest. CIexplicitlyrunsadaptertests; exactheadCIpending.
+PublishindividualHTML/JSON/README/verification underdocs/full-exit-research-2026-11-06,
+noZIP/rawarchive,brokercollection,modelAPI,Telegram orworkerchange.
+TimeisMoney: preserve failedcandidateevidence; do notretunethis sample.
