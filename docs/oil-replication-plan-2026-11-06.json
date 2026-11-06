@@ -1,0 +1,60 @@
+{
+  "trace": "№18,283 §§1–3",
+  "by": "Codex (GPT-6), effort not exposed",
+  "parent_plan_sha256": "b202c9a5c9f4603576f48c9ea9dafc374a422581177beb7b32114a5edf14464b",
+  "frozen_at_utc": "2026-11-06T06:52:00.000000+00:00",
+  "scope": "Bounded 20-episode pre-holdout development replication for oil momentum; no live orders, validation opening or strategy promotion.",
+  "account": 49236051,
+  "classes": {
+    "oil": [
+      "SpotCrude",
+      "SpotBrent"
+    ]
+  },
+  "native_volume": {
+    "SpotCrude": 100,
+    "SpotBrent": 100
+  },
+  "rules": {
+    "oil": [
+      "own_momentum",
+      "peer_continuation",
+      "always_long"
+    ]
+  },
+  "candidates": {
+    "oil": "own_momentum"
+  },
+  "replication_dates": [
+    "2025-07-21",
+    "2025-07-23",
+    "2025-07-25",
+    "2025-07-28",
+    "2025-07-30",
+    "2025-08-01",
+    "2025-08-04",
+    "2025-08-06",
+    "2025-08-08",
+    "2025-08-11"
+  ],
+  "prior_development_dates_tracked_separately": [
+    "2025-08-05",
+    "2025-08-12"
+  ],
+  "window": {
+    "start_utc": "07:00:00Z",
+    "end_utc": "11:00:00Z",
+    "tail_seconds": 5
+  },
+  "cost_gates": {
+    "primary_decision_slippage_bps_per_side": 24.0,
+    "calibrated_benchmarks_bps_per_side": [2.0, 3.74]
+  },
+  "thresholds": {
+    "min_closed_per_symbol": 5,
+    "min_weeks": 3,
+    "min_win_rate": 0.50,
+    "min_profit_factor": 1.0,
+    "min_mean_net_r": 0.0
+  }
+}
