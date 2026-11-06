@@ -195,6 +195,9 @@ hypothesis. It is not a reason to spend unused AI allowance or create a cosmetic
 
 ## §8. Requested independent review from the other AI
 
+Use the [ready-to-paste review prompt](AI-review-prompt-tested-18280-2026-11-06.md)
+for a standalone brief covering the tested rules, results and qualification work.
+
 Assess this handover critically; agreement is not the objective. Return:
 
 1. A short verdict: which conclusions are supported, conditional or unsupported?

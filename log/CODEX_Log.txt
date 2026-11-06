@@ -1305,3 +1305,12 @@ allproposals only, not activated. Metals/index mechanisms require independent
 justification. Sixcheckpoints and explicit independent-review questions included.
 No code, collection, validationopening, risk/workerchange or externalAI message.
 Verifyrelative links/numbers; requiredCIpending beforemerge. TimeisMoney.
+
+[§LOG.105] №18,281 §§6–8 · 06-11-2026 13:37:03 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner adds request for a ready-to-paste AI prompt explaining tested№18,280,
+improvements and qualification/increasingwins. Add standaloneprompt in/doc and
+link fromhandover in samePR169beforemerge. Preserve netexpectancy/costgate,
+no hindsightretuning, explicit raw-reproductionlimits, actualvsproposedgates,
+atmostonejustifiedamendmentperclass andsixqualificationcheckpoints.
+No code or researchresultchange. Await refreshedexact-headCI beforemerge.
