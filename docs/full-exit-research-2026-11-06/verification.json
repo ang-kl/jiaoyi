@@ -1,0 +1,29 @@
+{
+  "trace": "\u211618,280 \u00a7\u00a71\u20138",
+  "by": "Codex (GPT-6), effort not exposed",
+  "at_utc": "2026-11-06T05:08:47.628631+00:00",
+  "frozen_plan_commit": "9384ccf",
+  "plan_sha256": "b202c9a5c9f4603576f48c9ea9dafc374a422581177beb7b32114a5edf14464b",
+  "local_tests": {
+    "core_library": 113,
+    "native_adapter": 2,
+    "python_research": 21,
+    "python_skipped": 0,
+    "fmt": "PASS",
+    "clippy_workspace_all_targets_denied_warnings": "PASS"
+  },
+  "source_jobs_verified": 40,
+  "target_symbol_episodes": 22,
+  "rule_episode_rows": 52,
+  "admitted_rule_episodes": 20,
+  "independent_closed_arm_cost_checks": 108,
+  "correction": "Decision-cost veto precedes fill search; admitted entries and all their outcomes unchanged. No frozen rule retuning.",
+  "candidate_classes_passing": 0,
+  "validation_opened": false,
+  "financial_pass": false,
+  "ci": "Pending exact-head checks at commit; closure recorded in PR.",
+  "files": {
+    "full-exit-results.json": "491274deccfd15e5359f542c362b10df4c2ba8ee6724b479c056e43767bdb548",
+    "Jiaoyi_Full_Exit_Research.html": "fd833d8787bd5a3b6d3090de021c272e8ae9eee56fef01beba9d17fa4ad2d0e8"
+  }
+}
