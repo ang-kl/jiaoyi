@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Oil replication</title><style>body{font:16px/1.5 system-ui;max-width:1200px;margin:30px auto;padding:16px}table{border-collapse:collapse;width:100%}td,th{padding:8px;border-bottom:1px solid #ddd;text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere}.scroll{overflow:auto}</style><h1>Oil own-momentum replication</h1><p>№18,287 · 06-11-2026 16:25:18 SGT · by Codex (GPT-6), effort not exposed</p><h2>TLDR</h2><p><strong>INSUFFICIENT_EVIDENCE</strong>. 3/9 closed scenarios win; mean net R -0.7255994257474717. 20/20 source episodes complete. No validation opened or live policy changed.</p><p>Interim target: 50% per symbol plus positive expectancy. Original goal: 73% / 1:1.38 over latest20 per strategy/account. Qualified progress: Not Verifiable; zero account trades added.</p><h2>Every symbol: primary 24bp trailing scenario</h2><div class="scroll"><table><tr><th>symbol</th><th>closed</th><th>wins</th><th>net_win_rate</th><th>mean_net_r</th><th>profit_factor</th><th>distinct_closed_iso_weeks</th><th>passes_screen</th></tr><tr><td>SpotCrude</td><td>6</td><td>2</td><td>33.3%</td><td>-0.5569</td><td>0.3096</td><td>3</td><td>False</td></tr><tr><td>SpotBrent</td><td>3</td><td>1</td><td>33.3%</td><td>-1.0629</td><td>0.0297</td><td>2</td><td>False</td></tr></table></div><h2>Why this decision</h2><pre>[
+  &quot;insufficient closed scenarios&quot;,
+  &quot;net win rate below50% or unavailable&quot;,
+  &quot;net expectancy not positive&quot;,
+  &quot;PF(R) not above1&quot;,
+  &quot;a symbol lacks positive net price-unit evidence&quot;,
+  &quot;a symbol lacks50% net wins&quot;,
+  &quot;SpotCrude: net win rate below50% or unavailable; net expectancy not positive; PF(R) not above1; a symbol lacks positive net price-unit evidence; a symbol lacks50% net wins&quot;,
+  &quot;SpotBrent: insufficient closed scenarios; net win rate below50% or unavailable; net expectancy not positive; PF(R) not above1; a symbol lacks positive net price-unit evidence; a symbol lacks50% net wins; fewer than three closed ISO weeks&quot;,
+  &quot;reported source/quote coverage gaps&quot;,
+  &quot;no positive matched always-long delta: SpotBrent&quot;
+]</pre><h2>Matched controls</h2><table><tr><th>control</th><th>symbols</th><th>matched</th><th>changed_direction</th><th>mean_delta_r</th></tr><tr><td>peer_continuation</td><td>[&#x27;SpotCrude&#x27;, &#x27;SpotBrent&#x27;]</td><td>8</td><td>0</td><td>0.0000</td></tr><tr><td>peer_continuation</td><td>[&#x27;SpotCrude&#x27;]</td><td>5</td><td>0</td><td>0.0000</td></tr><tr><td>peer_continuation</td><td>[&#x27;SpotBrent&#x27;]</td><td>3</td><td>0</td><td>0.0000</td></tr><tr><td>always_long</td><td>[&#x27;SpotCrude&#x27;, &#x27;SpotBrent&#x27;]</td><td>9</td><td>5</td><td>0.0064</td></tr><tr><td>always_long</td><td>[&#x27;SpotCrude&#x27;]</td><td>6</td><td>4</td><td>0.3353</td></tr><tr><td>always_long</td><td>[&#x27;SpotBrent&#x27;]</td><td>3</td><td>1</td><td>-0.6514</td></tr></table><h2>All scenarios</h2><div class="scroll"><table><tr><th>rule</th><th>arm</th><th>bps</th><th>closed</th><th>wins</th><th>net_win_rate</th><th>mean_net_r</th><th>profit_factor</th><th>passes_screen</th></tr><tr><td>own_momentum</td><td>fixed_stop</td><td>2.0000</td><td>9</td><td>4</td><td>44.4%</td><td>0.0068</td><td>1.0137</td><td>False</td></tr><tr><td>own_momentum</td><td>fixed_stop</td><td>3.7400</td><td>9</td><td>4</td><td>44.4%</td><td>-0.0433</td><td>0.9180</td><td>False</td></tr><tr><td>own_momentum</td><td>fixed_stop</td><td>24.0000</td><td>9</td><td>4</td><td>44.4%</td><td>-0.6274</td><td>0.2733</td><td>False</td></tr><tr><td>own_momentum</td><td>trailing</td><td>2.0000</td><td>9</td><td>4</td><td>44.4%</td><td>-0.0911</td><td>0.8048</td><td>False</td></tr><tr><td>own_momentum</td><td>trailing</td><td>3.7400</td><td>9</td><td>4</td><td>44.4%</td><td>-0.1413</td><td>0.7148</td><td>False</td></tr><tr><td>own_momentum</td><td>trailing</td><td>24.0000</td><td>9</td><td>3</td><td>33.3%</td><td>-0.7256</td><td>0.1964</td><td>False</td></tr><tr><td>peer_continuation</td><td>fixed_stop</td><td>2.0000</td><td>8</td><td>3</td><td>37.5%</td><td>-0.1565</td><td>0.7217</td><td>False</td></tr><tr><td>peer_continuation</td><td>fixed_stop</td><td>3.7400</td><td>8</td><td>3</td><td>37.5%</td><td>-0.2051</td><td>0.6550</td><td>False</td></tr><tr><td>peer_continuation</td><td>fixed_stop</td><td>24.0000</td><td>8</td><td>3</td><td>37.5%</td><td>-0.7717</td><td>0.2054</td><td>False</td></tr><tr><td>peer_continuation</td><td>trailing</td><td>2.0000</td><td>8</td><td>3</td><td>37.5%</td><td>-0.1191</td><td>0.7730</td><td>False</td></tr><tr><td>peer_continuation</td><td>trailing</td><td>3.7400</td><td>8</td><td>3</td><td>37.5%</td><td>-0.1678</td><td>0.6989</td><td>False</td></tr><tr><td>peer_continuation</td><td>trailing</td><td>24.0000</td><td>8</td><td>3</td><td>37.5%</td><td>-0.7344</td><td>0.2137</td><td>False</td></tr><tr><td>always_long</td><td>fixed_stop</td><td>2.0000</td><td>9</td><td>4</td><td>44.4%</td><td>-0.1550</td><td>0.6732</td><td>False</td></tr><tr><td>always_long</td><td>fixed_stop</td><td>3.7400</td><td>9</td><td>4</td><td>44.4%</td><td>-0.2052</td><td>0.5942</td><td>False</td></tr><tr><td>always_long</td><td>fixed_stop</td><td>24.0000</td><td>9</td><td>4</td><td>44.4%</td><td>-0.7898</td><td>0.0938</td><td>False</td></tr><tr><td>always_long</td><td>trailing</td><td>2.0000</td><td>9</td><td>4</td><td>44.4%</td><td>-0.0971</td><td>0.7667</td><td>False</td></tr><tr><td>always_long</td><td>trailing</td><td>3.7400</td><td>9</td><td>4</td><td>44.4%</td><td>-0.1474</td><td>0.6710</td><td>False</td></tr><tr><td>always_long</td><td>trailing</td><td>24.0000</td><td>9</td><td>4</td><td>44.4%</td><td>-0.7320</td><td>0.1005</td><td>False</td></tr></table></div><h2>Interpretation and limits</h2><p>24bp/side remains primary admission/target geometry. 2/3.74bp sensitivities hold geometry fixed and are not calibrated. Executable spread is charged once; additional commission is unknown and modelled as zero. Historical contracts, execution, fees and quote continuity remain unqualified. Price-unit results are per symbol, never pooled across assets. Controls reuse the same dates. Reported gaps/censoring fail the screen; small samples do not establish an edge.</p><h2>Prior and pooled diagnostics</h2><p>Previously inspected5/12August dates cannot rescue standalone gates.</p><pre>{
+  &quot;prior&quot;: {
+    &quot;source_sha256&quot;: &quot;491274deccfd15e5359f542c362b10df4c2ba8ee6724b479c056e43767bdb548&quot;,
+    &quot;dates&quot;: [
+      &quot;2025-08-05&quot;,
+      &quot;2025-08-12&quot;
+    ],
+    &quot;primary&quot;: {
+      &quot;episodes&quot;: 4,
+      &quot;expected&quot;: 4,
+      &quot;closed&quot;: 2,
+      &quot;censored&quot;: 0,
+      &quot;wins&quot;: 2,
+      &quot;net_win_rate&quot;: 1.0,
+      &quot;mean_net_r&quot;: 0.32640443262411334,
+      &quot;lcb_net_r&quot;: 0.28695968423445867,
+      &quot;lcb_method&quot;: &quot;normal one-sided 90% IID ranking heuristic; not confidence in an edge&quot;,
+      &quot;data_gaps&quot;: {},
+      &quot;net_r&quot;: 0.6528088652482267,
+      &quot;profit_factor&quot;: null,
+      &quot;win_rate_wilson95&quot;: [
+        0.34238022750666547,
+        1.0
+      ],
+      &quot;passes_screen&quot;: false,
+      &quot;reasons&quot;: [
+        &quot;insufficient closed scenarios&quot;
+      ],
+      &quot;symbols&quot;: {
+        &quot;SpotCrude&quot;: {
+          &quot;closed&quot;: 1,
+          &quot;net_price_units&quot;: 0.17144799999999988
+        },
+        &quot;SpotBrent&quot;: {
+          &quot;closed&quot;: 1,
+          &quot;net_price_units&quot;: 0.138944
+        }
+      },
+      &quot;financial_pass&quot;: false,
+      &quot;skips&quot;: {
+        &quot;candidate_cost_ge_r&quot;: 1,
+        &quot;flat_predictor&quot;: 1
+      },
+      &quot;max_scenario_drawdown_r&quot;: null
+    }
+  },
+  &quot;pooled&quot;: {
+    &quot;episodes&quot;: 24,
+    &quot;expected&quot;: 24,
+    &quot;closed&quot;: 11,
+    &quot;censored&quot;: 0,
+    &quot;wins&quot;: 5,
+    &quot;net_win_rate&quot;: 0.45454545454545453,
+    &quot;mean_net_r&quot;: -0.5343259969526382,
+    &quot;lcb_net_r&quot;: -0.9396303444867136,
+    &quot;lcb_method&quot;: &quot;normal one-sided 90% IID ranking heuristic; not confidence in an edge&quot;,
+    &quot;data_gaps&quot;: {},
+    &quot;net_r&quot;: -5.877585966479019,
+    &quot;profit_factor&quot;: 0.27676145291722676,
+    &quot;win_rate_wilson95&quot;: [
+      0.21271271622460242,
+      0.7199084625906723
+    ],
+    &quot;passes_screen&quot;: false,
+    &quot;reasons&quot;: [
+      &quot;net win rate below50% or unavailable&quot;,
+      &quot;net expectancy not positive&quot;,
+      &quot;PF(R) not above1&quot;,
+      &quot;a symbol lacks positive net price-unit evidence&quot;,
+      &quot;a symbol lacks50% net wins&quot;
+    ],
+    &quot;symbols&quot;: {
+      &quot;SpotCrude&quot;: {
+        &quot;closed&quot;: 7,
+        &quot;net_price_units&quot;: -1.5211808
+      },
+      &quot;SpotBrent&quot;: {
+        &quot;closed&quot;: 4,
+        &quot;net_price_units&quot;: -1.3843952
+      }
+    },
+    &quot;financial_pass&quot;: false,
+    &quot;skips&quot;: {
+      &quot;candidate_cost_ge_r&quot;: 12,
+      &quot;flat_predictor&quot;: 1
+    },
+    &quot;max_scenario_drawdown_r&quot;: null
+  }
+}</pre><h2>Next decision</h2><p>Stop at the frozen batch. Insufficient evidence is distinct from demonstrated losses. Do not lower costs, retune exits, replace dates or collect a second batch to obtain a pass. Even a preliminary pass needs separate-date validation and representative paired costs before promotion.</p><p>Plan SHA256: d35c0ff1b6379d305ee4f6294fe362a3e849121a618280c0ed269cb4d6efedfb. Source hashes, source failures, native fills and every outcome are in results.json. Draft for review.</p></html>
