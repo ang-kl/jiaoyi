@@ -1361,3 +1361,22 @@ executed, live changes, validation or duplicate research dataset. Byte identity,
 JSON/parent hashes,4ISOweeks/date separation/links and unchanged evidence checked.
 Required CI pending. No new unit tests for document-only changes. Time is Money;
 original73%/1:1.38 latest20 and interim50% goals remain unproven.
+
+[§LOG.109] №18,287 §§1–6 · 06-11-2026 16:15:42 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner executes №18,286: build adapter, merge green, run bounded oil backtests.
+Read main3128780 and GROK_Log17,703. Freeze amendment7e7d407 before outcomes,
+SHA d35c0ff1b6379d305ee4f6294fe362a3e849121a618280c0ed269cb4d6efedfb.
+Own momentum primary; unchanged peer/always-long controls;24bp geometry;2/3.74
+uncalibrated fixed-geometry sensitivities. Five closes/three weeks per symbol,
+positive expectancy/PF/price units and matched always-long delta; zero gaps or
+censoring. Original goal remains73%/1:1.38 latest20; interim50% unproven.
+New offline adapter reuses broker client/native verifier/full-exit engine. Durable
+pre-POST ledger/no retries; one active job,2/invocation,20total; first date pair
+must pass technical preflight before remaining18. Source/hash/account/contract/
+size checks; missing/censored and known continuity flags cannot pass the screen.
+Prior and pooled diagnostics cannot promote. Local26tests pass/1optional skip,
+including3new focused regressions; native examples build. No Rust/live/worker
+policy changes. Owner endpoint read-only preflight succeeds, latestjobnull.
+Required CI pending; no market job submitted before merge. Results follow after
+merge. Preserve all earlier frozen plans/results. Time is Money.
