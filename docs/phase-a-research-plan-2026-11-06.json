@@ -1,0 +1,134 @@
+{
+  "serial": "\u211618,278 \u00a7\u00a71\u20135",
+  "frozen_at_utc": "2026-11-06T03:29:43.209102+00:00",
+  "by": "Codex (GPT-6); effort not exposed",
+  "account": 49236051,
+  "classes": {
+    "equity_index": [
+      "US500",
+      "NAS100",
+      "US30",
+      "GER40",
+      "UK100",
+      "JPN225",
+      "AUS200"
+    ],
+    "fx": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "AUDUSD",
+      "USDCAD",
+      "NZDUSD"
+    ],
+    "metal": [
+      "XAUUSD",
+      "XAGUSD"
+    ],
+    "energy": [
+      "NatGas",
+      "SpotCrude",
+      "SpotBrent"
+    ],
+    "crypto": [
+      "BTCUSD",
+      "ETHUSD"
+    ]
+  },
+  "native_volume": {
+    "NAS100": 10,
+    "US30": 10,
+    "GER40": 10,
+    "UK100": 10,
+    "JPN225": 1000,
+    "AUS200": 10,
+    "GBPUSD": 100000,
+    "USDJPY": 100000,
+    "AUDUSD": 100000,
+    "NZDUSD": 100000,
+    "XAUUSD": 100,
+    "XAGUSD": 5000,
+    "SpotCrude": 100,
+    "NatGas": 10000,
+    "SpotBrent": 100,
+    "BTCUSD": 1,
+    "ETHUSD": 1,
+    "US500": 100,
+    "EURUSD": 100000,
+    "USDCAD": 100000
+  },
+  "development_dates": [
+    "2025-08-05",
+    "2025-08-12"
+  ],
+  "validation_dates": [
+    "2025-08-19",
+    "2025-08-20",
+    "2025-08-21",
+    "2025-08-22",
+    "2025-08-26",
+    "2025-08-27",
+    "2025-08-28",
+    "2025-08-29",
+    "2025-09-02",
+    "2025-09-03",
+    "2025-09-04",
+    "2025-09-05"
+  ],
+  "validation_warning": "Some historical bars/baseline dates were previously visible; this is separate-time candidate evaluation, not a pristine holdout. Every class and symbol result remains visible. No retuning on validation.",
+  "rules": [
+    "class_momentum1h",
+    "class_reversion1h",
+    "class_chop_reversion1h",
+    "class_momentum_observed1h",
+    "class_reversion_observed1h",
+    "class_chop_reversion_observed1h"
+  ],
+  "feature": "13five-minute fresh snapshots through hour1; first-to-last direction; efficiency>=0.5; observed fresh tick range fixesR; single decision at60min; nextfresh<=5s proxy fill; mandatory close4h",
+  "costs": {
+    "spread": "causal13sample median",
+    "commission_round_trip": 0,
+    "commission_status": "explicit unknown/zero scenario, not certified fees",
+    "slippage_bps_per_side": 24
+  },
+  "scope": "development/research only; no financial qualification, live entries, universe restoration or risk changes",
+  "development_min_closed_per_class": 4,
+  "validation_min_closed_per_class": 20,
+  "validation_min_closed_per_symbol": 5,
+  "validation_min_weeks": 3,
+  "target_net_win_rate": 0.5,
+  "additional_requirements": [
+    "positive mean net R",
+    "PF(R)>1",
+    "positive net price units per symbol; no adding unlike asset price units",
+    "complete episode collection and no censored trades",
+    "validation rule selected only from development; per-symbol >=50% remains required"
+  ],
+  "limits": {
+    "development_max_jobs": 0,
+    "new_jobs_per_invocation": 0,
+    "max_ticks_per_job": 200000,
+    "max_pages_per_job": 120,
+    "episode_hours": 4
+  },
+  "references": [
+    "https://www.nber.org/papers/w24877",
+    "https://doi.org/10.20955/wp.1999.016",
+    "https://www.nber.org/papers/w8959",
+    "https://www.nyse.com/markets/hours-calendars",
+    "https://ir.eia.gov/ngs/ngs.html"
+  ],
+  "hypothesis_limits": "Direction continuation and reversal are competing research controls, not an assumed universal edge. Missing macro/news/consensus/order-flow features prevent claiming a fundamental event model.",
+  "pre_collection_amendment": {
+    "prior_plan_sha256": "0c16a951e9453903311d9db6992214d433177e3f0906719bacde8694cd991050",
+    "reason": "Before any source collection or outcome inspection, exclude25Aug/1Sep from all validation classes to avoid UK summer-bank-holiday/US Labor-Day cash-session assumptions. Development dates and candidate rules unchanged."
+  },
+  "parent_plan_sha256": "8c8cb376d2bbe25a61567c55cb6187dd2616c2b6fd08baaaefda608f597e88ac",
+  "amendment": "Phase A scoring and collection-lineage correction only. Reuse original40 development sources, native quantities and six existing candidate rules. No new collection or validation opening. Separate collection receipt from this analysis plan.",
+  "feature_ablation": "For observed variants: first fresh snapshot within minute1; last previously fresh snapshot at/before scheduled minutes5..55, age<=60s; minute60decision and nextquote fill unchanged at5s/6s freshness. No interpolation or future features. Low-efficiency reversion uses efficiency<0.5; originaldirectional modes>=0.5.",
+  "reuse_only": true,
+  "source_collection_plan_sha256": "8c8cb376d2bbe25a61567c55cb6187dd2616c2b6fd08baaaefda608f597e88ac",
+  "parent_analysis_plan_sha256": "d085bfd8d86fe30d0cbdaa0865238e49c792fc368011837cbcb2c23daed1d970",
+  "selection_metric": "normal one-sided90% IID lower-bound ranking heuristic, then mean netR and rule name; existing minimum-sample and per-symbol gates unchanged",
+  "parent_frozen_at_utc": "2026-11-05T12:15:25.295214+00:00"
+}

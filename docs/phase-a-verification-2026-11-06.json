@@ -1,0 +1,109 @@
+{
+  "trace": "\u211618,278 \u00a7\u00a71\u20135",
+  "at_utc": "2026-11-06T03:33:17.996962+00:00",
+  "by": "Codex (GPT-6), effort not exposed",
+  "base_commit": "4134af1737c105e86d27d9b0021ecd680c3c04d8",
+  "local_checks": {
+    "fmt": "PASS",
+    "clippy_workspace_all_targets_denied_warnings": "PASS",
+    "cargo_test_workspace": {
+      "passed": 694,
+      "failed": 0,
+      "ignored": 1
+    },
+    "python_research": {
+      "passed": 17,
+      "skipped": 0
+    },
+    "py_compile": "PASS",
+    "acceptance_groups_passed": 5
+  },
+  "review_reproduction": {
+    "old_diagnostic_rows_exact": 480,
+    "fresh_diagnostic_rows": 240,
+    "fresh_ticks": 1281012,
+    "fresh_statuses": {
+      "observed": 222,
+      "missing_predictor": 18
+    }
+  },
+  "native_analysis": {
+    "complete_jobs": 40,
+    "failed_jobs": 0,
+    "unchanged_native_replay_rows": 240,
+    "passing_class_candidates": 0,
+    "source_collection_plan_sha256": "8c8cb376d2bbe25a61567c55cb6187dd2616c2b6fd08baaaefda608f597e88ac",
+    "analysis_plan_sha256": "5b024e0e8c7b800cbafeaaef6c7bd45a4d46b9fa4f6c0f60d467221241a19312",
+    "data_gaps": {
+      "equity_index": {
+        "class_momentum1h": {
+          "missing_first_hour_samples": 4
+        },
+        "class_reversion1h": {
+          "missing_first_hour_samples": 4
+        },
+        "class_chop_reversion1h": {
+          "missing_first_hour_samples": 4
+        },
+        "class_momentum_observed1h": {},
+        "class_reversion_observed1h": {},
+        "class_chop_reversion_observed1h": {
+          "no_next_fresh_fill_quote_before_deadline": 1
+        }
+      },
+      "fx": {
+        "class_momentum1h": {
+          "missing_first_hour_samples": 2
+        },
+        "class_reversion1h": {
+          "missing_first_hour_samples": 2
+        },
+        "class_chop_reversion1h": {
+          "missing_first_hour_samples": 2
+        },
+        "class_momentum_observed1h": {},
+        "class_reversion_observed1h": {},
+        "class_chop_reversion_observed1h": {}
+      },
+      "metal": {
+        "class_momentum1h": {},
+        "class_reversion1h": {},
+        "class_chop_reversion1h": {},
+        "class_momentum_observed1h": {},
+        "class_reversion_observed1h": {},
+        "class_chop_reversion_observed1h": {}
+      },
+      "energy": {
+        "class_momentum1h": {
+          "missing_first_hour_samples": 6
+        },
+        "class_reversion1h": {
+          "missing_first_hour_samples": 6
+        },
+        "class_chop_reversion1h": {
+          "missing_first_hour_samples": 6
+        },
+        "class_momentum_observed1h": {
+          "missing_first_hour_samples": 2
+        },
+        "class_reversion_observed1h": {
+          "missing_first_hour_samples": 2
+        },
+        "class_chop_reversion_observed1h": {
+          "missing_first_hour_samples": 2
+        }
+      },
+      "crypto": {
+        "class_momentum1h": {},
+        "class_reversion1h": {},
+        "class_chop_reversion1h": {},
+        "class_momentum_observed1h": {},
+        "class_reversion_observed1h": {},
+        "class_chop_reversion_observed1h": {}
+      }
+    }
+  },
+  "ci_corpus_note": "CI lacks the local raw corpora and explicitly skips only the raw-data reproduction group; its other checks still run. The local run above executed that group.",
+  "financial_pass": false,
+  "initial_failure_corrected": "Clippy found a test-only sqlx import; production now uses the existing jiaoyi_store::sqlx re-export. No lint was suppressed."
+}
