@@ -1260,7 +1260,10 @@ passed on99d4c65. Automated review4488766123 was read only after merge;
 its missing native no_fresh_quote_in_mark_window reason is valid. Correct the
 shared coverage whitelist and add an independent literal regression: five
 otherwise passing closes plus this missing-decision episode must fail both
-scorecards. Test failed before the one-line fix, passed afterward. Research
+scorecards. Test failed before the fix, passed afterward. The same emitter
+audit also found missing_band/missing_session_open in s3_ticks; include both
+with explicit literal regression cases rather than testing only the whitelist.
+Research
 suite17passed/one optional corpus reproduction skipped (already run inPR166).
 No Rust, live order/risk, worker or collection changes. Required follow-up CI
 pending. CheckGROK_Log17,703 andcurrentchat before allocatingnextserial.
