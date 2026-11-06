@@ -1,0 +1,1566 @@
+{
+  "schema": "s3-oil-spec-inventory-v1",
+  "trace": "№18,306 §§1–11; by Codex (GPT-6), effort not exposed",
+  "generated_at_utc": "2026-11-06T23:28:47.308131+00:00",
+  "timezone": "Asia/Singapore",
+  "scope": "Production-S3 oil specification and bounded retained-evidence inventory; no new replay, collection, validation or trading change",
+  "reviewed_source_commit": "6693e960cf0af8c5a6ce1efb982bfff049d70cd3",
+  "reviewed_source_sha256": {
+    "crates/jiaoyi/src/strategy3.rs": "8ae6e14c581126843585bfaba54f9c902ecf70e153aad25f5cbb08e501b7ba3c",
+    "crates/jiaoyi/src/strategy3/preopen.rs": "03df1c8f16c10c723d8c2a0575a066b7bfa0b2d9302d9aae43b82126b9067f6b",
+    "crates/jiaoyi/src/broker_backtest.rs": "5a85e6c42745574b7b4b87d0d929a169e5c56ef46391523ffc917041b1636745",
+    "crates/jiaoyi/src/quote_coverage.rs": "2f0680e2394c44cea1c00d9a807ad43ce2ebb78c7e7b9dbf0f9c6d4235168505",
+    "crates/jiaoyi/src/research.rs": "b9e7414624d0888d809f11d7d6aa106694f78f63283c82371c1c6607b8d7d35a",
+    "crates/jiaoyi/src/admission.rs": "9d72416657e7f723fdc215fc9623c55f3fed21049b8b997cafd8e95d78df91aa",
+    "crates/jiaoyi-ctrader/src/entry_guard.rs": "2a9ecab496d91f1ed318d47f8a1ec4ddc66dea0e0ae50b924254789a7a44657c",
+    "crates/jiaoyi-store/src/strategy3.rs": "3734a724369a8bfa886d5c5aa95c939bc9d7e80c8d88e4b73ffdd8a6c97ddfc1",
+    "crates/jiaoyi-core/src/research/s3_signal.rs": "3bf0ff4fda40fb1b2f83dba018943f3a18f56672b2624fdff1a0ac2335380fe3",
+    "crates/jiaoyi-core/src/research/s3_ticks.rs": "0b35da1dda870eecfb8b6736b1728ee6c4fe82d3b7fbca360e4558602f19d427",
+    "crates/jiaoyi-core/src/research/exit_replay.rs": "b744e6095e9da1c0736689a098ef62c88c18a2da6a5150f7d2bbd99436f5096d",
+    "crates/jiaoyi-core/src/strategy3/band.rs": "483998e9e3a4206e1249b92d2804111c253f1a60db8f7902f00dc7a11a00f70c",
+    "crates/jiaoyi-core/src/strategy3/sessions.rs": "f60a556596c720ab9befb8932c615d1bf57b9ee6e1339d52b2d5559b655c91fa",
+    "crates/jiaoyi-core/src/strategy3/targets.rs": "e373c96e321c9349522408249c4a545572756eb8431c10185e4948208d680c44",
+    "docs/preregistration-2026-11-01-strategy3-v7.md": "73a09b7f0cef34fab8cf3fa1691fe7451b2bfbf1fad46fc99b725149d84be7ef",
+    "docs/oil-replication-v2-2026-11-06.json": "d35c0ff1b6379d305ee4f6294fe362a3e849121a618280c0ed269cb4d6efedfb",
+    "docs/oil-cost-and-replication-2026-11-06/cost-assessment.json": "c3b4d4a07eda16fda0b30a9a1d4b00a245b538dddc3abb28005e26977c217043",
+    "railway.toml": "bb5f7546e23748295970000db0a4f06d8b262b2c05ee944a508c21934ebc9e07"
+  },
+  "local_inventory": {
+    "roots": [
+      "/workspace/jiaoyi-broker-backtest-evidence",
+      "/workspace/jiaoyi-tick-replay-evidence",
+      "/workspace/jiaoyi-edge-milestone-evidence",
+      "/workspace/jiaoyi-major-fx-evidence",
+      "/workspace/jiaoyi-btc-nov4-forensic",
+      "/workspace/jiaoyi-checkpoint-evidence-20261031",
+      "/workspace/reports",
+      "/workspace/shared",
+      "/workspace/attachments",
+      "/workspace/library-files"
+    ],
+    "recognition": "JSON containing request and result.input with bars, bids, asks; excludes build/credential files; not a global data catalogue",
+    "parse_errors": [],
+    "raw_job_file_count": 66,
+    "unique_recorded_source_hashes": 66,
+    "files_with_m30_bars": 6,
+    "oil_raw_job_files": 0,
+    "sum_file_bytes": 110925062,
+    "hash_assurance": "File digests recalculated; recorded broker-input digests not independently reserialised or verified; a file is not an independent trade",
+    "per_symbol": {
+      "AUDUSD": {
+        "files": 6,
+        "unique_request_and_recorded_source_hash": 6,
+        "unique_recorded_source_hashes": 6,
+        "files_with_m30": 0,
+        "ticks_all_files": 191308,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-09-18T16:00:00Z",
+        "file_bytes": 8625624
+      },
+      "BTCUSD": {
+        "files": 13,
+        "unique_request_and_recorded_source_hash": 13,
+        "unique_recorded_source_hashes": 13,
+        "files_with_m30": 5,
+        "ticks_all_files": 829394,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-10-06T04:00:00Z",
+        "file_bytes": 45598657
+      },
+      "EURUSD": {
+        "files": 6,
+        "unique_request_and_recorded_source_hash": 6,
+        "unique_recorded_source_hashes": 6,
+        "files_with_m30": 0,
+        "ticks_all_files": 227631,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-09-18T16:00:00Z",
+        "file_bytes": 10487666
+      },
+      "GBPUSD": {
+        "files": 6,
+        "unique_request_and_recorded_source_hash": 6,
+        "unique_recorded_source_hashes": 6,
+        "files_with_m30": 0,
+        "ticks_all_files": 242575,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-09-18T16:00:00Z",
+        "file_bytes": 11175324
+      },
+      "NZDUSD": {
+        "files": 6,
+        "unique_request_and_recorded_source_hash": 6,
+        "unique_recorded_source_hashes": 6,
+        "files_with_m30": 0,
+        "ticks_all_files": 95060,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-09-18T16:00:00Z",
+        "file_bytes": 4294448
+      },
+      "NatGas": {
+        "files": 11,
+        "unique_request_and_recorded_source_hash": 11,
+        "unique_recorded_source_hashes": 11,
+        "files_with_m30": 1,
+        "ticks_all_files": 13781,
+        "from_min": "2025-09-08T07:00:00Z",
+        "to_max": "2025-10-06T11:00:00Z",
+        "file_bytes": 916745
+      },
+      "USDCAD": {
+        "files": 6,
+        "unique_request_and_recorded_source_hash": 6,
+        "unique_recorded_source_hashes": 6,
+        "files_with_m30": 0,
+        "ticks_all_files": 166896,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-09-18T16:00:00Z",
+        "file_bytes": 7693982
+      },
+      "USDCHF": {
+        "files": 6,
+        "unique_request_and_recorded_source_hash": 6,
+        "unique_recorded_source_hashes": 6,
+        "files_with_m30": 0,
+        "ticks_all_files": 194076,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-09-18T16:00:00Z",
+        "file_bytes": 8750258
+      },
+      "USDJPY": {
+        "files": 6,
+        "unique_request_and_recorded_source_hash": 6,
+        "unique_recorded_source_hashes": 6,
+        "files_with_m30": 0,
+        "ticks_all_files": 278448,
+        "from_min": "2025-09-08T00:00:00Z",
+        "to_max": "2025-09-18T16:00:00Z",
+        "file_bytes": 13382358
+      }
+    },
+    "files": [
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/AUDUSD/Tokyo/result.json",
+        "file_sha256": "f29c9077cc64110984f205d0632b5beb241a1535067e63d7767f468e2fa0e5ce",
+        "bytes": 1192288,
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 13427,
+          "asks": 13007,
+          "bars": 0
+        },
+        "recorded_input_sha256": "77091e619b3f69e8e5383c1ddf77f9fb2399c1413086ccc4fb8dd86099ee402b"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/AUDUSD/London/result.json",
+        "file_sha256": "5feba92a1b3f411b6f75dbd66de1223ef2e0f837e4eebff294af1e193e2c94b4",
+        "bytes": 1338206,
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 15315,
+          "asks": 14361,
+          "bars": 0
+        },
+        "recorded_input_sha256": "eb0607ed48c1e65bc08c8f5a9fd82cd6667b7fd515bdcf74aa4533f55f7acb1e"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/AUDUSD/New-York/result.json",
+        "file_sha256": "a0cd43faa62d1199cca28914d36adcf2de7d6792195dc5765b0d4b27285e1738",
+        "bytes": 1581413,
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-09-08T12:00:00Z",
+        "to": "2025-09-08T16:00:00Z",
+        "counts": {
+          "bids": 17663,
+          "asks": 17417,
+          "bars": 0
+        },
+        "recorded_input_sha256": "f9b603c20dac5a05a2771918b0a90c5f948dab598ac6b68fac46007f33cb0f2d"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/AUDUSD/Tokyo/result.json",
+        "file_sha256": "6f3789cf8f2d8554f8f9fc9969edf2e17f73159d6565bc6b963f6354d470f45b",
+        "bytes": 1055018,
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 11600,
+          "asks": 11783,
+          "bars": 0
+        },
+        "recorded_input_sha256": "f5c0f32efd11810c66c7f46835aa04dc7270adb586cd63d3e7870f391fae6280"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/AUDUSD/London/result.json",
+        "file_sha256": "60827b7707b9f8943f5fcfb60ee2d04f90555fbf14f831e24433de85313291a2",
+        "bytes": 1364916,
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 14849,
+          "asks": 15420,
+          "bars": 0
+        },
+        "recorded_input_sha256": "3dc48ce0f8274e9f46da5d1456f20b92aa519853c3043b3d8319e39bcb4b7d92"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/AUDUSD/New-York/result.json",
+        "file_sha256": "c6ed809defb2ca1dfc42f8cd1d384967c861ab08523cefec60f1746dd351dc7b",
+        "bytes": 2093783,
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-09-18T12:00:00Z",
+        "to": "2025-09-18T16:00:00Z",
+        "counts": {
+          "bids": 23205,
+          "asks": 23261,
+          "bars": 0
+        },
+        "recorded_input_sha256": "352860927284cf54990b32b44cacba8961ab238e2fc8c3c47f9af251f1af8cb5"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-08/result.json",
+        "file_sha256": "6924836f601a4be07efe594104f54cdc53fe8fa4d0b8ebf8cee51c16035f7f5d",
+        "bytes": 3502242,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 32634,
+          "asks": 32636,
+          "bars": 2397
+        },
+        "recorded_input_sha256": "a75e8b93e0bdf485944816267a63737c43c9f4033d09fbc1ecb547ebeeed3f53"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-09/result.json",
+        "file_sha256": "11d151c42825b104155db0db5733f51893f580db6185a145ada93d0e8f54a276",
+        "bytes": 3378883,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-09T00:00:00Z",
+        "to": "2025-09-09T04:00:00Z",
+        "counts": {
+          "bids": 31424,
+          "asks": 31423,
+          "bars": 2401
+        },
+        "recorded_input_sha256": "303e134ddcc48cabe3e79dff4ada80799c17b4059efbd9a966f926877a6cb404"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-10/result.json",
+        "file_sha256": "91ac8a2867530d4db624cb543ba9f2fc3363e72e5573b0728c360256c80e161a",
+        "bytes": 3427342,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-10T00:00:00Z",
+        "to": "2025-09-10T04:00:00Z",
+        "counts": {
+          "bids": 31897,
+          "asks": 31900,
+          "bars": 2401
+        },
+        "recorded_input_sha256": "29ee1d3cb6ccc3a3dcf4b87ff1720cb47fd74ca5344ab9730b96e5d3eb45cd59"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-11/result.json",
+        "file_sha256": "86deb1fab2a16136ad3767f9afd52e2be7f43db029362a6ab7f7d4501581bc5e",
+        "bytes": 3443550,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-11T00:00:00Z",
+        "to": "2025-09-11T04:00:00Z",
+        "counts": {
+          "bids": 32056,
+          "asks": 32055,
+          "bars": 2401
+        },
+        "recorded_input_sha256": "65608a2682dcb7bddbcab40dd682ca977afbe5964c97ec750fd8be6ec77cefcd"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-12/result.json",
+        "file_sha256": "955965b8f186e6240cd7436c5cd45c8bcff958fc883ec09ce67265cb323f81f0",
+        "bytes": 3353253,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-12T00:00:00Z",
+        "to": "2025-09-12T04:00:00Z",
+        "counts": {
+          "bids": 32820,
+          "asks": 32818,
+          "bars": 0
+        },
+        "recorded_input_sha256": "0df0e8dece8a121c4cd178d038fb8f2da9bc536a2a7886e3d28780f899766bd6"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-13/result.json",
+        "file_sha256": "9faae412646fe70d59df6607d814514513a3ca4dba41c896c1ab213b2f640a81",
+        "bytes": 3246327,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-13T00:00:00Z",
+        "to": "2025-09-13T04:00:00Z",
+        "counts": {
+          "bids": 31796,
+          "asks": 31792,
+          "bars": 0
+        },
+        "recorded_input_sha256": "44b3e30b746e86a49b9cc5a0c80961f8ab7b937ec3aef9084991c2615d1f9b2c"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-14/result.json",
+        "file_sha256": "d8514226607a2c3c95bafc199d4db3d08a59d7f6ea769f8dc04dd542808870db",
+        "bytes": 3246185,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-14T00:00:00Z",
+        "to": "2025-09-14T04:00:00Z",
+        "counts": {
+          "bids": 31795,
+          "asks": 31790,
+          "bars": 0
+        },
+        "recorded_input_sha256": "dc5a7b61aa5eef163ccfff437cc6d49ee0ac3257b1b74464a54feef314819fc6"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-15/result.json",
+        "file_sha256": "6a1da8663851665ac829b2207c0ab16669d0ca8846217e6c0bd2d689f308270a",
+        "bytes": 3403675,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-15T00:00:00Z",
+        "to": "2025-09-15T04:00:00Z",
+        "counts": {
+          "bids": 33337,
+          "asks": 33336,
+          "bars": 0
+        },
+        "recorded_input_sha256": "f90dd4ee52d2c4cd84b1e7f8b17d22f7cd2823cb7f079e8fe81c89ec1d42bfe5"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-16/result.json",
+        "file_sha256": "a5cc85a1eedf059f6107a49b183d2707733de5d0ec4ec09bb2f994ac0608e739",
+        "bytes": 3156924,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-16T00:00:00Z",
+        "to": "2025-09-16T04:00:00Z",
+        "counts": {
+          "bids": 30916,
+          "asks": 30919,
+          "bars": 0
+        },
+        "recorded_input_sha256": "b83a13049636e79e036685b9dce693cfee34420699a49bf813fb74f9ed03b4b9"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-17/result.json",
+        "file_sha256": "3ee88cfa75684317d3283033623edd3aa571791c4581901f6649db8e4f2ef9b1",
+        "bytes": 3211761,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-17T00:00:00Z",
+        "to": "2025-09-17T04:00:00Z",
+        "counts": {
+          "bids": 31457,
+          "asks": 31453,
+          "bars": 0
+        },
+        "recorded_input_sha256": "86f1a03533f4cfb9e029b7beb53dcdc2b614946fa5bd3b9768a761f1d32177ba"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-18/result.json",
+        "file_sha256": "071016d656d84d9e4b5eb51d5e10ba77e4bb49d2388488340cc2b32c0e97a03b",
+        "bytes": 3345361,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 32742,
+          "asks": 32742,
+          "bars": 0
+        },
+        "recorded_input_sha256": "b957ad4c2e831235a2466f2e4fb89c84f76dce8f96be5c6cbef488743039a02c"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/btc/2025-09-19/result.json",
+        "file_sha256": "77680d87489328c8443f17fe1cead246ad589a07e04403ab63f6ac9043178750",
+        "bytes": 3246299,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-09-19T00:00:00Z",
+        "to": "2025-09-19T04:00:00Z",
+        "counts": {
+          "bids": 31793,
+          "asks": 31794,
+          "bars": 0
+        },
+        "recorded_input_sha256": "889886ff3c4e97af02add4aae1a5fff9435b550fb30b9d9c848b362a3f25a6d0"
+      },
+      {
+        "path": "/workspace/jiaoyi-tick-replay-evidence/btc/result.json",
+        "file_sha256": "9ed84a9fce158af49ac60931ec2a60fc8d6ffa1560f6d0e8039fa4ddf1232993",
+        "bytes": 5636855,
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-10-06T00:00:00Z",
+        "to": "2025-10-06T04:00:00Z",
+        "counts": {
+          "bids": 30037,
+          "asks": 30032,
+          "bars": 2408
+        },
+        "recorded_input_sha256": "101c067360c49895125390081317da2046ba35e77a31a1a5aa1635860e0e6c9a"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/EURUSD/Tokyo/result.json",
+        "file_sha256": "d7366f7621f95bdf4fcb7c18687bf6bbc88e1f9f1094706684cc1858aed348d9",
+        "bytes": 1460036,
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 15783,
+          "asks": 15897,
+          "bars": 0
+        },
+        "recorded_input_sha256": "5e72be704c6595459cb22f02aa4ea120ff7c0d8edba8061f2bbe99db40992b38"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/EURUSD/London/result.json",
+        "file_sha256": "7456d174aaee95f92c4f7661d4522ac0ddbc78c12250bdab0ed0c96ac204ba52",
+        "bytes": 1593189,
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 17281,
+          "asks": 17293,
+          "bars": 0
+        },
+        "recorded_input_sha256": "941a67cbe8fd0d68c6ab76c12f40f775f5d1c0d1350d9f10f1d243ddfb849149"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/EURUSD/New-York/result.json",
+        "file_sha256": "d8a3634f24a0bac4df93753bae6bc02ac1ff8df2af3511e9ab695499627b3fb1",
+        "bytes": 2036858,
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-09-08T12:00:00Z",
+        "to": "2025-09-08T16:00:00Z",
+        "counts": {
+          "bids": 22156,
+          "asks": 22063,
+          "bars": 0
+        },
+        "recorded_input_sha256": "0ce9cba9177582ad5e831110a50fdca0ae2f28a8c11e0e7b08bd243873c178c2"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/EURUSD/Tokyo/result.json",
+        "file_sha256": "ae53780016c99f948542be7c1f6cf01fdb794532a88860112b2712597f6ee7a4",
+        "bytes": 1095179,
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 11891,
+          "asks": 11857,
+          "bars": 0
+        },
+        "recorded_input_sha256": "4da1761fd0ef3f9ea456974700bbd0d1e02c14c84ce5e45530f32f387a8bde29"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/EURUSD/London/result.json",
+        "file_sha256": "0b583c1038cf12e881c1af773d0c927e66aaeae5aa3713a013be9731f8b8f5f8",
+        "bytes": 1774771,
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 19264,
+          "asks": 19258,
+          "bars": 0
+        },
+        "recorded_input_sha256": "4092efd932683a4e391707ce6605014921a31b3691bf817c9ec548e6d5421077"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/EURUSD/New-York/result.json",
+        "file_sha256": "3cdbb21525606bb0f08812ecf60128700bb01ac8b580165a46e0244e44475c4d",
+        "bytes": 2527633,
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-09-18T12:00:00Z",
+        "to": "2025-09-18T16:00:00Z",
+        "counts": {
+          "bids": 27454,
+          "asks": 27434,
+          "bars": 0
+        },
+        "recorded_input_sha256": "9e77f0ad80232e3ce89eb6655275a344fd1ca27f01a0c1250cce76fd7f7db61a"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/GBPUSD/Tokyo/result.json",
+        "file_sha256": "1f6c416f1a7ee3d0c4cc1088d4114771e0ad9db43720ec57e084c4021e344277",
+        "bytes": 1615018,
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 17483,
+          "asks": 17565,
+          "bars": 0
+        },
+        "recorded_input_sha256": "8fceb35100f15a2e7c982526ae19bee11e15ce5ca7a6e166689f9082698bcb71"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/GBPUSD/London/result.json",
+        "file_sha256": "ee3bd60d26bb185e0287a2aae9363328272772dafeabe02f0d4cc9d65a0b8a18",
+        "bytes": 1773444,
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 19265,
+          "asks": 19227,
+          "bars": 0
+        },
+        "recorded_input_sha256": "f148ab7f19ab0fd8e191713c15d252302f28a6a7f43c187ff17c0b33a026c43b"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/GBPUSD/New-York/result.json",
+        "file_sha256": "b9933666b53d02d448d593d5d8dc6d7c7e85e3a1d493de1adcb03e9c73db4b3e",
+        "bytes": 1890149,
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-09-08T12:00:00Z",
+        "to": "2025-09-08T16:00:00Z",
+        "counts": {
+          "bids": 20702,
+          "asks": 20327,
+          "bars": 0
+        },
+        "recorded_input_sha256": "03944cefe3b5a336a607a762b8b32b6bc98335ffd52eb723511254aeb959ce51"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/GBPUSD/Tokyo/result.json",
+        "file_sha256": "14d862d38ac580b22e23d5e786fb56f9afc2cf532bd3a3ec4f01c17a5a7faeec",
+        "bytes": 1319654,
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 14325,
+          "asks": 14302,
+          "bars": 0
+        },
+        "recorded_input_sha256": "3d0e073303f6f1495ef61013e4ec518b41e1889975c8493f69e3e8c8f6e37ec9"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/GBPUSD/London/result.json",
+        "file_sha256": "6a5156c648048860a1210e2600f91f23ace706768cadef16922ec942e2619a89",
+        "bytes": 1844469,
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 20561,
+          "asks": 19475,
+          "bars": 0
+        },
+        "recorded_input_sha256": "ae8d7231cc7ee3173c3c016e9889e727fc925a6efc10a74a2100e84b2162c1ce"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/GBPUSD/New-York/result.json",
+        "file_sha256": "f708b6628c2b378074a45984903fad02b9a328a4ee80f7bdb1215ad5ed214b17",
+        "bytes": 2732590,
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-09-18T12:00:00Z",
+        "to": "2025-09-18T16:00:00Z",
+        "counts": {
+          "bids": 29897,
+          "asks": 29446,
+          "bars": 0
+        },
+        "recorded_input_sha256": "06a1b8df82002dfadbd19763185d30845aa9d270d12e7aaaebe375357a79b0d2"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/NZDUSD/Tokyo/result.json",
+        "file_sha256": "a915a48d529042baf8ea36c11da9442dd6e38bec83a0dd04336f0037c01bf0ec",
+        "bytes": 623832,
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 6820,
+          "asks": 6981,
+          "bars": 0
+        },
+        "recorded_input_sha256": "a3d7ed21d11fc2234abec788597603bb610e424fd1e7188df141c1dc308e41fb"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/NZDUSD/London/result.json",
+        "file_sha256": "4a4d23d8c242683e795f257af604a753890f4fcaaab7aebbb4dc49bed030b92c",
+        "bytes": 579951,
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 6479,
+          "asks": 6347,
+          "bars": 0
+        },
+        "recorded_input_sha256": "2f2140ae5eed31ae422e8bcd5b192d028e25831e863bdf836016597a4502e4c3"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/NZDUSD/New-York/result.json",
+        "file_sha256": "6b0ac69d6dbd2a015b7f67c3effb086f8140c9589a6913237c27711f72e012ee",
+        "bytes": 747580,
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-09-08T12:00:00Z",
+        "to": "2025-09-08T16:00:00Z",
+        "counts": {
+          "bids": 8262,
+          "asks": 8289,
+          "bars": 0
+        },
+        "recorded_input_sha256": "ddf3424c7d6c2bcd903f8ceea18bc4e283d70d2cdd1cfccc28a271d2d963fbea"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/NZDUSD/Tokyo/result.json",
+        "file_sha256": "bd98d0eca208779b1e3787a893aa5c7c593c723cfe15dedd5075ef42159b4cd7",
+        "bytes": 624660,
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 6901,
+          "asks": 6918,
+          "bars": 0
+        },
+        "recorded_input_sha256": "6558111d775549a62dfcb81102b29c56e9f144eca2d7f41f9469d098d44ae4b0"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/NZDUSD/London/result.json",
+        "file_sha256": "528b186be40a506aa292818170b49d4b5276d33b2dbac382ff60911a5c3c4c0f",
+        "bytes": 707972,
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 7866,
+          "asks": 7805,
+          "bars": 0
+        },
+        "recorded_input_sha256": "07fce554500177129edca9c9ceb6ef5d6dd3a3f8013cdca079d7a31545c00859"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/NZDUSD/New-York/result.json",
+        "file_sha256": "78625cc37d1af475551604bb25b52057bd7d5365b2643b9bbbf0c75b82ff0d46",
+        "bytes": 1010453,
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-09-18T12:00:00Z",
+        "to": "2025-09-18T16:00:00Z",
+        "counts": {
+          "bids": 11159,
+          "asks": 11233,
+          "bars": 0
+        },
+        "recorded_input_sha256": "1270147e8b56f4896d76905c4873369e86da760d257b4aec4405c4e6c550a3a4"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-08/result.json",
+        "file_sha256": "1e7e9f8211040bbcdc077e2c19a9ffb4043cd6fb91d36ae4fe0dc4ef90353442",
+        "bytes": 55465,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 484,
+          "asks": 650,
+          "bars": 0
+        },
+        "recorded_input_sha256": "df37774fcc53a302b8764101be5914a5a39fe8a003d9883feec9db09dee1cd54"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-09/result.json",
+        "file_sha256": "254525d6b049484cc592b10f24836770c747901f6a8f55f7f98e7347fd2a8f60",
+        "bytes": 77868,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-09T07:00:00Z",
+        "to": "2025-09-09T11:00:00Z",
+        "counts": {
+          "bids": 774,
+          "asks": 847,
+          "bars": 0
+        },
+        "recorded_input_sha256": "50eb258d0f8c2410721be16b3ee8549df38a2fc23776f354f62b665498e24506"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-10/result.json",
+        "file_sha256": "5fce2cc2bf59435166a1216bb47cd66c8844f7762bd11917b3a4a3576094dcd8",
+        "bytes": 69910,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-10T07:00:00Z",
+        "to": "2025-09-10T11:00:00Z",
+        "counts": {
+          "bids": 708,
+          "asks": 740,
+          "bars": 0
+        },
+        "recorded_input_sha256": "3e178456049a8b30659ad7328e5c9c7757bb8582c0f58827f32cf32895f4d94c"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-11/result.json",
+        "file_sha256": "606fd35649ee7b669b21e772edd79c7b7373ddcae694f30981a5c6931469f94e",
+        "bytes": 60157,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-11T07:00:00Z",
+        "to": "2025-09-11T11:00:00Z",
+        "counts": {
+          "bids": 575,
+          "asks": 661,
+          "bars": 0
+        },
+        "recorded_input_sha256": "b8753da38c4b314c7cc158ee1bc7b2a83e60505d8af6f6e09a0760995871712f"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-12/result.json",
+        "file_sha256": "3823082c058f29b0e75801874a996afd4e939316069b76f03d9f62178ebdb0d6",
+        "bytes": 51187,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-12T07:00:00Z",
+        "to": "2025-09-12T11:00:00Z",
+        "counts": {
+          "bids": 496,
+          "asks": 545,
+          "bars": 0
+        },
+        "recorded_input_sha256": "3a59c3793507c72f7bbd584c46a535c7a9212dec6990034ddf9d1e74d6330fed"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-15/result.json",
+        "file_sha256": "978abf5818368cb0c1c75dcfd87cdc3cb1e89de8d0f531559b162639f24a12d2",
+        "bytes": 48197,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-15T07:00:00Z",
+        "to": "2025-09-15T11:00:00Z",
+        "counts": {
+          "bids": 493,
+          "asks": 483,
+          "bars": 0
+        },
+        "recorded_input_sha256": "e4488318cba0fb9d5e66be0421251802ef7c1bb644dbfb4ee01936ae88792c1a"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-16/result.json",
+        "file_sha256": "64182c78f556e665a5ef12c70c80c8c75a6079e8ebc7a9c489ef1a6e21bc0b57",
+        "bytes": 58362,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-16T07:00:00Z",
+        "to": "2025-09-16T11:00:00Z",
+        "counts": {
+          "bids": 542,
+          "asks": 654,
+          "bars": 0
+        },
+        "recorded_input_sha256": "fe5859b286bfd01ee2f3d2acb2b81175eae4e7818156054e691c2a88a8b12709"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-17/result.json",
+        "file_sha256": "f93e01b3dc665b85b312a4d20ab8a47df1c317dd58899aeae780311047d2632b",
+        "bytes": 52015,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-17T07:00:00Z",
+        "to": "2025-09-17T11:00:00Z",
+        "counts": {
+          "bids": 508,
+          "asks": 551,
+          "bars": 0
+        },
+        "recorded_input_sha256": "435ce25a51ae7fff92ae264ec8e0c06a4e6d566f2814cc426eee4e572b59d715"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-18/result.json",
+        "file_sha256": "e7e0339610fa0a7c126ee401f6e517b6337d9762c060e7fed2d3f0dfdd8c1b9e",
+        "bytes": 60065,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 575,
+          "asks": 659,
+          "bars": 0
+        },
+        "recorded_input_sha256": "3034c73aca5e819e23dde0d1e888dd0eedd5e272c6cd0371ebc9513df4386de4"
+      },
+      {
+        "path": "/workspace/jiaoyi-edge-milestone-evidence/development/natgas/2025-09-19/result.json",
+        "file_sha256": "a63b9de57ca9f77f469e87b0e232b0ddc29b4761188237abd49d13e860808dd0",
+        "bytes": 55787,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-09-19T07:00:00Z",
+        "to": "2025-09-19T11:00:00Z",
+        "counts": {
+          "bids": 536,
+          "asks": 605,
+          "bars": 0
+        },
+        "recorded_input_sha256": "b32ed205bedc79da59d21d22b84e8667c4d80dd02c01abd07081c2c3b531bc09"
+      },
+      {
+        "path": "/workspace/jiaoyi-tick-replay-evidence/natgas/result.json",
+        "file_sha256": "7aaa3a9c64b5965fef773fc40e787b92d81f32b55428f9d28f30c8d20c454494",
+        "bytes": 327732,
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-10-06T07:00:00Z",
+        "to": "2025-10-06T11:00:00Z",
+        "counts": {
+          "bids": 816,
+          "asks": 879,
+          "bars": 1631
+        },
+        "recorded_input_sha256": "e1be45f34fe79dec5e9983855cc5c7550e5efd76687bf1a558e1b2e6a87933b2"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDCAD/Tokyo/result.json",
+        "file_sha256": "5cca84129ac830d7bca86b9cfaffe467ebcd480a2fbec7f2204631582fe35f34",
+        "bytes": 1208537,
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 13144,
+          "asks": 13068,
+          "bars": 0
+        },
+        "recorded_input_sha256": "0c8a31cf357b2c1eeb701e2915642792716a84d4c815f5a6b7d232e0baf93efa"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDCAD/London/result.json",
+        "file_sha256": "99bb61586346f919214e6fe2d19cfb27120037b7579391d22c73086bd4028792",
+        "bytes": 1140785,
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 12217,
+          "asks": 12522,
+          "bars": 0
+        },
+        "recorded_input_sha256": "d3c2c1d498a9fa4f476f0a4f3bcd4f6b6a3316c6e0ad7338d84bc51cd7f25363"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDCAD/New-York/result.json",
+        "file_sha256": "580e7848c1c0b42156e32a1d5ae8be2a0947af342871745588d1f953668c4440",
+        "bytes": 1386193,
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-09-08T12:00:00Z",
+        "to": "2025-09-08T16:00:00Z",
+        "counts": {
+          "bids": 14568,
+          "asks": 15506,
+          "bars": 0
+        },
+        "recorded_input_sha256": "955d2db06833532262026e1713c0cbe4938dbaee46f7d9df7fb2b7dfb9309759"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDCAD/Tokyo/result.json",
+        "file_sha256": "6705f8cc29eca906f0c5a337946030e5efcdda891ee1f0ffe7f202f3ccd30b59",
+        "bytes": 789581,
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 8103,
+          "asks": 9001,
+          "bars": 0
+        },
+        "recorded_input_sha256": "f9c63178d30dccf7b9397964e9080f071ac72a6748c5730c371a03323f9175eb"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDCAD/London/result.json",
+        "file_sha256": "01db48aaa31594b79e2df0bad9ac3db3de22c263740a28259050f910eb3e873a",
+        "bytes": 1207022,
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 12695,
+          "asks": 13484,
+          "bars": 0
+        },
+        "recorded_input_sha256": "64bbab6d688633be0961b16784993efc0b38382adf2f7458fc6e0f251dfe6233"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDCAD/New-York/result.json",
+        "file_sha256": "42885e16a12349b2ca735088cf93d7089a78792683d27f3c3a1212bac7e4167b",
+        "bytes": 1961864,
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-09-18T12:00:00Z",
+        "to": "2025-09-18T16:00:00Z",
+        "counts": {
+          "bids": 21282,
+          "asks": 21306,
+          "bars": 0
+        },
+        "recorded_input_sha256": "da4aa3c232f82677f90bfebc52397aa52756e98c47af9c1dc4618bc414199bf6"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDCHF/Tokyo/result.json",
+        "file_sha256": "da9a75a4aeba08ff04c64ff714af7753f12501541872231c4424a9616d8dcf23",
+        "bytes": 1471134,
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 16317,
+          "asks": 16313,
+          "bars": 0
+        },
+        "recorded_input_sha256": "1962228d7f4cc5239752892d20a6ddb6e5a16de00f9b06ab16fc252e1ea4a16b"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDCHF/London/result.json",
+        "file_sha256": "0b403ee5ea1094bc250f4cb9d711c1794186421e9743173232d7f388ab76f9e6",
+        "bytes": 1360553,
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 14826,
+          "asks": 15346,
+          "bars": 0
+        },
+        "recorded_input_sha256": "7f611d06b1d3210c3e28173bff3dd1ba4724d4b5dbc2fb8feb07d90ffcbf9e07"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDCHF/New-York/result.json",
+        "file_sha256": "dc9e9e97f1a449e50c81571c9ac6860f7f04f6716fc2dfd907c1194e56ddb18b",
+        "bytes": 1562241,
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-09-08T12:00:00Z",
+        "to": "2025-09-08T16:00:00Z",
+        "counts": {
+          "bids": 17473,
+          "asks": 17181,
+          "bars": 0
+        },
+        "recorded_input_sha256": "dd09b1b0393e471ecf58c9b4a0664a0c0080fe75b56dd8bbea79c60ecb67a882"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDCHF/Tokyo/result.json",
+        "file_sha256": "36b30e18f1afd814e4844aefeb502720f418891fc8805f4eda02ec91367a55ca",
+        "bytes": 1017915,
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 10547,
+          "asks": 12011,
+          "bars": 0
+        },
+        "recorded_input_sha256": "036cbac654b06a7acd8e5c01fa4f9b01de2a3634c027beb1a0d17c4788d12dca"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDCHF/London/result.json",
+        "file_sha256": "2c1c967247b4ea0d3b27a63543ed0422be561f5cde803949be1a676c89ad63a6",
+        "bytes": 1323653,
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 14151,
+          "asks": 15201,
+          "bars": 0
+        },
+        "recorded_input_sha256": "f7a9dda0f45c9d340c14a3c79a872e29ba94a531a2174d0236af02049014710d"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDCHF/New-York/result.json",
+        "file_sha256": "d2133d807051f0406cfc793646191c7fdc8114d1dd2441caa639362f664d17fb",
+        "bytes": 2014762,
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-09-18T12:00:00Z",
+        "to": "2025-09-18T16:00:00Z",
+        "counts": {
+          "bids": 22540,
+          "asks": 22170,
+          "bars": 0
+        },
+        "recorded_input_sha256": "73c9855474d5c891c65a03f99d22e616bad72802f452bee5f2049d44aefc5fdb"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDJPY/Tokyo/result.json",
+        "file_sha256": "e7a0fff311d7dbb7df58ea3e43490b78becea2854731d9bd6141b93207dec8aa",
+        "bytes": 2036140,
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-09-08T00:00:00Z",
+        "to": "2025-09-08T04:00:00Z",
+        "counts": {
+          "bids": 21264,
+          "asks": 21097,
+          "bars": 0
+        },
+        "recorded_input_sha256": "0417a8d8526a2b389b73059d4e46c4e4dcddcde167d192143dfcaee56684ab90"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDJPY/London/result.json",
+        "file_sha256": "48425f062cee135b14f0455832eb3b37e43890bd1e214a07a561f3d8461ec838",
+        "bytes": 2105407,
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-09-08T07:00:00Z",
+        "to": "2025-09-08T11:00:00Z",
+        "counts": {
+          "bids": 21739,
+          "asks": 22065,
+          "bars": 0
+        },
+        "recorded_input_sha256": "49cc52f9d717dcb7870103715d0f00d4f46d48dcbc6e31478dbca38e946bf9d1"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-08/USDJPY/New-York/result.json",
+        "file_sha256": "7e0dc91f536ba745e585c672818306a715156846458f60a4e0d0586d70035212",
+        "bytes": 2497805,
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-09-08T12:00:00Z",
+        "to": "2025-09-08T16:00:00Z",
+        "counts": {
+          "bids": 25709,
+          "asks": 26270,
+          "bars": 0
+        },
+        "recorded_input_sha256": "e28f9f066dba781d5df7e61b0ed044866a2940810566528b46b5abd2a87594c2"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDJPY/Tokyo/result.json",
+        "file_sha256": "18fa04cf815bad61032e8070312e5c9534ccc6cee4b1bfeaa50fc9e95757a8d8",
+        "bytes": 1667332,
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-09-18T00:00:00Z",
+        "to": "2025-09-18T04:00:00Z",
+        "counts": {
+          "bids": 17345,
+          "asks": 17333,
+          "bars": 0
+        },
+        "recorded_input_sha256": "bb3d987ae6fb1f08c0ed2fcd4b204fe1df3f8f89ce22a39e63dc7ebc59da38d7"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDJPY/London/result.json",
+        "file_sha256": "1ada77fdd4414cfb6b2599ef78abff06954bf8782a91f36a60309e1945b238ad",
+        "bytes": 2084909,
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-09-18T07:00:00Z",
+        "to": "2025-09-18T11:00:00Z",
+        "counts": {
+          "bids": 21750,
+          "asks": 21627,
+          "bars": 0
+        },
+        "recorded_input_sha256": "e8fa048939f97a62734398dfe725510529ae93d73e93606d034b2be4a02a4e84"
+      },
+      {
+        "path": "/workspace/jiaoyi-major-fx-evidence/pilot/2025-09-18/USDJPY/New-York/result.json",
+        "file_sha256": "476aea8f903347bc006d47c7d7b10d4972bf71e13f44747e26f025027d0af9e9",
+        "bytes": 2990765,
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-09-18T12:00:00Z",
+        "to": "2025-09-18T16:00:00Z",
+        "counts": {
+          "bids": 31683,
+          "asks": 30566,
+          "bars": 0
+        },
+        "recorded_input_sha256": "1172e6afb83cf844c607c6bcd98f46d1dbd85148a38d08e64655ff7fc956b97d"
+      }
+    ],
+    "original_oil_directory_present": false,
+    "previous_twenty_collection_jobs": "spent; absent local ledger is not a reset"
+  },
+  "read_only_http_receipts": [
+    {
+      "name": "health",
+      "endpoint": "/health",
+      "fetched_at": "2026-11-06T23:22:33.712929+00:00",
+      "status": 200,
+      "bytes": 166752,
+      "response_sha256": "158dbc1d72e81bedd6dcc4eda82ba1b2e0825d20cc06fffb434ebeff2439e2d6"
+    },
+    {
+      "name": "latest-backtest",
+      "endpoint": "/owner/backtests",
+      "fetched_at": "2026-11-06T23:22:33.713947+00:00",
+      "status": 200,
+      "bytes": 4,
+      "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    {
+      "name": "orders-demo",
+      "endpoint": "/trading/orders?account=49236051&strategy=s3&limit=500",
+      "fetched_at": "2026-11-06T23:22:33.714439+00:00",
+      "status": 200,
+      "bytes": 148586,
+      "response_sha256": "ecc806db49d6c184fd82bb74a3171982c062b75e905523bf88927d994f0840b4"
+    },
+    {
+      "name": "coverage-SpotCrude-2025-07-21",
+      "endpoint": "/owner/quote-coverage?account_id=49236051&symbol_id=10054&from=2025-07-21T07%3A00%3A00Z&to=2025-07-21T20%3A00%3A05Z",
+      "fetched_at": "2026-11-06T23:23:31.007656+00:00",
+      "status": 200,
+      "bytes": 4358,
+      "response_sha256": "384a570b60112ec21365248cc6c2f6b0356b78011ef951cbc720025961e18499"
+    },
+    {
+      "name": "coverage-SpotBrent-2025-07-21",
+      "endpoint": "/owner/quote-coverage?account_id=49236051&symbol_id=10053&from=2025-07-21T07%3A00%3A00Z&to=2025-07-21T20%3A00%3A05Z",
+      "fetched_at": "2026-11-06T23:23:31.356683+00:00",
+      "status": 200,
+      "bytes": 4358,
+      "response_sha256": "dd705b9188b010732af79804bc768e4639fd16e0228f38252932f0a099302f83"
+    },
+    {
+      "name": "coverage-SpotCrude-2026-11-06",
+      "endpoint": "/owner/quote-coverage?account_id=49236051&symbol_id=10054&from=2026-11-06T07%3A00%3A00Z&to=2026-11-06T20%3A00%3A05Z",
+      "fetched_at": "2026-11-06T23:23:31.701900+00:00",
+      "status": 200,
+      "bytes": 7187,
+      "response_sha256": "73dfeeb7a39471f052e5f7b2c2895f51f6a050b3617ea98600237fb3fbeac695"
+    },
+    {
+      "name": "coverage-SpotBrent-2026-11-06",
+      "endpoint": "/owner/quote-coverage?account_id=49236051&symbol_id=10053&from=2026-11-06T07%3A00%3A00Z&to=2026-11-06T20%3A00%3A05Z",
+      "fetched_at": "2026-11-06T23:23:33.696325+00:00",
+      "status": 200,
+      "bytes": 7182,
+      "response_sha256": "07828b71993cbe0dd50d11b4bf237a6cebd096cfeab7819c567494d9323a13cc"
+    }
+  ],
+  "http_request_count": 7,
+  "new_broker_history_requests": 0,
+  "new_backtest_jobs": 0,
+  "validation_opened": false,
+  "health_observation": {
+    "status": "ok",
+    "service": "jiaoyi",
+    "settings_version": 47,
+    "phase": 1
+  },
+  "health_limit": "A point-in-time response; no deployed commit or all-subsystems health certification",
+  "latest_backtest": {
+    "response": null,
+    "meaning": "empty in-memory latest-job slot; no historical absence claim"
+  },
+  "mapping_read": {
+    "account": 49236051,
+    "row_limit": 500,
+    "rows_returned": 246,
+    "symbol_ids_from_durable_open_keys": {
+      "SpotBrent": [
+        10053
+      ],
+      "SpotCrude": [
+        10054
+      ]
+    },
+    "contemporaneous_mapping": "Quote-coverage confirms 2026-11-06 names; 2025-07-21 mapping unavailable"
+  },
+  "bounded_quote_coverage": [
+    {
+      "receipt_name": "coverage-SpotBrent-2025-07-21",
+      "generated_at": "2026-11-06T23:23:31.582855104Z",
+      "account_id": 49236051,
+      "symbol_id": 10053,
+      "from_inclusive": "2025-07-21T07:00:00Z",
+      "to_exclusive": "2025-07-21T20:00:05Z",
+      "max_rows_per_tick_source": 500000,
+      "mark_mapping_state": "unavailable",
+      "mark_symbol_names": [],
+      "recorded_strategy3_marks": null,
+      "live": {
+        "both_side_updates": 0,
+        "invalid_side_updates": 0,
+        "missing_broker_timestamp": 0,
+        "recording_sessions": 0,
+        "rows": 0,
+        "series": [],
+        "truncated": false,
+        "eligible_calendar_mark_windows": 24,
+        "eligible_windows_with_updates": 0,
+        "eligible_windows_with_bid_and_ask_updates": 0
+      },
+      "history": {
+        "fetches": [],
+        "rows": 0,
+        "series": [],
+        "truncated": false
+      }
+    },
+    {
+      "receipt_name": "coverage-SpotBrent-2026-11-06",
+      "generated_at": "2026-11-06T23:23:35.106655190Z",
+      "account_id": 49236051,
+      "symbol_id": 10053,
+      "from_inclusive": "2026-11-06T07:00:00Z",
+      "to_exclusive": "2026-11-06T20:00:05Z",
+      "max_rows_per_tick_source": 500000,
+      "mark_mapping_state": "linked",
+      "mark_symbol_names": [
+        "SpotBrent"
+      ],
+      "recorded_strategy3_marks": {
+        "distinct_recorded_marks": 3,
+        "first_recorded_at": "2026-11-06T07:30:03.448063+00:00",
+        "last_recorded_at": "2026-11-06T08:30:01.243204+00:00",
+        "rows": 3,
+        "with_two_numeric_sides": 3
+      },
+      "live": {
+        "both_side_updates": 61633,
+        "invalid_side_updates": 0,
+        "missing_broker_timestamp": 0,
+        "recording_sessions": 2,
+        "rows": 62068,
+        "series": [
+          {
+            "first_at": "2026-11-06T07:00:00.101913+00:00",
+            "gap_from_interval_start_ms": 101.913,
+            "gap_to_interval_end_ms": 546.117,
+            "last_at": "2026-11-06T20:00:04.453883+00:00",
+            "max_observed_gap_ms": 23632.383,
+            "observed_gaps_over_six_seconds": 376,
+            "side": "all",
+            "updates": 62068
+          },
+          {
+            "first_at": "2026-11-06T07:00:00.101913+00:00",
+            "gap_from_interval_start_ms": 101.913,
+            "gap_to_interval_end_ms": 546.117,
+            "last_at": "2026-11-06T20:00:04.453883+00:00",
+            "max_observed_gap_ms": 23632.383,
+            "observed_gaps_over_six_seconds": 377,
+            "side": "ask",
+            "updates": 61847
+          },
+          {
+            "first_at": "2026-11-06T07:00:00.101913+00:00",
+            "gap_from_interval_start_ms": 101.913,
+            "gap_to_interval_end_ms": 546.117,
+            "last_at": "2026-11-06T20:00:04.453883+00:00",
+            "max_observed_gap_ms": 23632.383,
+            "observed_gaps_over_six_seconds": 376,
+            "side": "bid",
+            "updates": 61854
+          }
+        ],
+        "truncated": false,
+        "eligible_calendar_mark_windows": 24,
+        "eligible_windows_with_updates": 24,
+        "eligible_windows_with_bid_and_ask_updates": 24
+      },
+      "history": {
+        "fetches": [
+          {
+            "completed_fetch_range_covers_interval": false,
+            "completed_fetches": 0,
+            "failed_or_incomplete_fetches": 3,
+            "first_available_at": "2026-11-06T11:37:45.031451+00:00",
+            "last_available_at": "2026-11-06T23:02:17.855477+00:00",
+            "overlapping_fetches": 3,
+            "side": "ask"
+          },
+          {
+            "completed_fetch_range_covers_interval": false,
+            "completed_fetches": 0,
+            "failed_or_incomplete_fetches": 3,
+            "first_available_at": "2026-11-06T11:37:29.967275+00:00",
+            "last_available_at": "2026-11-06T23:02:00.938424+00:00",
+            "overlapping_fetches": 3,
+            "side": "bid"
+          }
+        ],
+        "rows": 123561,
+        "series": [
+          {
+            "first_at": "2026-11-06T07:00:00.182+00:00",
+            "gap_from_interval_start_ms": 182.0,
+            "gap_to_interval_end_ms": 662.0,
+            "last_at": "2026-11-06T20:00:04.338+00:00",
+            "max_observed_gap_ms": 23617,
+            "observed_gaps_over_six_seconds": 379,
+            "side": "ask",
+            "updates": 61777
+          },
+          {
+            "first_at": "2026-11-06T07:00:00.182+00:00",
+            "gap_from_interval_start_ms": 182.0,
+            "gap_to_interval_end_ms": 662.0,
+            "last_at": "2026-11-06T20:00:04.338+00:00",
+            "max_observed_gap_ms": 23617,
+            "observed_gaps_over_six_seconds": 378,
+            "side": "bid",
+            "updates": 61784
+          }
+        ],
+        "truncated": false
+      }
+    },
+    {
+      "receipt_name": "coverage-SpotCrude-2025-07-21",
+      "generated_at": "2026-11-06T23:23:31.248123070Z",
+      "account_id": 49236051,
+      "symbol_id": 10054,
+      "from_inclusive": "2025-07-21T07:00:00Z",
+      "to_exclusive": "2025-07-21T20:00:05Z",
+      "max_rows_per_tick_source": 500000,
+      "mark_mapping_state": "unavailable",
+      "mark_symbol_names": [],
+      "recorded_strategy3_marks": null,
+      "live": {
+        "both_side_updates": 0,
+        "invalid_side_updates": 0,
+        "missing_broker_timestamp": 0,
+        "recording_sessions": 0,
+        "rows": 0,
+        "series": [],
+        "truncated": false,
+        "eligible_calendar_mark_windows": 24,
+        "eligible_windows_with_updates": 0,
+        "eligible_windows_with_bid_and_ask_updates": 0
+      },
+      "history": {
+        "fetches": [],
+        "rows": 0,
+        "series": [],
+        "truncated": false
+      }
+    },
+    {
+      "receipt_name": "coverage-SpotCrude-2026-11-06",
+      "generated_at": "2026-11-06T23:23:33.573532934Z",
+      "account_id": 49236051,
+      "symbol_id": 10054,
+      "from_inclusive": "2026-11-06T07:00:00Z",
+      "to_exclusive": "2026-11-06T20:00:05Z",
+      "max_rows_per_tick_source": 500000,
+      "mark_mapping_state": "linked",
+      "mark_symbol_names": [
+        "SpotCrude"
+      ],
+      "recorded_strategy3_marks": {
+        "distinct_recorded_marks": 3,
+        "first_recorded_at": "2026-11-06T07:30:03.963905+00:00",
+        "last_recorded_at": "2026-11-06T08:30:01.195666+00:00",
+        "rows": 3,
+        "with_two_numeric_sides": 3
+      },
+      "live": {
+        "both_side_updates": 81401,
+        "invalid_side_updates": 0,
+        "missing_broker_timestamp": 0,
+        "recording_sessions": 2,
+        "rows": 82629,
+        "series": [
+          {
+            "first_at": "2026-11-06T07:00:00.370973+00:00",
+            "gap_from_interval_start_ms": 370.973,
+            "gap_to_interval_end_ms": 497.4,
+            "last_at": "2026-11-06T20:00:04.5026+00:00",
+            "max_observed_gap_ms": 18192.197,
+            "observed_gaps_over_six_seconds": 101,
+            "side": "all",
+            "updates": 82629
+          },
+          {
+            "first_at": "2026-11-06T07:00:00.370973+00:00",
+            "gap_from_interval_start_ms": 370.973,
+            "gap_to_interval_end_ms": 497.4,
+            "last_at": "2026-11-06T20:00:04.5026+00:00",
+            "max_observed_gap_ms": 18192.197,
+            "observed_gaps_over_six_seconds": 102,
+            "side": "ask",
+            "updates": 82024
+          },
+          {
+            "first_at": "2026-11-06T07:00:00.370973+00:00",
+            "gap_from_interval_start_ms": 370.973,
+            "gap_to_interval_end_ms": 497.4,
+            "last_at": "2026-11-06T20:00:04.5026+00:00",
+            "max_observed_gap_ms": 18192.197,
+            "observed_gaps_over_six_seconds": 103,
+            "side": "bid",
+            "updates": 82006
+          }
+        ],
+        "truncated": false,
+        "eligible_calendar_mark_windows": 24,
+        "eligible_windows_with_updates": 24,
+        "eligible_windows_with_bid_and_ask_updates": 24
+      },
+      "history": {
+        "fetches": [
+          {
+            "completed_fetch_range_covers_interval": false,
+            "completed_fetches": 0,
+            "failed_or_incomplete_fetches": 3,
+            "first_available_at": "2026-11-06T11:38:20.377269+00:00",
+            "last_available_at": "2026-11-06T23:02:56.786058+00:00",
+            "overlapping_fetches": 3,
+            "side": "ask"
+          },
+          {
+            "completed_fetch_range_covers_interval": false,
+            "completed_fetches": 0,
+            "failed_or_incomplete_fetches": 3,
+            "first_available_at": "2026-11-06T11:38:02.136166+00:00",
+            "last_available_at": "2026-11-06T23:02:37.261889+00:00",
+            "overlapping_fetches": 3,
+            "side": "bid"
+          }
+        ],
+        "rows": 163856,
+        "series": [
+          {
+            "first_at": "2026-11-06T07:00:00.243+00:00",
+            "gap_from_interval_start_ms": 243.0,
+            "gap_to_interval_end_ms": 616.0,
+            "last_at": "2026-11-06T20:00:04.384+00:00",
+            "max_observed_gap_ms": 18189,
+            "observed_gaps_over_six_seconds": 102,
+            "side": "ask",
+            "updates": 81936
+          },
+          {
+            "first_at": "2026-11-06T07:00:00.243+00:00",
+            "gap_from_interval_start_ms": 243.0,
+            "gap_to_interval_end_ms": 616.0,
+            "last_at": "2026-11-06T20:00:04.384+00:00",
+            "max_observed_gap_ms": 18189,
+            "observed_gaps_over_six_seconds": 103,
+            "side": "bid",
+            "updates": 81920
+          }
+        ],
+        "truncated": false
+      }
+    }
+  ],
+  "coverage_limits": [
+    "One account, two queried intervals per symbol ID; other dates/accounts were not scanned",
+    "2025-07-21 empty ID slices do not prove all development oil history is absent",
+    "Recent data lie outside the 2025-10-24T00:00:00Z development seal; only availability was inspected",
+    "Live received_at and historical broker ts differ; acquisition timestamps do not prove original decision-time availability",
+    "No row-cap truncation, but recent historical fetch records do not certify complete interval coverage",
+    "Per-window update counts are not eligible trade counts or proof of simultaneously fresh quotes",
+    "M30 warm-up, positive-volume open, as-of costs and historical account/contract state not exported or certified by these endpoints"
+  ],
+  "retained_cost_evidence": {
+    "source": "docs/oil-cost-and-replication-2026-11-06/cost-assessment.json",
+    "captured_at_utc": [
+      "2026-11-06T06:42:23.683793+00:00",
+      "2026-11-06T06:42:24.562442+00:00"
+    ],
+    "oil": {
+      "filled_opens": 31,
+      "measured_entries": 5,
+      "measured_dates_utc": [
+        "2026-11-03"
+      ],
+      "measured_sides": [
+        "sell"
+      ],
+      "measured_native_volumes": [
+        500,
+        800,
+        8200,
+        10800,
+        22000
+      ],
+      "min_dispatch_to_fill_bps": -1.3775749171159613,
+      "max_dispatch_to_fill_bps": 2.474481905351161,
+      "entries_with_linked_exit_records": 5,
+      "verified_round_trip_samples_in_this_review": 0
+    },
+    "fresh_cost_audit_in_this_task": false,
+    "maintained_research_reserve_bps_per_side": 24,
+    "calibrated_round_trip_distribution": null
+  },
+  "material_parity_work": [
+    "Explicit current-S3 oil routing without broadening candidate or FX admission",
+    "Production 45-day/preopen history view and positive-volume session-open evidence",
+    "Causal prepared spread/commission provenance instead of present-day substitutions",
+    "Final-dispatch cost recheck with persistent refusal semantics and frozen payload",
+    "Explicit account/admission/transport-state limits",
+    "Native quote-quality propagation and full-exit freshness/acknowledgement boundary checks"
+  ],
+  "proposed_acceptance_groups": [
+    "Causal signal and mark parity",
+    "Cost, dispatch and admission boundaries",
+    "Full exits and evidence honesty"
+  ],
+  "acceptance_tests_executed_this_task": false,
+  "financial_goal_progress": {
+    "new_qualified_trades": 0,
+    "new_backtests": 0,
+    "financial_pass": false,
+    "interim_50_percent": "not established",
+    "original_goal": "73% net wins and reference risk:reward 1:1.38 over latest20 owned closes per strategy/account; unchanged",
+    "effect_of_proposed_parity_changes_on_win_rate": null
+  },
+  "local_document_validation": "Recalculate referenced file/response hashes and coverage counts; parse JSON; validate local links and diff scope. CI/merge receipt belongs to PR."
+}
