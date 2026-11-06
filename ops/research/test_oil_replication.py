@@ -33,6 +33,10 @@ class OilReplicationTests(unittest.TestCase):
             p=Path(folder)/'plan.json';p.write_bytes(oil.PLAN.read_bytes()+b' ')
             with self.assertRaises(ValueError):oil.load_plan(p)
         job=source_job(request,plan);oil.validate_job(job,request,plan)
+        tied=copy.deepcopy(job)
+        tied['result']['input']['bids'].append(copy.deepcopy(tied['result']['input']['bids'][0]))
+        tied['result']['input_sha256']=oil.market_collection.source_digest(tied['result']['input'])
+        oil.validate_job(tied,request,plan)  # Native collector permits equal milliseconds.
         wrong=copy.deepcopy(job);wrong['request']['account']=43002148
         with self.assertRaises(ValueError):oil.validate_job(wrong,request,plan)
         wrong=copy.deepcopy(job);wrong['result']['input']['contract']['min_volume']=200

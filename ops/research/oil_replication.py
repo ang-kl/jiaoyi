@@ -83,7 +83,7 @@ def validate_job(job, request, plan):
         for tick in source[side]:
             at, price = tick['ts_ms'], tick['price_e5']
             if (type(at) is not int or type(price) is not int or price <= 0
-                    or not previous < at < end or at < start
+                    or not previous <= at < end or at < start
                     or price % (10**(5-contract['digits']))):
                 raise ValueError('invalid, out-of-window or unordered tick')
             previous = at
@@ -255,7 +255,8 @@ def analyse(out, plan, verifier, binary, preflight=False):
         jobs[key]=job;corpus[key]=replay.context.quotes(job['result']['input'])
         provenance.append(dict(file=name,file_sha256=digest(path),input_sha256=proof['input_sha256'],
             source_algorithm_sha256=proof['source_algorithm_sha256'],
-            replay_algorithm_sha256=proof['replay_algorithm_sha256']))
+            replay_algorithm_sha256=proof['replay_algorithm_sha256'],
+            native_source_quality=job['result']['study']['quality']))
     rows=[]
     for request in requests:
         key=(request['symbol'],replay.context.ms(request['from']))
@@ -321,9 +322,15 @@ def analyse(out, plan, verifier, binary, preflight=False):
 
 def report(result,path):
     esc=lambda x:html.escape(str(x))
+    def display(key,value):
+        if value is None:
+            return 'unavailable'
+        if isinstance(value,float):
+            return f'{value:.1%}' if key=='net_win_rate' else f'{value:.4f}'
+        return str(value)
     def table(rows,keys):
         return '<table><tr>'+''.join('<th>'+esc(k)+'</th>' for k in keys)+'</tr>'+''.join(
-            '<tr>'+''.join('<td>'+esc(row.get(k))+'</td>' for k in keys)+'</tr>' for row in rows)+'</table>'
+            '<tr>'+''.join('<td>'+esc(display(k,row.get(k)))+'</td>' for k in keys)+'</tr>' for row in rows)+'</table>'
     p=result['primary']
     symbols=[dict(symbol=s,**v) for s,v in p['per_symbol'].items()]
     path.write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Oil replication</title><style>body{font:16px/1.5 system-ui;max-width:1200px;margin:30px auto;padding:16px}table{border-collapse:collapse;width:100%}td,th{padding:8px;border-bottom:1px solid #ddd;text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere}.scroll{overflow:auto}</style><h1>Oil own-momentum replication</h1><p>'+esc(result['trace'])+'</p><h2>TLDR</h2><p><strong>'+esc(result['decision'])+'</strong>. '+esc(p['wins'])+'/'+esc(p['closed'])+' closed scenarios win; mean net R '+esc(p['mean_net_r'])+'. '+esc(result['complete_jobs'])+'/20 source episodes complete. No validation opened or live policy changed.</p><p>Interim target: 50% per symbol plus positive expectancy. Original goal: 73% / 1:1.38 over latest20 per strategy/account. Qualified progress: Not Verifiable; zero account trades added.</p><h2>Every symbol: primary 24bp trailing scenario</h2><div class="scroll">'+table(symbols,['symbol','closed','wins','net_win_rate','mean_net_r','profit_factor','distinct_closed_iso_weeks','passes_screen'])+'</div><h2>Why this decision</h2><pre>'+esc(json.dumps(p['reasons'],indent=2))+'</pre><h2>Matched controls</h2>'+table(result['matched_controls'],['control','symbols','matched','changed_direction','mean_delta_r'])+'<h2>All scenarios</h2><div class="scroll">'+table(result['summary'],['rule','arm','bps','closed','wins','net_win_rate','mean_net_r','profit_factor','passes_screen'])+'</div><h2>Interpretation and limits</h2><p>24bp/side remains primary admission/target geometry. 2/3.74bp sensitivities hold geometry fixed and are not calibrated. Executable spread is charged once; additional commission is unknown and modelled as zero. Historical contracts, execution, fees and quote continuity remain unqualified. Price-unit results are per symbol, never pooled across assets. Controls reuse the same dates. Reported gaps/censoring fail the screen; small samples do not establish an edge.</p><h2>Prior and pooled diagnostics</h2><p>Previously inspected5/12August dates cannot rescue standalone gates.</p><pre>'+esc(json.dumps(dict(prior=result['prior_development'],pooled=result['pooled_descriptive_only']),indent=2))+'</pre><h2>Next decision</h2><p>Stop at the frozen batch. Insufficient evidence is distinct from demonstrated losses. Do not lower costs, retune exits, replace dates or collect a second batch to obtain a pass. Even a preliminary pass needs separate-date validation and representative paired costs before promotion.</p><p>Plan SHA256: '+esc(result['plan_sha256'])+'. Source hashes, source failures, native fills and every outcome are in results.json. Draft for review.</p></html>')

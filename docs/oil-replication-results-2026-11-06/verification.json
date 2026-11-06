@@ -1,0 +1,26 @@
+{
+  "trace": "\u211618,287 \u00a7\u00a71\u201312",
+  "checked_at_utc": "2026-11-06T08:26:08.160567+00:00",
+  "collection_adapter_commit": "0d61ca12e66114530713f6a1d91cdf68eac8e570",
+  "collection_adapter_sha256": "a2c4a3a2e1ba8de7f2e3a9c5181d8a09a4e31a123e798122fdd155a477226040",
+  "analysis_adapter_sha256": "fdb14574382f09214dd2e26d7343fcf2d0a933109166172506f27f0b371ca64e",
+  "plan_sha256": "d35c0ff1b6379d305ee4f6294fe362a3e849121a618280c0ed269cb4d6efedfb",
+  "source_hashes_verified": 20,
+  "source_bytes": 4297306,
+  "new_jobs": 20,
+  "retries": 0,
+  "replacement_dates": 0,
+  "closed_arm_cost_checks": 156,
+  "reported_counts_verified": true,
+  "same_side_equal_timestamps_in_collected_sources": 0,
+  "preflight": "Passed before remaining18; rechecked after validator correction, no recollection",
+  "validator_repair": "Equal-timestamp regression fails before repair, passes after; no collected source contains same-side ties, frozen features/exits unchanged",
+  "local_python_suite": {
+    "ran": 27,
+    "passed": 26,
+    "skipped_optional_old_corpus": 1
+  },
+  "ci": "pending on final commit; see PR closure",
+  "financial_pass": false,
+  "validation_opened": false
+}

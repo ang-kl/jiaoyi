@@ -1380,3 +1380,24 @@ including3new focused regressions; native examples build. No Rust/live/worker
 policy changes. Owner endpoint read-only preflight succeeds, latestjobnull.
 Required CI pending; no market job submitted before merge. Results follow after
 merge. Preserve all earlier frozen plans/results. Time is Money.
+
+[§LOG.110] №18,287 §§5–12 · 06-11-2026 16:27:54 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+GitHub401 interrupted CI observation/merge afterPR172creation; continued already
+approved bounded non-live research from committed0d61ca1; connection recovered.
+All20sources complete, no retries/replacementdates; firstpairtechnicalpreflight
+passed (sixcostvetos), thenremaining18. Native parity/sourcehash20pass;156closed
+arm costchecks independently agree. Rawsource4,297,306bytesoutsideGit/productionDB.
+Primaryownmomentum24bp trailing3/9wins33.3%,mean−0.725599R,PF(R)0.196433;
+Crude2/6,−0.556933R;Brent1/3,−1.062931R. Eleven costvetos. Nine primary paths
+carry continuityflags; Brent3closes/twoweeks. Formal insufficient evidence AND
+observed profitabilityfail. At2bp trailing4/9wins,−0.091064R/PF0.804797.
+Own/peer8matchedidentical; alwayslongdelta+0.006435Rclass but−0.651370RBrent.
+OneprimarywholepositionbrokerTP,3sessioncloses,3stops,2gapstops. Validationclosed.
+Review4490397147: nativecollector supports equal-side timestamps. Regressionfails
+beforefix/passesafter; acceptnondecreasing and retainnativesourcequality. Actual
+20sourceshavezero same-side ties, no frozenrule/sourcechange. Recheckedpreflight/
+analysis,26tests pass/1optional skip. PublishHTML/JSON/README/verification in
+/docs/oil-replication-results-2026-11-06; no rawarchive/ZIP. FinalheadCIpending.
+Stopbatch; no retuning/secondbatch/livepromotion. Interim50% gap16.7ppscenario;
+originalaccountgoalnotverified. TimeisMoney: preserve negativeevidence.
