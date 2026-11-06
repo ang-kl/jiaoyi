@@ -1,0 +1,15 @@
+{
+  "Independent_AI_Review_Prompt.md": "a914ca1890f1b0d963ef4dbc54b70dfaeee459de43927de69d45fc521803ae4f",
+  "README.md": "c6c8aa56f67a45193fa0bcd022b9e939c0dc32e5782a3f9696285d1f3caee5d6",
+  "data/cost-context-results.json": "5dc4df854e9fa4b16f883c022e24ec456c35e8b24e4834aa40677230737b6526",
+  "instructions/1-Pr_Agent_Prompt_2026_11_06.md": "67ff5d4f59a274f44f8fc0244c8f55f56844d4430bd47e67db3b15e196b931e9",
+  "instructions/2-Predictive_Optimization_Plan_2026_11_06.md": "5bd0d6ee4a05839675f0ecb596fba6ef0eea97f703c7a0d7e7a91f1e886014cd",
+  "reproduction-check.json": "128f90b5af4dda9bbc055ef98257872a1eeefda703d5b05fc67f0f9f2e66d21f",
+  "reviews/Handoff_Review.md": "6bc484962e7589d69257319633ce3a897072e767fb303197166e69c537ce3af2",
+  "reviews/Reconsidered_Review.md": "a64ae9e8d501acef4c98e9c726c8a7fe7ee4396d836822acd2721dfcecd97987",
+  "reviews/Response_18269.md": "8cc1a5dcd031bca481cdb832666765b2ca971d5e613a76bcebb402162ea7b38d",
+  "reviews/Response_18270.md": "020eadffa13b7b5ffd4425ff0e9730b63dbeca636983a2e5dbcb449d684cc144",
+  "reviews/fresh-reconsideration.json": "b54ee6e582c6ba227128b0434cf473ebac5e5f5c7a512bf4e429f07c45e0ce4a",
+  "reviews/handoff-verification.json": "02802f94f49e63bba73004241094d61662306eaef56733e20b28e4b30394d025",
+  "scripts/reproduce_review.py": "c55ca8d8ca1ffe70a96c747914c5d3d9ec812f5a255dd714b78b82c2e988080c"
+}
