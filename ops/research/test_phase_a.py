@@ -23,6 +23,19 @@ def episodes(values):
 
 
 class PhaseATests(unittest.TestCase):
+    def test_native_missing_decision_mark_blocks_otherwise_passing_closes(self):
+        base = episodes([2.0, -1.0, 2.0, 2.0, -1.0])
+        # Literal emitted by opening_range::study, independent of the whitelist.
+        missing = dict(symbol='A', **{'from': '2025-08-06T00:00:00Z'}, study={
+            'trade': None, 'marks': [{'reason': 'no_fresh_quote_in_mark_window'}]})
+        for score in (lambda r: classes.score(r, 5, len(r), ['A']),
+                      lambda r: milestone.score(r, 5, len(r), 'development')):
+            self.assertTrue(score(base)['passes_screen'])
+            result = score(base + [missing])
+            self.assertFalse(result['passes_screen'])
+            self.assertEqual(result['data_gaps'], {'no_fresh_quote_in_mark_window': 1})
+            self.assertTrue(any('data coverage gaps' in r for r in result['reasons']))
+
     def test_score_fails_on_data_gap_when_trade_is_none(self):
         # Enough profitable closes to pass absent the missing-data episode.
         base = episodes([2.0, -1.0])

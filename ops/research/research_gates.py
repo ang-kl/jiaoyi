@@ -9,6 +9,7 @@ DATA_GAP_REASONS = frozenset({
     'missing_next_fresh_entry',
     'no_next_fresh_fill_quote_before_deadline',
     'missing_decision_quote',
+    'no_fresh_quote_in_mark_window',
     'missing_close_quote',
     'missing_predictor',
     'zero_tick_stream',
