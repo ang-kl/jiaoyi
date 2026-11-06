@@ -1,0 +1,242 @@
+{
+  "source_collection_plan_sha256": "8c8cb376d2bbe25a61567c55cb6187dd2616c2b6fd08baaaefda608f597e88ac",
+  "cost_context_plan_sha256": "300eb7750a7637a4f1682b17945aea0d035baf3b6508449b917e52763319d234",
+  "cost_context_code_sha256": "dd4bae3893a0c23175590f5f397bee074461eb247e0a678fd086a667b8a68eed",
+  "uploaded_analysis_plan_sha256": "0b0fa0fa5cc11952767e419003cbf63c0c4f07b267db77759d27007fd4dbad8c",
+  "diagnostic_status_counts": {
+    "observed": 417,
+    "missing_close_quote": 12,
+    "missing_next_fresh_entry": 24,
+    "missing_predictor": 6,
+    "missing_decision_quote": 12,
+    "flat_predictor": 9
+  },
+  "qualification": "Saved development sensitivity only; no full strategy replay, fee calibration, validation or deployment approval",
+  "classes": {
+    "crypto": {
+      "sensitivity_at_2bp_per_side": {
+        "closed": 4,
+        "wins": 3,
+        "mean_bps": 43.18648387249798,
+        "net_win_rate": 0.75
+      },
+      "per_symbol": {
+        "BTCUSD": {
+          "closed": 2,
+          "wins": 1,
+          "mean_bps": 18.68004341790332,
+          "net_win_rate": 0.5
+        },
+        "ETHUSD": {
+          "closed": 2,
+          "wins": 2,
+          "mean_bps": 67.69292432709264,
+          "net_win_rate": 1.0
+        }
+      },
+      "statuses": {
+        "observed": 4
+      },
+      "fallbacks": [],
+      "development_blockers": [],
+      "financial_pass": false
+    },
+    "energy": {
+      "sensitivity_at_2bp_per_side": {
+        "closed": 5,
+        "wins": 5,
+        "mean_bps": 39.299165343775734,
+        "net_win_rate": 1.0
+      },
+      "per_symbol": {
+        "NatGas": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 29.97451146983936,
+          "net_win_rate": 1.0
+        },
+        "SpotBrent": {
+          "closed": 2,
+          "wins": 2,
+          "mean_bps": 39.613994541141416,
+          "net_win_rate": 1.0
+        },
+        "SpotCrude": {
+          "closed": 2,
+          "wins": 2,
+          "mean_bps": 43.64666308337823,
+          "net_win_rate": 1.0
+        }
+      },
+      "statuses": {
+        "observed": 5,
+        "missing_decision_quote": 1
+      },
+      "fallbacks": [
+        {
+          "symbol": "NatGas",
+          "start_ms": 1754377200000,
+          "original_status": "missing_predictor"
+        },
+        {
+          "symbol": "SpotCrude",
+          "start_ms": 1754982000000,
+          "original_status": "flat_predictor"
+        }
+      ],
+      "development_blockers": [
+        "data gaps"
+      ],
+      "financial_pass": false
+    },
+    "equity_index": {
+      "sensitivity_at_2bp_per_side": {
+        "closed": 11,
+        "wins": 6,
+        "mean_bps": 8.70397292663833,
+        "net_win_rate": 0.5454545454545454
+      },
+      "per_symbol": {
+        "AUS200": {
+          "closed": 0,
+          "wins": 0,
+          "mean_bps": null,
+          "net_win_rate": null
+        },
+        "GER40": {
+          "closed": 2,
+          "wins": 1,
+          "mean_bps": -0.9004051339828747,
+          "net_win_rate": 0.5
+        },
+        "JPN225": {
+          "closed": 2,
+          "wins": 1,
+          "mean_bps": -0.9512699773558371,
+          "net_win_rate": 0.5
+        },
+        "NAS100": {
+          "closed": 2,
+          "wins": 2,
+          "mean_bps": 38.32449965150032,
+          "net_win_rate": 1.0
+        },
+        "UK100": {
+          "closed": 1,
+          "wins": 0,
+          "mean_bps": -11.865672701454256,
+          "net_win_rate": 0.0
+        },
+        "US30": {
+          "closed": 2,
+          "wins": 0,
+          "mean_bps": -2.6586771107450553,
+          "net_win_rate": 0.0
+        },
+        "US500": {
+          "closed": 2,
+          "wins": 2,
+          "mean_bps": 19.990540017821402,
+          "net_win_rate": 1.0
+        }
+      },
+      "statuses": {
+        "observed": 11,
+        "missing_close_quote": 1,
+        "missing_next_fresh_entry": 2
+      },
+      "fallbacks": [],
+      "development_blockers": [
+        "data gaps",
+        "a constituent lacks 50% wins and positive expectancy"
+      ],
+      "financial_pass": false
+    },
+    "fx": {
+      "sensitivity_at_2bp_per_side": {
+        "closed": 6,
+        "wins": 5,
+        "mean_bps": 9.07580709861186,
+        "net_win_rate": 0.8333333333333334
+      },
+      "per_symbol": {
+        "AUDUSD": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 16.458391646032055,
+          "net_win_rate": 1.0
+        },
+        "EURUSD": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 4.521277419686449,
+          "net_win_rate": 1.0
+        },
+        "GBPUSD": {
+          "closed": 1,
+          "wins": 0,
+          "mean_bps": -2.5880027788190416,
+          "net_win_rate": 0.0
+        },
+        "NZDUSD": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 20.27274259327913,
+          "net_win_rate": 1.0
+        },
+        "USDCAD": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 6.303798295176028,
+          "net_win_rate": 1.0
+        },
+        "USDJPY": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 9.486635416316531,
+          "net_win_rate": 1.0
+        }
+      },
+      "statuses": {
+        "peer_disagreement": 6,
+        "observed": 6
+      },
+      "fallbacks": [],
+      "development_blockers": [
+        "a constituent lacks 50% wins and positive expectancy"
+      ],
+      "financial_pass": false
+    },
+    "metal": {
+      "sensitivity_at_2bp_per_side": {
+        "closed": 2,
+        "wins": 2,
+        "mean_bps": 8.230417233880402,
+        "net_win_rate": 1.0
+      },
+      "per_symbol": {
+        "XAGUSD": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 3.144043588658756,
+          "net_win_rate": 1.0
+        },
+        "XAUUSD": {
+          "closed": 1,
+          "wins": 1,
+          "mean_bps": 13.316790879102049,
+          "net_win_rate": 1.0
+        }
+      },
+      "statuses": {
+        "peer_disagreement": 2,
+        "observed": 2
+      },
+      "fallbacks": [],
+      "development_blockers": [
+        "fewer than four class closes"
+      ],
+      "financial_pass": false
+    }
+  }
+}

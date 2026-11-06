@@ -1,0 +1,12 @@
+{
+  "trace": "\u211618,273 \u00a72",
+  "verified_at_utc": "2026-11-06T02:05:00.652867+00:00",
+  "status": "PASS",
+  "compared": "All review result fields except generation timestamp and script hash",
+  "development_rows_exact": 480,
+  "fresh_rows": 240,
+  "fresh_ticks": 1281012,
+  "network_or_broker_calls": 0,
+  "raw_datasets_in_repository": false,
+  "ci_status": "See pull request; not established by this local receipt"
+}
