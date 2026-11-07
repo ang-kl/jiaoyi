@@ -1711,3 +1711,12 @@ Plan SHA256 a7b09cde60c398a2c8502aed5cf401c24ad53df0ecdd123218510cff6b5256ff.
 Manifest SHA256 942e548d708857fea2469022976c81d81b809c5fda1a12ff494dd13910eb9b95.
 Required plan CI/merge precedes new data. Actual pre-read freeze records merged code/binary.
 Time is Money. Prepare to win; software PASS does not qualify financial performance.
+
+[§LOG.123] №18,325 §§1–8 · 07-11-2026 14:23:10 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Executed frozen three-year120-job pilot; statuses {'complete': 119, 'failed': 1}; reused10 prior US500 episodes including failure.
+Actual primary outcomes: {"production_s3": {"closed_trades": 3, "wins": 0, "win_rate": 0.0, "mean_net_r": -0.8724888010401293, "profit_factor": 0.0}, "orb_60m": {"closed_trades": 10, "wins": 1, "win_rate": 0.1, "mean_net_r": -0.3806111197327102, "profit_factor": 0.14285330806209443}, "macro_180m": {"closed_trades": 54, "wins": 11, "win_rate": 0.2037037037037037, "mean_net_r": -0.3600418669176741, "profit_factor": 0.0421795361331221}, "always_long_control": {"closed_trades": 52, "wins": 18, "win_rate": 0.34615384615384615, "mean_net_r": -0.3846219124139928, "profit_factor": 0.3596635231354943}, "own_momentum_fixed_horizon": {"closed_trades": 51, "wins": 16, "win_rate": 0.3137254901960784, "mean_net_r": -0.5275524154811465, "profit_factor": 0.24446591310542098}}.
+Flagged episodes 120/120. Plan SHA a7b09cde60c398a2c8502aed5cf401c24ad53df0ecdd123218510cff6b5256ff. Binary SHA 8dd57c65fd723e0165fce0efa1cf42a7f3cff7dc1630b145de1df86c1812151b.
+No fabricated win/PF values, Stage2, validation, live change, Telegram or model API.
+All source receipts/hashes, episode scope and aggregate counts/means verified; raw corpus outside Git.
+Report Markdown/HTML/JSON include limitations, by-year/class/symbol/cohort results and matched controls.
+CI/main-publication receipt belongs to report PR. Time is Money; prepare to win.
