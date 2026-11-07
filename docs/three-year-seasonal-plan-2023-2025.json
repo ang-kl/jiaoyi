@@ -1,0 +1,369 @@
+{
+  "plan_id": "three-year-seasonal-backtest-plan-2023-2025",
+  "serial": "\u211618,321",
+  "timestamp_sgt": "07-11-2026 11:35:00 SGT",
+  "hard_research_seal": "2025-10-24",
+  "total_years": 3,
+  "total_cohorts": 12,
+  "total_trading_dates": 60,
+  "universe_active": [
+    {
+      "symbol": "SpotCrude",
+      "name": "WTI Light Sweet Crude Oil",
+      "tier": "Tier 1 (High Alpha)",
+      "asset_class": "energy",
+      "typical_spread": "0.025 USD (3.35 bps)",
+      "spread_drag_pct": "1.35%",
+      "primary_window_utc": "13:00-17:00",
+      "strategy_fit": "180m Momentum & ORB-60m (Physical supply chain trend inertia)"
+    },
+    {
+      "symbol": "SpotBrent",
+      "name": "Brent North Sea Crude Oil",
+      "tier": "Tier 1 (High Alpha)",
+      "asset_class": "energy",
+      "typical_spread": "0.028 USD (3.75 bps)",
+      "spread_drag_pct": "1.42%",
+      "primary_window_utc": "13:00-17:00",
+      "strategy_fit": "180m Momentum & ORB-60m (Paired crude peer coherence)"
+    },
+    {
+      "symbol": "US500",
+      "name": "S&P 500 Cash CFD",
+      "tier": "Tier 1 (High Alpha)",
+      "asset_class": "equity_index",
+      "typical_spread": "0.35 pts (0.60 bps)",
+      "spread_drag_pct": "0.54%",
+      "primary_window_utc": "14:30-18:30",
+      "strategy_fit": "Strategy 3 v7 & ORB-30m (CME E-mini liquidity, sub-1bp friction)"
+    },
+    {
+      "symbol": "NAS100",
+      "name": "Nasdaq 100 Cash CFD",
+      "tier": "Tier 1 (High Alpha)",
+      "asset_class": "equity_index",
+      "typical_spread": "1.20 pts (0.62 bps)",
+      "spread_drag_pct": "0.85%",
+      "primary_window_utc": "14:30-18:30",
+      "strategy_fit": "Strategy 3 v7 & ORB-30m (Deep liquidity, high intraday range)"
+    },
+    {
+      "symbol": "XAUUSD",
+      "name": "Spot Gold",
+      "tier": "Tier 1 (High Alpha)",
+      "asset_class": "metal",
+      "typical_spread": "0.18 USD (0.66 bps)",
+      "spread_drag_pct": "0.56%",
+      "primary_window_utc": "07:00-11:00",
+      "strategy_fit": "London Open Momentum & ORB-60m (Sovereign reserve flow trend)"
+    },
+    {
+      "symbol": "XAGUSD",
+      "name": "Spot Silver",
+      "tier": "Tier 1 (High Alpha)",
+      "asset_class": "metal",
+      "typical_spread": "0.015 USD (4.80 bps)",
+      "spread_drag_pct": "2.10%",
+      "primary_window_utc": "07:00-11:00",
+      "strategy_fit": "Precious metals peer coherence with Gold; high-beta trend"
+    },
+    {
+      "symbol": "GER40",
+      "name": "DAX 40 Cash CFD",
+      "tier": "Tier 2 (Tactical)",
+      "asset_class": "equity_index",
+      "typical_spread": "1.20 pts (0.65 bps)",
+      "spread_drag_pct": "1.95%",
+      "primary_window_utc": "08:00-12:00",
+      "strategy_fit": "Frankfurt/London morning cash session breakout"
+    },
+    {
+      "symbol": "BTCUSD",
+      "name": "Bitcoin / USD",
+      "tier": "Tier 2 (Tactical)",
+      "asset_class": "crypto",
+      "typical_spread": "15.0 USD (2.20 bps)",
+      "spread_drag_pct": "2.80%",
+      "primary_window_utc": "00:00-04:00",
+      "strategy_fit": "Volatility expansion breakout; institutional ETF flow momentum"
+    }
+  ],
+  "universe_blacklisted": [
+    {
+      "symbol": "NatGas",
+      "reason": "Widow-maker microstructural decay: 25% win rate, +3.74 bp slippage penalty, roll curve gaps."
+    },
+    {
+      "symbol": "EURUSD / USDCAD",
+      "reason": "Spread-to-range tax destroys edge: 1.0 pip spread on 12-15 pip intraday move = 8.5% drag."
+    },
+    {
+      "symbol": "Altcoins (BCH/LTC/AVAX)",
+      "reason": "100% gap_before_quote warnings in PR #177; thin order books, 28%+ friction drag."
+    },
+    {
+      "symbol": "PGMs (XPTUSD/XPDUSD)",
+      "reason": "Illiquid industrial metals; wide spreads, severe stop slippage (-0.92R to -1.59R in PR #177)."
+    }
+  ],
+  "models": [
+    {
+      "model_id": "S3_V7_M30",
+      "name": "Production Strategy 3 v7 (s3_ticks.rs)",
+      "description": "Adaptive 45-day M30 sigma-noise bands with 30s Chandelier trailing stop (Target Q=1.38, Risk 1.0R).",
+      "execution_cadence": "30-minute bar boundaries",
+      "filter": "Mid crosses adaptive sigma threshold; peer coherence check"
+    },
+    {
+      "model_id": "ORB_60M_VOL_EXP",
+      "name": "Opening Range Breakout with Range Expansion Gate (ORB-60m)",
+      "description": "First 60-minute causal session high/low breakout with dynamic range expansion filter R > 1.25 * median20(R).",
+      "execution_cadence": "End of first session hour",
+      "filter": "Eliminates low-volume summer chop; enters only with institutional volume participation"
+    },
+    {
+      "model_id": "MACRO_180M_MOM",
+      "name": "Centaur Multi-Hour Macro Momentum (180m)",
+      "description": "Multi-hour trend following capturing physical commodity and index momentum (proven 100% win rate on 5 Nov 2026).",
+      "execution_cadence": "Rolling 180-minute window",
+      "filter": "Unanimous directional alignment across asset class peers"
+    }
+  ],
+  "cohorts": [
+    {
+      "id": "2023-Q1-WINTER",
+      "year": 2023,
+      "quarter": "Q1",
+      "season": "Winter / Heating Peak & Terminal Rate Surge",
+      "dates": [
+        "2023-01-23",
+        "2023-01-24",
+        "2023-01-25",
+        "2023-01-26",
+        "2023-01-27"
+      ],
+      "macro_theme": "Aggressive central bank rate hikes, winter distillate draws, tech earnings kickoff"
+    },
+    {
+      "id": "2023-Q2-SPRING",
+      "year": 2023,
+      "quarter": "Q2",
+      "season": "Spring / US Driving Season & SVB Aftermath",
+      "dates": [
+        "2023-05-15",
+        "2023-05-16",
+        "2023-05-17",
+        "2023-05-18",
+        "2023-05-19"
+      ],
+      "macro_theme": "Pre-Memorial Day refinery crude ramp, regional US banking stabilization, debt ceiling negotiations"
+    },
+    {
+      "id": "2023-Q3-SUMMER",
+      "year": 2023,
+      "quarter": "Q3",
+      "season": "Summer / Doldrums & Energy Supply Cuts",
+      "dates": [
+        "2023-07-24",
+        "2023-07-25",
+        "2023-07-26",
+        "2023-07-27",
+        "2023-07-28"
+      ],
+      "macro_theme": "OPEC+ voluntary production cuts, summer liquidity trough, Fed July 25bp rate hike"
+    },
+    {
+      "id": "2023-Q4-AUTUMN",
+      "year": 2023,
+      "quarter": "Q4",
+      "season": "Autumn / Yield Curve Peak & Year-End Reversal",
+      "dates": [
+        "2023-11-13",
+        "2023-11-14",
+        "2023-11-15",
+        "2023-11-16",
+        "2023-11-17"
+      ],
+      "macro_theme": "10-year US Treasury yield pull-back from 5.0%, massive risk-on rally kickoff in indices and gold"
+    },
+    {
+      "id": "2024-Q1-WINTER",
+      "year": 2024,
+      "quarter": "Q1",
+      "season": "Winter / Red Sea Disruption & AI Capex Wave",
+      "dates": [
+        "2024-01-22",
+        "2024-01-23",
+        "2024-01-24",
+        "2024-01-25",
+        "2024-01-26"
+      ],
+      "macro_theme": "Middle East tanker rerouting around Cape of Good Hope, Bitcoin ETF institutional approval, mega-cap AI capex"
+    },
+    {
+      "id": "2024-Q2-SPRING",
+      "year": 2024,
+      "quarter": "Q2",
+      "season": "Spring / Physical Refinery Ramp & Inflation Stickiness",
+      "dates": [
+        "2024-05-13",
+        "2024-05-14",
+        "2024-05-15",
+        "2024-05-16",
+        "2024-05-17"
+      ],
+      "macro_theme": "Refinery utilization surge, central bank gold buying acceleration, sticky CPI print repricing"
+    },
+    {
+      "id": "2024-Q3-SUMMER",
+      "year": 2024,
+      "quarter": "Q3",
+      "season": "Summer / Doldrums & Pre-Easing Repositioning",
+      "dates": [
+        "2024-07-22",
+        "2024-07-23",
+        "2024-07-24",
+        "2024-07-25",
+        "2024-07-26"
+      ],
+      "macro_theme": "Q2 tech earnings volatility, pre-Jackson Hole policy easing speculation, low-volume summer chop"
+    },
+    {
+      "id": "2024-Q4-AUTUMN",
+      "year": 2024,
+      "quarter": "Q4",
+      "season": "Autumn / US Election Flow & Global Easing Cycle",
+      "dates": [
+        "2024-11-11",
+        "2024-11-12",
+        "2024-11-13",
+        "2024-11-14",
+        "2024-11-15"
+      ],
+      "macro_theme": "Post-US Presidential Election liquidity surge, aggressive index momentum breakouts, crypto halving rally"
+    },
+    {
+      "id": "2025-Q1-WINTER",
+      "year": 2025,
+      "quarter": "Q1",
+      "season": "Winter / Global Macro Realignment",
+      "dates": [
+        "2025-02-10",
+        "2025-02-11",
+        "2025-02-12",
+        "2025-02-13",
+        "2025-02-14"
+      ],
+      "macro_theme": "Fiscal realignment, global tariff discussions, winter energy demand inventory draws"
+    },
+    {
+      "id": "2025-Q2-SPRING",
+      "year": 2025,
+      "quarter": "Q2",
+      "season": "Spring / Physical Commodity Tightness",
+      "dates": [
+        "2025-05-12",
+        "2025-05-13",
+        "2025-05-14",
+        "2025-05-15",
+        "2025-05-16"
+      ],
+      "macro_theme": "Refinery capacity bottlenecks, physical commodity deficit trends, sovereign reserve de-dollarization"
+    },
+    {
+      "id": "2025-Q3-SUMMER",
+      "year": 2025,
+      "quarter": "Q3",
+      "season": "Summer / Pre-Holdout Benchmark Baseline",
+      "dates": [
+        "2025-07-21",
+        "2025-07-22",
+        "2025-07-23",
+        "2025-07-24",
+        "2025-07-25"
+      ],
+      "macro_theme": "Benchmark comparative cohort matching historical July/August development trials"
+    },
+    {
+      "id": "2025-Q4-AUTUMN",
+      "year": 2025,
+      "quarter": "Q4",
+      "season": "Autumn / Pre-24 October Development Cut-Off",
+      "dates": [
+        "2025-10-06",
+        "2025-10-07",
+        "2025-10-08",
+        "2025-10-09",
+        "2025-10-10"
+      ],
+      "macro_theme": "Terminal development cohort strictly preceding the 24 October 2025 research seal"
+    }
+  ],
+  "execution_stages": [
+    {
+      "stage": 1,
+      "name": "Pilot Calibration",
+      "cohort_count": 6,
+      "cohort_ids": [
+        "2023-Q1-WINTER",
+        "2023-Q3-SUMMER",
+        "2024-Q1-WINTER",
+        "2024-Q3-SUMMER",
+        "2025-Q1-WINTER",
+        "2025-Q3-SUMMER"
+      ],
+      "symbols": [
+        "SpotCrude",
+        "SpotBrent",
+        "US500",
+        "XAUUSD"
+      ],
+      "dates_count": 30,
+      "total_jobs": 120,
+      "runtime_estimate": "25-35 minutes",
+      "output_file": "doc/THREE_YEAR_PILOT_REPORT-18322-2026-11-07.md"
+    },
+    {
+      "stage": 2,
+      "name": "Full Three-Year Seasonal Verification",
+      "cohort_count": 12,
+      "cohort_ids": [
+        "2023-Q1-WINTER",
+        "2023-Q2-SPRING",
+        "2023-Q3-SUMMER",
+        "2023-Q4-AUTUMN",
+        "2024-Q1-WINTER",
+        "2024-Q2-SPRING",
+        "2024-Q3-SUMMER",
+        "2024-Q4-AUTUMN",
+        "2025-Q1-WINTER",
+        "2025-Q2-SPRING",
+        "2025-Q3-SUMMER",
+        "2025-Q4-AUTUMN"
+      ],
+      "symbols": [
+        "SpotCrude",
+        "SpotBrent",
+        "US500",
+        "NAS100",
+        "XAUUSD",
+        "XAGUSD",
+        "GER40",
+        "BTCUSD"
+      ],
+      "dates_count": 60,
+      "total_jobs": 480,
+      "runtime_estimate": "75-90 minutes",
+      "output_file": "doc/THREE_YEAR_FULL_SEASONAL_REPORT-18323-2026-11-07.md"
+    }
+  ],
+  "acceptance_criteria": {
+    "min_trades_per_class": 20,
+    "min_win_rate_net": 0.5,
+    "target_win_rate_net": 0.73,
+    "target_rr": 1.38,
+    "min_mean_net_r": 0.05,
+    "min_profit_factor": 1.25,
+    "max_data_gaps": 0
+  }
+}

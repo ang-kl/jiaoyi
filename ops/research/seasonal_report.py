@@ -18,7 +18,7 @@ def model(row,name): return row.get('replay',{}).get('result',{}).get('models',{
 
 def observation(row,name,arm,bps):
     m=model(row,name);trade=m.get('study',{}).get('trade');control=m.get('control')
-    if name in MODELS[:3]:
+    if arm != 'fixed_horizon':
         value=m.get('sensitivities',{}).get(arm,{}).get(bps)
         r=trade['entry']['initial_r'] if trade else None
         entered=trade is not None
@@ -41,7 +41,7 @@ def gap(row,name):
     if any(q.get(k,0)>0 for k in ('missing_side','stale_side','crossed','long_intervals','same_millisecond_groups')):return True
     if not q.get('bid_ticks') or not q.get('ask_ticks'):return True
     if any(r.startswith(('missing_','no_fresh_','no_next_')) for r in reasons(row,name)):return True
-    entered,value,_=observation(row,name,ARMS[name][0],'24')
+    entered,value,_=observation(row,name,ARMS.get(name,['trailing'])[0],'24')
     return entered and value is None
 
 

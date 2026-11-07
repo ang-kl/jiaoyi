@@ -34,3 +34,5 @@ pub mod opening_range;
 pub mod production_s3;
 
 pub mod seasonal;
+
+pub mod three_year;
