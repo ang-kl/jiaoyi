@@ -41,7 +41,7 @@ fn validate_bars(bars: &[M30], first: DateTime<Utc>, last: DateTime<Utc>) -> Res
     }
     Ok(())
 }
-fn atr(bars: &[M30], at: DateTime<Utc>) -> Option<f64> {
+pub(super) fn atr(bars: &[M30], at: DateTime<Utc>) -> Option<f64> {
     let past: Vec<_> = bars
         .iter()
         .filter(|b| b.ts_ms + 1800000 <= at.timestamp_millis() && b.volume > 0)
@@ -76,10 +76,17 @@ fn prior_range(req: &Request, bars: &[M30]) -> Option<f64> {
     }
     seasonal::median(r)
 }
-fn peer_move(payload: &Payload, at: DateTime<Utc>, req: &Request) -> Option<f64> {
+fn peer_move(
+    payload: &Payload,
+    at: DateTime<Utc>,
+    req: &Request,
+    authorized_peers: bool,
+) -> Option<f64> {
     let expected = match req.symbol.as_str() {
         "SpotCrude" => "SpotBrent",
         "SpotBrent" => "SpotCrude",
+        "US500" if authorized_peers => "NAS100",
+        "XAUUSD" if authorized_peers => "XAGUSD",
         _ => return None,
     };
     if payload.peer_symbol.as_deref() != Some(expected) {
@@ -103,6 +110,7 @@ fn candidate(
     payload: &Payload,
     quotes: &[Snapshot],
     momentum: bool,
+    authorized_peers: bool,
 ) -> Result<Value, String> {
     let mut out = seasonal::empty(req, src, "three_year_frozen_candidate_v1")?;
     let minutes = if momentum { 180 } else { 60 };
@@ -128,7 +136,7 @@ fn candidate(
         }
     }
     let peer = if momentum {
-        peer_move(payload, first, req)
+        peer_move(payload, first, req, authorized_peers)
     } else {
         None
     };
@@ -235,7 +243,7 @@ fn candidate(
         json!({"study":out,"prepared_spread":s,"range":hi-lo,"prior_median":prior,"peer_move":peer,"dynamic_gate":diagnostics}),
     )
 }
-fn rerate(model: &mut Value) -> Result<(), String> {
+pub(super) fn rerate(model: &mut Value) -> Result<(), String> {
     let Some(trade) = model
         .get("study")
         .and_then(|s| s.get("trade"))
@@ -365,11 +373,11 @@ pub fn study(req: &Request, payload: &Payload) -> Result<Value, String> {
     let (quotes, window_quality) = s3_ticks::snapshots(req, &window_src)?;
     models.insert(
         "orb_60m".into(),
-        candidate(req, &window_src, payload, &quotes, false)?,
+        candidate(req, &window_src, payload, &quotes, false, false)?,
     );
     models.insert(
         "macro_180m".into(),
-        candidate(req, &window_src, payload, &quotes, true)?,
+        candidate(req, &window_src, payload, &quotes, true, false)?,
     );
     models.insert(
         "always_long_control".into(),
@@ -385,6 +393,33 @@ pub fn study(req: &Request, payload: &Payload) -> Result<Value, String> {
     Ok(
         json!({"models":models,"quality":quality,"window_quality":window_quality,"financial_pass":false,"validation_opened":false}),
     )
+}
+
+// Called only after `study` validates the frozen input. An authorised mapping
+// never substitutes for six real, completed peer bars.
+pub(super) fn authorized_macro(req: &Request, payload: &Payload) -> Result<Value, String> {
+    let src = Source {
+        bars: vec![],
+        bids: payload
+            .quotes
+            .bids
+            .iter()
+            .filter(|q| q.ts_ms >= req.from.timestamp_millis())
+            .cloned()
+            .collect(),
+        asks: payload
+            .quotes
+            .asks
+            .iter()
+            .filter(|q| q.ts_ms >= req.from.timestamp_millis())
+            .cloned()
+            .collect(),
+        contract: payload.quotes.contract.clone(),
+    };
+    let quotes = s3_ticks::snapshots(req, &src)?.0;
+    let mut model = candidate(req, &src, payload, &quotes, true, true)?;
+    rerate(&mut model)?;
+    Ok(model)
 }
 
 #[cfg(test)]
@@ -510,6 +545,24 @@ mod tests {
             "missing_exact_20_prior_ranges"
         );
         assert_eq!(a["financial_pass"], false);
+    }
+
+    #[test]
+    fn repair_authorization_requires_actual_completed_class_peer_bars() {
+        let (mut req, mut p) = fixture();
+        let at = req.from + Duration::hours(3);
+        for (symbol, peer) in [("US500", "NAS100"), ("XAUUSD", "XAGUSD")] {
+            req.symbol = symbol.into();
+            p.peer_symbol = Some(peer.into());
+            assert!(peer_move(&p, at, &req, false).is_none());
+            assert!(peer_move(&p, at, &req, true).unwrap() > 0.0);
+            p.peer_symbol = None;
+            assert!(peer_move(&p, at, &req, true).is_none());
+            p.peer_symbol = Some(peer.into());
+            let last = p.peer_m30.pop().unwrap();
+            assert!(peer_move(&p, at, &req, true).is_none());
+            p.peer_m30.push(last);
+        }
     }
     #[test]
     fn sealed_dates_window_and_http_scope_stay_closed() {

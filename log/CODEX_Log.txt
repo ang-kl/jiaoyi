@@ -1742,3 +1742,21 @@ previously successful intervals and also breach the no-repeat rule. JSON flags a
 with failed/successful subsets explicit; report and review block corrected before merge.
 Verified native models and score data are byte-equivalent under canonical hashing.
 No collection or model rerun; final CI and main-publication checks apply to this correction.
+
+[§LOG.126] №18,331 §§1–4 · 07-11-2026 15:49:31 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Owner requested gemini-code-1794036759689.md and supplied companion Bash. Both scripts
+hard-code favourable outcomes instead of replaying ticks; per-symbol totals and Bash
+review arithmetic disagree, and null CI fields can pass. Implement actual hypotheses
+offline instead. Markdown serial18331 governs; no separate18332 run. Grok log checked,
+unchanged latest17703. Frozen contract preserves120 slots/119 available datasets and
+all20 inherited source-protocol flags. No broker reads or missing-peer fabrication.
+New native two-stage exit, causal price-unit volatility admission and peer mapping;
+normal production path unchanged. Three new native checks plus existing48 pass.
+Pre-run baseline/hash checks and independent fill accounting required before reporting.
+No performance improvement claimed before measured outcomes. Time is Money; prepare to win.
+Pre-run full checks:51 native research tests passed;45 Python tests,44 passed/one existing skip;
+core Clippy/all-targets and format passed. Initial Python run caught3 old-study dependency
+failures after an experimental edit to exit_replay.rs. Restored that frozen file exactly
+and isolated the new exit engine in repaired_exit.rs; all checks pass without weakening
+the old plan or its guards. No market replay/outcome was run before this correction.
+All296 existing source component hashes verified before the experiment freeze.
