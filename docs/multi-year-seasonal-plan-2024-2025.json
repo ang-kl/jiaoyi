@@ -1,0 +1,130 @@
+{
+  "trace": "№18,314 §§1–8",
+  "by": "Gemini 3.1 Pro (Independent Reviewer)",
+  "frozen_at_utc": "2026-11-07T02:55:00.000000+00:00",
+  "scope": "Multi-year stratified seasonal backtest plan across 2024 and 2025; pre-holdout development only; no live orders or validation opening.",
+  "account": 49236051,
+  "development_seal_cutoff": "2025-10-24",
+  "classes": {
+    "equity_index": [
+      "US500",
+      "NAS100",
+      "GER40"
+    ],
+    "energy": [
+      "SpotCrude",
+      "SpotBrent"
+    ],
+    "crypto": [
+      "BTCUSD",
+      "ETHUSD"
+    ],
+    "metal": [
+      "XAUUSD"
+    ]
+  },
+  "native_volume": {
+    "US500": 10,
+    "NAS100": 10,
+    "GER40": 10,
+    "SpotCrude": 100,
+    "SpotBrent": 100,
+    "BTCUSD": 1,
+    "ETHUSD": 1,
+    "XAUUSD": 100
+  },
+  "seasonal_cohorts": {
+    "2024_Q1_Winter": [
+      "2024-01-22",
+      "2024-01-23",
+      "2024-01-24",
+      "2024-01-25",
+      "2024-01-26"
+    ],
+    "2024_Q2_Spring": [
+      "2024-05-13",
+      "2024-05-14",
+      "2024-05-15",
+      "2024-05-16",
+      "2024-05-17"
+    ],
+    "2024_Q3_Summer": [
+      "2024-07-22",
+      "2024-07-23",
+      "2024-07-24",
+      "2024-07-25",
+      "2024-07-26"
+    ],
+    "2024_Q4_Autumn": [
+      "2024-11-11",
+      "2024-11-12",
+      "2024-11-13",
+      "2024-11-14",
+      "2024-11-15"
+    ],
+    "2025_Q1_Winter": [
+      "2025-02-10",
+      "2025-02-11",
+      "2025-02-12",
+      "2025-02-13",
+      "2025-02-14"
+    ],
+    "2025_Q2_Spring": [
+      "2025-05-12",
+      "2025-05-13",
+      "2025-05-14",
+      "2025-05-15",
+      "2025-05-16"
+    ],
+    "2025_Q3_Summer": [
+      "2025-07-21",
+      "2025-07-22",
+      "2025-07-23",
+      "2025-07-24",
+      "2025-07-25"
+    ],
+    "2025_Q4_PreHoldout": [
+      "2025-10-06",
+      "2025-10-07",
+      "2025-10-08",
+      "2025-10-09",
+      "2025-10-10"
+    ]
+  },
+  "stage_1_pilot_cohorts": [
+    "2024_Q1_Winter",
+    "2024_Q3_Summer",
+    "2025_Q2_Spring",
+    "2025_Q4_PreHoldout"
+  ],
+  "stage_1_pilot_symbols": [
+    "SpotCrude",
+    "SpotBrent",
+    "US500",
+    "BTCUSD"
+  ],
+  "models": [
+    "production_s3_m30_sigma_band",
+    "opening_range_breakout_30m",
+    "opening_range_breakout_60m"
+  ],
+  "controls": [
+    "always_long",
+    "own_momentum_fixed_horizon"
+  ],
+  "cost_gates": {
+    "primary_decision_slippage_bps_per_side": 24.0,
+    "calibrated_benchmarks_bps_per_side": [
+      2.0,
+      3.74
+    ]
+  },
+  "thresholds": {
+    "min_closed_per_symbol": 10,
+    "min_closed_per_class": 20,
+    "min_weeks": 4,
+    "min_win_rate": 0.5,
+    "min_profit_factor": 1.0,
+    "min_mean_net_r": 0.0
+  }
+}

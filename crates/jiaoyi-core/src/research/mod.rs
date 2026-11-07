@@ -32,3 +32,5 @@ pub mod fx_diagnostic;
 pub mod opening_range;
 
 pub mod production_s3;
+
+pub mod seasonal;

@@ -241,6 +241,11 @@ pub fn study(req: &Request, src: &Source) -> Result<Study, String> {
 
 pub(super) fn study_impl(req: &Request, src: &Source, v7: bool) -> Result<Study, String> {
     req.validate(Utc::now())?;
+    study_validated(req, src, v7)
+}
+
+// The offline seasonal adapter separately validates its exact four-symbol scope.
+pub(super) fn study_validated(req: &Request, src: &Source, v7: bool) -> Result<Study, String> {
     validate_request(req)?;
     let c = &src.contract;
     let volume = req.tick_replay.as_ref().unwrap().volume;
@@ -275,7 +280,7 @@ pub(super) fn study_impl(req: &Request, src: &Source, v7: bool) -> Result<Study,
         let (quotes, quality) = snapshots(req, src)?;
         return Ok(super::fx_diagnostic::study(req, &quotes, quality));
     }
-    super::s3_signal::study(req, &src.bars)?;
+    super::s3_signal::validated_bar_map(req, &src.bars)?;
     let (quotes, quality) = snapshots(req, src)?;
     if !req.tick_replay.as_ref().unwrap().entry_rule.is_current() {
         return super::opening_range::study(req, src, &quotes, quality);
