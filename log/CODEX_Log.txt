@@ -1789,3 +1789,8 @@ Removed positive-expectancy guarantee; gross entry-price stop does not guarantee
 No production activation, new broker reads, validation opening or financial qualification.
 Checked GROK_Log.txt before choosing serial; latest recorded Grok serial remains №17,703.
 Publication requires explicit head-matched CI success and merged artifact verification.
+
+[§LOG.130] №18,338 §§1–6 · 07-11-2026 20:11:41 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Frozen40 peer slots:35 new tick reads,5 cached BTC sources;20 total reused sources and25 missing primaries retained in80 slots.
+2025 May dates previously observed; no clean-validation or Stage2 claim. One attempt per component; source overlaps forbidden.
+Existing cost/exit formulae retained; offline8-symbol scope and symmetric crypto peers added. No live changes.
