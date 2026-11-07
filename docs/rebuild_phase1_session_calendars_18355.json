@@ -1,0 +1,2251 @@
+{
+  "code_sha256": "f60a556596c720ab9befb8932c615d1bf57b9ee6e1339d52b2d5559b655c91fa",
+  "compiled_from": "crates/jiaoyi-core/src/strategy3/sessions.rs",
+  "crypto_code_timezone": "UTC",
+  "interpretation": "Strategy sessions and recorded current broker schedules are separate authorities. NYMEX/London reference calendar claims require dated specifications; never substitute a guessed fixed offset.",
+  "london_code_timezone": "Europe/London",
+  "native_adapter_sha256": "f9f2ae9e654850b0bac04b475306cd09467d80f0e1b7102e2e915bf45a5e3d9e",
+  "new_broker_requests": 0,
+  "ny_indices_timezone": "America/New_York",
+  "nymex_reference_hours_status": "unverified_requires_broker_spec",
+  "nymex_reference_timezone": "America/New_York",
+  "profiles": {
+    "402b5f4f06bb2f13e18af59f": {
+      "authority": "verified_from_code",
+      "broker_maintenance_breaks": {
+        "status": "unverified_requires_broker_spec",
+        "windows": null
+      },
+      "historical_45day_broker_bar_count": null,
+      "holidays_included": false,
+      "profile": {
+        "close": "16:00:00",
+        "exchange": "NYSE",
+        "iana_timezone": "America/New_York",
+        "kind": "exchange_strategy",
+        "lunch": null,
+        "open": "09:30:00",
+        "weekdays_only": true
+      },
+      "profile_id": "402b5f4f06bb2f13e18af59f"
+    },
+    "6eccfcceeff527bb7982aad3": {
+      "authority": "verified_from_code",
+      "broker_maintenance_breaks": {
+        "status": "unverified_requires_broker_spec",
+        "windows": null
+      },
+      "historical_45day_broker_bar_count": null,
+      "holidays_included": false,
+      "profile": {
+        "close": "20:00:00",
+        "iana_timezone": "UTC",
+        "kind": "fixed_utc_strategy",
+        "open": "07:00:00",
+        "weekdays_only": true
+      },
+      "profile_id": "6eccfcceeff527bb7982aad3"
+    },
+    "8316084743ef9b651aa539bc": {
+      "authority": "verified_from_code",
+      "broker_maintenance_breaks": {
+        "status": "unverified_requires_broker_spec",
+        "windows": null
+      },
+      "historical_45day_broker_bar_count": null,
+      "holidays_included": false,
+      "profile": {
+        "close": "16:30:00",
+        "exchange": "LSE",
+        "iana_timezone": "Europe/London",
+        "kind": "exchange_strategy",
+        "lunch": null,
+        "open": "08:00:00",
+        "weekdays_only": true
+      },
+      "profile_id": "8316084743ef9b651aa539bc"
+    },
+    "a8c76aee02b5af7779f5dc71": {
+      "authority": "verified_from_code",
+      "broker_maintenance_breaks": {
+        "status": "unverified_requires_broker_spec",
+        "windows": null
+      },
+      "historical_45day_broker_bar_count": null,
+      "holidays_included": false,
+      "profile": {
+        "close": "16:00:00",
+        "exchange": "ASX",
+        "iana_timezone": "Australia/Sydney",
+        "kind": "exchange_strategy",
+        "lunch": null,
+        "open": "10:00:00",
+        "weekdays_only": true
+      },
+      "profile_id": "a8c76aee02b5af7779f5dc71"
+    },
+    "ba4521b31b082df3e5a67324": {
+      "authority": "verified_from_code",
+      "broker_maintenance_breaks": {
+        "status": "unverified_requires_broker_spec",
+        "windows": null
+      },
+      "historical_45day_broker_bar_count": null,
+      "holidays_included": false,
+      "profile": {
+        "close": "17:30:00",
+        "exchange": "Xetra",
+        "iana_timezone": "Europe/Berlin",
+        "kind": "exchange_strategy",
+        "lunch": null,
+        "open": "09:00:00",
+        "weekdays_only": true
+      },
+      "profile_id": "ba4521b31b082df3e5a67324"
+    },
+    "ce1773ca82f81fa01e9c1384": {
+      "authority": "verified_from_code",
+      "broker_maintenance_breaks": {
+        "status": "unverified_requires_broker_spec",
+        "windows": null
+      },
+      "historical_45day_broker_bar_count": null,
+      "holidays_included": false,
+      "profile": {
+        "close": "15:30:00",
+        "exchange": "TSE",
+        "iana_timezone": "Asia/Tokyo",
+        "kind": "exchange_strategy",
+        "lunch": [
+          "11:30:00",
+          "12:30:00"
+        ],
+        "open": "09:00:00",
+        "weekdays_only": true
+      },
+      "profile_id": "ce1773ca82f81fa01e9c1384"
+    },
+    "ec89e9f17011feb0ae8fb99f": {
+      "authority": "verified_from_code",
+      "broker_maintenance_breaks": {
+        "status": "unverified_requires_broker_spec",
+        "windows": null
+      },
+      "historical_45day_broker_bar_count": null,
+      "holidays_included": false,
+      "profile": {
+        "close": "24:00:00",
+        "iana_timezone": "UTC",
+        "kind": "utc_day_strategy",
+        "open": "00:00:00",
+        "weekdays_only": false
+      },
+      "profile_id": "ec89e9f17011feb0ae8fb99f"
+    }
+  },
+  "recorded_broker_contract_snapshots": [
+    {
+      "account_id": 43002148,
+      "contract_version": "0fcd427d15690e2334644e4d4dfdc4e490ee3add11b3149ea87df32de65afcfe",
+      "record": {
+        "chargeSwapAtWeekends": true,
+        "commission": 0,
+        "commissionType": 2,
+        "digits": 2,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "Weekend Maintenance 19.09.2026",
+            "endSecond": 28800,
+            "holidayDate": 20715,
+            "holidayId": 4438,
+            "isRecurring": false,
+            "name": "Weekend Maintenance 19.09.2026",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 10800
+          }
+        ],
+        "leverageId": 53383,
+        "lotSize": 100,
+        "maxExposure": 500000000,
+        "maxVolume": 2200,
+        "measurementUnits": "Bitcoin",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 1,
+        "minVolume": 1,
+        "pipPosition": 1,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 5,
+        "schedule": [
+          {
+            "endSecond": 61140,
+            "startSecond": 0
+          },
+          {
+            "endSecond": 147540,
+            "startSecond": 61260
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 147660
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 234060
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 320460
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 406860
+          },
+          {
+            "endSecond": 579540,
+            "startSecond": 493260
+          },
+          {
+            "endSecond": 604799,
+            "startSecond": 579660
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 1,
+        "swapCalculationType": 1,
+        "swapLong": -14.0,
+        "swapPeriod": 24,
+        "swapRollover3Days": 0,
+        "swapShort": 2.0,
+        "swapTime": 1260,
+        "symbolId": 10026,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 120,
+            "from": "Sunday 16:59:00",
+            "to_exclusive": "Sunday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 17:01:00"
+          },
+          {
+            "duration_seconds": 360,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "Friday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Saturday 16:59:00",
+            "to_exclusive": "Saturday 17:01:00"
+          },
+          {
+            "duration_seconds": 1,
+            "from": "Saturday 23:59:59",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "Weekend Maintenance 19.09.2026",
+            "endSecond": 28800,
+            "holidayDate": 20715,
+            "holidayId": 4438,
+            "isRecurring": false,
+            "name": "Weekend Maintenance 19.09.2026",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 10800
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 61140,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Sunday 17:01:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Monday 17:01:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Tuesday 17:01:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Wednesday 17:01:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 86040,
+            "from": "Thursday 17:01:00",
+            "to_exclusive": "Friday 16:55:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Friday 17:01:00",
+            "to_exclusive": "Saturday 16:59:00"
+          },
+          {
+            "duration_seconds": 25139,
+            "from": "Saturday 17:01:00",
+            "to_exclusive": "Saturday 23:59:59"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1260
+      },
+      "source": "/workspace/jiaoyi-checkpoint-evidence-20261031/sources/broker-43002148-symbol-details.json",
+      "source_sha256": "9b479a9becbbff07953b6eda0ef7a2d47472355aec55bb3b980c0438789d0ddd",
+      "symbol": "BTCUSD",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 43002148,
+      "contract_version": "7e634560904490206f77f6ce9a1fd67b4123728f2684ffeebe18d59428ba985d",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 2,
+        "digits": 3,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4662,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          },
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4654,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          }
+        ],
+        "leverageId": 53365,
+        "lotSize": 1000000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 100000000,
+        "measurementUnits": "NatGas",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 1,
+        "minVolume": 10000,
+        "pipPosition": 2,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 5,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 64800
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 151200
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 237600
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 324000
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 410400
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 10000,
+        "swapCalculationType": 0,
+        "swapLong": -1.4,
+        "swapPeriod": 24,
+        "swapRollover3Days": 5,
+        "swapShort": 1.26,
+        "swapTime": 1260,
+        "symbolId": 10054,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 64800,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 18:00:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4662,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          },
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4654,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 82740,
+            "from": "Sunday 18:00:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Monday 18:00:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Tuesday 18:00:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Wednesday 18:00:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 82500,
+            "from": "Thursday 18:00:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1260
+      },
+      "source": "/workspace/jiaoyi-checkpoint-evidence-20261031/sources/broker-43002148-symbol-details.json",
+      "source_sha256": "9b479a9becbbff07953b6eda0ef7a2d47472355aec55bb3b980c0438789d0ddd",
+      "symbol": "NatGas",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 46130058,
+      "contract_version": "e30a0b6b5d993741014c941e21f7715971053b237b3ede8688d72fc904ea84d1",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 1,
+        "digits": 5,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "25.12.2025 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20447,
+            "holidayId": 4004,
+            "isRecurring": false,
+            "name": "25.12.2025 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "01.01.2026 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20454,
+            "holidayId": 4005,
+            "isRecurring": false,
+            "name": "01.01.2026 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "24.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20446,
+            "holidayId": 4041,
+            "isRecurring": false,
+            "name": "24.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          },
+          {
+            "description": "31.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20453,
+            "holidayId": 4010,
+            "isRecurring": false,
+            "name": "31.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          }
+        ],
+        "leverageId": 52627,
+        "lotSize": 10000000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 1000000000,
+        "measurementUnits": "EUR",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 2,
+        "minVolume": 100000,
+        "pipPosition": 4,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 3,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 61260
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 147660
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 234060
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 320460
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 406860
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 100000,
+        "swapCalculationType": 0,
+        "swapFreeProfileId": 1,
+        "swapLong": -0.73,
+        "swapPeriod": 24,
+        "swapRollover3Days": 3,
+        "swapShort": 0.15,
+        "swapTime": 1260,
+        "symbolId": 1,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 61260,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 17:01:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "25.12.2025 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20447,
+            "holidayId": 4004,
+            "isRecurring": false,
+            "name": "25.12.2025 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "01.01.2026 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20454,
+            "holidayId": 4005,
+            "isRecurring": false,
+            "name": "01.01.2026 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "24.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20446,
+            "holidayId": 4041,
+            "isRecurring": false,
+            "name": "24.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          },
+          {
+            "description": "31.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20453,
+            "holidayId": 4010,
+            "isRecurring": false,
+            "name": "31.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 86280,
+            "from": "Sunday 17:01:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Monday 17:01:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Tuesday 17:01:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Wednesday 17:01:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 86040,
+            "from": "Thursday 17:01:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1260
+      },
+      "source": "/workspace/jiaoyi-checkpoint-evidence-20261031/sources/broker-46130058-symbol-details.json",
+      "source_sha256": "ae3beb66af2dc836f320eeb335db4e1a05c57c2166e11aa73d68433051042d00",
+      "symbol": "EURUSD",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 46130058,
+      "contract_version": "4d8ff5c91dc2811891a0f521d57977746276c04c5184d472cd19f4fccd9a47af",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 1,
+        "digits": 3,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "26.11.2026 EC 21:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4195,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 21:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 77400
+          },
+          {
+            "description": "27.11.2026 EC 23:00",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4205,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 23:00",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 82800
+          }
+        ],
+        "leverageId": 52644,
+        "lotSize": 10000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 500000,
+        "measurementUnits": "Barrel",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 2,
+        "minVolume": 100,
+        "pipPosition": 2,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 0,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 64800
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 158400
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 244800
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 331200
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 417600
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 100,
+        "swapCalculationType": 0,
+        "swapFreeProfileId": 11,
+        "swapLong": 13.63,
+        "swapPeriod": 24,
+        "swapRollover3Days": 5,
+        "swapShort": -15.0,
+        "swapTime": 1260,
+        "symbolId": 10053,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 64800,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 18:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 20:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 20:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 20:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 20:00:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "26.11.2026 EC 21:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4195,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 21:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 77400
+          },
+          {
+            "description": "27.11.2026 EC 23:00",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4205,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 23:00",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 82800
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 82740,
+            "from": "Sunday 18:00:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 75540,
+            "from": "Monday 20:00:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 75540,
+            "from": "Tuesday 20:00:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 75540,
+            "from": "Wednesday 20:00:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 75300,
+            "from": "Thursday 20:00:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1260
+      },
+      "source": "/workspace/jiaoyi-checkpoint-evidence-20261031/sources/broker-46130058-symbol-details.json",
+      "source_sha256": "ae3beb66af2dc836f320eeb335db4e1a05c57c2166e11aa73d68433051042d00",
+      "symbol": "SpotBrent",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 46130058,
+      "contract_version": "5ac88fb8aae6e8c3d3f8530f30a092ff8ae024bf3394c7ff4a7131b830cc9646",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 1,
+        "digits": 3,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4196,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          },
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4204,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          }
+        ],
+        "leverageId": 52655,
+        "lotSize": 1000000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 100000000,
+        "measurementUnits": "NatGas",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 2,
+        "minVolume": 10000,
+        "pipPosition": 2,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 1,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 64800
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 151200
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 237600
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 324000
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 410400
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 10000,
+        "swapCalculationType": 0,
+        "swapFreeProfileId": 3,
+        "swapLong": -1.4,
+        "swapPeriod": 24,
+        "swapRollover3Days": 5,
+        "swapShort": 1.26,
+        "swapTime": 1260,
+        "symbolId": 10055,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 64800,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 18:00:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4196,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          },
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4204,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 82740,
+            "from": "Sunday 18:00:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Monday 18:00:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Tuesday 18:00:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Wednesday 18:00:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 82500,
+            "from": "Thursday 18:00:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1260
+      },
+      "source": "/workspace/jiaoyi-checkpoint-evidence-20261031/sources/broker-46130058-symbol-details.json",
+      "source_sha256": "ae3beb66af2dc836f320eeb335db4e1a05c57c2166e11aa73d68433051042d00",
+      "symbol": "NatGas",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 47790949,
+      "contract_version": "49635618d5fccdd3728f77072634e84dac731c13d876aeb662c31e17b2ebac16",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 1,
+        "digits": 3,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4196,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          },
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4204,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          }
+        ],
+        "leverageId": 52622,
+        "lotSize": 10000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 500000,
+        "measurementUnits": "Barrel",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 2,
+        "minVolume": 100,
+        "pipPosition": 2,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 0,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 64800
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 151200
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 237600
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 324000
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 410400
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 100,
+        "swapCalculationType": 0,
+        "swapFreeProfileId": 11,
+        "swapLong": 3.3,
+        "swapPeriod": 24,
+        "swapRollover3Days": 5,
+        "swapShort": -4.17,
+        "swapTime": 1260,
+        "symbolId": 10054,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 64800,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 18:00:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4196,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          },
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4204,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 82740,
+            "from": "Sunday 18:00:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Monday 18:00:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Tuesday 18:00:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Wednesday 18:00:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 82500,
+            "from": "Thursday 18:00:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1260
+      },
+      "source": "/workspace/jiaoyi-checkpoint-evidence-20261031/sources/broker-47790949-symbol-details.json",
+      "source_sha256": "cb204841abb5128d6800830b82af56233edd17601294bb532ba608fbe2c085c7",
+      "symbol": "SpotCrude",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 43002148,
+      "contract_version": "aad1e4eb65290a983ca3a84fdf3e3d148477318ed89040c8b3c2153a5d371222",
+      "record": {
+        "chargeSwapAtWeekends": true,
+        "commission": 0,
+        "commissionType": 2,
+        "digits": 2,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "Weekend Maintenance 19.09.2026",
+            "endSecond": 28800,
+            "holidayDate": 20715,
+            "holidayId": 4438,
+            "isRecurring": false,
+            "name": "Weekend Maintenance 19.09.2026",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 10800
+          }
+        ],
+        "leverageId": 53383,
+        "lotSize": 100,
+        "maxExposure": 500000000,
+        "maxVolume": 2200,
+        "measurementUnits": "Bitcoin",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 1,
+        "minVolume": 1,
+        "pipPosition": 1,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 5,
+        "schedule": [
+          {
+            "endSecond": 61140,
+            "startSecond": 0
+          },
+          {
+            "endSecond": 147540,
+            "startSecond": 61260
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 147660
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 234060
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 320460
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 406860
+          },
+          {
+            "endSecond": 579540,
+            "startSecond": 493260
+          },
+          {
+            "endSecond": 604799,
+            "startSecond": 579660
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 1,
+        "swapCalculationType": 1,
+        "swapLong": -14.0,
+        "swapPeriod": 24,
+        "swapRollover3Days": 0,
+        "swapShort": 2.0,
+        "swapTime": 1320,
+        "symbolId": 10026,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 120,
+            "from": "Sunday 16:59:00",
+            "to_exclusive": "Sunday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 17:01:00"
+          },
+          {
+            "duration_seconds": 360,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "Friday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Saturday 16:59:00",
+            "to_exclusive": "Saturday 17:01:00"
+          },
+          {
+            "duration_seconds": 1,
+            "from": "Saturday 23:59:59",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "Weekend Maintenance 19.09.2026",
+            "endSecond": 28800,
+            "holidayDate": 20715,
+            "holidayId": 4438,
+            "isRecurring": false,
+            "name": "Weekend Maintenance 19.09.2026",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 10800
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 61140,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Sunday 17:01:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Monday 17:01:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Tuesday 17:01:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Wednesday 17:01:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 86040,
+            "from": "Thursday 17:01:00",
+            "to_exclusive": "Friday 16:55:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Friday 17:01:00",
+            "to_exclusive": "Saturday 16:59:00"
+          },
+          {
+            "duration_seconds": 25139,
+            "from": "Saturday 17:01:00",
+            "to_exclusive": "Saturday 23:59:59"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1320
+      },
+      "source": "/workspace/jiaoyi-live-visibility-20261102/broker-43002148-current-symbol-details.json",
+      "source_sha256": "4acf06e58147f396aea6d5784d978f9e4f2e24afa2aeb4fc4f88073efdb395a7",
+      "symbol": "BTCUSD",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 43002148,
+      "contract_version": "cf2a59b483e875caeaa5b9d6f02edd7dd8884f2900d02c5adadcb5af9e52ec29",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 2,
+        "digits": 3,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4662,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          },
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4654,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          }
+        ],
+        "leverageId": 53365,
+        "lotSize": 1000000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 100000000,
+        "measurementUnits": "NatGas",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 1,
+        "minVolume": 10000,
+        "pipPosition": 2,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 5,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 64800
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 151200
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 237600
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 324000
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 410400
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 10000,
+        "swapCalculationType": 0,
+        "swapLong": -1.4,
+        "swapPeriod": 24,
+        "swapRollover3Days": 5,
+        "swapShort": 1.26,
+        "swapTime": 1320,
+        "symbolId": 10054,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 64800,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 18:00:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4662,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          },
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4654,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 82740,
+            "from": "Sunday 18:00:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Monday 18:00:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Tuesday 18:00:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Wednesday 18:00:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 82500,
+            "from": "Thursday 18:00:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1320
+      },
+      "source": "/workspace/jiaoyi-live-visibility-20261102/broker-43002148-current-symbol-details.json",
+      "source_sha256": "4acf06e58147f396aea6d5784d978f9e4f2e24afa2aeb4fc4f88073efdb395a7",
+      "symbol": "NatGas",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 46130058,
+      "contract_version": "61f65edae95b8069e4996e415d19c9d620df1cd9fe17da0d3d48d37c72ed3e7f",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 1,
+        "digits": 5,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "25.12.2025 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20447,
+            "holidayId": 4004,
+            "isRecurring": false,
+            "name": "25.12.2025 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "01.01.2026 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20454,
+            "holidayId": 4005,
+            "isRecurring": false,
+            "name": "01.01.2026 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "24.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20446,
+            "holidayId": 4041,
+            "isRecurring": false,
+            "name": "24.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          },
+          {
+            "description": "31.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20453,
+            "holidayId": 4010,
+            "isRecurring": false,
+            "name": "31.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          }
+        ],
+        "leverageId": 52627,
+        "lotSize": 10000000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 1000000000,
+        "measurementUnits": "EUR",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 2,
+        "minVolume": 100000,
+        "pipPosition": 4,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 3,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 61260
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 147660
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 234060
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 320460
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 406860
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 100000,
+        "swapCalculationType": 0,
+        "swapFreeProfileId": 1,
+        "swapLong": -0.73,
+        "swapPeriod": 24,
+        "swapRollover3Days": 3,
+        "swapShort": 0.15,
+        "swapTime": 1320,
+        "symbolId": 1,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 61260,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 17:01:00"
+          },
+          {
+            "duration_seconds": 120,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 17:01:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "25.12.2025 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20447,
+            "holidayId": 4004,
+            "isRecurring": false,
+            "name": "25.12.2025 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "01.01.2026 - Closed",
+            "endSecond": 0,
+            "holidayDate": 20454,
+            "holidayId": 4005,
+            "isRecurring": false,
+            "name": "01.01.2026 - Closed",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 0
+          },
+          {
+            "description": "24.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20446,
+            "holidayId": 4041,
+            "isRecurring": false,
+            "name": "24.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          },
+          {
+            "description": "31.12.2025 - EC 21:55",
+            "endSecond": 86399,
+            "holidayDate": 20453,
+            "holidayId": 4010,
+            "isRecurring": false,
+            "name": "31.12.2025 - EC 21:55",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 78900
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 86280,
+            "from": "Sunday 17:01:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Monday 17:01:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Tuesday 17:01:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 86280,
+            "from": "Wednesday 17:01:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 86040,
+            "from": "Thursday 17:01:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1320
+      },
+      "source": "/workspace/jiaoyi-live-visibility-20261102/broker-46130058-current-symbol-details.json",
+      "source_sha256": "8e6f144eedbef3879c99f0cd9c2e33dc5e2e7654ec2cd195683939d1452a46e0",
+      "symbol": "EURUSD",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 46130058,
+      "contract_version": "73eaf9f7f3d0ca8247dcc2bb887e29155f3095f09a923974610f69d0ffa9c2d3",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 1,
+        "digits": 3,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "26.11.2026 EC 21:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4195,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 21:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 77400
+          },
+          {
+            "description": "27.11.2026 EC 23:00",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4205,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 23:00",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 82800
+          }
+        ],
+        "leverageId": 52644,
+        "lotSize": 10000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 500000,
+        "measurementUnits": "Barrel",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 2,
+        "minVolume": 100,
+        "pipPosition": 2,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 0,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 64800
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 158400
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 244800
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 331200
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 417600
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 100,
+        "swapCalculationType": 0,
+        "swapFreeProfileId": 11,
+        "swapLong": 13.63,
+        "swapPeriod": 24,
+        "swapRollover3Days": 5,
+        "swapShort": -15.0,
+        "swapTime": 1320,
+        "symbolId": 10053,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 64800,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 18:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 20:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 20:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 20:00:00"
+          },
+          {
+            "duration_seconds": 10860,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 20:00:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "26.11.2026 EC 21:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4195,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 21:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 77400
+          },
+          {
+            "description": "27.11.2026 EC 23:00",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4205,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 23:00",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 82800
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 82740,
+            "from": "Sunday 18:00:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 75540,
+            "from": "Monday 20:00:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 75540,
+            "from": "Tuesday 20:00:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 75540,
+            "from": "Wednesday 20:00:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 75300,
+            "from": "Thursday 20:00:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1320
+      },
+      "source": "/workspace/jiaoyi-live-visibility-20261102/broker-46130058-current-symbol-details.json",
+      "source_sha256": "8e6f144eedbef3879c99f0cd9c2e33dc5e2e7654ec2cd195683939d1452a46e0",
+      "symbol": "SpotBrent",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    },
+    {
+      "account_id": 46130058,
+      "contract_version": "3dbc60d1111e070752cf163bbec810e90408e59a55459cf29679ea450e2cd73e",
+      "record": {
+        "chargeSwapAtWeekends": false,
+        "commission": 0,
+        "commissionType": 1,
+        "digits": 3,
+        "distanceSetIn": 1,
+        "enableShortSelling": true,
+        "gslCharge": 0,
+        "gslDistance": 0,
+        "gslScheduleId": 1,
+        "guaranteedStopLoss": false,
+        "holiday": [
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4196,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          },
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4204,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          }
+        ],
+        "leverageId": 52655,
+        "lotSize": 1000000,
+        "maxExposure": 10000000000000,
+        "maxVolume": 100000000,
+        "measurementUnits": "NatGas",
+        "minCommission": 0,
+        "minCommissionAsset": "USD",
+        "minCommissionType": 2,
+        "minVolume": 10000,
+        "pipPosition": 2,
+        "pnlConversionFeeRate": 0,
+        "preciseMinCommission": 0,
+        "preciseTradingCommissionRate": 0,
+        "rolloverCommission": 0,
+        "rolloverCommission3Days": 1,
+        "schedule": [
+          {
+            "endSecond": 147540,
+            "startSecond": 64800
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 151200
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 237600
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 324000
+          },
+          {
+            "endSecond": 492900,
+            "startSecond": 410400
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "skipRolloverDays": 3,
+        "skipSWAPPeriods": 0,
+        "slDistance": 0,
+        "stepVolume": 10000,
+        "swapCalculationType": 0,
+        "swapFreeProfileId": 3,
+        "swapLong": -1.4,
+        "swapPeriod": 24,
+        "swapRollover3Days": 5,
+        "swapShort": 1.26,
+        "swapTime": 1320,
+        "symbolId": 10055,
+        "tpDistance": 0,
+        "tradingMode": 0
+      },
+      "schedule_registry": {
+        "closed_intervals": [
+          {
+            "duration_seconds": 64800,
+            "from": "Sunday 00:00:00",
+            "to_exclusive": "Sunday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Monday 16:59:00",
+            "to_exclusive": "Monday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Tuesday 16:59:00",
+            "to_exclusive": "Tuesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Wednesday 16:59:00",
+            "to_exclusive": "Wednesday 18:00:00"
+          },
+          {
+            "duration_seconds": 3660,
+            "from": "Thursday 16:59:00",
+            "to_exclusive": "Thursday 18:00:00"
+          },
+          {
+            "duration_seconds": 111900,
+            "from": "Friday 16:55:00",
+            "to_exclusive": "next Sunday 00:00:00"
+          }
+        ],
+        "holiday_rules_recorded": [
+          {
+            "description": "26.11.2026 EC 22:30",
+            "endSecond": 86399,
+            "holidayDate": 20783,
+            "holidayId": 4196,
+            "isRecurring": false,
+            "name": "26.11.2026 EC 22:30",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81000
+          },
+          {
+            "description": "27.11.2026 EC 22:45",
+            "endSecond": 86399,
+            "holidayDate": 20784,
+            "holidayId": 4204,
+            "isRecurring": false,
+            "name": "27.11.2026 EC 22:45",
+            "scheduleTimeZone": "Europe/Moscow",
+            "startSecond": 81900
+          }
+        ],
+        "iana_timezone": "America/New_York",
+        "maintenance_vs_weekend_classification": "Closed intervals are observed schedule gaps; business reason not inferred.",
+        "open_intervals": [
+          {
+            "duration_seconds": 82740,
+            "from": "Sunday 18:00:00",
+            "to_exclusive": "Monday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Monday 18:00:00",
+            "to_exclusive": "Tuesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Tuesday 18:00:00",
+            "to_exclusive": "Wednesday 16:59:00"
+          },
+          {
+            "duration_seconds": 82740,
+            "from": "Wednesday 18:00:00",
+            "to_exclusive": "Thursday 16:59:00"
+          },
+          {
+            "duration_seconds": 82500,
+            "from": "Thursday 18:00:00",
+            "to_exclusive": "Friday 16:55:00"
+          }
+        ],
+        "status": "recorded_current_snapshot_not_historical",
+        "swap_first_charge_minutes_utc": 1320
+      },
+      "source": "/workspace/jiaoyi-live-visibility-20261102/broker-46130058-current-symbol-details.json",
+      "source_sha256": "8e6f144eedbef3879c99f0cd9c2e33dc5e2e7654ec2cd195683939d1452a46e0",
+      "symbol": "NatGas",
+      "temporal_authority": "recorded current snapshot; not verified historical2023-2025 terms"
+    }
+  ],
+  "schema": "jiaoyi.calendar-registry.v1",
+  "trace": "\u211618,355"
+}

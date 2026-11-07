@@ -1,0 +1,106 @@
+{
+  "trace": "\u211618,355",
+  "artifact_sha256": {
+    "rebuild_phase1_cost_and_contract_inventory_18355.json": "3de980dfca4f531045a99d46fc435587a6ec945110c78dd7c974e8216f930da2",
+    "rebuild_phase1_session_calendars_18355.json": "c8eccc375e3a227f7a43c13e4d4d795d92079a68de951ad5f5e3623573ecb67a",
+    "rebuild_phase1_unified_replay_manifest_18355.json": "622e0d1d3ab3a718d6ecc94bd0de342089d22f66beaf73b0858e30842a6e5a29"
+  },
+  "byte_identical_independent_builds": 2,
+  "frozen_files_reconciled": 2691,
+  "matched_collection_ledger_references": 887,
+  "prior159_identity_parity": {
+    "missing": 0,
+    "prior_episodes_reconciled": 159,
+    "scope": "file identities only; no strategy path changed or rerun by inventory"
+  },
+  "focused_python_tests_passed": 4,
+  "native_calendar_DST_checks_passed": 4,
+  "clippy_warnings_denied": "passed",
+  "format": "passed",
+  "source_prices_in_protected_interval_used": 0,
+  "new_broker_requests": 0,
+  "financial_pass": false,
+  "acceptance_gates": [
+    {
+      "gate": "G1",
+      "status": "Partial",
+      "evidence": "Current inventory links source/code/calendar/contract identities and records unknown cost authority. Older unresolved references prevent a claim of complete historical provenance."
+    },
+    {
+      "gate": "G2",
+      "status": "Passed for inventory identity only",
+      "evidence": "All 159 prior frozen sources are represented. PR #190\u2019s 159-path parity remains prior evidence; this phase does not migrate or rerun the strategy kernel."
+    },
+    {
+      "gate": "G3",
+      "status": "Partial",
+      "evidence": "Deterministic offline freeze/build and verified episode loader exist. The consolidated replay/scoring/publication command is Phase 2 scope."
+    },
+    {
+      "gate": "G4",
+      "status": "Partial",
+      "evidence": "Preparation slots, protected dependencies and contiguous M30 tails are indexed. Missing data remain missing; full holding/closing-tail qualification is still required per experiment."
+    },
+    {
+      "gate": "G5",
+      "status": "Partial",
+      "evidence": "Rust strategy sessions and four DST examples checked; dated broker/reference holidays and historical maintenance terms remain unverified."
+    },
+    {
+      "gate": "G6",
+      "status": "Partial",
+      "evidence": "Actual deal/statement money and volume coverage inventoried. Complete matched entry/exit dispatch-cost reconciliation remains absent."
+    },
+    {
+      "gate": "G7",
+      "status": "Not satisfied",
+      "evidence": "No calibrated round-trip model or independent cost prediction-error validation."
+    },
+    {
+      "gate": "G8",
+      "status": "Deferred",
+      "evidence": "Shared multi-day execution kernel and research/live parity migration are later work."
+    },
+    {
+      "gate": "G9",
+      "status": "Not satisfied for promotion",
+      "evidence": "Current analysis excludes protected dependencies; legacy protected preparation means historical unseen status cannot be asserted. A future split/exposure audit is required."
+    },
+    {
+      "gate": "G10",
+      "status": "Not satisfied",
+      "evidence": "No new strategy experiment or positive quantitative qualification in Phase 1."
+    },
+    {
+      "gate": "G11",
+      "status": "Deferred",
+      "evidence": "No new shadow/canary deployment or reconciliation trial."
+    },
+    {
+      "gate": "G12",
+      "status": "Deferred",
+      "evidence": "Existing live risk rules remain in force; a rebuild lifecycle/rollback acceptance exercise was not performed."
+    }
+  ],
+  "phase1_engineering_delivery_complete": true,
+  "all12_rfc_gates_satisfied": false,
+  "independent_trade_observations_added": 0,
+  "html_layout_checks": [
+    {
+      "width": 1200,
+      "pageWidth": 1200,
+      "tables": 14,
+      "sections": 8,
+      "brokenAnchors": 0,
+      "bodyText": 208856
+    },
+    {
+      "width": 390,
+      "pageWidth": 390,
+      "tables": 14,
+      "sections": 8,
+      "brokenAnchors": 0,
+      "bodyText": 208856
+    }
+  ]
+}
