@@ -1818,3 +1818,7 @@ Post-run assessment: four US500 sources contain0 M30 bars after8 failed preparat
 New peers add only one gold macro loss; January macro2/6 wins and−0.288994R net.
 Cumulative S3 deduplicates January winner;3/6 closes,4 censored,−0.188924R.
 Native rows, scores and cumulative observations unchanged by canonical SHA256 cbe6768b90f7010ed8568b589683f95c2fcbc4c95edbae8e59d7286964a28ec8. No new collection, strategy change or qualification.
+
+[§LOG.135] №18,346 §§1–6 · 07-11-2026 22:36:00 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Frozen offline audit and matched-fill ledgers; zero new broker reads. Lower rates are assumptions.
+Retain January source failures and previous losses; no 1400-bar workaround, fabricated 14 restorations or fixed 75% result.

@@ -132,8 +132,16 @@ def bar_request(part):
 
 
 def decode_bars(result,part):
-    if result.get('period') not in (8,'M30') or result.get('symbolId',part['symbol_id'])!=part['symbol_id'] or result.get('hasMore') is not False:
-        raise BrokerError('bar_identity_or_truncation_unverified')
+    # Keep the same acceptance rules, but retain the actual rejected field.
+    # A truncation/identity failure is not evidence of a market-session gap.
+    if result.get('period') not in (8,'M30'):
+        raise BrokerError('bar_period_unverified')
+    if result.get('symbolId',part['symbol_id'])!=part['symbol_id']:
+        raise BrokerError('bar_symbol_mismatch')
+    if result.get('hasMore') is True:
+        raise BrokerError('bar_response_truncated')
+    if result.get('hasMore') is not False:
+        raise BrokerError('bar_completeness_unverified')
     a,b=instant(part['from']),instant(part['to'])
     rows=[];seen=set()
     for raw in result.get('trendbar',[]):
