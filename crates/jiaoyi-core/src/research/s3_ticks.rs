@@ -257,7 +257,47 @@ pub(super) fn study_with_gate(
     v7: bool,
     dynamic_bars: Option<&[super::seasonal::M30]>,
 ) -> Result<Study, String> {
+    study_with_policy(req, src, v7, dynamic_bars, None)
+}
+
+// Explicit local-file experiment only. Public request validation remains 24bp.
+pub(super) fn study_with_native_cost_floor(
+    req: &Request,
+    src: &Source,
+    bps: f64,
+) -> Result<Study, String> {
+    if ![24.0, 3.74, 2.0].contains(&bps)
+        || !matches!(
+            req.symbol.as_str(),
+            "SpotCrude" | "SpotBrent" | "US500" | "XAUUSD"
+        )
+        || req
+            .tick_replay
+            .as_ref()
+            .is_none_or(|o| !o.entry_rule.is_current())
+    {
+        return Err("unregistered offline native-cost experiment".into());
+    }
+    study_with_policy(req, src, true, None, Some(bps))
+}
+
+fn range_floor(r: f64, price: f64) -> bool {
+    r.is_finite() && price.is_finite() && price > 0.0 && r * 10000.0 >= 48.0 * price
+}
+
+fn study_with_policy(
+    req: &Request,
+    src: &Source,
+    v7: bool,
+    dynamic_bars: Option<&[super::seasonal::M30]>,
+    native_cost_bps: Option<f64>,
+) -> Result<Study, String> {
     validate_request(req)?;
+    let mut native_req = req.clone();
+    if let Some(bps) = native_cost_bps {
+        native_req.slippage_bps_per_side = bps;
+    }
+    let req = &native_req;
     let c = &src.contract;
     let volume = req.tick_replay.as_ref().unwrap().volume;
     if !(0..=5).contains(&c.digits)
@@ -382,6 +422,10 @@ pub(super) fn study_with_gate(
                                 } else {
                                     "cost_ge_r_session_veto"
                                 };
+                            } else if native_cost_bps.is_some() && !range_floor(r, price) {
+                                // A low-volatility mark cannot enter. It does not create
+                                // a new durable veto; the existing cost veto stays first.
+                                m.reason = "range_below_48bp";
                             } else {
                                 m.reason = "no_next_fresh_fill_quote_before_deadline";
                                 if let Some((fi, fq)) =
@@ -420,6 +464,10 @@ pub(super) fn study_with_gate(
                                         } else {
                                             "dispatch_cost_ge_r_session_veto"
                                         };
+                                    } else if native_cost_bps.is_some()
+                                        && !range_floor(r, executable(&fq.quote, side))
+                                    {
+                                        m.reason = "dispatch_range_below_48bp";
                                     } else {
                                         let p = targets::plan(&targets::Input {
                                             side,
@@ -591,6 +639,25 @@ mod tests {
         e.available_at += Duration::seconds(1);
         assert!(prepared(&req, &src, &e).is_err());
         assert!(study(&req, &src).is_err());
+    }
+
+    #[test]
+    fn offline_native_cost_changes_admission_but_retains_floor_and_public_contract() {
+        let (mut req, src, _) = oil(false);
+        req.spread = 0.55;
+        assert!(study_with_native_cost_floor(&req, &src, 24.0)
+            .unwrap()
+            .trade
+            .is_none());
+        let cheaper = study_with_native_cost_floor(&req, &src, 2.0).unwrap();
+        let entry = cheaper.trade.unwrap().entry;
+        assert!(range_floor(entry.initial_r, entry.fill));
+        assert!(range_floor(0.48, 100.0));
+        assert!(!range_floor(0.47999, 100.0));
+        assert!(!range_floor(f64::NAN, 100.0));
+        assert!(study_with_native_cost_floor(&req, &src, 1.0).is_err());
+        req.slippage_bps_per_side = 2.0;
+        assert!(validate_request(&req).is_err());
     }
 
     #[test]

@@ -1853,3 +1853,6 @@ Prior five censoring identities reconciled; four outside fixed sample retained a
 
 [§LOG.142] №18,351 §§13–16 · 08-11-2026 05:25:15 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
 Post-run assessment: fade rejected for deployment on tested sample;72h effects unresolved because the sole eligible open trade has zero future bars. Four prior May censored trades outside159 retained. Four missing-preparation US500 sources disclosed. Outcomes unchanged SHA256 de727aee9534a04daf979f04a11bc233876d9d471d787b29ee7444a2d787adc9. The prior research milestone remains8/20; no independent evidence, broker requests or live rule changes.
+
+[§LOG.143] №18,353 §§1–6 · 08-11-2026 06:29:07 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Frozen159 local sources/four native-cost arms. Correct false premise: two-stage R/BE/target independent of C at fixed entry; native production target diagnostics separate. Full cost gate then48bp decision/dispatch floor. Requested LOG131 occupied; unique journal index retained.
