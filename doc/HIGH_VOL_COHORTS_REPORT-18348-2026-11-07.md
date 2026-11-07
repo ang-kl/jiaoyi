@@ -59,3 +59,21 @@ Validation: interval reuse/failure guards, causal bar assembly, native boundary-
 Next: assess the standalone net outcomes against both controls and across the two cohorts. If entry counts remain low, report the native veto and missing-input reasons instead of weakening the gate to fill a quota. If performance differs under the four-hour deadline, treat that as an exit-policy hypothesis requiring a separately frozen, genuinely untouched evaluation. Calibrate actual execution costs before any deployment decision.
 
 [Frozen plan](../docs/high_vol_cohorts_plan_18348.json) · [Measured JSON](../docs/high_vol_cohorts_results_18348.json)
+
+## §6. Post-run assessment: what this batch establishes
+
+**This high-volatility selection did not establish an edge.** All 40 source jobs and all preparation components completed, but the election cohort admitted no S3 trade. Across the full batch, 36 of 40 episodes recorded a strict cost-gate veto; those episodes had no S3 entry. The remaining non-entry was XAUUSD on 8 November 2024. Selecting a volatile week does not guarantee that the model's causal risk distance exceeds its full cost reserve at the decision mark.
+
+| Trade | Direction | Gross R | Assumed cost R | Net R | Exit |
+| --- | --- | ---: | ---: | ---: | --- |
+| SpotCrude-2025-04-11 | short | -0.000000 | 0.793407 | -0.793407 | stop |
+| US500-2025-04-08 | short | -1.000000 | 0.682141 | -1.682141 | stop |
+| US500-2025-04-11 | long | -0.315542 | 0.401034 | -0.716575 | session_end |
+
+The oil short reached the +1R amendment trigger and subsequently exited at entry price: gross-flat but −0.793407R after assumed costs. The 8 April US500 short hit its original stop. The 11 April US500 long was still open at the observation boundary in the legacy model; the explicit window-close variant exited it at 17:30:00.201 UTC for a gross loss. These are measured path outcomes, not inferred broker fills.
+
+For the three window-close trades, mean gross return was -0.438514R and mean assumed cost was 0.625527R. **All three gross returns were non-positive.** Reducing nonnegative costs on these identical fills cannot turn them into winners. A cheaper-cost admission policy could choose different trades, but that was not this experiment and must not be inferred from it.
+
+Always-long and own-momentum controls also had negative mean net returns at 24 bp/side. Their different admissions and oil exposure windows prevent a clean causal alpha comparison; the results provide no justification for deployment. The sample is too small and event-selected to prove universal strategy failure.
+
+The next investigation should distinguish the model's opening/mark risk distance and durable cost veto from whole-week volatility, and separate actual round-trip execution costs from the stress reserve. Any altered admission or cost-aware exit rule needs its own frozen hypothesis. Do not collect additional dates merely to reach 20 closes or erase these losses. No source, model, fill, score or cumulative outcome was changed by this assessment.
