@@ -1734,3 +1734,11 @@ focused regression covers prior failure/success, changed bounds and existing rec
 Guard is not retrospectively attributed to the original frozen replay. Report JSON/MD/
 HTML now disclose lineage, ten affected rows, and distinction between arithmetic PASS
 and protocol FAIL. Report PR must rerun CI at the corrected head; no further collection.
+
+[§LOG.125] №18,325 §16 · 07-11-2026 14:29:12 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Final lineage count clarification: all28 repeated M30 components affect20 oil episodes,
+not only the10 winter episodes whose prior intervals failed. Ten summer episodes repeat
+previously successful intervals and also breach the no-repeat rule. JSON flags all20,
+with failed/successful subsets explicit; report and review block corrected before merge.
+Verified native models and score data are byte-equivalent under canonical hashing.
+No collection or model rerun; final CI and main-publication checks apply to this correction.

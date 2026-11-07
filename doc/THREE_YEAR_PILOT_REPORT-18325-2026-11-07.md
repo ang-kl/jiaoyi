@@ -19,14 +19,16 @@ Full method: [frozen execution addendum](../docs/three-year-execution-addendum-1
 
 **Protocol compliance FAILED.** The new manifest used 28 exact M30 intervals already
 spent by the earlier pilot: 14 whose prior requests completed and 14 whose prior
-requests failed. The latter affect all ten SpotCrude/SpotBrent winter-2024 episodes.
+requests failed. In total twenty oil episodes are affected: ten summer-2024 episodes
+repeat previously successful intervals, and ten winter-2024 episodes repeat failed intervals.
 The planner preserved prior US500 job failures but omitted cross-study identity checks
 for these warm-up components. Renaming a cohort did not make an old interval unspent.
 This violated the frozen no-repeat rule; this run must not be presented as clean.
 
 The earlier failures, all new receipts and all computed native outcomes are retained.
-No date, trade, cost or return was replaced, and these ten rows are explicitly marked
-`prior_failed_m30_interval_refetched` in the JSON. They remain in coverage denominators.
+No date, trade, cost or return was replaced. All twenty rows carry a protocol flag in
+the JSON: `prior_failed_m30_interval_refetched` or
+`prior_successful_m30_interval_refetched`. They remain in coverage denominators.
 Software/source-hash/arithmetic checks passed; protocol compliance and financial
 qualification did not. These are separate conclusions.
 
