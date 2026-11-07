@@ -1537,3 +1537,22 @@ admission/restart/real transport and exit freshness parity remain incomplete.
 Synthetic returns are not goal progress. Zero new qualified trades; interim50%
 and original73%/1:1.38 latest20 per strategy/account remain unverified.
 Required CI/review/merge receipt on implementation PR. Time is Money.
+
+[§LOG.116] №18,308 §§1–9 · 07-11-2026 08:21 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner requests backtest report in doc/ for another AI. Consolidated evidence
+from merged PR175; no new performance run or collection in report preparation.
+BTC/NatGas exact retained replays have zero trades: C/R4.090983 and3.950720;
+first cost veto plus six session skips each. Win rate/PF unavailable, not zero.
+Clarified synthetic oil full-session wording: 13-hour requested windows and24
+scheduled marks, but only5 quote snapshots each spanning41seconds. Trailing
+fixture results are not market wins; fixed arms censored; qualified nets null.
+Earlier separate oil momentum failure retained:20episodes,9closes,3wins,
+mean−0.725599R,PF(R)0.196433. Not a new raw rerun or production-S3 evidence.
+Added doc/BACKTEST_REPORT-18308-2026-11-07.md, compact evidence JSON and
+independent AI review prompt with sources, defects to challenge and next steps.
+Verified raw BTC/NatGas JSON equality, source hashes and reported arithmetic.
+Remaining oil preparation/account/dispatch/restart/exit-parity gaps explicit.
+No goal improvement claimed; zero newly qualified account trades. Logs checked:
+Grok latest17,703 unchanged; next serial18,309 subject to other AI updates.
+Required CI and publication receipt belong to report PR. Time is Money.
