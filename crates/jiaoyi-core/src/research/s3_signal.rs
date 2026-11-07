@@ -157,8 +157,10 @@ pub struct Study {
     pub notes: Vec<&'static str>,
 }
 
-pub fn study(req: &Request, bars: &[Bar]) -> Result<Study, String> {
-    req.validate(Utc::now())?;
+pub(super) fn validated_bar_map<'a>(
+    req: &Request,
+    bars: &'a [Bar],
+) -> Result<BTreeMap<DateTime<Utc>, &'a Bar>, String> {
     let mut map = BTreeMap::new();
     for b in bars {
         if !b.open.is_finite()
@@ -176,6 +178,12 @@ pub fn study(req: &Request, bars: &[Bar]) -> Result<Study, String> {
             return Err("duplicate M30 timestamp".into());
         }
     }
+    Ok(map)
+}
+
+pub fn study(req: &Request, bars: &[Bar]) -> Result<Study, String> {
+    req.validate(Utc::now())?;
+    let map = validated_bar_map(req, bars)?;
     let rule = req.rule();
     let m30: Vec<_> = bars
         .iter()

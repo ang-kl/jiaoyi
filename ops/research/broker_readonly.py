@@ -7,7 +7,7 @@ import os
 import time
 import urllib.request
 
-READ_TYPES = {2100: 2101, 2102: 2103, 2114: 2115, 2116: 2117, 2145: 2146}
+READ_TYPES = {2100: 2101, 2102: 2103, 2114: 2115, 2116: 2117, 2137: 2138, 2145: 2146}
 ACCOUNT = 49236051
 
 

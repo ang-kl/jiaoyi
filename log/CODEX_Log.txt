@@ -1600,3 +1600,29 @@ one existing conditional skip. Regenerated report with all 160 receipts checked.
 Scores, native episode evidence and original pre-read provenance are unchanged;
 no additional market collection or strategy adjustment. New CI required at the
 fixed PR head. Time is Money.
+
+[§LOG.119] №18,315 §§1–8 · 07-11-2026 11:30 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Owner explicitly requested execution of doc/Next_Step_Agent_Prompt_18314_2026_11_07.md:
+freeze and merge, run 80 Stage 1 jobs, publish report, print Gemini review block.
+Read all three uploaded main documents. Grok log remains at №17,703; source prompt
+reserves №18,315 for preparation and №18,316 for results. Exact source JSON/Markdown
+copied to requested docs/ paths. Added execution addendum before any pilot data read:
+eight full-universe symbols, not seven; DST-aware US500; oils use existing 07:00 UTC;
+lower costs uncalibrated; no summer/illiquidity causality or definitive edge proof.
+October nominal 45-day warm-up excludes protected 19 August–5 September 2025;
+no held data request. Frozen 80 episodes and 116 shared M30 component requests.
+Added offline Rust seasonal adapter: existing native S3 v7 dispatch/targets/exits,
+strict prior-20-session ORB-30/60 expansion, always-long and own-momentum controls.
+Production S3 retains real session end and censors at four hours; no fabricated close.
+Sensitivities reprice identical admitted fills. Native HTTP/live admission unchanged.
+Read-only demo collector uses bounded pages, pre-read source/binary/plan provenance,
+segment/episode receipts, no retries or replacements. Report keeps every denominator,
+null missing metrics and weekly paired-control sign-flip test (four-week minimum
+possible p=0.0625 cannot pass p<=0.05). No automatic Stage 2 or validation opening.
+Verified: 45 research Rust tests pass (three new seasonal checks); Python research
+suite 38 total, 37 passed, one existing conditional skip (four new seasonal checks);
+core Clippy/format and native example build pass. No pilot price data collected yet.
+Plan SHA256: 2801e7267d90875bc1bafef20f7cee3469a98fe6c89ddeb8bba2ef79f7777d4e.
+Merge/CI receipt belongs to plan PR; actual pre-read freeze records its merged commit.
+Time is Money. Prepare to win; no financial progress claimed from engineering checks.
