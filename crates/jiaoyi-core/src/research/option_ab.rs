@@ -33,7 +33,7 @@ fn net(i: &exits::Input, price: f64) -> Value {
     json!({"gross_r":gross,"net_by_bps":values})
 }
 
-fn tick_run(
+pub(super) fn tick_run(
     i: &exits::Input,
     quotes: &[s3_ticks::Snapshot],
     to: DateTime<Utc>,

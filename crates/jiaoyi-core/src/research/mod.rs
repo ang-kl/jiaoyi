@@ -35,6 +35,7 @@ pub mod production_s3;
 
 pub mod seasonal;
 
+pub mod native_target_sizing;
 pub mod offline_repaired;
 pub mod option_ab;
 pub mod peer_evaluation;
