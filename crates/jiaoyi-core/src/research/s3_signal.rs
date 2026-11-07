@@ -36,7 +36,7 @@ impl Request {
             .as_ref()
             .is_some_and(|o| o.entry_rule.class_prediction());
         if class_mode && super::class_prediction::asset_class(&self.symbol).is_none() {
-            return Err("class prediction requires an exact original-20 symbol".into());
+            return Err("class prediction requires an exact registered research symbol".into());
         }
         if !class_mode
             && !matches!(

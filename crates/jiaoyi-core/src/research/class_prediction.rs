@@ -37,20 +37,27 @@ pub const SYMBOLS: [&str; 20] = [
     "BTCUSD",
     "ETHUSD",
 ];
+pub const EXPANSION: [&str; 20] = [
+    "USDCHF", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "CHFJPY", "EURAUD", "XPTUSD",
+    "XPDUSD", "BCHUSD", "LTCUSD", "XRPUSD", "ADAUSD", "DOGEUSD", "DOTUSD", "LINKUSD", "SOLUSD",
+    "XLMUSD", "AVAXUSD",
+];
 pub fn asset_class(symbol: &str) -> Option<AssetClass> {
     Some(match symbol {
         "US500" | "NAS100" | "US30" | "GER40" | "UK100" | "JPN225" | "AUS200" => {
             AssetClass::EquityIndex
         }
-        "EURUSD" | "GBPUSD" | "USDJPY" | "AUDUSD" | "USDCAD" | "NZDUSD" => AssetClass::Fx,
-        "XAUUSD" | "XAGUSD" => AssetClass::Metal,
+        "EURUSD" | "GBPUSD" | "USDJPY" | "AUDUSD" | "USDCAD" | "NZDUSD" | "USDCHF" | "EURGBP"
+        | "EURJPY" | "GBPJPY" | "AUDJPY" | "CADJPY" | "CHFJPY" | "EURAUD" => AssetClass::Fx,
+        "XAUUSD" | "XAGUSD" | "XPTUSD" | "XPDUSD" => AssetClass::Metal,
         "NatGas" | "SpotCrude" | "SpotBrent" => AssetClass::Energy,
-        "BTCUSD" | "ETHUSD" => AssetClass::Crypto,
+        "BTCUSD" | "ETHUSD" | "BCHUSD" | "LTCUSD" | "XRPUSD" | "ADAUSD" | "DOGEUSD" | "DOTUSD"
+        | "LINKUSD" | "SOLUSD" | "XLMUSD" | "AVAXUSD" => AssetClass::Crypto,
         _ => return None,
     })
 }
 pub fn validate(req: &Request) -> Result<(), String> {
-    let class = asset_class(&req.symbol).ok_or("unsupported original-20 symbol")?;
+    let class = asset_class(&req.symbol).ok_or("unsupported research symbol")?;
     let rule = sessions::rule_for(&req.symbol, class).ok_or("session undefined")?;
     let session = sessions::session_at(&rule, req.from).ok_or("not a registered session")?;
     let opts = req.tick_replay.as_ref().ok_or("tick options missing")?;
@@ -336,8 +343,8 @@ mod tests {
         (req, src)
     }
     #[test]
-    fn all_twenty_use_local_sessions_and_preserve_mode_boundaries() {
-        for s in SYMBOLS {
+    fn all_forty_use_local_sessions_and_preserve_mode_boundaries() {
+        for s in SYMBOLS.into_iter().chain(EXPANSION) {
             let (mut req, _) = fixture();
             req.symbol = s.into();
             let rule = req.rule();
@@ -351,7 +358,7 @@ mod tests {
             }
         }
         let (mut req, _) = fixture();
-        req.symbol = "USDCHF".into();
+        req.symbol = "UNREGISTERED".into();
         assert!(req.validate(Utc::now()).is_err());
         req.symbol = "GER40".into();
         req.tick_replay.as_mut().unwrap().entry_rule = EntryRule::CurrentS3;
