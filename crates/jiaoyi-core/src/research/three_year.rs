@@ -87,6 +87,10 @@ fn peer_move(
         "SpotBrent" => "SpotCrude",
         "US500" if authorized_peers => "NAS100",
         "XAUUSD" if authorized_peers => "XAGUSD",
+        "NAS100" if authorized_peers => "US500",
+        "XAGUSD" if authorized_peers => "XAUUSD",
+        "BTCUSD" if authorized_peers => "ETHUSD",
+        "ETHUSD" if authorized_peers => "BTCUSD",
         _ => return None,
     };
     if payload.peer_symbol.as_deref() != Some(expected) {
@@ -272,10 +276,24 @@ pub(super) fn rerate(model: &mut Value) -> Result<(), String> {
     Ok(())
 }
 pub fn study(req: &Request, payload: &Payload) -> Result<Value, String> {
-    if !matches!(
+    study_scope(req, payload, false)
+}
+
+pub(super) fn study_scope(
+    req: &Request,
+    payload: &Payload,
+    peer_scope: bool,
+) -> Result<Value, String> {
+    let allowed = matches!(
         req.symbol.as_str(),
         "SpotCrude" | "SpotBrent" | "US500" | "XAUUSD"
-    ) || req.account != 49236051
+    ) || (peer_scope
+        && matches!(
+            req.symbol.as_str(),
+            "NAS100" | "XAGUSD" | "BTCUSD" | "ETHUSD"
+        ));
+    if !allowed
+        || req.account != 49236051
         || req.spread != 0.0
         || req.commission_round_trip != 0.0
         || req.slippage_bps_per_side != 24.0
@@ -551,7 +569,14 @@ mod tests {
     fn repair_authorization_requires_actual_completed_class_peer_bars() {
         let (mut req, mut p) = fixture();
         let at = req.from + Duration::hours(3);
-        for (symbol, peer) in [("US500", "NAS100"), ("XAUUSD", "XAGUSD")] {
+        for (symbol, peer) in [
+            ("US500", "NAS100"),
+            ("XAUUSD", "XAGUSD"),
+            ("NAS100", "US500"),
+            ("XAGUSD", "XAUUSD"),
+            ("BTCUSD", "ETHUSD"),
+            ("ETHUSD", "BTCUSD"),
+        ] {
             req.symbol = symbol.into();
             p.peer_symbol = Some(peer.into());
             assert!(peer_move(&p, at, &req, false).is_none());
@@ -563,6 +588,38 @@ mod tests {
             assert!(peer_move(&p, at, &req, true).is_none());
             p.peer_m30.push(last);
         }
+    }
+    #[test]
+    fn owner_peer_scope_is_offline_and_uses_native_crypto_day() {
+        let (mut req, mut payload) = fixture();
+        let at: DateTime<Utc> = "2025-05-12T00:00:00Z".parse().unwrap();
+        let shift = at - req.from;
+        req.symbol = "BTCUSD".into();
+        req.from = at;
+        req.to = at + Duration::hours(4);
+        payload.source_from = at;
+        for side in [&mut payload.quotes.bids, &mut payload.quotes.asks] {
+            for tick in side.iter_mut() {
+                tick.ts_ms += shift.num_milliseconds();
+            }
+            side.retain(|t| t.ts_ms >= at.timestamp_millis());
+        }
+        for bar in payload.m30.iter_mut().chain(payload.peer_m30.iter_mut()) {
+            bar.ts_ms += shift.num_milliseconds();
+        }
+        payload.peer_symbol = Some("ETHUSD".into());
+        assert!(study(&req, &payload).is_err());
+        let result = super::super::peer_evaluation::study(&req, &payload).unwrap();
+        assert_eq!(result["peer"]["required"], "ETHUSD");
+        assert_eq!(result["peer"]["available"], true);
+        payload.peer_symbol = None;
+        let result = super::super::peer_evaluation::study(&req, &payload).unwrap();
+        assert_eq!(
+            result["models"]["macro_180m_two_stage"]["status"],
+            "missing_required_class_peer"
+        );
+        req.from = "2025-08-20T00:00:00Z".parse().unwrap();
+        assert!(super::super::peer_evaluation::study(&req, &payload).is_err());
     }
     #[test]
     fn sealed_dates_window_and_http_scope_stay_closed() {

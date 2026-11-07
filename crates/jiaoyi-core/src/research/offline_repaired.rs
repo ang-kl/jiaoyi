@@ -9,7 +9,7 @@ use super::{
 use chrono::{DateTime, Duration};
 use serde_json::{json, Value};
 
-fn two_stage(req: &Request, payload: &Payload, source: &Value) -> Result<Value, String> {
+pub(super) fn two_stage(req: &Request, payload: &Payload, source: &Value) -> Result<Value, String> {
     let mut model = source.clone();
     let Some(trade) = model
         .get("study")

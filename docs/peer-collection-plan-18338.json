@@ -1,0 +1,4086 @@
+{
+  "trace": "\u211618,338 \u00a7\u00a71\u20136",
+  "prepared_at_sgt": "07-11-2026 20:11:41 SGT (+08:00)",
+  "by": "Codex (GPT-6), effort not exposed",
+  "dates": [
+    "2024-05-13",
+    "2024-05-14",
+    "2024-05-15",
+    "2024-05-16",
+    "2024-05-17",
+    "2025-05-12",
+    "2025-05-13",
+    "2025-05-14",
+    "2025-05-15",
+    "2025-05-16"
+  ],
+  "symbols": [
+    "US500",
+    "XAUUSD",
+    "SpotCrude",
+    "SpotBrent",
+    "NAS100",
+    "XAGUSD",
+    "BTCUSD",
+    "ETHUSD"
+  ],
+  "peer_symbols": [
+    "NAS100",
+    "XAGUSD",
+    "BTCUSD",
+    "ETHUSD"
+  ],
+  "peer_pairs": {
+    "SpotCrude": "SpotBrent",
+    "SpotBrent": "SpotCrude",
+    "US500": "NAS100",
+    "NAS100": "US500",
+    "XAUUSD": "XAGUSD",
+    "XAGUSD": "XAUUSD",
+    "BTCUSD": "ETHUSD",
+    "ETHUSD": "BTCUSD"
+  },
+  "models": [
+    "s3_two_stage",
+    "macro_180m_two_stage",
+    "production_s3_baseline",
+    "always_long_control",
+    "own_momentum_fixed_horizon"
+  ],
+  "jobs": [
+    {
+      "key": "US500-2024-05-13",
+      "symbol": "US500",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-05-13T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-05-13T13:30:00Z",
+        "to": "2024-05-13T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "XAUUSD-2024-05-13",
+      "symbol": "XAUUSD",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-05-13T07:00:00Z",
+        "to": "2024-05-13T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2024-05-13",
+      "symbol": "SpotCrude",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-05-13T13:00:00Z",
+        "to": "2024-05-13T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotBrent-2024-05-13",
+      "symbol": "SpotBrent",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-05-13T13:00:00Z",
+        "to": "2024-05-13T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "NAS100-2024-05-13",
+      "symbol": "NAS100",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2024-05-13T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2024-05-13T13:30:00Z",
+        "to": "2024-05-13T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2024-May-NAS100-0",
+        "2024-May-NAS100-1",
+        "2024-May-NAS100-2",
+        "2024-May-NAS100-3",
+        "2024-May-NAS100-4",
+        "2024-May-NAS100-5",
+        "2024-May-NAS100-6",
+        "2024-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-13T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2024-05-13",
+      "symbol": "XAGUSD",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2024-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2024-05-13T07:00:00Z",
+        "to": "2024-05-13T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2024-May-XAGUSD-0",
+        "2024-May-XAGUSD-1",
+        "2024-May-XAGUSD-2",
+        "2024-May-XAGUSD-3",
+        "2024-May-XAGUSD-4",
+        "2024-May-XAGUSD-5",
+        "2024-May-XAGUSD-6",
+        "2024-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-13T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2024-05-13",
+      "symbol": "BTCUSD",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2024-05-13T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2024-05-13T00:00:00Z",
+        "to": "2024-05-13T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-BTCUSD-0",
+        "2024-May-BTCUSD-1",
+        "2024-May-BTCUSD-2",
+        "2024-May-BTCUSD-3",
+        "2024-May-BTCUSD-4",
+        "2024-May-BTCUSD-5",
+        "2024-May-BTCUSD-6",
+        "2024-May-BTCUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-13T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2024-05-13",
+      "symbol": "ETHUSD",
+      "date": "2024-05-13",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2024-05-13T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2024-05-13T00:00:00Z",
+        "to": "2024-05-13T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-ETHUSD-0",
+        "2024-May-ETHUSD-1",
+        "2024-May-ETHUSD-2",
+        "2024-May-ETHUSD-3",
+        "2024-May-ETHUSD-4",
+        "2024-May-ETHUSD-5",
+        "2024-May-ETHUSD-6",
+        "2024-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-13T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2024-05-14",
+      "symbol": "US500",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-05-14T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-05-14T13:30:00Z",
+        "to": "2024-05-14T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "XAUUSD-2024-05-14",
+      "symbol": "XAUUSD",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-05-14T07:00:00Z",
+        "to": "2024-05-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2024-05-14",
+      "symbol": "SpotCrude",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-05-14T13:00:00Z",
+        "to": "2024-05-14T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotBrent-2024-05-14",
+      "symbol": "SpotBrent",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-05-14T13:00:00Z",
+        "to": "2024-05-14T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "NAS100-2024-05-14",
+      "symbol": "NAS100",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2024-05-14T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2024-05-14T13:30:00Z",
+        "to": "2024-05-14T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2024-May-NAS100-0",
+        "2024-May-NAS100-1",
+        "2024-May-NAS100-2",
+        "2024-May-NAS100-3",
+        "2024-May-NAS100-4",
+        "2024-May-NAS100-5",
+        "2024-May-NAS100-6",
+        "2024-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-14T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2024-05-14",
+      "symbol": "XAGUSD",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2024-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2024-05-14T07:00:00Z",
+        "to": "2024-05-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2024-May-XAGUSD-0",
+        "2024-May-XAGUSD-1",
+        "2024-May-XAGUSD-2",
+        "2024-May-XAGUSD-3",
+        "2024-May-XAGUSD-4",
+        "2024-May-XAGUSD-5",
+        "2024-May-XAGUSD-6",
+        "2024-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-14T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2024-05-14",
+      "symbol": "BTCUSD",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2024-05-14T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2024-05-14T00:00:00Z",
+        "to": "2024-05-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-BTCUSD-0",
+        "2024-May-BTCUSD-1",
+        "2024-May-BTCUSD-2",
+        "2024-May-BTCUSD-3",
+        "2024-May-BTCUSD-4",
+        "2024-May-BTCUSD-5",
+        "2024-May-BTCUSD-6",
+        "2024-May-BTCUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-14T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2024-05-14",
+      "symbol": "ETHUSD",
+      "date": "2024-05-14",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2024-05-14T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2024-05-14T00:00:00Z",
+        "to": "2024-05-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-ETHUSD-0",
+        "2024-May-ETHUSD-1",
+        "2024-May-ETHUSD-2",
+        "2024-May-ETHUSD-3",
+        "2024-May-ETHUSD-4",
+        "2024-May-ETHUSD-5",
+        "2024-May-ETHUSD-6",
+        "2024-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-14T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2024-05-15",
+      "symbol": "US500",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-05-15T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-05-15T13:30:00Z",
+        "to": "2024-05-15T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "XAUUSD-2024-05-15",
+      "symbol": "XAUUSD",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-05-15T07:00:00Z",
+        "to": "2024-05-15T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2024-05-15",
+      "symbol": "SpotCrude",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-05-15T13:00:00Z",
+        "to": "2024-05-15T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotBrent-2024-05-15",
+      "symbol": "SpotBrent",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-05-15T13:00:00Z",
+        "to": "2024-05-15T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "NAS100-2024-05-15",
+      "symbol": "NAS100",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2024-05-15T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2024-05-15T13:30:00Z",
+        "to": "2024-05-15T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2024-May-NAS100-0",
+        "2024-May-NAS100-1",
+        "2024-May-NAS100-2",
+        "2024-May-NAS100-3",
+        "2024-May-NAS100-4",
+        "2024-May-NAS100-5",
+        "2024-May-NAS100-6",
+        "2024-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-15T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2024-05-15",
+      "symbol": "XAGUSD",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2024-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2024-05-15T07:00:00Z",
+        "to": "2024-05-15T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2024-May-XAGUSD-0",
+        "2024-May-XAGUSD-1",
+        "2024-May-XAGUSD-2",
+        "2024-May-XAGUSD-3",
+        "2024-May-XAGUSD-4",
+        "2024-May-XAGUSD-5",
+        "2024-May-XAGUSD-6",
+        "2024-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-15T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2024-05-15",
+      "symbol": "BTCUSD",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2024-05-15T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2024-05-15T00:00:00Z",
+        "to": "2024-05-15T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-BTCUSD-0",
+        "2024-May-BTCUSD-1",
+        "2024-May-BTCUSD-2",
+        "2024-May-BTCUSD-3",
+        "2024-May-BTCUSD-4",
+        "2024-May-BTCUSD-5",
+        "2024-May-BTCUSD-6",
+        "2024-May-BTCUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-15T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2024-05-15",
+      "symbol": "ETHUSD",
+      "date": "2024-05-15",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2024-05-15T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2024-05-15T00:00:00Z",
+        "to": "2024-05-15T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-ETHUSD-0",
+        "2024-May-ETHUSD-1",
+        "2024-May-ETHUSD-2",
+        "2024-May-ETHUSD-3",
+        "2024-May-ETHUSD-4",
+        "2024-May-ETHUSD-5",
+        "2024-May-ETHUSD-6",
+        "2024-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-15T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2024-05-16",
+      "symbol": "US500",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-05-16T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-05-16T13:30:00Z",
+        "to": "2024-05-16T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "XAUUSD-2024-05-16",
+      "symbol": "XAUUSD",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-05-16T07:00:00Z",
+        "to": "2024-05-16T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2024-05-16",
+      "symbol": "SpotCrude",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-05-16T13:00:00Z",
+        "to": "2024-05-16T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotBrent-2024-05-16",
+      "symbol": "SpotBrent",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-05-16T13:00:00Z",
+        "to": "2024-05-16T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "NAS100-2024-05-16",
+      "symbol": "NAS100",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2024-05-16T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2024-05-16T13:30:00Z",
+        "to": "2024-05-16T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2024-May-NAS100-0",
+        "2024-May-NAS100-1",
+        "2024-May-NAS100-2",
+        "2024-May-NAS100-3",
+        "2024-May-NAS100-4",
+        "2024-May-NAS100-5",
+        "2024-May-NAS100-6",
+        "2024-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-16T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2024-05-16",
+      "symbol": "XAGUSD",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2024-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2024-05-16T07:00:00Z",
+        "to": "2024-05-16T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2024-May-XAGUSD-0",
+        "2024-May-XAGUSD-1",
+        "2024-May-XAGUSD-2",
+        "2024-May-XAGUSD-3",
+        "2024-May-XAGUSD-4",
+        "2024-May-XAGUSD-5",
+        "2024-May-XAGUSD-6",
+        "2024-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-16T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2024-05-16",
+      "symbol": "BTCUSD",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2024-05-16T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2024-05-16T00:00:00Z",
+        "to": "2024-05-16T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-BTCUSD-0",
+        "2024-May-BTCUSD-1",
+        "2024-May-BTCUSD-2",
+        "2024-May-BTCUSD-3",
+        "2024-May-BTCUSD-4",
+        "2024-May-BTCUSD-5",
+        "2024-May-BTCUSD-6",
+        "2024-May-BTCUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-16T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2024-05-16",
+      "symbol": "ETHUSD",
+      "date": "2024-05-16",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2024-05-16T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2024-05-16T00:00:00Z",
+        "to": "2024-05-16T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-ETHUSD-0",
+        "2024-May-ETHUSD-1",
+        "2024-May-ETHUSD-2",
+        "2024-May-ETHUSD-3",
+        "2024-May-ETHUSD-4",
+        "2024-May-ETHUSD-5",
+        "2024-May-ETHUSD-6",
+        "2024-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-16T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2024-05-17",
+      "symbol": "US500",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-05-17T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-05-17T13:30:00Z",
+        "to": "2024-05-17T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "XAUUSD-2024-05-17",
+      "symbol": "XAUUSD",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-05-17T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-05-17T07:00:00Z",
+        "to": "2024-05-17T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2024-05-17",
+      "symbol": "SpotCrude",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-05-17T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-05-17T13:00:00Z",
+        "to": "2024-05-17T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotBrent-2024-05-17",
+      "symbol": "SpotBrent",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-05-17T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-05-17T13:00:00Z",
+        "to": "2024-05-17T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "NAS100-2024-05-17",
+      "symbol": "NAS100",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2024-05-17T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2024-05-17T13:30:00Z",
+        "to": "2024-05-17T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2024-May-NAS100-0",
+        "2024-May-NAS100-1",
+        "2024-May-NAS100-2",
+        "2024-May-NAS100-3",
+        "2024-May-NAS100-4",
+        "2024-May-NAS100-5",
+        "2024-May-NAS100-6",
+        "2024-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-17T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2024-05-17",
+      "symbol": "XAGUSD",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2024-05-17T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2024-05-17T07:00:00Z",
+        "to": "2024-05-17T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2024-May-XAGUSD-0",
+        "2024-May-XAGUSD-1",
+        "2024-May-XAGUSD-2",
+        "2024-May-XAGUSD-3",
+        "2024-May-XAGUSD-4",
+        "2024-May-XAGUSD-5",
+        "2024-May-XAGUSD-6",
+        "2024-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-17T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2024-05-17",
+      "symbol": "BTCUSD",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2024-05-17T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2024-05-17T00:00:00Z",
+        "to": "2024-05-17T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-BTCUSD-0",
+        "2024-May-BTCUSD-1",
+        "2024-May-BTCUSD-2",
+        "2024-May-BTCUSD-3",
+        "2024-May-BTCUSD-4",
+        "2024-May-BTCUSD-5",
+        "2024-May-BTCUSD-6",
+        "2024-May-BTCUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-17T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2024-05-17",
+      "symbol": "ETHUSD",
+      "date": "2024-05-17",
+      "cohort": "2024-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2024-05-17T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2024-05-17T00:00:00Z",
+        "to": "2024-05-17T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2024-May-ETHUSD-0",
+        "2024-May-ETHUSD-1",
+        "2024-May-ETHUSD-2",
+        "2024-May-ETHUSD-3",
+        "2024-May-ETHUSD-4",
+        "2024-May-ETHUSD-5",
+        "2024-May-ETHUSD-6",
+        "2024-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2024-05-17T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2025-05-12",
+      "symbol": "US500",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-05-12T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-05-12T13:30:00Z",
+        "to": "2025-05-12T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-US500-0",
+        "2025_Q2_Spring-US500-1",
+        "2025_Q2_Spring-US500-2",
+        "2025_Q2_Spring-US500-3",
+        "2025_Q2_Spring-US500-4",
+        "2025_Q2_Spring-US500-5",
+        "2025_Q2_Spring-US500-6",
+        "2025_Q2_Spring-US500-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-12.json",
+        "sha256": "b3ef3ee6e5564c6228f0b8148dcbe33501e4b16bb8fca1408cc41e7432f8148c"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-12T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAUUSD-2025-05-12",
+      "symbol": "XAUUSD",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-05-12T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-05-12T07:00:00Z",
+        "to": "2025-05-12T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2025-05-12",
+      "symbol": "SpotCrude",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-05-12T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-05-12T13:00:00Z",
+        "to": "2025-05-12T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotCrude-0",
+        "2025_Q2_Spring-SpotCrude-1",
+        "2025_Q2_Spring-SpotCrude-2",
+        "2025_Q2_Spring-SpotCrude-3",
+        "2025_Q2_Spring-SpotCrude-4",
+        "2025_Q2_Spring-SpotCrude-5",
+        "2025_Q2_Spring-SpotCrude-6",
+        "2025_Q2_Spring-SpotCrude-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-12.json",
+        "sha256": "f8f0ed0f6faa7e91efaff837e8e3ed22c7ab6eb686bbc01a79ec93acad092a3f"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-12T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "SpotBrent-2025-05-12",
+      "symbol": "SpotBrent",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-05-12T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-05-12T13:00:00Z",
+        "to": "2025-05-12T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotBrent-0",
+        "2025_Q2_Spring-SpotBrent-1",
+        "2025_Q2_Spring-SpotBrent-2",
+        "2025_Q2_Spring-SpotBrent-3",
+        "2025_Q2_Spring-SpotBrent-4",
+        "2025_Q2_Spring-SpotBrent-5",
+        "2025_Q2_Spring-SpotBrent-6",
+        "2025_Q2_Spring-SpotBrent-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-12.json",
+        "sha256": "f3849f3cae519caac67d14f34246dd02aba4c3d704cd27ccbae327c4c2fae503"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-12T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "NAS100-2025-05-12",
+      "symbol": "NAS100",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2025-05-12T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2025-05-12T13:30:00Z",
+        "to": "2025-05-12T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-May-NAS100-0",
+        "2025-May-NAS100-1",
+        "2025-May-NAS100-2",
+        "2025-May-NAS100-3",
+        "2025-May-NAS100-4",
+        "2025-May-NAS100-5",
+        "2025-May-NAS100-6",
+        "2025-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-12T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2025-05-12",
+      "symbol": "XAGUSD",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2025-05-12T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2025-05-12T07:00:00Z",
+        "to": "2025-05-12T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2025-May-XAGUSD-0",
+        "2025-May-XAGUSD-1",
+        "2025-May-XAGUSD-2",
+        "2025-May-XAGUSD-3",
+        "2025-May-XAGUSD-4",
+        "2025-May-XAGUSD-5",
+        "2025-May-XAGUSD-6",
+        "2025-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-12T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2025-05-12",
+      "symbol": "BTCUSD",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2025-05-12T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-05-12T00:00:00Z",
+        "to": "2025-05-12T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-BTCUSD-0",
+        "2025_Q2_Spring-BTCUSD-1",
+        "2025_Q2_Spring-BTCUSD-2",
+        "2025_Q2_Spring-BTCUSD-3",
+        "2025_Q2_Spring-BTCUSD-4",
+        "2025_Q2_Spring-BTCUSD-5",
+        "2025_Q2_Spring-BTCUSD-6",
+        "2025_Q2_Spring-BTCUSD-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-12.json",
+        "sha256": "44d2bc43268ae8f9a3a12275248d04a7109183b50b5f6215da6340643b0104eb"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-12T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2025-05-12",
+      "symbol": "ETHUSD",
+      "date": "2025-05-12",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2025-05-12T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2025-05-12T00:00:00Z",
+        "to": "2025-05-12T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025-May-ETHUSD-0",
+        "2025-May-ETHUSD-1",
+        "2025-May-ETHUSD-2",
+        "2025-May-ETHUSD-3",
+        "2025-May-ETHUSD-4",
+        "2025-May-ETHUSD-5",
+        "2025-May-ETHUSD-6",
+        "2025-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-12T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2025-05-13",
+      "symbol": "US500",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-05-13T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-05-13T13:30:00Z",
+        "to": "2025-05-13T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-US500-0",
+        "2025_Q2_Spring-US500-1",
+        "2025_Q2_Spring-US500-2",
+        "2025_Q2_Spring-US500-3",
+        "2025_Q2_Spring-US500-4",
+        "2025_Q2_Spring-US500-5",
+        "2025_Q2_Spring-US500-6",
+        "2025_Q2_Spring-US500-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-13.json",
+        "sha256": "0b300f8e655a29aa61286d09e951cecc2db6032c4fc0375716d558b2bc956715"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-13T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAUUSD-2025-05-13",
+      "symbol": "XAUUSD",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-05-13T07:00:00Z",
+        "to": "2025-05-13T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2025-05-13",
+      "symbol": "SpotCrude",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-05-13T13:00:00Z",
+        "to": "2025-05-13T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotCrude-0",
+        "2025_Q2_Spring-SpotCrude-1",
+        "2025_Q2_Spring-SpotCrude-2",
+        "2025_Q2_Spring-SpotCrude-3",
+        "2025_Q2_Spring-SpotCrude-4",
+        "2025_Q2_Spring-SpotCrude-5",
+        "2025_Q2_Spring-SpotCrude-6",
+        "2025_Q2_Spring-SpotCrude-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-13.json",
+        "sha256": "0f69baa8d3e90184969ae465a5fbec5cde5fc206d105260541bb60e1693a0d92"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-13T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "SpotBrent-2025-05-13",
+      "symbol": "SpotBrent",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-05-13T13:00:00Z",
+        "to": "2025-05-13T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotBrent-0",
+        "2025_Q2_Spring-SpotBrent-1",
+        "2025_Q2_Spring-SpotBrent-2",
+        "2025_Q2_Spring-SpotBrent-3",
+        "2025_Q2_Spring-SpotBrent-4",
+        "2025_Q2_Spring-SpotBrent-5",
+        "2025_Q2_Spring-SpotBrent-6",
+        "2025_Q2_Spring-SpotBrent-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-13.json",
+        "sha256": "51940641d5ef7c9139113ab6f0bf6c613fbc967dc2af30549a9817137af1bbc4"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-13T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "NAS100-2025-05-13",
+      "symbol": "NAS100",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2025-05-13T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2025-05-13T13:30:00Z",
+        "to": "2025-05-13T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-May-NAS100-0",
+        "2025-May-NAS100-1",
+        "2025-May-NAS100-2",
+        "2025-May-NAS100-3",
+        "2025-May-NAS100-4",
+        "2025-May-NAS100-5",
+        "2025-May-NAS100-6",
+        "2025-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-13T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2025-05-13",
+      "symbol": "XAGUSD",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2025-05-13T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2025-05-13T07:00:00Z",
+        "to": "2025-05-13T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2025-May-XAGUSD-0",
+        "2025-May-XAGUSD-1",
+        "2025-May-XAGUSD-2",
+        "2025-May-XAGUSD-3",
+        "2025-May-XAGUSD-4",
+        "2025-May-XAGUSD-5",
+        "2025-May-XAGUSD-6",
+        "2025-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-13T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2025-05-13",
+      "symbol": "BTCUSD",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2025-05-13T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-05-13T00:00:00Z",
+        "to": "2025-05-13T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-BTCUSD-0",
+        "2025_Q2_Spring-BTCUSD-1",
+        "2025_Q2_Spring-BTCUSD-2",
+        "2025_Q2_Spring-BTCUSD-3",
+        "2025_Q2_Spring-BTCUSD-4",
+        "2025_Q2_Spring-BTCUSD-5",
+        "2025_Q2_Spring-BTCUSD-6",
+        "2025_Q2_Spring-BTCUSD-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-13.json",
+        "sha256": "1178b78fe90ca384a598d405885444f39e18f238fcc88f1e3a6ff19356c98951"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-13T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2025-05-13",
+      "symbol": "ETHUSD",
+      "date": "2025-05-13",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2025-05-13T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2025-05-13T00:00:00Z",
+        "to": "2025-05-13T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025-May-ETHUSD-0",
+        "2025-May-ETHUSD-1",
+        "2025-May-ETHUSD-2",
+        "2025-May-ETHUSD-3",
+        "2025-May-ETHUSD-4",
+        "2025-May-ETHUSD-5",
+        "2025-May-ETHUSD-6",
+        "2025-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-13T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2025-05-14",
+      "symbol": "US500",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-05-14T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-05-14T13:30:00Z",
+        "to": "2025-05-14T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-US500-0",
+        "2025_Q2_Spring-US500-1",
+        "2025_Q2_Spring-US500-2",
+        "2025_Q2_Spring-US500-3",
+        "2025_Q2_Spring-US500-4",
+        "2025_Q2_Spring-US500-5",
+        "2025_Q2_Spring-US500-6",
+        "2025_Q2_Spring-US500-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-14.json",
+        "sha256": "94b7fd397a3517d7d8238de16a2911022ea6991e0ff7476f777d13377220263f"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-14T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAUUSD-2025-05-14",
+      "symbol": "XAUUSD",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-05-14T07:00:00Z",
+        "to": "2025-05-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2025-05-14",
+      "symbol": "SpotCrude",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-05-14T13:00:00Z",
+        "to": "2025-05-14T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotCrude-0",
+        "2025_Q2_Spring-SpotCrude-1",
+        "2025_Q2_Spring-SpotCrude-2",
+        "2025_Q2_Spring-SpotCrude-3",
+        "2025_Q2_Spring-SpotCrude-4",
+        "2025_Q2_Spring-SpotCrude-5",
+        "2025_Q2_Spring-SpotCrude-6",
+        "2025_Q2_Spring-SpotCrude-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-14.json",
+        "sha256": "60aba46f1fe94cf8935ea514b8d807ea0c5051b4cfd1b39b73024178b4271227"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-14T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "SpotBrent-2025-05-14",
+      "symbol": "SpotBrent",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-05-14T13:00:00Z",
+        "to": "2025-05-14T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotBrent-0",
+        "2025_Q2_Spring-SpotBrent-1",
+        "2025_Q2_Spring-SpotBrent-2",
+        "2025_Q2_Spring-SpotBrent-3",
+        "2025_Q2_Spring-SpotBrent-4",
+        "2025_Q2_Spring-SpotBrent-5",
+        "2025_Q2_Spring-SpotBrent-6",
+        "2025_Q2_Spring-SpotBrent-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-14.json",
+        "sha256": "4e4b7af1e2d5691acbf9c286bac496b2809ebdb9ad0c8548518bca7c54e078b5"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-14T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "NAS100-2025-05-14",
+      "symbol": "NAS100",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2025-05-14T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2025-05-14T13:30:00Z",
+        "to": "2025-05-14T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-May-NAS100-0",
+        "2025-May-NAS100-1",
+        "2025-May-NAS100-2",
+        "2025-May-NAS100-3",
+        "2025-May-NAS100-4",
+        "2025-May-NAS100-5",
+        "2025-May-NAS100-6",
+        "2025-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-14T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2025-05-14",
+      "symbol": "XAGUSD",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2025-05-14T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2025-05-14T07:00:00Z",
+        "to": "2025-05-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2025-May-XAGUSD-0",
+        "2025-May-XAGUSD-1",
+        "2025-May-XAGUSD-2",
+        "2025-May-XAGUSD-3",
+        "2025-May-XAGUSD-4",
+        "2025-May-XAGUSD-5",
+        "2025-May-XAGUSD-6",
+        "2025-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-14T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2025-05-14",
+      "symbol": "BTCUSD",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2025-05-14T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-05-14T00:00:00Z",
+        "to": "2025-05-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-BTCUSD-0",
+        "2025_Q2_Spring-BTCUSD-1",
+        "2025_Q2_Spring-BTCUSD-2",
+        "2025_Q2_Spring-BTCUSD-3",
+        "2025_Q2_Spring-BTCUSD-4",
+        "2025_Q2_Spring-BTCUSD-5",
+        "2025_Q2_Spring-BTCUSD-6",
+        "2025_Q2_Spring-BTCUSD-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-14.json",
+        "sha256": "9eafa9ddb7465af7223891cd9d97a6c085f7c2d4ff73ef190d86047d11c829eb"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-14T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2025-05-14",
+      "symbol": "ETHUSD",
+      "date": "2025-05-14",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2025-05-14T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2025-05-14T00:00:00Z",
+        "to": "2025-05-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025-May-ETHUSD-0",
+        "2025-May-ETHUSD-1",
+        "2025-May-ETHUSD-2",
+        "2025-May-ETHUSD-3",
+        "2025-May-ETHUSD-4",
+        "2025-May-ETHUSD-5",
+        "2025-May-ETHUSD-6",
+        "2025-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-14T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2025-05-15",
+      "symbol": "US500",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-05-15T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-05-15T13:30:00Z",
+        "to": "2025-05-15T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-US500-0",
+        "2025_Q2_Spring-US500-1",
+        "2025_Q2_Spring-US500-2",
+        "2025_Q2_Spring-US500-3",
+        "2025_Q2_Spring-US500-4",
+        "2025_Q2_Spring-US500-5",
+        "2025_Q2_Spring-US500-6",
+        "2025_Q2_Spring-US500-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-15.json",
+        "sha256": "473ac847610d75a180830341a3ee7bbb8dd6647fc25d740047501ef654ac9993"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-15T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAUUSD-2025-05-15",
+      "symbol": "XAUUSD",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-05-15T07:00:00Z",
+        "to": "2025-05-15T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2025-05-15",
+      "symbol": "SpotCrude",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-05-15T13:00:00Z",
+        "to": "2025-05-15T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotCrude-0",
+        "2025_Q2_Spring-SpotCrude-1",
+        "2025_Q2_Spring-SpotCrude-2",
+        "2025_Q2_Spring-SpotCrude-3",
+        "2025_Q2_Spring-SpotCrude-4",
+        "2025_Q2_Spring-SpotCrude-5",
+        "2025_Q2_Spring-SpotCrude-6",
+        "2025_Q2_Spring-SpotCrude-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-15.json",
+        "sha256": "098f1261d1e6aa8d5c7ee6d965edc3a064021da5c4880344ed483c01a6c9c6cf"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-15T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "SpotBrent-2025-05-15",
+      "symbol": "SpotBrent",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-05-15T13:00:00Z",
+        "to": "2025-05-15T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotBrent-0",
+        "2025_Q2_Spring-SpotBrent-1",
+        "2025_Q2_Spring-SpotBrent-2",
+        "2025_Q2_Spring-SpotBrent-3",
+        "2025_Q2_Spring-SpotBrent-4",
+        "2025_Q2_Spring-SpotBrent-5",
+        "2025_Q2_Spring-SpotBrent-6",
+        "2025_Q2_Spring-SpotBrent-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-15.json",
+        "sha256": "733c776829bf9610767fc0b20897692cffca484a4e6272c50440ae2a0d5e585a"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-15T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "NAS100-2025-05-15",
+      "symbol": "NAS100",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2025-05-15T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2025-05-15T13:30:00Z",
+        "to": "2025-05-15T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-May-NAS100-0",
+        "2025-May-NAS100-1",
+        "2025-May-NAS100-2",
+        "2025-May-NAS100-3",
+        "2025-May-NAS100-4",
+        "2025-May-NAS100-5",
+        "2025-May-NAS100-6",
+        "2025-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-15T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2025-05-15",
+      "symbol": "XAGUSD",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2025-05-15T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2025-05-15T07:00:00Z",
+        "to": "2025-05-15T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2025-May-XAGUSD-0",
+        "2025-May-XAGUSD-1",
+        "2025-May-XAGUSD-2",
+        "2025-May-XAGUSD-3",
+        "2025-May-XAGUSD-4",
+        "2025-May-XAGUSD-5",
+        "2025-May-XAGUSD-6",
+        "2025-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-15T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2025-05-15",
+      "symbol": "BTCUSD",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2025-05-15T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-05-15T00:00:00Z",
+        "to": "2025-05-15T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-BTCUSD-0",
+        "2025_Q2_Spring-BTCUSD-1",
+        "2025_Q2_Spring-BTCUSD-2",
+        "2025_Q2_Spring-BTCUSD-3",
+        "2025_Q2_Spring-BTCUSD-4",
+        "2025_Q2_Spring-BTCUSD-5",
+        "2025_Q2_Spring-BTCUSD-6",
+        "2025_Q2_Spring-BTCUSD-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-15.json",
+        "sha256": "d542dc0dd92e4cae2d2a8eaf828f40634746f4d378688870473e8565a14f4100"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-15T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2025-05-15",
+      "symbol": "ETHUSD",
+      "date": "2025-05-15",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2025-05-15T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2025-05-15T00:00:00Z",
+        "to": "2025-05-15T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025-May-ETHUSD-0",
+        "2025-May-ETHUSD-1",
+        "2025-May-ETHUSD-2",
+        "2025-May-ETHUSD-3",
+        "2025-May-ETHUSD-4",
+        "2025-May-ETHUSD-5",
+        "2025-May-ETHUSD-6",
+        "2025-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-15T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "US500-2025-05-16",
+      "symbol": "US500",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-05-16T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-05-16T13:30:00Z",
+        "to": "2025-05-16T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-US500-0",
+        "2025_Q2_Spring-US500-1",
+        "2025_Q2_Spring-US500-2",
+        "2025_Q2_Spring-US500-3",
+        "2025_Q2_Spring-US500-4",
+        "2025_Q2_Spring-US500-5",
+        "2025_Q2_Spring-US500-6",
+        "2025_Q2_Spring-US500-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-16.json",
+        "sha256": "f3f8d6b63ee068851e2e9a33629947dc99bedfb6fe80c3abe18ebc66664839ed"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-16T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAUUSD-2025-05-16",
+      "symbol": "XAUUSD",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-05-16T07:00:00Z",
+        "to": "2025-05-16T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [],
+      "mode": "missing",
+      "previously_observed": false,
+      "reason": "primary_source_absent_outside_40_peer_collection_slots"
+    },
+    {
+      "key": "SpotCrude-2025-05-16",
+      "symbol": "SpotCrude",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-05-16T13:00:00Z",
+        "to": "2025-05-16T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotCrude-0",
+        "2025_Q2_Spring-SpotCrude-1",
+        "2025_Q2_Spring-SpotCrude-2",
+        "2025_Q2_Spring-SpotCrude-3",
+        "2025_Q2_Spring-SpotCrude-4",
+        "2025_Q2_Spring-SpotCrude-5",
+        "2025_Q2_Spring-SpotCrude-6",
+        "2025_Q2_Spring-SpotCrude-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-16.json",
+        "sha256": "a0888de0cb3e138bfe6bee33548371505f4c7165fc8be0223647da1f65224f62"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-16T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "SpotBrent-2025-05-16",
+      "symbol": "SpotBrent",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-05-16T13:00:00Z",
+        "to": "2025-05-16T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-SpotBrent-0",
+        "2025_Q2_Spring-SpotBrent-1",
+        "2025_Q2_Spring-SpotBrent-2",
+        "2025_Q2_Spring-SpotBrent-3",
+        "2025_Q2_Spring-SpotBrent-4",
+        "2025_Q2_Spring-SpotBrent-5",
+        "2025_Q2_Spring-SpotBrent-6",
+        "2025_Q2_Spring-SpotBrent-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-16.json",
+        "sha256": "5d3b49189d634bb3fdefeb5d92c5b41ee63b0c6a7e4d3b51c2e64f22d5d3d7a7"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-16T11:00:00Z",
+      "partial_observation": true
+    },
+    {
+      "key": "NAS100-2025-05-16",
+      "symbol": "NAS100",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "equity_index",
+      "symbol_id": 10014,
+      "source_from": "2025-05-16T13:30:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2025-05-16T13:30:00Z",
+        "to": "2025-05-16T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-May-NAS100-0",
+        "2025-May-NAS100-1",
+        "2025-May-NAS100-2",
+        "2025-May-NAS100-3",
+        "2025-May-NAS100-4",
+        "2025-May-NAS100-5",
+        "2025-May-NAS100-6",
+        "2025-May-NAS100-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-16T17:30:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "XAGUSD-2025-05-16",
+      "symbol": "XAGUSD",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "metal",
+      "symbol_id": 42,
+      "source_from": "2025-05-16T07:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2025-05-16T07:00:00Z",
+        "to": "2025-05-16T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "bar_segments": [
+        "2025-May-XAGUSD-0",
+        "2025-May-XAGUSD-1",
+        "2025-May-XAGUSD-2",
+        "2025-May-XAGUSD-3",
+        "2025-May-XAGUSD-4",
+        "2025-May-XAGUSD-5",
+        "2025-May-XAGUSD-6",
+        "2025-May-XAGUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-16T11:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "BTCUSD-2025-05-16",
+      "symbol": "BTCUSD",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10028,
+      "source_from": "2025-05-16T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-05-16T00:00:00Z",
+        "to": "2025-05-16T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025_Q2_Spring-BTCUSD-0",
+        "2025_Q2_Spring-BTCUSD-1",
+        "2025_Q2_Spring-BTCUSD-2",
+        "2025_Q2_Spring-BTCUSD-3",
+        "2025_Q2_Spring-BTCUSD-4",
+        "2025_Q2_Spring-BTCUSD-5",
+        "2025_Q2_Spring-BTCUSD-6",
+        "2025_Q2_Spring-BTCUSD-7"
+      ],
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-16.json",
+        "sha256": "9444e865da337134c72f521a3f14fa0c54178309ba3a4edd99ded940d444057c"
+      },
+      "previously_observed": true,
+      "source_to": "2025-05-16T04:00:00Z",
+      "partial_observation": false
+    },
+    {
+      "key": "ETHUSD-2025-05-16",
+      "symbol": "ETHUSD",
+      "date": "2025-05-16",
+      "cohort": "2025-May",
+      "asset_class": "crypto",
+      "symbol_id": 10029,
+      "source_from": "2025-05-16T00:00:00Z",
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2025-05-16T00:00:00Z",
+        "to": "2025-05-16T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "current_s3"
+        }
+      },
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "bar_segments": [
+        "2025-May-ETHUSD-0",
+        "2025-May-ETHUSD-1",
+        "2025-May-ETHUSD-2",
+        "2025-May-ETHUSD-3",
+        "2025-May-ETHUSD-4",
+        "2025-May-ETHUSD-5",
+        "2025-May-ETHUSD-6",
+        "2025-May-ETHUSD-7"
+      ],
+      "mode": "collect",
+      "previously_observed": false,
+      "source_to": "2025-05-16T04:00:00Z",
+      "partial_observation": false
+    }
+  ],
+  "bar_segments": [
+    {
+      "key": "2024-May-NAS100-0",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-03-29T13:30:00Z",
+      "to": "2024-04-05T13:30:00Z"
+    },
+    {
+      "key": "2024-May-NAS100-1",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-04-05T13:30:00Z",
+      "to": "2024-04-12T13:30:00Z"
+    },
+    {
+      "key": "2024-May-NAS100-2",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-04-12T13:30:00Z",
+      "to": "2024-04-19T13:30:00Z"
+    },
+    {
+      "key": "2024-May-NAS100-3",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-04-19T13:30:00Z",
+      "to": "2024-04-26T13:30:00Z"
+    },
+    {
+      "key": "2024-May-NAS100-4",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-04-26T13:30:00Z",
+      "to": "2024-05-03T13:30:00Z"
+    },
+    {
+      "key": "2024-May-NAS100-5",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-05-03T13:30:00Z",
+      "to": "2024-05-10T13:30:00Z"
+    },
+    {
+      "key": "2024-May-NAS100-6",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-05-10T13:30:00Z",
+      "to": "2024-05-17T13:30:00Z"
+    },
+    {
+      "key": "2024-May-NAS100-7",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2024-05-17T13:30:00Z",
+      "to": "2024-05-17T17:30:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-0",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-03-29T07:00:00Z",
+      "to": "2024-04-05T07:00:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-1",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-04-05T07:00:00Z",
+      "to": "2024-04-12T07:00:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-2",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-04-12T07:00:00Z",
+      "to": "2024-04-19T07:00:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-3",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-04-19T07:00:00Z",
+      "to": "2024-04-26T07:00:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-4",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-04-26T07:00:00Z",
+      "to": "2024-05-03T07:00:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-5",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-05-03T07:00:00Z",
+      "to": "2024-05-10T07:00:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-6",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-05-10T07:00:00Z",
+      "to": "2024-05-17T07:00:00Z"
+    },
+    {
+      "key": "2024-May-XAGUSD-7",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2024-05-17T07:00:00Z",
+      "to": "2024-05-17T11:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-0",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-03-29T00:00:00Z",
+      "to": "2024-04-05T00:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-1",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-04-05T00:00:00Z",
+      "to": "2024-04-12T00:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-2",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-04-12T00:00:00Z",
+      "to": "2024-04-19T00:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-3",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-04-19T00:00:00Z",
+      "to": "2024-04-26T00:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-4",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-04-26T00:00:00Z",
+      "to": "2024-05-03T00:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-5",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-05-03T00:00:00Z",
+      "to": "2024-05-10T00:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-6",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-05-10T00:00:00Z",
+      "to": "2024-05-17T00:00:00Z"
+    },
+    {
+      "key": "2024-May-BTCUSD-7",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "mode": "collect",
+      "from": "2024-05-17T00:00:00Z",
+      "to": "2024-05-17T04:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-0",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-03-29T00:00:00Z",
+      "to": "2024-04-05T00:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-1",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-04-05T00:00:00Z",
+      "to": "2024-04-12T00:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-2",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-04-12T00:00:00Z",
+      "to": "2024-04-19T00:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-3",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-04-19T00:00:00Z",
+      "to": "2024-04-26T00:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-4",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-04-26T00:00:00Z",
+      "to": "2024-05-03T00:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-5",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-05-03T00:00:00Z",
+      "to": "2024-05-10T00:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-6",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-05-10T00:00:00Z",
+      "to": "2024-05-17T00:00:00Z"
+    },
+    {
+      "key": "2024-May-ETHUSD-7",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2024-05-17T00:00:00Z",
+      "to": "2024-05-17T04:00:00Z"
+    },
+    {
+      "key": "2025_Q2_Spring-US500-0",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-03-28T13:30:00Z",
+      "to": "2025-04-04T13:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-0.json",
+        "sha256": "5fdfc4207f5886c1980e84459f3a2392562208ae388a10aec189b34b3a66fb1a"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-US500-1",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-04-04T13:30:00Z",
+      "to": "2025-04-11T13:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-1.json",
+        "sha256": "3fa9829aebd121a3699679392400c6c6a0659d07bad00178628ee661654af481"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-US500-2",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-04-11T13:30:00Z",
+      "to": "2025-04-18T13:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-2.json",
+        "sha256": "a50f491b369fda3d383e775e89690765c66467f5cec64688d9eab3e8fdd45a22"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-US500-3",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-04-18T13:30:00Z",
+      "to": "2025-04-25T13:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-3.json",
+        "sha256": "3139624dc9ec6f7ee037e8fc745ee5654cd4cc0ee6a4c7bf8ba7d1c7176a4f56"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-US500-4",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-04-25T13:30:00Z",
+      "to": "2025-05-02T13:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-4.json",
+        "sha256": "1083d629999ad4751c902f64fd70c1da1791371d5fa09a2cc34ff09ba4620470"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-US500-5",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-05-02T13:30:00Z",
+      "to": "2025-05-09T13:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-5.json",
+        "sha256": "f9aeaa1b9f38f9c56f6460f87d30800cc83721bb26365ceb4d7c0570944dea64"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-US500-6",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-05-09T13:30:00Z",
+      "to": "2025-05-16T13:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-6.json",
+        "sha256": "0acc015e0fd995701caa57811d2478906875f23ec521c55edd4e0d847aece1d1"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-US500-7",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-05-16T13:30:00Z",
+      "to": "2025-05-16T17:30:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-7.json",
+        "sha256": "6d8645199df1aacb7c06ba72745d7d833d6ac7913f5b06f99fa373c1fa258ff8"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-0",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-03-28T07:00:00Z",
+      "to": "2025-04-04T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-0.json",
+        "sha256": "c8c9b2cb1dcaa529b6c97bba44c9b3ae859535a6ccc8791559b22d778c5a5b9b"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-1",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-04-04T07:00:00Z",
+      "to": "2025-04-11T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-1.json",
+        "sha256": "240ba22aab8ae4c809ceea0e4292b5b4c76ebd07c208b16f9595d65d01aed47a"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-2",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-04-11T07:00:00Z",
+      "to": "2025-04-18T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-2.json",
+        "sha256": "456386ccedbbfefd63392245171bd531f865f4faf65538a6498b350ee9516fd7"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-3",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-04-18T07:00:00Z",
+      "to": "2025-04-25T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-3.json",
+        "sha256": "be737b634462c496f2f6a20a1a1026a427f6e12ef2c795146afcccd792df820e"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-4",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-04-25T07:00:00Z",
+      "to": "2025-05-02T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-4.json",
+        "sha256": "236531e1cec8ee573452947b866ef784478675c12d9d61b58bac44096a7fd392"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-5",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-05-02T07:00:00Z",
+      "to": "2025-05-09T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-5.json",
+        "sha256": "0d8ae713c2de5714a1125d78d05efd87527c6f1a18aebd3bb8ab935a1cff20d5"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-6",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-05-09T07:00:00Z",
+      "to": "2025-05-16T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-6.json",
+        "sha256": "955ad24e51c8e751cb80207ef717f413b336b88ad066be643dc3e0fef1c252d9"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotCrude-7",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-05-16T07:00:00Z",
+      "to": "2025-05-16T11:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-7.json",
+        "sha256": "2bbd2d62e0c462d029856a0e34342cb5d6f3276b076ef063a6239a0ca40e26cb"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-0",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-03-28T07:00:00Z",
+      "to": "2025-04-04T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-0.json",
+        "sha256": "9e0063dcb80f24755d7e564ef550533d5640b9bcf995e3f775579cfc834183de"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-1",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-04-04T07:00:00Z",
+      "to": "2025-04-11T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-1.json",
+        "sha256": "ea9b54a6981c3bca95beaf609f5ac865dc99821bed7f12199149263ca7687919"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-2",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-04-11T07:00:00Z",
+      "to": "2025-04-18T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-2.json",
+        "sha256": "ca86f4f729dc32a40b9fb5c85b3263c7b1e3d0f168f217e7802e6674af55f1d6"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-3",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-04-18T07:00:00Z",
+      "to": "2025-04-25T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-3.json",
+        "sha256": "3de82ab8b4c25534849fb6c26ba64e0b36ca556bc4aac9b408f6fa8881ebd82a"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-4",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-04-25T07:00:00Z",
+      "to": "2025-05-02T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-4.json",
+        "sha256": "a96a6e6ffc879ed0f9493752dbff842c0d36ab80be7409871b6a5d68c06ceb69"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-5",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-05-02T07:00:00Z",
+      "to": "2025-05-09T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-5.json",
+        "sha256": "fb2faf63ce9aa7ba8f048e3bef908d4b25c427bc26c2f4c94d11bb3cfc37a55b"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-6",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-05-09T07:00:00Z",
+      "to": "2025-05-16T07:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-6.json",
+        "sha256": "ddd83caf3e58c843aa42a8fdb79467737137327246da84d05ed9eebdd04777c9"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-SpotBrent-7",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-05-16T07:00:00Z",
+      "to": "2025-05-16T11:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-7.json",
+        "sha256": "b925f9de3da3c966c13be48415824a3d7a8e7f490222edfddb95ac3afe6159e1"
+      }
+    },
+    {
+      "key": "2025-May-NAS100-0",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-03-28T13:30:00Z",
+      "to": "2025-04-04T13:30:00Z"
+    },
+    {
+      "key": "2025-May-NAS100-1",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-04-04T13:30:00Z",
+      "to": "2025-04-11T13:30:00Z"
+    },
+    {
+      "key": "2025-May-NAS100-2",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-04-11T13:30:00Z",
+      "to": "2025-04-18T13:30:00Z"
+    },
+    {
+      "key": "2025-May-NAS100-3",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-04-18T13:30:00Z",
+      "to": "2025-04-25T13:30:00Z"
+    },
+    {
+      "key": "2025-May-NAS100-4",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-04-25T13:30:00Z",
+      "to": "2025-05-02T13:30:00Z"
+    },
+    {
+      "key": "2025-May-NAS100-5",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-05-02T13:30:00Z",
+      "to": "2025-05-09T13:30:00Z"
+    },
+    {
+      "key": "2025-May-NAS100-6",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-05-09T13:30:00Z",
+      "to": "2025-05-16T13:30:00Z"
+    },
+    {
+      "key": "2025-May-NAS100-7",
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "mode": "collect",
+      "from": "2025-05-16T13:30:00Z",
+      "to": "2025-05-16T17:30:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-0",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-03-28T07:00:00Z",
+      "to": "2025-04-04T07:00:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-1",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-04-04T07:00:00Z",
+      "to": "2025-04-11T07:00:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-2",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-04-11T07:00:00Z",
+      "to": "2025-04-18T07:00:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-3",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-04-18T07:00:00Z",
+      "to": "2025-04-25T07:00:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-4",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-04-25T07:00:00Z",
+      "to": "2025-05-02T07:00:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-5",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-05-02T07:00:00Z",
+      "to": "2025-05-09T07:00:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-6",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-05-09T07:00:00Z",
+      "to": "2025-05-16T07:00:00Z"
+    },
+    {
+      "key": "2025-May-XAGUSD-7",
+      "symbol": "XAGUSD",
+      "symbol_id": 42,
+      "mode": "collect",
+      "from": "2025-05-16T07:00:00Z",
+      "to": "2025-05-16T11:00:00Z"
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-0",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-03-28T00:00:00Z",
+      "to": "2025-04-04T00:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-0.json",
+        "sha256": "0683068433bfabb471a0ca1aa580abee7cd9a9bdbb1b56c3223deb284129fd54"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-1",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-04-04T00:00:00Z",
+      "to": "2025-04-11T00:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-1.json",
+        "sha256": "db1b9f4df8ee7dfaadb7ebab728f099d5700c7a8e849182edb476dd49648db57"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-2",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-04-11T00:00:00Z",
+      "to": "2025-04-18T00:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-2.json",
+        "sha256": "9e1ac77623b1aeea0761ba5542c848b3a5998068ab89671747a0dcf81cf53a49"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-3",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-04-18T00:00:00Z",
+      "to": "2025-04-25T00:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-3.json",
+        "sha256": "820415b23543f316319a3fe466c2827b8055a027c07ca188efeaed2d6d8a060b"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-4",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-04-25T00:00:00Z",
+      "to": "2025-05-02T00:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-4.json",
+        "sha256": "a119e13fcc16be3a34697c72e9fef5c043c077b41b6c3e6e18e4496e82b3158f"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-5",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-05-02T00:00:00Z",
+      "to": "2025-05-09T00:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-5.json",
+        "sha256": "265db840d87fef4668d59a866fd8befb0ac3b4fa6a092cb76685cf8d7953c585"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-6",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-05-09T00:00:00Z",
+      "to": "2025-05-16T00:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-6.json",
+        "sha256": "891c78902884cd1876d89fd72bca2bdbc8103024dce3640f6ea31978166ee30b"
+      }
+    },
+    {
+      "key": "2025_Q2_Spring-BTCUSD-7",
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "from": "2025-05-16T00:00:00Z",
+      "to": "2025-05-16T04:00:00Z",
+      "mode": "reuse",
+      "prior_source": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-7.json",
+        "sha256": "668bf2004258574388948d7b0826287a63b3dd18f589df7117e620cb10699639"
+      }
+    },
+    {
+      "key": "2025-May-ETHUSD-0",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-03-28T00:00:00Z",
+      "to": "2025-04-04T00:00:00Z"
+    },
+    {
+      "key": "2025-May-ETHUSD-1",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-04-04T00:00:00Z",
+      "to": "2025-04-11T00:00:00Z"
+    },
+    {
+      "key": "2025-May-ETHUSD-2",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-04-11T00:00:00Z",
+      "to": "2025-04-18T00:00:00Z"
+    },
+    {
+      "key": "2025-May-ETHUSD-3",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-04-18T00:00:00Z",
+      "to": "2025-04-25T00:00:00Z"
+    },
+    {
+      "key": "2025-May-ETHUSD-4",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-04-25T00:00:00Z",
+      "to": "2025-05-02T00:00:00Z"
+    },
+    {
+      "key": "2025-May-ETHUSD-5",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-05-02T00:00:00Z",
+      "to": "2025-05-09T00:00:00Z"
+    },
+    {
+      "key": "2025-May-ETHUSD-6",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-05-09T00:00:00Z",
+      "to": "2025-05-16T00:00:00Z"
+    },
+    {
+      "key": "2025-May-ETHUSD-7",
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "mode": "collect",
+      "from": "2025-05-16T00:00:00Z",
+      "to": "2025-05-16T04:00:00Z"
+    }
+  ],
+  "prior_manifests": {
+    "docs/seasonal-execution-18315.json": "d6e354759d50213236aefe167c01c5cca8a2be167d1289c666a2672d82caf3b3",
+    "docs/three-year-execution-18324.json": "942e548d708857fea2469022976c81d81b809c5fda1a12ff494dd13910eb9b95",
+    "docs/class-batch-40-plan-18309-2026-11-07.json": "61a6df3a129c842afd3e289e131a13ce60194ceee543931cdf623ef47b903182"
+  },
+  "prior_source_sha256": {
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-12.json": "b3ef3ee6e5564c6228f0b8148dcbe33501e4b16bb8fca1408cc41e7432f8148c",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-0.json": "5fdfc4207f5886c1980e84459f3a2392562208ae388a10aec189b34b3a66fb1a",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-1.json": "3fa9829aebd121a3699679392400c6c6a0659d07bad00178628ee661654af481",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-2.json": "a50f491b369fda3d383e775e89690765c66467f5cec64688d9eab3e8fdd45a22",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-3.json": "3139624dc9ec6f7ee037e8fc745ee5654cd4cc0ee6a4c7bf8ba7d1c7176a4f56",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-4.json": "1083d629999ad4751c902f64fd70c1da1791371d5fa09a2cc34ff09ba4620470",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-5.json": "f9aeaa1b9f38f9c56f6460f87d30800cc83721bb26365ceb4d7c0570944dea64",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-6.json": "0acc015e0fd995701caa57811d2478906875f23ec521c55edd4e0d847aece1d1",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-US500-7.json": "6d8645199df1aacb7c06ba72745d7d833d6ac7913f5b06f99fa373c1fa258ff8",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-12.json": "f8f0ed0f6faa7e91efaff837e8e3ed22c7ab6eb686bbc01a79ec93acad092a3f",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-0.json": "c8c9b2cb1dcaa529b6c97bba44c9b3ae859535a6ccc8791559b22d778c5a5b9b",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-1.json": "240ba22aab8ae4c809ceea0e4292b5b4c76ebd07c208b16f9595d65d01aed47a",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-2.json": "456386ccedbbfefd63392245171bd531f865f4faf65538a6498b350ee9516fd7",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-3.json": "be737b634462c496f2f6a20a1a1026a427f6e12ef2c795146afcccd792df820e",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-4.json": "236531e1cec8ee573452947b866ef784478675c12d9d61b58bac44096a7fd392",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-5.json": "0d8ae713c2de5714a1125d78d05efd87527c6f1a18aebd3bb8ab935a1cff20d5",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-6.json": "955ad24e51c8e751cb80207ef717f413b336b88ad066be643dc3e0fef1c252d9",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotCrude-7.json": "2bbd2d62e0c462d029856a0e34342cb5d6f3276b076ef063a6239a0ca40e26cb",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-12.json": "f3849f3cae519caac67d14f34246dd02aba4c3d704cd27ccbae327c4c2fae503",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-0.json": "9e0063dcb80f24755d7e564ef550533d5640b9bcf995e3f775579cfc834183de",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-1.json": "ea9b54a6981c3bca95beaf609f5ac865dc99821bed7f12199149263ca7687919",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-2.json": "ca86f4f729dc32a40b9fb5c85b3263c7b1e3d0f168f217e7802e6674af55f1d6",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-3.json": "3de82ab8b4c25534849fb6c26ba64e0b36ca556bc4aac9b408f6fa8881ebd82a",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-4.json": "a96a6e6ffc879ed0f9493752dbff842c0d36ab80be7409871b6a5d68c06ceb69",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-5.json": "fb2faf63ce9aa7ba8f048e3bef908d4b25c427bc26c2f4c94d11bb3cfc37a55b",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-6.json": "ddd83caf3e58c843aa42a8fdb79467737137327246da84d05ed9eebdd04777c9",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-SpotBrent-7.json": "b925f9de3da3c966c13be48415824a3d7a8e7f490222edfddb95ac3afe6159e1",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-12.json": "44d2bc43268ae8f9a3a12275248d04a7109183b50b5f6215da6340643b0104eb",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-0.json": "0683068433bfabb471a0ca1aa580abee7cd9a9bdbb1b56c3223deb284129fd54",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-1.json": "db1b9f4df8ee7dfaadb7ebab728f099d5700c7a8e849182edb476dd49648db57",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-2.json": "9e1ac77623b1aeea0761ba5542c848b3a5998068ab89671747a0dcf81cf53a49",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-3.json": "820415b23543f316319a3fe466c2827b8055a027c07ca188efeaed2d6d8a060b",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-4.json": "a119e13fcc16be3a34697c72e9fef5c043c077b41b6c3e6e18e4496e82b3158f",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-5.json": "265db840d87fef4668d59a866fd8befb0ac3b4fa6a092cb76685cf8d7953c585",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-6.json": "891c78902884cd1876d89fd72bca2bdbc8103024dce3640f6ea31978166ee30b",
+    "/workspace/jiaoyi-seasonal-stage1-18316/bar-2025_Q2_Spring-BTCUSD-7.json": "668bf2004258574388948d7b0826287a63b3dd18f589df7117e620cb10699639",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-13.json": "0b300f8e655a29aa61286d09e951cecc2db6032c4fc0375716d558b2bc956715",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-13.json": "0f69baa8d3e90184969ae465a5fbec5cde5fc206d105260541bb60e1693a0d92",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-13.json": "51940641d5ef7c9139113ab6f0bf6c613fbc967dc2af30549a9817137af1bbc4",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-13.json": "1178b78fe90ca384a598d405885444f39e18f238fcc88f1e3a6ff19356c98951",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-14.json": "94b7fd397a3517d7d8238de16a2911022ea6991e0ff7476f777d13377220263f",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-14.json": "60aba46f1fe94cf8935ea514b8d807ea0c5051b4cfd1b39b73024178b4271227",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-14.json": "4e4b7af1e2d5691acbf9c286bac496b2809ebdb9ad0c8548518bca7c54e078b5",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-14.json": "9eafa9ddb7465af7223891cd9d97a6c085f7c2d4ff73ef190d86047d11c829eb",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-15.json": "473ac847610d75a180830341a3ee7bbb8dd6647fc25d740047501ef654ac9993",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-15.json": "098f1261d1e6aa8d5c7ee6d965edc3a064021da5c4880344ed483c01a6c9c6cf",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-15.json": "733c776829bf9610767fc0b20897692cffca484a4e6272c50440ae2a0d5e585a",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-15.json": "d542dc0dd92e4cae2d2a8eaf828f40634746f4d378688870473e8565a14f4100",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2025-05-16.json": "f3f8d6b63ee068851e2e9a33629947dc99bedfb6fe80c3abe18ebc66664839ed",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotCrude-2025-05-16.json": "a0888de0cb3e138bfe6bee33548371505f4c7165fc8be0223647da1f65224f62",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-SpotBrent-2025-05-16.json": "5d3b49189d634bb3fdefeb5d92c5b41ee63b0c6a7e4d3b51c2e64f22d5d3d7a7",
+    "/workspace/jiaoyi-seasonal-stage1-18316/job-BTCUSD-2025-05-16.json": "9444e865da337134c72f521a3f14fa0c54178309ba3a4edd99ded940d444057c"
+  },
+  "prior_ledger_sha256": "753cd4641b5e54bea05a86f5af5d89a5cec2a37899b90b57e359b55fe1cd12fb",
+  "architecture_sha256": "6b174f04a5127422f054c91ca6f37a7245e4930bf03b2a3c267b9dfe57cc99e1",
+  "costs": {
+    "primary_bps_per_side": 24,
+    "same_fill_sensitivities": [
+      2,
+      3.74
+    ],
+    "extra_commission": 0,
+    "calibration": "unverified; bid/ask includes spread once"
+  },
+  "rules": "Unchanged strict C<R admission and two-stage +1R trigger / gross1.38R target. Peer confirmation affects macro only.",
+  "scope": "40 peer slots only; reuse5 BTC slots; missing primary slots retained. Previously observed 2025 dates remain development.",
+  "limits": {
+    "peer_slots": 40,
+    "fresh_tick_jobs": 35,
+    "reused_tick_sources": 20,
+    "missing_primary_slots": 25,
+    "fresh_bar_components": 56,
+    "max_tick_pages": 120,
+    "max_tick_rows": 200000,
+    "seconds_per_tick_job": 240,
+    "attempts": 1,
+    "source_bytes_per_file": 32000000,
+    "total_new_source_bytes": 256000000,
+    "max_replays": 55
+  },
+  "validation_opened": false,
+  "financial_pass": false,
+  "stopping_rule": "Complete fixed slots once; never collect until 20 closes or until a win threshold passes",
+  "goal": "73% net wins / reference R:R1:1.38 latest20 per strategy/account; 15/20=75%; pooled historical research is not account qualification"
+}
