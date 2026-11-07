@@ -139,11 +139,21 @@ def verify_ledger(out,p,complete=False):
     return ends
 
 
+def reject_spent_bar_reads(plan, prior_plan, prior_events, current_ends):
+    """Prior component failures must not disappear behind new cohort/job names."""
+    prior_keys={e['key'] for e in prior_events if e['state']=='started'}
+    intervals={(x['symbol_id'],x['from'],x['to']) for x in prior_plan['bar_segments'] if 'bar-'+x['key'] in prior_keys}
+    repeated=[x['key'] for x in plan['bar_segments'] if 'bar-'+x['key'] not in current_ends and (x['symbol_id'],x['from'],x['to']) in intervals]
+    if repeated:
+        raise ValueError('prior spent M30 interval requires explicit cached-source lineage; refuse new read: '+','.join(repeated))
+
+
 def collect(out,p,plan_pr):
     out.mkdir(parents=True,exist_ok=True)
     with (out/'collect.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);freeze(out,plan_pr);ends=verify_ledger(out,p)
         if sha(PRIOR/'ledger.jsonl')!=p['prior_ledger_sha256'] or sha(PRIOR/'freeze.json')!=p['prior_freeze_sha256']:raise ValueError('prior evidence changed')
+        reject_spent_bar_reads(p,json.loads((PRIOR/'execution.json').read_text()),ledger(PRIOR),ends)
         def perform(key,operation):
             path=out/(key+'.json')
             if key in ends:return json.loads(path.read_text())
