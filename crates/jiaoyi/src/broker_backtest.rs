@@ -103,6 +103,17 @@ pub async fn submit(
     if let Err(e) = req.validate(Utc::now()) {
         return response(StatusCode::BAD_REQUEST, json!({"error":e}));
     }
+    if matches!(req.symbol.as_str(), "SpotCrude" | "SpotBrent")
+        && req
+            .tick_replay
+            .as_ref()
+            .is_some_and(|o| o.entry_rule.is_current())
+    {
+        return response(
+            StatusCode::BAD_REQUEST,
+            json!({"error":"prepared oil S3 requires the offline evidence adapter; no collection started"}),
+        );
+    }
     let envelope = json!({"request":req});
     start(state, jobs, req, envelope, false)
 }

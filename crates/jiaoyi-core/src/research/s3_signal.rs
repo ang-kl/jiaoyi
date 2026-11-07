@@ -39,12 +39,25 @@ impl Request {
             return Err("class prediction requires an exact original-20 symbol".into());
         }
         if !class_mode
-            && !matches!(self.symbol.as_str(), "BTCUSD" | "NatGas")
+            && !matches!(
+                self.symbol.as_str(),
+                "BTCUSD" | "NatGas" | "SpotCrude" | "SpotBrent"
+            )
             && !self.is_major_fx()
         {
             return Err(
-                "symbol must be BTCUSD, NatGas or an explicitly supported major FX pair".into(),
+                "symbol must be BTCUSD, NatGas, SpotCrude, SpotBrent or a supported major FX pair"
+                    .into(),
             );
+        }
+        if matches!(self.symbol.as_str(), "SpotCrude" | "SpotBrent")
+            && !class_mode
+            && self
+                .tick_replay
+                .as_ref()
+                .is_none_or(|o| !o.entry_rule.is_current())
+        {
+            return Err("oil requires prepared current-S3 or an existing class candidate".into());
         }
         if self.is_major_fx()
             && !class_mode
