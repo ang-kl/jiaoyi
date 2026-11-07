@@ -15,6 +15,28 @@ The supplied runner fabricated outcomes using symbols/job numbers and fixed PF/c
 It was replaced before execution. No manufactured results were used as market evidence.
 Full method: [frozen execution addendum](../docs/three-year-execution-addendum-18324.md).
 
+### §1.1. Protocol deviation found by the post-collection audit
+
+**Protocol compliance FAILED.** The new manifest used 28 exact M30 intervals already
+spent by the earlier pilot: 14 whose prior requests completed and 14 whose prior
+requests failed. The latter affect all ten SpotCrude/SpotBrent winter-2024 episodes.
+The planner preserved prior US500 job failures but omitted cross-study identity checks
+for these warm-up components. Renaming a cohort did not make an old interval unspent.
+This violated the frozen no-repeat rule; this run must not be presented as clean.
+
+The earlier failures, all new receipts and all computed native outcomes are retained.
+No date, trade, cost or return was replaced, and these ten rows are explicitly marked
+`prior_failed_m30_interval_refetched` in the JSON. They remain in coverage denominators.
+Software/source-hash/arithmetic checks passed; protocol compliance and financial
+qualification did not. These are separate conclusions.
+
+A post-run guard now rejects a planned fresh M30 read that matches a previously spent
+interval, regardless of cohort name or whether the earlier read failed or succeeded.
+A focused regression covers both statuses, different interval bounds and already
+receipted current components. The guard was added after the frozen replay; results
+remain attributable to the original plan merge and native binary, not the later guard.
+Any future collection needs an explicit cached-source plan and a new reviewed freeze.
+
 ## §2. What was tested and retained
 
 Four symbols: SpotCrude, SpotBrent, US500 and XAUUSD; winter/summer weeks in 2023–2025.

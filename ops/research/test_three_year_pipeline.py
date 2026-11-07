@@ -34,3 +34,14 @@ class ThreeYearTests(unittest.TestCase):
         rows[0].update(status='complete',replay={'result':{'models':models,'quality':{'bid_ticks':2,'ask_ticks':2}}})
         s=p.summarize(rows)['scores']['overall']['orb_60m']['trailing']['24']
         self.assertEqual((s['closed'],s['wins'],s['mean_r'],s['pf']),(1,0,-0.4,0.0))
+
+    def test_prior_components_cannot_be_refetched_under_new_names(self):
+        part=dict(key='old',symbol_id=1,**{'from':'2023-01-01','to':'2023-01-07'})
+        prior={'bar_segments':[part]};current={'bar_segments':[dict(part,key='new')]}
+        for status in ['failed','complete']:
+            events=[dict(key='bar-old',state='started'),dict(key='bar-old',state='finished',status=status)]
+            with self.assertRaisesRegex(ValueError,'prior spent M30'):
+                p.reject_spent_bar_reads(current,prior,events,{})
+            p.reject_spent_bar_reads(current,prior,events,{'bar-new':{}})
+        current['bar_segments'][0]['to']='2023-01-08'
+        p.reject_spent_bar_reads(current,prior,events,{})

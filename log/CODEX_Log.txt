@@ -1720,3 +1720,17 @@ No fabricated win/PF values, Stage2, validation, live change, Telegram or model 
 All source receipts/hashes, episode scope and aggregate counts/means verified; raw corpus outside Git.
 Report Markdown/HTML/JSON include limitations, by-year/class/symbol/cohort results and matched controls.
 CI/main-publication receipt belongs to report PR. Time is Money; prepare to win.
+
+[§LOG.124] №18,325 §§9–12 · 07-11-2026 14:23:50 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Post-collection audit found a planner omission: 28 new M30 components have identical
+symbol/from/to to prior spent components, including14 previously failed and14 successful.
+Ten winter2024 oil episodes use the previously failed intervals. This breaches the
+frozen no-repeat contract and corrects any overly broad no-prior-retry claim in LOG.122.
+The intended new oil window did not excuse repeated warm-up intervals. All raw sources,
+old/new receipts, native outputs and financial metrics remain unchanged; affected rows
+are flagged and protocol compliance is FAILED. No clean-run/financial PASS claimed.
+Added a post-run guard rejecting spent intervals under new names before any broker read;
+focused regression covers prior failure/success, changed bounds and existing receipts.
+Guard is not retrospectively attributed to the original frozen replay. Report JSON/MD/
+HTML now disclose lineage, ten affected rows, and distinction between arithmetic PASS
+and protocol FAIL. Report PR must rerun CI at the corrected head; no further collection.
