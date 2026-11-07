@@ -1,0 +1,5714 @@
+{
+  "trace": "\u211618,324 \u00a7\u00a71\u20139",
+  "prepared_at_utc": "2026-11-07T05:59:14.076231Z",
+  "plan_sha256": "a7b09cde60c398a2c8502aed5cf401c24ad53df0ecdd123218510cff6b5256ff",
+  "addendum_sha256": "4c90c502ecc2ecdfa2068e185b564d4ae116692f6af48fc53fc52752b1ed151f",
+  "prior_ledger_sha256": "753cd4641b5e54bea05a86f5af5d89a5cec2a37899b90b57e359b55fe1cd12fb",
+  "prior_freeze_sha256": "021102d736b1af5dd058fae94b4095f4b18e4a4f0785979344000c421c2b6181",
+  "models": [
+    "production_s3",
+    "orb_60m",
+    "macro_180m",
+    "always_long_control",
+    "own_momentum_fixed_horizon"
+  ],
+  "jobs": [
+    {
+      "key": "SpotCrude-2023-01-23",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-23",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-01-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotCrude-0",
+        "2023-Q1-WINTER-SpotCrude-1",
+        "2023-Q1-WINTER-SpotCrude-2",
+        "2023-Q1-WINTER-SpotCrude-3",
+        "2023-Q1-WINTER-SpotCrude-4",
+        "2023-Q1-WINTER-SpotCrude-5",
+        "2023-Q1-WINTER-SpotCrude-6",
+        "2023-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-01-23T13:00:00Z",
+        "to": "2023-01-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-01-24",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-24",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-01-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotCrude-0",
+        "2023-Q1-WINTER-SpotCrude-1",
+        "2023-Q1-WINTER-SpotCrude-2",
+        "2023-Q1-WINTER-SpotCrude-3",
+        "2023-Q1-WINTER-SpotCrude-4",
+        "2023-Q1-WINTER-SpotCrude-5",
+        "2023-Q1-WINTER-SpotCrude-6",
+        "2023-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-01-24T13:00:00Z",
+        "to": "2023-01-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-01-25",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-25",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-01-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotCrude-0",
+        "2023-Q1-WINTER-SpotCrude-1",
+        "2023-Q1-WINTER-SpotCrude-2",
+        "2023-Q1-WINTER-SpotCrude-3",
+        "2023-Q1-WINTER-SpotCrude-4",
+        "2023-Q1-WINTER-SpotCrude-5",
+        "2023-Q1-WINTER-SpotCrude-6",
+        "2023-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-01-25T13:00:00Z",
+        "to": "2023-01-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-01-26",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-26",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-01-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotCrude-0",
+        "2023-Q1-WINTER-SpotCrude-1",
+        "2023-Q1-WINTER-SpotCrude-2",
+        "2023-Q1-WINTER-SpotCrude-3",
+        "2023-Q1-WINTER-SpotCrude-4",
+        "2023-Q1-WINTER-SpotCrude-5",
+        "2023-Q1-WINTER-SpotCrude-6",
+        "2023-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-01-26T13:00:00Z",
+        "to": "2023-01-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-01-27",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-27",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-01-27T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotCrude-0",
+        "2023-Q1-WINTER-SpotCrude-1",
+        "2023-Q1-WINTER-SpotCrude-2",
+        "2023-Q1-WINTER-SpotCrude-3",
+        "2023-Q1-WINTER-SpotCrude-4",
+        "2023-Q1-WINTER-SpotCrude-5",
+        "2023-Q1-WINTER-SpotCrude-6",
+        "2023-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-01-27T13:00:00Z",
+        "to": "2023-01-27T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-01-23",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-23",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-01-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotBrent-0",
+        "2023-Q1-WINTER-SpotBrent-1",
+        "2023-Q1-WINTER-SpotBrent-2",
+        "2023-Q1-WINTER-SpotBrent-3",
+        "2023-Q1-WINTER-SpotBrent-4",
+        "2023-Q1-WINTER-SpotBrent-5",
+        "2023-Q1-WINTER-SpotBrent-6",
+        "2023-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-01-23T13:00:00Z",
+        "to": "2023-01-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-01-24",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-24",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-01-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotBrent-0",
+        "2023-Q1-WINTER-SpotBrent-1",
+        "2023-Q1-WINTER-SpotBrent-2",
+        "2023-Q1-WINTER-SpotBrent-3",
+        "2023-Q1-WINTER-SpotBrent-4",
+        "2023-Q1-WINTER-SpotBrent-5",
+        "2023-Q1-WINTER-SpotBrent-6",
+        "2023-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-01-24T13:00:00Z",
+        "to": "2023-01-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-01-25",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-25",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-01-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotBrent-0",
+        "2023-Q1-WINTER-SpotBrent-1",
+        "2023-Q1-WINTER-SpotBrent-2",
+        "2023-Q1-WINTER-SpotBrent-3",
+        "2023-Q1-WINTER-SpotBrent-4",
+        "2023-Q1-WINTER-SpotBrent-5",
+        "2023-Q1-WINTER-SpotBrent-6",
+        "2023-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-01-25T13:00:00Z",
+        "to": "2023-01-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-01-26",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-26",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-01-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotBrent-0",
+        "2023-Q1-WINTER-SpotBrent-1",
+        "2023-Q1-WINTER-SpotBrent-2",
+        "2023-Q1-WINTER-SpotBrent-3",
+        "2023-Q1-WINTER-SpotBrent-4",
+        "2023-Q1-WINTER-SpotBrent-5",
+        "2023-Q1-WINTER-SpotBrent-6",
+        "2023-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-01-26T13:00:00Z",
+        "to": "2023-01-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-01-27",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-27",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-01-27T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-SpotBrent-0",
+        "2023-Q1-WINTER-SpotBrent-1",
+        "2023-Q1-WINTER-SpotBrent-2",
+        "2023-Q1-WINTER-SpotBrent-3",
+        "2023-Q1-WINTER-SpotBrent-4",
+        "2023-Q1-WINTER-SpotBrent-5",
+        "2023-Q1-WINTER-SpotBrent-6",
+        "2023-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-01-27T13:00:00Z",
+        "to": "2023-01-27T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-01-23",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-23",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-01-23T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-US500-0",
+        "2023-Q1-WINTER-US500-1",
+        "2023-Q1-WINTER-US500-2",
+        "2023-Q1-WINTER-US500-3",
+        "2023-Q1-WINTER-US500-4",
+        "2023-Q1-WINTER-US500-5",
+        "2023-Q1-WINTER-US500-6",
+        "2023-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-01-23T14:30:00Z",
+        "to": "2023-01-23T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-01-24",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-24",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-01-24T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-US500-0",
+        "2023-Q1-WINTER-US500-1",
+        "2023-Q1-WINTER-US500-2",
+        "2023-Q1-WINTER-US500-3",
+        "2023-Q1-WINTER-US500-4",
+        "2023-Q1-WINTER-US500-5",
+        "2023-Q1-WINTER-US500-6",
+        "2023-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-01-24T14:30:00Z",
+        "to": "2023-01-24T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-01-25",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-25",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-01-25T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-US500-0",
+        "2023-Q1-WINTER-US500-1",
+        "2023-Q1-WINTER-US500-2",
+        "2023-Q1-WINTER-US500-3",
+        "2023-Q1-WINTER-US500-4",
+        "2023-Q1-WINTER-US500-5",
+        "2023-Q1-WINTER-US500-6",
+        "2023-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-01-25T14:30:00Z",
+        "to": "2023-01-25T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-01-26",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-26",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-01-26T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-US500-0",
+        "2023-Q1-WINTER-US500-1",
+        "2023-Q1-WINTER-US500-2",
+        "2023-Q1-WINTER-US500-3",
+        "2023-Q1-WINTER-US500-4",
+        "2023-Q1-WINTER-US500-5",
+        "2023-Q1-WINTER-US500-6",
+        "2023-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-01-26T14:30:00Z",
+        "to": "2023-01-26T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-01-27",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-27",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-01-27T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-US500-0",
+        "2023-Q1-WINTER-US500-1",
+        "2023-Q1-WINTER-US500-2",
+        "2023-Q1-WINTER-US500-3",
+        "2023-Q1-WINTER-US500-4",
+        "2023-Q1-WINTER-US500-5",
+        "2023-Q1-WINTER-US500-6",
+        "2023-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-01-27T14:30:00Z",
+        "to": "2023-01-27T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-01-23",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-23",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-01-23T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-XAUUSD-0",
+        "2023-Q1-WINTER-XAUUSD-1",
+        "2023-Q1-WINTER-XAUUSD-2",
+        "2023-Q1-WINTER-XAUUSD-3",
+        "2023-Q1-WINTER-XAUUSD-4",
+        "2023-Q1-WINTER-XAUUSD-5",
+        "2023-Q1-WINTER-XAUUSD-6",
+        "2023-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-01-23T07:00:00Z",
+        "to": "2023-01-23T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-01-24",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-24",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-01-24T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-XAUUSD-0",
+        "2023-Q1-WINTER-XAUUSD-1",
+        "2023-Q1-WINTER-XAUUSD-2",
+        "2023-Q1-WINTER-XAUUSD-3",
+        "2023-Q1-WINTER-XAUUSD-4",
+        "2023-Q1-WINTER-XAUUSD-5",
+        "2023-Q1-WINTER-XAUUSD-6",
+        "2023-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-01-24T07:00:00Z",
+        "to": "2023-01-24T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-01-25",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-25",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-01-25T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-XAUUSD-0",
+        "2023-Q1-WINTER-XAUUSD-1",
+        "2023-Q1-WINTER-XAUUSD-2",
+        "2023-Q1-WINTER-XAUUSD-3",
+        "2023-Q1-WINTER-XAUUSD-4",
+        "2023-Q1-WINTER-XAUUSD-5",
+        "2023-Q1-WINTER-XAUUSD-6",
+        "2023-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-01-25T07:00:00Z",
+        "to": "2023-01-25T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-01-26",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-26",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-01-26T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-XAUUSD-0",
+        "2023-Q1-WINTER-XAUUSD-1",
+        "2023-Q1-WINTER-XAUUSD-2",
+        "2023-Q1-WINTER-XAUUSD-3",
+        "2023-Q1-WINTER-XAUUSD-4",
+        "2023-Q1-WINTER-XAUUSD-5",
+        "2023-Q1-WINTER-XAUUSD-6",
+        "2023-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-01-26T07:00:00Z",
+        "to": "2023-01-26T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-01-27",
+      "cohort": "2023-Q1-WINTER",
+      "date": "2023-01-27",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-01-27T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q1-WINTER-XAUUSD-0",
+        "2023-Q1-WINTER-XAUUSD-1",
+        "2023-Q1-WINTER-XAUUSD-2",
+        "2023-Q1-WINTER-XAUUSD-3",
+        "2023-Q1-WINTER-XAUUSD-4",
+        "2023-Q1-WINTER-XAUUSD-5",
+        "2023-Q1-WINTER-XAUUSD-6",
+        "2023-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-01-27T07:00:00Z",
+        "to": "2023-01-27T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-07-24",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-24",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-07-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotCrude-0",
+        "2023-Q3-SUMMER-SpotCrude-1",
+        "2023-Q3-SUMMER-SpotCrude-2",
+        "2023-Q3-SUMMER-SpotCrude-3",
+        "2023-Q3-SUMMER-SpotCrude-4",
+        "2023-Q3-SUMMER-SpotCrude-5",
+        "2023-Q3-SUMMER-SpotCrude-6",
+        "2023-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-07-24T13:00:00Z",
+        "to": "2023-07-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-07-25",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-25",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-07-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotCrude-0",
+        "2023-Q3-SUMMER-SpotCrude-1",
+        "2023-Q3-SUMMER-SpotCrude-2",
+        "2023-Q3-SUMMER-SpotCrude-3",
+        "2023-Q3-SUMMER-SpotCrude-4",
+        "2023-Q3-SUMMER-SpotCrude-5",
+        "2023-Q3-SUMMER-SpotCrude-6",
+        "2023-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-07-25T13:00:00Z",
+        "to": "2023-07-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-07-26",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-26",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-07-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotCrude-0",
+        "2023-Q3-SUMMER-SpotCrude-1",
+        "2023-Q3-SUMMER-SpotCrude-2",
+        "2023-Q3-SUMMER-SpotCrude-3",
+        "2023-Q3-SUMMER-SpotCrude-4",
+        "2023-Q3-SUMMER-SpotCrude-5",
+        "2023-Q3-SUMMER-SpotCrude-6",
+        "2023-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-07-26T13:00:00Z",
+        "to": "2023-07-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-07-27",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-27",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-07-27T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotCrude-0",
+        "2023-Q3-SUMMER-SpotCrude-1",
+        "2023-Q3-SUMMER-SpotCrude-2",
+        "2023-Q3-SUMMER-SpotCrude-3",
+        "2023-Q3-SUMMER-SpotCrude-4",
+        "2023-Q3-SUMMER-SpotCrude-5",
+        "2023-Q3-SUMMER-SpotCrude-6",
+        "2023-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-07-27T13:00:00Z",
+        "to": "2023-07-27T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2023-07-28",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-28",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2023-07-28T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotCrude-0",
+        "2023-Q3-SUMMER-SpotCrude-1",
+        "2023-Q3-SUMMER-SpotCrude-2",
+        "2023-Q3-SUMMER-SpotCrude-3",
+        "2023-Q3-SUMMER-SpotCrude-4",
+        "2023-Q3-SUMMER-SpotCrude-5",
+        "2023-Q3-SUMMER-SpotCrude-6",
+        "2023-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2023-07-28T13:00:00Z",
+        "to": "2023-07-28T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-07-24",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-24",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-07-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotBrent-0",
+        "2023-Q3-SUMMER-SpotBrent-1",
+        "2023-Q3-SUMMER-SpotBrent-2",
+        "2023-Q3-SUMMER-SpotBrent-3",
+        "2023-Q3-SUMMER-SpotBrent-4",
+        "2023-Q3-SUMMER-SpotBrent-5",
+        "2023-Q3-SUMMER-SpotBrent-6",
+        "2023-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-07-24T13:00:00Z",
+        "to": "2023-07-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-07-25",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-25",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-07-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotBrent-0",
+        "2023-Q3-SUMMER-SpotBrent-1",
+        "2023-Q3-SUMMER-SpotBrent-2",
+        "2023-Q3-SUMMER-SpotBrent-3",
+        "2023-Q3-SUMMER-SpotBrent-4",
+        "2023-Q3-SUMMER-SpotBrent-5",
+        "2023-Q3-SUMMER-SpotBrent-6",
+        "2023-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-07-25T13:00:00Z",
+        "to": "2023-07-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-07-26",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-26",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-07-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotBrent-0",
+        "2023-Q3-SUMMER-SpotBrent-1",
+        "2023-Q3-SUMMER-SpotBrent-2",
+        "2023-Q3-SUMMER-SpotBrent-3",
+        "2023-Q3-SUMMER-SpotBrent-4",
+        "2023-Q3-SUMMER-SpotBrent-5",
+        "2023-Q3-SUMMER-SpotBrent-6",
+        "2023-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-07-26T13:00:00Z",
+        "to": "2023-07-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-07-27",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-27",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-07-27T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotBrent-0",
+        "2023-Q3-SUMMER-SpotBrent-1",
+        "2023-Q3-SUMMER-SpotBrent-2",
+        "2023-Q3-SUMMER-SpotBrent-3",
+        "2023-Q3-SUMMER-SpotBrent-4",
+        "2023-Q3-SUMMER-SpotBrent-5",
+        "2023-Q3-SUMMER-SpotBrent-6",
+        "2023-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-07-27T13:00:00Z",
+        "to": "2023-07-27T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2023-07-28",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-28",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2023-07-28T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-SpotBrent-0",
+        "2023-Q3-SUMMER-SpotBrent-1",
+        "2023-Q3-SUMMER-SpotBrent-2",
+        "2023-Q3-SUMMER-SpotBrent-3",
+        "2023-Q3-SUMMER-SpotBrent-4",
+        "2023-Q3-SUMMER-SpotBrent-5",
+        "2023-Q3-SUMMER-SpotBrent-6",
+        "2023-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2023-07-28T13:00:00Z",
+        "to": "2023-07-28T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-07-24",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-24",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-07-24T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-US500-0",
+        "2023-Q3-SUMMER-US500-1",
+        "2023-Q3-SUMMER-US500-2",
+        "2023-Q3-SUMMER-US500-3",
+        "2023-Q3-SUMMER-US500-4",
+        "2023-Q3-SUMMER-US500-5",
+        "2023-Q3-SUMMER-US500-6",
+        "2023-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-07-24T13:30:00Z",
+        "to": "2023-07-24T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-07-25",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-25",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-07-25T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-US500-0",
+        "2023-Q3-SUMMER-US500-1",
+        "2023-Q3-SUMMER-US500-2",
+        "2023-Q3-SUMMER-US500-3",
+        "2023-Q3-SUMMER-US500-4",
+        "2023-Q3-SUMMER-US500-5",
+        "2023-Q3-SUMMER-US500-6",
+        "2023-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-07-25T13:30:00Z",
+        "to": "2023-07-25T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-07-26",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-26",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-07-26T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-US500-0",
+        "2023-Q3-SUMMER-US500-1",
+        "2023-Q3-SUMMER-US500-2",
+        "2023-Q3-SUMMER-US500-3",
+        "2023-Q3-SUMMER-US500-4",
+        "2023-Q3-SUMMER-US500-5",
+        "2023-Q3-SUMMER-US500-6",
+        "2023-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-07-26T13:30:00Z",
+        "to": "2023-07-26T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-07-27",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-27",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-07-27T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-US500-0",
+        "2023-Q3-SUMMER-US500-1",
+        "2023-Q3-SUMMER-US500-2",
+        "2023-Q3-SUMMER-US500-3",
+        "2023-Q3-SUMMER-US500-4",
+        "2023-Q3-SUMMER-US500-5",
+        "2023-Q3-SUMMER-US500-6",
+        "2023-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-07-27T13:30:00Z",
+        "to": "2023-07-27T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2023-07-28",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-28",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2023-07-28T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-US500-0",
+        "2023-Q3-SUMMER-US500-1",
+        "2023-Q3-SUMMER-US500-2",
+        "2023-Q3-SUMMER-US500-3",
+        "2023-Q3-SUMMER-US500-4",
+        "2023-Q3-SUMMER-US500-5",
+        "2023-Q3-SUMMER-US500-6",
+        "2023-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2023-07-28T13:30:00Z",
+        "to": "2023-07-28T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-07-24",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-24",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-07-24T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-XAUUSD-0",
+        "2023-Q3-SUMMER-XAUUSD-1",
+        "2023-Q3-SUMMER-XAUUSD-2",
+        "2023-Q3-SUMMER-XAUUSD-3",
+        "2023-Q3-SUMMER-XAUUSD-4",
+        "2023-Q3-SUMMER-XAUUSD-5",
+        "2023-Q3-SUMMER-XAUUSD-6",
+        "2023-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-07-24T07:00:00Z",
+        "to": "2023-07-24T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-07-25",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-25",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-07-25T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-XAUUSD-0",
+        "2023-Q3-SUMMER-XAUUSD-1",
+        "2023-Q3-SUMMER-XAUUSD-2",
+        "2023-Q3-SUMMER-XAUUSD-3",
+        "2023-Q3-SUMMER-XAUUSD-4",
+        "2023-Q3-SUMMER-XAUUSD-5",
+        "2023-Q3-SUMMER-XAUUSD-6",
+        "2023-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-07-25T07:00:00Z",
+        "to": "2023-07-25T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-07-26",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-26",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-07-26T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-XAUUSD-0",
+        "2023-Q3-SUMMER-XAUUSD-1",
+        "2023-Q3-SUMMER-XAUUSD-2",
+        "2023-Q3-SUMMER-XAUUSD-3",
+        "2023-Q3-SUMMER-XAUUSD-4",
+        "2023-Q3-SUMMER-XAUUSD-5",
+        "2023-Q3-SUMMER-XAUUSD-6",
+        "2023-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-07-26T07:00:00Z",
+        "to": "2023-07-26T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-07-27",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-27",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-07-27T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-XAUUSD-0",
+        "2023-Q3-SUMMER-XAUUSD-1",
+        "2023-Q3-SUMMER-XAUUSD-2",
+        "2023-Q3-SUMMER-XAUUSD-3",
+        "2023-Q3-SUMMER-XAUUSD-4",
+        "2023-Q3-SUMMER-XAUUSD-5",
+        "2023-Q3-SUMMER-XAUUSD-6",
+        "2023-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-07-27T07:00:00Z",
+        "to": "2023-07-27T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2023-07-28",
+      "cohort": "2023-Q3-SUMMER",
+      "date": "2023-07-28",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2023-07-28T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2023-Q3-SUMMER-XAUUSD-0",
+        "2023-Q3-SUMMER-XAUUSD-1",
+        "2023-Q3-SUMMER-XAUUSD-2",
+        "2023-Q3-SUMMER-XAUUSD-3",
+        "2023-Q3-SUMMER-XAUUSD-4",
+        "2023-Q3-SUMMER-XAUUSD-5",
+        "2023-Q3-SUMMER-XAUUSD-6",
+        "2023-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2023-07-28T07:00:00Z",
+        "to": "2023-07-28T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-01-22",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-22",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-01-22T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotCrude-0",
+        "2024-Q1-WINTER-SpotCrude-1",
+        "2024-Q1-WINTER-SpotCrude-2",
+        "2024-Q1-WINTER-SpotCrude-3",
+        "2024-Q1-WINTER-SpotCrude-4",
+        "2024-Q1-WINTER-SpotCrude-5",
+        "2024-Q1-WINTER-SpotCrude-6",
+        "2024-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-22T13:00:00Z",
+        "to": "2024-01-22T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-01-23",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-23",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-01-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotCrude-0",
+        "2024-Q1-WINTER-SpotCrude-1",
+        "2024-Q1-WINTER-SpotCrude-2",
+        "2024-Q1-WINTER-SpotCrude-3",
+        "2024-Q1-WINTER-SpotCrude-4",
+        "2024-Q1-WINTER-SpotCrude-5",
+        "2024-Q1-WINTER-SpotCrude-6",
+        "2024-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-23T13:00:00Z",
+        "to": "2024-01-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-01-24",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-24",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-01-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotCrude-0",
+        "2024-Q1-WINTER-SpotCrude-1",
+        "2024-Q1-WINTER-SpotCrude-2",
+        "2024-Q1-WINTER-SpotCrude-3",
+        "2024-Q1-WINTER-SpotCrude-4",
+        "2024-Q1-WINTER-SpotCrude-5",
+        "2024-Q1-WINTER-SpotCrude-6",
+        "2024-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-24T13:00:00Z",
+        "to": "2024-01-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-01-25",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-25",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-01-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotCrude-0",
+        "2024-Q1-WINTER-SpotCrude-1",
+        "2024-Q1-WINTER-SpotCrude-2",
+        "2024-Q1-WINTER-SpotCrude-3",
+        "2024-Q1-WINTER-SpotCrude-4",
+        "2024-Q1-WINTER-SpotCrude-5",
+        "2024-Q1-WINTER-SpotCrude-6",
+        "2024-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-25T13:00:00Z",
+        "to": "2024-01-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-01-26",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-26",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-01-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotCrude-0",
+        "2024-Q1-WINTER-SpotCrude-1",
+        "2024-Q1-WINTER-SpotCrude-2",
+        "2024-Q1-WINTER-SpotCrude-3",
+        "2024-Q1-WINTER-SpotCrude-4",
+        "2024-Q1-WINTER-SpotCrude-5",
+        "2024-Q1-WINTER-SpotCrude-6",
+        "2024-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-26T13:00:00Z",
+        "to": "2024-01-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-01-22",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-22",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-01-22T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotBrent-0",
+        "2024-Q1-WINTER-SpotBrent-1",
+        "2024-Q1-WINTER-SpotBrent-2",
+        "2024-Q1-WINTER-SpotBrent-3",
+        "2024-Q1-WINTER-SpotBrent-4",
+        "2024-Q1-WINTER-SpotBrent-5",
+        "2024-Q1-WINTER-SpotBrent-6",
+        "2024-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-01-22T13:00:00Z",
+        "to": "2024-01-22T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-01-23",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-23",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-01-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotBrent-0",
+        "2024-Q1-WINTER-SpotBrent-1",
+        "2024-Q1-WINTER-SpotBrent-2",
+        "2024-Q1-WINTER-SpotBrent-3",
+        "2024-Q1-WINTER-SpotBrent-4",
+        "2024-Q1-WINTER-SpotBrent-5",
+        "2024-Q1-WINTER-SpotBrent-6",
+        "2024-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-01-23T13:00:00Z",
+        "to": "2024-01-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-01-24",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-24",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-01-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotBrent-0",
+        "2024-Q1-WINTER-SpotBrent-1",
+        "2024-Q1-WINTER-SpotBrent-2",
+        "2024-Q1-WINTER-SpotBrent-3",
+        "2024-Q1-WINTER-SpotBrent-4",
+        "2024-Q1-WINTER-SpotBrent-5",
+        "2024-Q1-WINTER-SpotBrent-6",
+        "2024-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-01-24T13:00:00Z",
+        "to": "2024-01-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-01-25",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-25",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-01-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotBrent-0",
+        "2024-Q1-WINTER-SpotBrent-1",
+        "2024-Q1-WINTER-SpotBrent-2",
+        "2024-Q1-WINTER-SpotBrent-3",
+        "2024-Q1-WINTER-SpotBrent-4",
+        "2024-Q1-WINTER-SpotBrent-5",
+        "2024-Q1-WINTER-SpotBrent-6",
+        "2024-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-01-25T13:00:00Z",
+        "to": "2024-01-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-01-26",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-26",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-01-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-SpotBrent-0",
+        "2024-Q1-WINTER-SpotBrent-1",
+        "2024-Q1-WINTER-SpotBrent-2",
+        "2024-Q1-WINTER-SpotBrent-3",
+        "2024-Q1-WINTER-SpotBrent-4",
+        "2024-Q1-WINTER-SpotBrent-5",
+        "2024-Q1-WINTER-SpotBrent-6",
+        "2024-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-01-26T13:00:00Z",
+        "to": "2024-01-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-01-22",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-22",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-01-22T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-22T14:30:00Z",
+        "to": "2024-01-22T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-01-22.json",
+        "file_sha256": "a995295de93f08f85eea305a46efa8fd97b6018810696a639b499e4c402a5aca",
+        "receipt": {
+          "key": "job-US500-2024-01-22",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "a995295de93f08f85eea305a46efa8fd97b6018810696a639b499e4c402a5aca"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-01-23",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-23",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-01-23T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-23T14:30:00Z",
+        "to": "2024-01-23T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-01-23.json",
+        "file_sha256": "6fa79b15c3914b1add3f7212084060340ec2bef1ead979d30bb863a83875c513",
+        "receipt": {
+          "key": "job-US500-2024-01-23",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "6fa79b15c3914b1add3f7212084060340ec2bef1ead979d30bb863a83875c513"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-01-24",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-24",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-01-24T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-24T14:30:00Z",
+        "to": "2024-01-24T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-01-24.json",
+        "file_sha256": "ce29c8066136ee4cde5d02950b1b62593d2ab3b6f42d2abdb3b87bbc4cb339e8",
+        "receipt": {
+          "key": "job-US500-2024-01-24",
+          "state": "finished",
+          "status": "failed",
+          "file_sha256": "ce29c8066136ee4cde5d02950b1b62593d2ab3b6f42d2abdb3b87bbc4cb339e8"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-01-25",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-25",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-01-25T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-25T14:30:00Z",
+        "to": "2024-01-25T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-01-25.json",
+        "file_sha256": "121a54b12f1dbaf72ece2d0e8d3ed3665124cc72e3df1b2c827f2f85c3080128",
+        "receipt": {
+          "key": "job-US500-2024-01-25",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "121a54b12f1dbaf72ece2d0e8d3ed3665124cc72e3df1b2c827f2f85c3080128"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-01-26",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-26",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-01-26T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-26T14:30:00Z",
+        "to": "2024-01-26T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-01-26.json",
+        "file_sha256": "97d4fee2560f62a5fbc6ed03a905df905669374574d6e901033b32458e0652c3",
+        "receipt": {
+          "key": "job-US500-2024-01-26",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "97d4fee2560f62a5fbc6ed03a905df905669374574d6e901033b32458e0652c3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-01-22",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-22",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-01-22T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-XAUUSD-0",
+        "2024-Q1-WINTER-XAUUSD-1",
+        "2024-Q1-WINTER-XAUUSD-2",
+        "2024-Q1-WINTER-XAUUSD-3",
+        "2024-Q1-WINTER-XAUUSD-4",
+        "2024-Q1-WINTER-XAUUSD-5",
+        "2024-Q1-WINTER-XAUUSD-6",
+        "2024-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-22T07:00:00Z",
+        "to": "2024-01-22T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-01-23",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-23",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-01-23T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-XAUUSD-0",
+        "2024-Q1-WINTER-XAUUSD-1",
+        "2024-Q1-WINTER-XAUUSD-2",
+        "2024-Q1-WINTER-XAUUSD-3",
+        "2024-Q1-WINTER-XAUUSD-4",
+        "2024-Q1-WINTER-XAUUSD-5",
+        "2024-Q1-WINTER-XAUUSD-6",
+        "2024-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-23T07:00:00Z",
+        "to": "2024-01-23T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-01-24",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-24",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-01-24T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-XAUUSD-0",
+        "2024-Q1-WINTER-XAUUSD-1",
+        "2024-Q1-WINTER-XAUUSD-2",
+        "2024-Q1-WINTER-XAUUSD-3",
+        "2024-Q1-WINTER-XAUUSD-4",
+        "2024-Q1-WINTER-XAUUSD-5",
+        "2024-Q1-WINTER-XAUUSD-6",
+        "2024-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-24T07:00:00Z",
+        "to": "2024-01-24T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-01-25",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-25",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-01-25T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-XAUUSD-0",
+        "2024-Q1-WINTER-XAUUSD-1",
+        "2024-Q1-WINTER-XAUUSD-2",
+        "2024-Q1-WINTER-XAUUSD-3",
+        "2024-Q1-WINTER-XAUUSD-4",
+        "2024-Q1-WINTER-XAUUSD-5",
+        "2024-Q1-WINTER-XAUUSD-6",
+        "2024-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-25T07:00:00Z",
+        "to": "2024-01-25T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-01-26",
+      "cohort": "2024-Q1-WINTER",
+      "date": "2024-01-26",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-01-26T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q1-WINTER-XAUUSD-0",
+        "2024-Q1-WINTER-XAUUSD-1",
+        "2024-Q1-WINTER-XAUUSD-2",
+        "2024-Q1-WINTER-XAUUSD-3",
+        "2024-Q1-WINTER-XAUUSD-4",
+        "2024-Q1-WINTER-XAUUSD-5",
+        "2024-Q1-WINTER-XAUUSD-6",
+        "2024-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-26T07:00:00Z",
+        "to": "2024-01-26T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-07-22",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-22",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-07-22T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotCrude-0",
+        "2024-Q3-SUMMER-SpotCrude-1",
+        "2024-Q3-SUMMER-SpotCrude-2",
+        "2024-Q3-SUMMER-SpotCrude-3",
+        "2024-Q3-SUMMER-SpotCrude-4",
+        "2024-Q3-SUMMER-SpotCrude-5",
+        "2024-Q3-SUMMER-SpotCrude-6",
+        "2024-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-07-22T13:00:00Z",
+        "to": "2024-07-22T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-07-23",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-23",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-07-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotCrude-0",
+        "2024-Q3-SUMMER-SpotCrude-1",
+        "2024-Q3-SUMMER-SpotCrude-2",
+        "2024-Q3-SUMMER-SpotCrude-3",
+        "2024-Q3-SUMMER-SpotCrude-4",
+        "2024-Q3-SUMMER-SpotCrude-5",
+        "2024-Q3-SUMMER-SpotCrude-6",
+        "2024-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-07-23T13:00:00Z",
+        "to": "2024-07-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-07-24",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-24",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-07-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotCrude-0",
+        "2024-Q3-SUMMER-SpotCrude-1",
+        "2024-Q3-SUMMER-SpotCrude-2",
+        "2024-Q3-SUMMER-SpotCrude-3",
+        "2024-Q3-SUMMER-SpotCrude-4",
+        "2024-Q3-SUMMER-SpotCrude-5",
+        "2024-Q3-SUMMER-SpotCrude-6",
+        "2024-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-07-24T13:00:00Z",
+        "to": "2024-07-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-07-25",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-25",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-07-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotCrude-0",
+        "2024-Q3-SUMMER-SpotCrude-1",
+        "2024-Q3-SUMMER-SpotCrude-2",
+        "2024-Q3-SUMMER-SpotCrude-3",
+        "2024-Q3-SUMMER-SpotCrude-4",
+        "2024-Q3-SUMMER-SpotCrude-5",
+        "2024-Q3-SUMMER-SpotCrude-6",
+        "2024-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-07-25T13:00:00Z",
+        "to": "2024-07-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2024-07-26",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-26",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2024-07-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotCrude-0",
+        "2024-Q3-SUMMER-SpotCrude-1",
+        "2024-Q3-SUMMER-SpotCrude-2",
+        "2024-Q3-SUMMER-SpotCrude-3",
+        "2024-Q3-SUMMER-SpotCrude-4",
+        "2024-Q3-SUMMER-SpotCrude-5",
+        "2024-Q3-SUMMER-SpotCrude-6",
+        "2024-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-07-26T13:00:00Z",
+        "to": "2024-07-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-07-22",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-22",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-07-22T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotBrent-0",
+        "2024-Q3-SUMMER-SpotBrent-1",
+        "2024-Q3-SUMMER-SpotBrent-2",
+        "2024-Q3-SUMMER-SpotBrent-3",
+        "2024-Q3-SUMMER-SpotBrent-4",
+        "2024-Q3-SUMMER-SpotBrent-5",
+        "2024-Q3-SUMMER-SpotBrent-6",
+        "2024-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-07-22T13:00:00Z",
+        "to": "2024-07-22T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-07-23",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-23",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-07-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotBrent-0",
+        "2024-Q3-SUMMER-SpotBrent-1",
+        "2024-Q3-SUMMER-SpotBrent-2",
+        "2024-Q3-SUMMER-SpotBrent-3",
+        "2024-Q3-SUMMER-SpotBrent-4",
+        "2024-Q3-SUMMER-SpotBrent-5",
+        "2024-Q3-SUMMER-SpotBrent-6",
+        "2024-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-07-23T13:00:00Z",
+        "to": "2024-07-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-07-24",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-24",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-07-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotBrent-0",
+        "2024-Q3-SUMMER-SpotBrent-1",
+        "2024-Q3-SUMMER-SpotBrent-2",
+        "2024-Q3-SUMMER-SpotBrent-3",
+        "2024-Q3-SUMMER-SpotBrent-4",
+        "2024-Q3-SUMMER-SpotBrent-5",
+        "2024-Q3-SUMMER-SpotBrent-6",
+        "2024-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-07-24T13:00:00Z",
+        "to": "2024-07-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-07-25",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-25",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-07-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotBrent-0",
+        "2024-Q3-SUMMER-SpotBrent-1",
+        "2024-Q3-SUMMER-SpotBrent-2",
+        "2024-Q3-SUMMER-SpotBrent-3",
+        "2024-Q3-SUMMER-SpotBrent-4",
+        "2024-Q3-SUMMER-SpotBrent-5",
+        "2024-Q3-SUMMER-SpotBrent-6",
+        "2024-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-07-25T13:00:00Z",
+        "to": "2024-07-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2024-07-26",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-26",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2024-07-26T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-SpotBrent-0",
+        "2024-Q3-SUMMER-SpotBrent-1",
+        "2024-Q3-SUMMER-SpotBrent-2",
+        "2024-Q3-SUMMER-SpotBrent-3",
+        "2024-Q3-SUMMER-SpotBrent-4",
+        "2024-Q3-SUMMER-SpotBrent-5",
+        "2024-Q3-SUMMER-SpotBrent-6",
+        "2024-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2024-07-26T13:00:00Z",
+        "to": "2024-07-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-07-22",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-22",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-07-22T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-07-22T13:30:00Z",
+        "to": "2024-07-22T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-07-22.json",
+        "file_sha256": "bc766d85ccd6e878370deba8274139ab43a5eca557cb82d6996f4612fc338b12",
+        "receipt": {
+          "key": "job-US500-2024-07-22",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "bc766d85ccd6e878370deba8274139ab43a5eca557cb82d6996f4612fc338b12"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-07-23",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-23",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-07-23T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-07-23T13:30:00Z",
+        "to": "2024-07-23T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-07-23.json",
+        "file_sha256": "85f0d62c8e91ceac5b7c9fb02dcf272a9b2ad365234bb3e183fc55aaaf068efc",
+        "receipt": {
+          "key": "job-US500-2024-07-23",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "85f0d62c8e91ceac5b7c9fb02dcf272a9b2ad365234bb3e183fc55aaaf068efc"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-07-24",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-24",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-07-24T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-07-24T13:30:00Z",
+        "to": "2024-07-24T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-07-24.json",
+        "file_sha256": "ea484433f35228c42f295089dc5edeca3ffe457340fc43ccb07004e21eaae023",
+        "receipt": {
+          "key": "job-US500-2024-07-24",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "ea484433f35228c42f295089dc5edeca3ffe457340fc43ccb07004e21eaae023"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-07-25",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-25",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-07-25T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-07-25T13:30:00Z",
+        "to": "2024-07-25T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-07-25.json",
+        "file_sha256": "51899a0406e2b6fcee737fe01e6adba805bbeaf7e427a47887b331a9bda6c6ed",
+        "receipt": {
+          "key": "job-US500-2024-07-25",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "51899a0406e2b6fcee737fe01e6adba805bbeaf7e427a47887b331a9bda6c6ed"
+        }
+      }
+    },
+    {
+      "key": "US500-2024-07-26",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-26",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2024-07-26T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-07-26T13:30:00Z",
+        "to": "2024-07-26T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "reuse": {
+        "path": "/workspace/jiaoyi-seasonal-stage1-18316/job-US500-2024-07-26.json",
+        "file_sha256": "87941d5857bbf13c08ff16937579c3f0edb910f928ec47a5d693e2eb4e8c2deb",
+        "receipt": {
+          "key": "job-US500-2024-07-26",
+          "state": "finished",
+          "status": "complete",
+          "file_sha256": "87941d5857bbf13c08ff16937579c3f0edb910f928ec47a5d693e2eb4e8c2deb"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-07-22",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-22",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-07-22T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-XAUUSD-0",
+        "2024-Q3-SUMMER-XAUUSD-1",
+        "2024-Q3-SUMMER-XAUUSD-2",
+        "2024-Q3-SUMMER-XAUUSD-3",
+        "2024-Q3-SUMMER-XAUUSD-4",
+        "2024-Q3-SUMMER-XAUUSD-5",
+        "2024-Q3-SUMMER-XAUUSD-6",
+        "2024-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-07-22T07:00:00Z",
+        "to": "2024-07-22T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-07-23",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-23",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-07-23T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-XAUUSD-0",
+        "2024-Q3-SUMMER-XAUUSD-1",
+        "2024-Q3-SUMMER-XAUUSD-2",
+        "2024-Q3-SUMMER-XAUUSD-3",
+        "2024-Q3-SUMMER-XAUUSD-4",
+        "2024-Q3-SUMMER-XAUUSD-5",
+        "2024-Q3-SUMMER-XAUUSD-6",
+        "2024-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-07-23T07:00:00Z",
+        "to": "2024-07-23T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-07-24",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-24",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-07-24T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-XAUUSD-0",
+        "2024-Q3-SUMMER-XAUUSD-1",
+        "2024-Q3-SUMMER-XAUUSD-2",
+        "2024-Q3-SUMMER-XAUUSD-3",
+        "2024-Q3-SUMMER-XAUUSD-4",
+        "2024-Q3-SUMMER-XAUUSD-5",
+        "2024-Q3-SUMMER-XAUUSD-6",
+        "2024-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-07-24T07:00:00Z",
+        "to": "2024-07-24T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-07-25",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-25",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-07-25T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-XAUUSD-0",
+        "2024-Q3-SUMMER-XAUUSD-1",
+        "2024-Q3-SUMMER-XAUUSD-2",
+        "2024-Q3-SUMMER-XAUUSD-3",
+        "2024-Q3-SUMMER-XAUUSD-4",
+        "2024-Q3-SUMMER-XAUUSD-5",
+        "2024-Q3-SUMMER-XAUUSD-6",
+        "2024-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-07-25T07:00:00Z",
+        "to": "2024-07-25T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2024-07-26",
+      "cohort": "2024-Q3-SUMMER",
+      "date": "2024-07-26",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2024-07-26T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2024-Q3-SUMMER-XAUUSD-0",
+        "2024-Q3-SUMMER-XAUUSD-1",
+        "2024-Q3-SUMMER-XAUUSD-2",
+        "2024-Q3-SUMMER-XAUUSD-3",
+        "2024-Q3-SUMMER-XAUUSD-4",
+        "2024-Q3-SUMMER-XAUUSD-5",
+        "2024-Q3-SUMMER-XAUUSD-6",
+        "2024-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-07-26T07:00:00Z",
+        "to": "2024-07-26T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-02-10",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-10",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-02-10T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotCrude-0",
+        "2025-Q1-WINTER-SpotCrude-1",
+        "2025-Q1-WINTER-SpotCrude-2",
+        "2025-Q1-WINTER-SpotCrude-3",
+        "2025-Q1-WINTER-SpotCrude-4",
+        "2025-Q1-WINTER-SpotCrude-5",
+        "2025-Q1-WINTER-SpotCrude-6",
+        "2025-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-02-10T13:00:00Z",
+        "to": "2025-02-10T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-02-11",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-11",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-02-11T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotCrude-0",
+        "2025-Q1-WINTER-SpotCrude-1",
+        "2025-Q1-WINTER-SpotCrude-2",
+        "2025-Q1-WINTER-SpotCrude-3",
+        "2025-Q1-WINTER-SpotCrude-4",
+        "2025-Q1-WINTER-SpotCrude-5",
+        "2025-Q1-WINTER-SpotCrude-6",
+        "2025-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-02-11T13:00:00Z",
+        "to": "2025-02-11T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-02-12",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-12",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-02-12T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotCrude-0",
+        "2025-Q1-WINTER-SpotCrude-1",
+        "2025-Q1-WINTER-SpotCrude-2",
+        "2025-Q1-WINTER-SpotCrude-3",
+        "2025-Q1-WINTER-SpotCrude-4",
+        "2025-Q1-WINTER-SpotCrude-5",
+        "2025-Q1-WINTER-SpotCrude-6",
+        "2025-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-02-12T13:00:00Z",
+        "to": "2025-02-12T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-02-13",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-13",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-02-13T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotCrude-0",
+        "2025-Q1-WINTER-SpotCrude-1",
+        "2025-Q1-WINTER-SpotCrude-2",
+        "2025-Q1-WINTER-SpotCrude-3",
+        "2025-Q1-WINTER-SpotCrude-4",
+        "2025-Q1-WINTER-SpotCrude-5",
+        "2025-Q1-WINTER-SpotCrude-6",
+        "2025-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-02-13T13:00:00Z",
+        "to": "2025-02-13T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-02-14",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-14",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-02-14T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotCrude-0",
+        "2025-Q1-WINTER-SpotCrude-1",
+        "2025-Q1-WINTER-SpotCrude-2",
+        "2025-Q1-WINTER-SpotCrude-3",
+        "2025-Q1-WINTER-SpotCrude-4",
+        "2025-Q1-WINTER-SpotCrude-5",
+        "2025-Q1-WINTER-SpotCrude-6",
+        "2025-Q1-WINTER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-02-14T13:00:00Z",
+        "to": "2025-02-14T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-02-10",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-10",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-02-10T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotBrent-0",
+        "2025-Q1-WINTER-SpotBrent-1",
+        "2025-Q1-WINTER-SpotBrent-2",
+        "2025-Q1-WINTER-SpotBrent-3",
+        "2025-Q1-WINTER-SpotBrent-4",
+        "2025-Q1-WINTER-SpotBrent-5",
+        "2025-Q1-WINTER-SpotBrent-6",
+        "2025-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-02-10T13:00:00Z",
+        "to": "2025-02-10T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-02-11",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-11",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-02-11T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotBrent-0",
+        "2025-Q1-WINTER-SpotBrent-1",
+        "2025-Q1-WINTER-SpotBrent-2",
+        "2025-Q1-WINTER-SpotBrent-3",
+        "2025-Q1-WINTER-SpotBrent-4",
+        "2025-Q1-WINTER-SpotBrent-5",
+        "2025-Q1-WINTER-SpotBrent-6",
+        "2025-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-02-11T13:00:00Z",
+        "to": "2025-02-11T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-02-12",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-12",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-02-12T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotBrent-0",
+        "2025-Q1-WINTER-SpotBrent-1",
+        "2025-Q1-WINTER-SpotBrent-2",
+        "2025-Q1-WINTER-SpotBrent-3",
+        "2025-Q1-WINTER-SpotBrent-4",
+        "2025-Q1-WINTER-SpotBrent-5",
+        "2025-Q1-WINTER-SpotBrent-6",
+        "2025-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-02-12T13:00:00Z",
+        "to": "2025-02-12T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-02-13",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-13",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-02-13T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotBrent-0",
+        "2025-Q1-WINTER-SpotBrent-1",
+        "2025-Q1-WINTER-SpotBrent-2",
+        "2025-Q1-WINTER-SpotBrent-3",
+        "2025-Q1-WINTER-SpotBrent-4",
+        "2025-Q1-WINTER-SpotBrent-5",
+        "2025-Q1-WINTER-SpotBrent-6",
+        "2025-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-02-13T13:00:00Z",
+        "to": "2025-02-13T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-02-14",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-14",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-02-14T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-SpotBrent-0",
+        "2025-Q1-WINTER-SpotBrent-1",
+        "2025-Q1-WINTER-SpotBrent-2",
+        "2025-Q1-WINTER-SpotBrent-3",
+        "2025-Q1-WINTER-SpotBrent-4",
+        "2025-Q1-WINTER-SpotBrent-5",
+        "2025-Q1-WINTER-SpotBrent-6",
+        "2025-Q1-WINTER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-02-14T13:00:00Z",
+        "to": "2025-02-14T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-02-10",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-10",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-02-10T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-US500-0",
+        "2025-Q1-WINTER-US500-1",
+        "2025-Q1-WINTER-US500-2",
+        "2025-Q1-WINTER-US500-3",
+        "2025-Q1-WINTER-US500-4",
+        "2025-Q1-WINTER-US500-5",
+        "2025-Q1-WINTER-US500-6",
+        "2025-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-02-10T14:30:00Z",
+        "to": "2025-02-10T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-02-11",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-11",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-02-11T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-US500-0",
+        "2025-Q1-WINTER-US500-1",
+        "2025-Q1-WINTER-US500-2",
+        "2025-Q1-WINTER-US500-3",
+        "2025-Q1-WINTER-US500-4",
+        "2025-Q1-WINTER-US500-5",
+        "2025-Q1-WINTER-US500-6",
+        "2025-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-02-11T14:30:00Z",
+        "to": "2025-02-11T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-02-12",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-12",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-02-12T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-US500-0",
+        "2025-Q1-WINTER-US500-1",
+        "2025-Q1-WINTER-US500-2",
+        "2025-Q1-WINTER-US500-3",
+        "2025-Q1-WINTER-US500-4",
+        "2025-Q1-WINTER-US500-5",
+        "2025-Q1-WINTER-US500-6",
+        "2025-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-02-12T14:30:00Z",
+        "to": "2025-02-12T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-02-13",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-13",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-02-13T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-US500-0",
+        "2025-Q1-WINTER-US500-1",
+        "2025-Q1-WINTER-US500-2",
+        "2025-Q1-WINTER-US500-3",
+        "2025-Q1-WINTER-US500-4",
+        "2025-Q1-WINTER-US500-5",
+        "2025-Q1-WINTER-US500-6",
+        "2025-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-02-13T14:30:00Z",
+        "to": "2025-02-13T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-02-14",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-14",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-02-14T14:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-US500-0",
+        "2025-Q1-WINTER-US500-1",
+        "2025-Q1-WINTER-US500-2",
+        "2025-Q1-WINTER-US500-3",
+        "2025-Q1-WINTER-US500-4",
+        "2025-Q1-WINTER-US500-5",
+        "2025-Q1-WINTER-US500-6",
+        "2025-Q1-WINTER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-02-14T14:30:00Z",
+        "to": "2025-02-14T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-02-10",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-10",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-02-10T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-XAUUSD-0",
+        "2025-Q1-WINTER-XAUUSD-1",
+        "2025-Q1-WINTER-XAUUSD-2",
+        "2025-Q1-WINTER-XAUUSD-3",
+        "2025-Q1-WINTER-XAUUSD-4",
+        "2025-Q1-WINTER-XAUUSD-5",
+        "2025-Q1-WINTER-XAUUSD-6",
+        "2025-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-02-10T07:00:00Z",
+        "to": "2025-02-10T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-02-11",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-11",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-02-11T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-XAUUSD-0",
+        "2025-Q1-WINTER-XAUUSD-1",
+        "2025-Q1-WINTER-XAUUSD-2",
+        "2025-Q1-WINTER-XAUUSD-3",
+        "2025-Q1-WINTER-XAUUSD-4",
+        "2025-Q1-WINTER-XAUUSD-5",
+        "2025-Q1-WINTER-XAUUSD-6",
+        "2025-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-02-11T07:00:00Z",
+        "to": "2025-02-11T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-02-12",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-12",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-02-12T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-XAUUSD-0",
+        "2025-Q1-WINTER-XAUUSD-1",
+        "2025-Q1-WINTER-XAUUSD-2",
+        "2025-Q1-WINTER-XAUUSD-3",
+        "2025-Q1-WINTER-XAUUSD-4",
+        "2025-Q1-WINTER-XAUUSD-5",
+        "2025-Q1-WINTER-XAUUSD-6",
+        "2025-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-02-12T07:00:00Z",
+        "to": "2025-02-12T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-02-13",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-13",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-02-13T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-XAUUSD-0",
+        "2025-Q1-WINTER-XAUUSD-1",
+        "2025-Q1-WINTER-XAUUSD-2",
+        "2025-Q1-WINTER-XAUUSD-3",
+        "2025-Q1-WINTER-XAUUSD-4",
+        "2025-Q1-WINTER-XAUUSD-5",
+        "2025-Q1-WINTER-XAUUSD-6",
+        "2025-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-02-13T07:00:00Z",
+        "to": "2025-02-13T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-02-14",
+      "cohort": "2025-Q1-WINTER",
+      "date": "2025-02-14",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-02-14T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q1-WINTER-XAUUSD-0",
+        "2025-Q1-WINTER-XAUUSD-1",
+        "2025-Q1-WINTER-XAUUSD-2",
+        "2025-Q1-WINTER-XAUUSD-3",
+        "2025-Q1-WINTER-XAUUSD-4",
+        "2025-Q1-WINTER-XAUUSD-5",
+        "2025-Q1-WINTER-XAUUSD-6",
+        "2025-Q1-WINTER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-02-14T07:00:00Z",
+        "to": "2025-02-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-07-21",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-21",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-07-21T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotCrude-0",
+        "2025-Q3-SUMMER-SpotCrude-1",
+        "2025-Q3-SUMMER-SpotCrude-2",
+        "2025-Q3-SUMMER-SpotCrude-3",
+        "2025-Q3-SUMMER-SpotCrude-4",
+        "2025-Q3-SUMMER-SpotCrude-5",
+        "2025-Q3-SUMMER-SpotCrude-6",
+        "2025-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-07-21T13:00:00Z",
+        "to": "2025-07-21T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-07-22",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-22",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-07-22T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotCrude-0",
+        "2025-Q3-SUMMER-SpotCrude-1",
+        "2025-Q3-SUMMER-SpotCrude-2",
+        "2025-Q3-SUMMER-SpotCrude-3",
+        "2025-Q3-SUMMER-SpotCrude-4",
+        "2025-Q3-SUMMER-SpotCrude-5",
+        "2025-Q3-SUMMER-SpotCrude-6",
+        "2025-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-07-22T13:00:00Z",
+        "to": "2025-07-22T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-07-23",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-23",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-07-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotCrude-0",
+        "2025-Q3-SUMMER-SpotCrude-1",
+        "2025-Q3-SUMMER-SpotCrude-2",
+        "2025-Q3-SUMMER-SpotCrude-3",
+        "2025-Q3-SUMMER-SpotCrude-4",
+        "2025-Q3-SUMMER-SpotCrude-5",
+        "2025-Q3-SUMMER-SpotCrude-6",
+        "2025-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-07-23T13:00:00Z",
+        "to": "2025-07-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-07-24",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-24",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-07-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotCrude-0",
+        "2025-Q3-SUMMER-SpotCrude-1",
+        "2025-Q3-SUMMER-SpotCrude-2",
+        "2025-Q3-SUMMER-SpotCrude-3",
+        "2025-Q3-SUMMER-SpotCrude-4",
+        "2025-Q3-SUMMER-SpotCrude-5",
+        "2025-Q3-SUMMER-SpotCrude-6",
+        "2025-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-07-24T13:00:00Z",
+        "to": "2025-07-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-07-25",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-25",
+      "symbol": "SpotCrude",
+      "asset_class": "energy",
+      "symbol_id": 10054,
+      "source_from": "2025-07-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotCrude-0",
+        "2025-Q3-SUMMER-SpotCrude-1",
+        "2025-Q3-SUMMER-SpotCrude-2",
+        "2025-Q3-SUMMER-SpotCrude-3",
+        "2025-Q3-SUMMER-SpotCrude-4",
+        "2025-Q3-SUMMER-SpotCrude-5",
+        "2025-Q3-SUMMER-SpotCrude-6",
+        "2025-Q3-SUMMER-SpotCrude-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-07-25T13:00:00Z",
+        "to": "2025-07-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-07-21",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-21",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-07-21T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotBrent-0",
+        "2025-Q3-SUMMER-SpotBrent-1",
+        "2025-Q3-SUMMER-SpotBrent-2",
+        "2025-Q3-SUMMER-SpotBrent-3",
+        "2025-Q3-SUMMER-SpotBrent-4",
+        "2025-Q3-SUMMER-SpotBrent-5",
+        "2025-Q3-SUMMER-SpotBrent-6",
+        "2025-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-07-21T13:00:00Z",
+        "to": "2025-07-21T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-07-22",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-22",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-07-22T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotBrent-0",
+        "2025-Q3-SUMMER-SpotBrent-1",
+        "2025-Q3-SUMMER-SpotBrent-2",
+        "2025-Q3-SUMMER-SpotBrent-3",
+        "2025-Q3-SUMMER-SpotBrent-4",
+        "2025-Q3-SUMMER-SpotBrent-5",
+        "2025-Q3-SUMMER-SpotBrent-6",
+        "2025-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-07-22T13:00:00Z",
+        "to": "2025-07-22T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-07-23",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-23",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-07-23T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotBrent-0",
+        "2025-Q3-SUMMER-SpotBrent-1",
+        "2025-Q3-SUMMER-SpotBrent-2",
+        "2025-Q3-SUMMER-SpotBrent-3",
+        "2025-Q3-SUMMER-SpotBrent-4",
+        "2025-Q3-SUMMER-SpotBrent-5",
+        "2025-Q3-SUMMER-SpotBrent-6",
+        "2025-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-07-23T13:00:00Z",
+        "to": "2025-07-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-07-24",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-24",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-07-24T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotBrent-0",
+        "2025-Q3-SUMMER-SpotBrent-1",
+        "2025-Q3-SUMMER-SpotBrent-2",
+        "2025-Q3-SUMMER-SpotBrent-3",
+        "2025-Q3-SUMMER-SpotBrent-4",
+        "2025-Q3-SUMMER-SpotBrent-5",
+        "2025-Q3-SUMMER-SpotBrent-6",
+        "2025-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-07-24T13:00:00Z",
+        "to": "2025-07-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-07-25",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-25",
+      "symbol": "SpotBrent",
+      "asset_class": "energy",
+      "symbol_id": 10053,
+      "source_from": "2025-07-25T07:00:00Z",
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-SpotBrent-0",
+        "2025-Q3-SUMMER-SpotBrent-1",
+        "2025-Q3-SUMMER-SpotBrent-2",
+        "2025-Q3-SUMMER-SpotBrent-3",
+        "2025-Q3-SUMMER-SpotBrent-4",
+        "2025-Q3-SUMMER-SpotBrent-5",
+        "2025-Q3-SUMMER-SpotBrent-6",
+        "2025-Q3-SUMMER-SpotBrent-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-07-25T13:00:00Z",
+        "to": "2025-07-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-07-21",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-21",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-07-21T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-US500-0",
+        "2025-Q3-SUMMER-US500-1",
+        "2025-Q3-SUMMER-US500-2",
+        "2025-Q3-SUMMER-US500-3",
+        "2025-Q3-SUMMER-US500-4",
+        "2025-Q3-SUMMER-US500-5",
+        "2025-Q3-SUMMER-US500-6",
+        "2025-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-07-21T13:30:00Z",
+        "to": "2025-07-21T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-07-22",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-22",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-07-22T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-US500-0",
+        "2025-Q3-SUMMER-US500-1",
+        "2025-Q3-SUMMER-US500-2",
+        "2025-Q3-SUMMER-US500-3",
+        "2025-Q3-SUMMER-US500-4",
+        "2025-Q3-SUMMER-US500-5",
+        "2025-Q3-SUMMER-US500-6",
+        "2025-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-07-22T13:30:00Z",
+        "to": "2025-07-22T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-07-23",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-23",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-07-23T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-US500-0",
+        "2025-Q3-SUMMER-US500-1",
+        "2025-Q3-SUMMER-US500-2",
+        "2025-Q3-SUMMER-US500-3",
+        "2025-Q3-SUMMER-US500-4",
+        "2025-Q3-SUMMER-US500-5",
+        "2025-Q3-SUMMER-US500-6",
+        "2025-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-07-23T13:30:00Z",
+        "to": "2025-07-23T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-07-24",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-24",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-07-24T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-US500-0",
+        "2025-Q3-SUMMER-US500-1",
+        "2025-Q3-SUMMER-US500-2",
+        "2025-Q3-SUMMER-US500-3",
+        "2025-Q3-SUMMER-US500-4",
+        "2025-Q3-SUMMER-US500-5",
+        "2025-Q3-SUMMER-US500-6",
+        "2025-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-07-24T13:30:00Z",
+        "to": "2025-07-24T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-07-25",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-25",
+      "symbol": "US500",
+      "asset_class": "equity_index",
+      "symbol_id": 10013,
+      "source_from": "2025-07-25T13:30:00Z",
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-US500-0",
+        "2025-Q3-SUMMER-US500-1",
+        "2025-Q3-SUMMER-US500-2",
+        "2025-Q3-SUMMER-US500-3",
+        "2025-Q3-SUMMER-US500-4",
+        "2025-Q3-SUMMER-US500-5",
+        "2025-Q3-SUMMER-US500-6",
+        "2025-Q3-SUMMER-US500-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-07-25T13:30:00Z",
+        "to": "2025-07-25T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-07-21",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-21",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-07-21T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-XAUUSD-0",
+        "2025-Q3-SUMMER-XAUUSD-1",
+        "2025-Q3-SUMMER-XAUUSD-2",
+        "2025-Q3-SUMMER-XAUUSD-3",
+        "2025-Q3-SUMMER-XAUUSD-4",
+        "2025-Q3-SUMMER-XAUUSD-5",
+        "2025-Q3-SUMMER-XAUUSD-6",
+        "2025-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-07-21T07:00:00Z",
+        "to": "2025-07-21T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-07-22",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-22",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-07-22T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-XAUUSD-0",
+        "2025-Q3-SUMMER-XAUUSD-1",
+        "2025-Q3-SUMMER-XAUUSD-2",
+        "2025-Q3-SUMMER-XAUUSD-3",
+        "2025-Q3-SUMMER-XAUUSD-4",
+        "2025-Q3-SUMMER-XAUUSD-5",
+        "2025-Q3-SUMMER-XAUUSD-6",
+        "2025-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-07-22T07:00:00Z",
+        "to": "2025-07-22T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-07-23",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-23",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-07-23T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-XAUUSD-0",
+        "2025-Q3-SUMMER-XAUUSD-1",
+        "2025-Q3-SUMMER-XAUUSD-2",
+        "2025-Q3-SUMMER-XAUUSD-3",
+        "2025-Q3-SUMMER-XAUUSD-4",
+        "2025-Q3-SUMMER-XAUUSD-5",
+        "2025-Q3-SUMMER-XAUUSD-6",
+        "2025-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-07-23T07:00:00Z",
+        "to": "2025-07-23T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-07-24",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-24",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-07-24T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-XAUUSD-0",
+        "2025-Q3-SUMMER-XAUUSD-1",
+        "2025-Q3-SUMMER-XAUUSD-2",
+        "2025-Q3-SUMMER-XAUUSD-3",
+        "2025-Q3-SUMMER-XAUUSD-4",
+        "2025-Q3-SUMMER-XAUUSD-5",
+        "2025-Q3-SUMMER-XAUUSD-6",
+        "2025-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-07-24T07:00:00Z",
+        "to": "2025-07-24T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-07-25",
+      "cohort": "2025-Q3-SUMMER",
+      "date": "2025-07-25",
+      "symbol": "XAUUSD",
+      "asset_class": "metal",
+      "symbol_id": 41,
+      "source_from": "2025-07-25T07:00:00Z",
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "bar_segments": [
+        "2025-Q3-SUMMER-XAUUSD-0",
+        "2025-Q3-SUMMER-XAUUSD-1",
+        "2025-Q3-SUMMER-XAUUSD-2",
+        "2025-Q3-SUMMER-XAUUSD-3",
+        "2025-Q3-SUMMER-XAUUSD-4",
+        "2025-Q3-SUMMER-XAUUSD-5",
+        "2025-Q3-SUMMER-XAUUSD-6",
+        "2025-Q3-SUMMER-XAUUSD-7"
+      ],
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-07-25T07:00:00Z",
+        "to": "2025-07-25T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      }
+    }
+  ],
+  "bar_segments": [
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-0",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2022-12-09T07:00:00Z",
+      "to": "2022-12-16T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-1",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2022-12-16T07:00:00Z",
+      "to": "2022-12-23T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-2",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2022-12-23T07:00:00Z",
+      "to": "2022-12-30T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-3",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2022-12-30T07:00:00Z",
+      "to": "2023-01-06T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-4",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-01-06T07:00:00Z",
+      "to": "2023-01-13T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-5",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-01-13T07:00:00Z",
+      "to": "2023-01-20T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-6",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-01-20T07:00:00Z",
+      "to": "2023-01-27T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotCrude-7",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-01-27T07:00:00Z",
+      "to": "2023-01-27T17:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-0",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2022-12-09T07:00:00Z",
+      "to": "2022-12-16T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-1",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2022-12-16T07:00:00Z",
+      "to": "2022-12-23T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-2",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2022-12-23T07:00:00Z",
+      "to": "2022-12-30T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-3",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2022-12-30T07:00:00Z",
+      "to": "2023-01-06T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-4",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-01-06T07:00:00Z",
+      "to": "2023-01-13T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-5",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-01-13T07:00:00Z",
+      "to": "2023-01-20T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-6",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-01-20T07:00:00Z",
+      "to": "2023-01-27T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-SpotBrent-7",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-01-27T07:00:00Z",
+      "to": "2023-01-27T17:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-0",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2022-12-09T14:30:00Z",
+      "to": "2022-12-16T14:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-1",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2022-12-16T14:30:00Z",
+      "to": "2022-12-23T14:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-2",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2022-12-23T14:30:00Z",
+      "to": "2022-12-30T14:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-3",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2022-12-30T14:30:00Z",
+      "to": "2023-01-06T14:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-4",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-01-06T14:30:00Z",
+      "to": "2023-01-13T14:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-5",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-01-13T14:30:00Z",
+      "to": "2023-01-20T14:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-6",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-01-20T14:30:00Z",
+      "to": "2023-01-27T14:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-US500-7",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-01-27T14:30:00Z",
+      "to": "2023-01-27T18:30:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-0",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2022-12-09T07:00:00Z",
+      "to": "2022-12-16T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-1",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2022-12-16T07:00:00Z",
+      "to": "2022-12-23T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-2",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2022-12-23T07:00:00Z",
+      "to": "2022-12-30T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-3",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2022-12-30T07:00:00Z",
+      "to": "2023-01-06T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-4",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-01-06T07:00:00Z",
+      "to": "2023-01-13T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-5",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-01-13T07:00:00Z",
+      "to": "2023-01-20T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-6",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-01-20T07:00:00Z",
+      "to": "2023-01-27T07:00:00Z"
+    },
+    {
+      "key": "2023-Q1-WINTER-XAUUSD-7",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-01-27T07:00:00Z",
+      "to": "2023-01-27T11:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-0",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-06-09T07:00:00Z",
+      "to": "2023-06-16T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-1",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-06-16T07:00:00Z",
+      "to": "2023-06-23T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-2",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-06-23T07:00:00Z",
+      "to": "2023-06-30T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-3",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-06-30T07:00:00Z",
+      "to": "2023-07-07T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-4",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-07-07T07:00:00Z",
+      "to": "2023-07-14T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-5",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-07-14T07:00:00Z",
+      "to": "2023-07-21T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-6",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-07-21T07:00:00Z",
+      "to": "2023-07-28T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotCrude-7",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-07-28T07:00:00Z",
+      "to": "2023-07-28T17:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-0",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-06-09T07:00:00Z",
+      "to": "2023-06-16T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-1",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-06-16T07:00:00Z",
+      "to": "2023-06-23T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-2",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-06-23T07:00:00Z",
+      "to": "2023-06-30T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-3",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-06-30T07:00:00Z",
+      "to": "2023-07-07T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-4",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-07-07T07:00:00Z",
+      "to": "2023-07-14T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-5",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-07-14T07:00:00Z",
+      "to": "2023-07-21T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-6",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-07-21T07:00:00Z",
+      "to": "2023-07-28T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-SpotBrent-7",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-07-28T07:00:00Z",
+      "to": "2023-07-28T17:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-0",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-06-09T13:30:00Z",
+      "to": "2023-06-16T13:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-1",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-06-16T13:30:00Z",
+      "to": "2023-06-23T13:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-2",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-06-23T13:30:00Z",
+      "to": "2023-06-30T13:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-3",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-06-30T13:30:00Z",
+      "to": "2023-07-07T13:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-4",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-07-07T13:30:00Z",
+      "to": "2023-07-14T13:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-5",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-07-14T13:30:00Z",
+      "to": "2023-07-21T13:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-6",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-07-21T13:30:00Z",
+      "to": "2023-07-28T13:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-US500-7",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2023-07-28T13:30:00Z",
+      "to": "2023-07-28T17:30:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-0",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-06-09T07:00:00Z",
+      "to": "2023-06-16T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-1",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-06-16T07:00:00Z",
+      "to": "2023-06-23T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-2",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-06-23T07:00:00Z",
+      "to": "2023-06-30T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-3",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-06-30T07:00:00Z",
+      "to": "2023-07-07T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-4",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-07-07T07:00:00Z",
+      "to": "2023-07-14T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-5",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-07-14T07:00:00Z",
+      "to": "2023-07-21T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-6",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-07-21T07:00:00Z",
+      "to": "2023-07-28T07:00:00Z"
+    },
+    {
+      "key": "2023-Q3-SUMMER-XAUUSD-7",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-07-28T07:00:00Z",
+      "to": "2023-07-28T11:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-0",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-12-08T07:00:00Z",
+      "to": "2023-12-15T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-1",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-12-15T07:00:00Z",
+      "to": "2023-12-22T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-2",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-12-22T07:00:00Z",
+      "to": "2023-12-29T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-3",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2023-12-29T07:00:00Z",
+      "to": "2024-01-05T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-4",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-01-05T07:00:00Z",
+      "to": "2024-01-12T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-5",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-01-12T07:00:00Z",
+      "to": "2024-01-19T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-6",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-01-19T07:00:00Z",
+      "to": "2024-01-26T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotCrude-7",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-01-26T07:00:00Z",
+      "to": "2024-01-26T17:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-0",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-12-08T07:00:00Z",
+      "to": "2023-12-15T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-1",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-12-15T07:00:00Z",
+      "to": "2023-12-22T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-2",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-12-22T07:00:00Z",
+      "to": "2023-12-29T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-3",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2023-12-29T07:00:00Z",
+      "to": "2024-01-05T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-4",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-01-05T07:00:00Z",
+      "to": "2024-01-12T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-5",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-01-12T07:00:00Z",
+      "to": "2024-01-19T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-6",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-01-19T07:00:00Z",
+      "to": "2024-01-26T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-SpotBrent-7",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-01-26T07:00:00Z",
+      "to": "2024-01-26T17:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-0",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-12-08T07:00:00Z",
+      "to": "2023-12-15T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-1",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-12-15T07:00:00Z",
+      "to": "2023-12-22T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-2",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-12-22T07:00:00Z",
+      "to": "2023-12-29T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-3",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2023-12-29T07:00:00Z",
+      "to": "2024-01-05T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-4",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-01-05T07:00:00Z",
+      "to": "2024-01-12T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-5",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-01-12T07:00:00Z",
+      "to": "2024-01-19T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-6",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-01-19T07:00:00Z",
+      "to": "2024-01-26T07:00:00Z"
+    },
+    {
+      "key": "2024-Q1-WINTER-XAUUSD-7",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-01-26T07:00:00Z",
+      "to": "2024-01-26T11:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-0",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-06-07T07:00:00Z",
+      "to": "2024-06-14T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-1",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-06-14T07:00:00Z",
+      "to": "2024-06-21T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-2",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-06-21T07:00:00Z",
+      "to": "2024-06-28T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-3",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-06-28T07:00:00Z",
+      "to": "2024-07-05T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-4",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-07-05T07:00:00Z",
+      "to": "2024-07-12T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-5",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-07-12T07:00:00Z",
+      "to": "2024-07-19T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-6",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-07-19T07:00:00Z",
+      "to": "2024-07-26T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotCrude-7",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-07-26T07:00:00Z",
+      "to": "2024-07-26T17:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-0",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-06-07T07:00:00Z",
+      "to": "2024-06-14T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-1",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-06-14T07:00:00Z",
+      "to": "2024-06-21T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-2",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-06-21T07:00:00Z",
+      "to": "2024-06-28T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-3",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-06-28T07:00:00Z",
+      "to": "2024-07-05T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-4",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-07-05T07:00:00Z",
+      "to": "2024-07-12T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-5",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-07-12T07:00:00Z",
+      "to": "2024-07-19T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-6",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-07-19T07:00:00Z",
+      "to": "2024-07-26T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-SpotBrent-7",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-07-26T07:00:00Z",
+      "to": "2024-07-26T17:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-0",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-06-07T07:00:00Z",
+      "to": "2024-06-14T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-1",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-06-14T07:00:00Z",
+      "to": "2024-06-21T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-2",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-06-21T07:00:00Z",
+      "to": "2024-06-28T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-3",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-06-28T07:00:00Z",
+      "to": "2024-07-05T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-4",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-07-05T07:00:00Z",
+      "to": "2024-07-12T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-5",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-07-12T07:00:00Z",
+      "to": "2024-07-19T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-6",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-07-19T07:00:00Z",
+      "to": "2024-07-26T07:00:00Z"
+    },
+    {
+      "key": "2024-Q3-SUMMER-XAUUSD-7",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-07-26T07:00:00Z",
+      "to": "2024-07-26T11:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-0",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2024-12-27T07:00:00Z",
+      "to": "2025-01-03T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-1",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-01-03T07:00:00Z",
+      "to": "2025-01-10T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-2",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-01-10T07:00:00Z",
+      "to": "2025-01-17T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-3",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-01-17T07:00:00Z",
+      "to": "2025-01-24T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-4",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-01-24T07:00:00Z",
+      "to": "2025-01-31T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-5",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-01-31T07:00:00Z",
+      "to": "2025-02-07T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-6",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-02-07T07:00:00Z",
+      "to": "2025-02-14T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotCrude-7",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-02-14T07:00:00Z",
+      "to": "2025-02-14T17:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-0",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2024-12-27T07:00:00Z",
+      "to": "2025-01-03T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-1",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-01-03T07:00:00Z",
+      "to": "2025-01-10T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-2",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-01-10T07:00:00Z",
+      "to": "2025-01-17T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-3",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-01-17T07:00:00Z",
+      "to": "2025-01-24T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-4",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-01-24T07:00:00Z",
+      "to": "2025-01-31T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-5",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-01-31T07:00:00Z",
+      "to": "2025-02-07T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-6",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-02-07T07:00:00Z",
+      "to": "2025-02-14T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-SpotBrent-7",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-02-14T07:00:00Z",
+      "to": "2025-02-14T17:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-0",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2024-12-27T14:30:00Z",
+      "to": "2025-01-03T14:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-1",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-01-03T14:30:00Z",
+      "to": "2025-01-10T14:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-2",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-01-10T14:30:00Z",
+      "to": "2025-01-17T14:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-3",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-01-17T14:30:00Z",
+      "to": "2025-01-24T14:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-4",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-01-24T14:30:00Z",
+      "to": "2025-01-31T14:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-5",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-01-31T14:30:00Z",
+      "to": "2025-02-07T14:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-6",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-02-07T14:30:00Z",
+      "to": "2025-02-14T14:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-US500-7",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-02-14T14:30:00Z",
+      "to": "2025-02-14T18:30:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-0",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2024-12-27T07:00:00Z",
+      "to": "2025-01-03T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-1",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-01-03T07:00:00Z",
+      "to": "2025-01-10T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-2",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-01-10T07:00:00Z",
+      "to": "2025-01-17T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-3",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-01-17T07:00:00Z",
+      "to": "2025-01-24T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-4",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-01-24T07:00:00Z",
+      "to": "2025-01-31T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-5",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-01-31T07:00:00Z",
+      "to": "2025-02-07T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-6",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-02-07T07:00:00Z",
+      "to": "2025-02-14T07:00:00Z"
+    },
+    {
+      "key": "2025-Q1-WINTER-XAUUSD-7",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-02-14T07:00:00Z",
+      "to": "2025-02-14T11:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-0",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-06-06T07:00:00Z",
+      "to": "2025-06-13T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-1",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-06-13T07:00:00Z",
+      "to": "2025-06-20T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-2",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-06-20T07:00:00Z",
+      "to": "2025-06-27T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-3",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-06-27T07:00:00Z",
+      "to": "2025-07-04T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-4",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-07-04T07:00:00Z",
+      "to": "2025-07-11T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-5",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-07-11T07:00:00Z",
+      "to": "2025-07-18T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-6",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-07-18T07:00:00Z",
+      "to": "2025-07-25T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotCrude-7",
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "from": "2025-07-25T07:00:00Z",
+      "to": "2025-07-25T17:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-0",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-06-06T07:00:00Z",
+      "to": "2025-06-13T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-1",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-06-13T07:00:00Z",
+      "to": "2025-06-20T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-2",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-06-20T07:00:00Z",
+      "to": "2025-06-27T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-3",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-06-27T07:00:00Z",
+      "to": "2025-07-04T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-4",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-07-04T07:00:00Z",
+      "to": "2025-07-11T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-5",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-07-11T07:00:00Z",
+      "to": "2025-07-18T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-6",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-07-18T07:00:00Z",
+      "to": "2025-07-25T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-SpotBrent-7",
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "from": "2025-07-25T07:00:00Z",
+      "to": "2025-07-25T17:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-0",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-06-06T13:30:00Z",
+      "to": "2025-06-13T13:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-1",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-06-13T13:30:00Z",
+      "to": "2025-06-20T13:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-2",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-06-20T13:30:00Z",
+      "to": "2025-06-27T13:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-3",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-06-27T13:30:00Z",
+      "to": "2025-07-04T13:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-4",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-07-04T13:30:00Z",
+      "to": "2025-07-11T13:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-5",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-07-11T13:30:00Z",
+      "to": "2025-07-18T13:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-6",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-07-18T13:30:00Z",
+      "to": "2025-07-25T13:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-US500-7",
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "from": "2025-07-25T13:30:00Z",
+      "to": "2025-07-25T17:30:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-0",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-06-06T07:00:00Z",
+      "to": "2025-06-13T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-1",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-06-13T07:00:00Z",
+      "to": "2025-06-20T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-2",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-06-20T07:00:00Z",
+      "to": "2025-06-27T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-3",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-06-27T07:00:00Z",
+      "to": "2025-07-04T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-4",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-07-04T07:00:00Z",
+      "to": "2025-07-11T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-5",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-07-11T07:00:00Z",
+      "to": "2025-07-18T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-6",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-07-18T07:00:00Z",
+      "to": "2025-07-25T07:00:00Z"
+    },
+    {
+      "key": "2025-Q3-SUMMER-XAUUSD-7",
+      "symbol": "XAUUSD",
+      "symbol_id": 41,
+      "from": "2025-07-25T07:00:00Z",
+      "to": "2025-07-25T11:00:00Z"
+    }
+  ],
+  "limits": {
+    "logical_jobs": 120,
+    "fresh_tick_jobs": 110,
+    "reused_jobs": 10,
+    "bar_components": 176,
+    "pages_per_job": 120,
+    "updates_per_job": 200000,
+    "seconds_per_job": 240,
+    "attempts": 3,
+    "bytes_per_component": 32000000,
+    "total_source_bytes": 384000000
+  },
+  "validation_opened": false
+}

@@ -30,21 +30,21 @@ pub struct Payload {
     pub quotes: Source,
     pub m30: Vec<M30>,
 }
-fn held(at: DateTime<Utc>) -> bool {
+pub(super) fn held(at: DateTime<Utc>) -> bool {
     at >= "2025-08-19T00:00:00Z".parse::<DateTime<Utc>>().unwrap()
         && at < "2025-09-06T00:00:00Z".parse::<DateTime<Utc>>().unwrap()
 }
-fn mid(q: &Snapshot) -> f64 {
+pub(super) fn mid(q: &Snapshot) -> f64 {
     (q.quote.bid + q.quote.ask) / 2.0
 }
-fn executable(q: &Snapshot, side: Dir) -> f64 {
+pub(super) fn executable(q: &Snapshot, side: Dir) -> f64 {
     if side == Dir::Buy {
         q.quote.ask
     } else {
         q.quote.bid
     }
 }
-fn median(mut values: Vec<f64>) -> Option<f64> {
+pub(super) fn median(mut values: Vec<f64>) -> Option<f64> {
     if values.is_empty() {
         return None;
     }
@@ -52,7 +52,7 @@ fn median(mut values: Vec<f64>) -> Option<f64> {
     let n = values.len();
     Some((values[(n - 1) / 2] + values[n / 2]) / 2.0)
 }
-fn spread(quotes: &[Snapshot], end: DateTime<Utc>) -> Option<f64> {
+pub(super) fn spread(quotes: &[Snapshot], end: DateTime<Utc>) -> Option<f64> {
     median(
         quotes
             .iter()
@@ -61,7 +61,7 @@ fn spread(quotes: &[Snapshot], end: DateTime<Utc>) -> Option<f64> {
             .collect(),
     )
 }
-fn range_at(bars: &[M30], start: DateTime<Utc>, minutes: i64) -> Option<(f64, f64)> {
+pub(super) fn range_at(bars: &[M30], start: DateTime<Utc>, minutes: i64) -> Option<(f64, f64)> {
     let mut lo = i64::MAX;
     let mut hi = 0;
     for offset in (0..minutes).step_by(30) {
@@ -83,7 +83,7 @@ fn prior_median(req: &Request, bars: &[M30], minutes: i64) -> Option<f64> {
         .collect();
     median(ranges?)
 }
-fn empty(req: &Request, src: &Source, mode: &'static str) -> Result<Study, String> {
+pub(super) fn empty(req: &Request, src: &Source, mode: &'static str) -> Result<Study, String> {
     Ok(Study { mode, quality:s3_ticks::snapshots(req,src)?.1, marks:vec![], trade:None,
         fx_diagnostic:None, prediction_features:None, notes:vec![
         "Frozen offline scenario, not account performance; current contracts and costs are unverified.",
@@ -91,7 +91,7 @@ fn empty(req: &Request, src: &Source, mode: &'static str) -> Result<Study, Strin
         "Primary admission/geometry stays 24bp/side; sensitivities reprice the same admitted fills only.",
     ]})
 }
-fn mark(at: DateTime<Utc>, reason: &'static str) -> Mark {
+pub(super) fn mark(at: DateTime<Utc>, reason: &'static str) -> Mark {
     Mark {
         at,
         reason,
@@ -102,7 +102,7 @@ fn mark(at: DateTime<Utc>, reason: &'static str) -> Mark {
     }
 }
 #[allow(clippy::too_many_arguments)]
-fn exit_trade(
+pub(super) fn exit_trade(
     req: &Request,
     src: &Source,
     quotes: &[Snapshot],
@@ -258,7 +258,7 @@ fn orb(
     }
     Ok(json!({"study":study,"range":width,"prior_median":prior,"prepared_spread":prepared_spread}))
 }
-fn control(
+pub(super) fn control(
     req: &Request,
     src: &Source,
     bars: &[M30],
