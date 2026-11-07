@@ -1,0 +1,549 @@
+{
+  "trace": "\u211618,342 \u00a7\u00a71\u20136",
+  "prepared_at_sgt": "07-11-2026 21:05:40 SGT (+08:00)",
+  "by": "Codex (GPT-6), effort not exposed",
+  "dates": [
+    "2024-01-22",
+    "2024-01-23",
+    "2024-01-24",
+    "2024-01-25",
+    "2024-01-26"
+  ],
+  "source_attachment_sha256": "bedd4bf3a0589eb11e9f0c5e108a0e57eb596d366d817a76e29b326c38b2ac68",
+  "jobs": [
+    {
+      "key": "NAS100-2024-01-22",
+      "symbol": "NAS100",
+      "primary": "US500-2024-01-22",
+      "date": "2024-01-22",
+      "symbol_id": 10014,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "from": "2024-01-22T14:30:00Z",
+      "to": "2024-01-22T18:30:00Z"
+    },
+    {
+      "key": "XAGUSD-2024-01-22",
+      "symbol": "XAGUSD",
+      "primary": "XAUUSD-2024-01-22",
+      "date": "2024-01-22",
+      "symbol_id": 42,
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "from": "2024-01-22T07:00:00Z",
+      "to": "2024-01-22T11:00:00Z"
+    },
+    {
+      "key": "NAS100-2024-01-23",
+      "symbol": "NAS100",
+      "primary": "US500-2024-01-23",
+      "date": "2024-01-23",
+      "symbol_id": 10014,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "from": "2024-01-23T14:30:00Z",
+      "to": "2024-01-23T18:30:00Z"
+    },
+    {
+      "key": "XAGUSD-2024-01-23",
+      "symbol": "XAGUSD",
+      "primary": "XAUUSD-2024-01-23",
+      "date": "2024-01-23",
+      "symbol_id": 42,
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "from": "2024-01-23T07:00:00Z",
+      "to": "2024-01-23T11:00:00Z"
+    },
+    {
+      "key": "NAS100-2024-01-24",
+      "symbol": "NAS100",
+      "primary": "US500-2024-01-24",
+      "date": "2024-01-24",
+      "symbol_id": 10014,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "from": "2024-01-24T14:30:00Z",
+      "to": "2024-01-24T18:30:00Z"
+    },
+    {
+      "key": "XAGUSD-2024-01-24",
+      "symbol": "XAGUSD",
+      "primary": "XAUUSD-2024-01-24",
+      "date": "2024-01-24",
+      "symbol_id": 42,
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "from": "2024-01-24T07:00:00Z",
+      "to": "2024-01-24T11:00:00Z"
+    },
+    {
+      "key": "NAS100-2024-01-25",
+      "symbol": "NAS100",
+      "primary": "US500-2024-01-25",
+      "date": "2024-01-25",
+      "symbol_id": 10014,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "from": "2024-01-25T14:30:00Z",
+      "to": "2024-01-25T18:30:00Z"
+    },
+    {
+      "key": "XAGUSD-2024-01-25",
+      "symbol": "XAGUSD",
+      "primary": "XAUUSD-2024-01-25",
+      "date": "2024-01-25",
+      "symbol_id": 42,
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "from": "2024-01-25T07:00:00Z",
+      "to": "2024-01-25T11:00:00Z"
+    },
+    {
+      "key": "NAS100-2024-01-26",
+      "symbol": "NAS100",
+      "primary": "US500-2024-01-26",
+      "date": "2024-01-26",
+      "symbol_id": 10014,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "from": "2024-01-26T14:30:00Z",
+      "to": "2024-01-26T18:30:00Z"
+    },
+    {
+      "key": "XAGUSD-2024-01-26",
+      "symbol": "XAGUSD",
+      "primary": "XAUUSD-2024-01-26",
+      "date": "2024-01-26",
+      "symbol_id": 42,
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "from": "2024-01-26T07:00:00Z",
+      "to": "2024-01-26T11:00:00Z"
+    }
+  ],
+  "evaluations": [
+    {
+      "key": "US500-2024-01-22",
+      "symbol": "US500",
+      "date": "2024-01-22",
+      "asset_class": "equity_index",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-22T14:30:00Z",
+        "to": "2024-01-22T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-22.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "XAUUSD-2024-01-22",
+      "symbol": "XAUUSD",
+      "date": "2024-01-22",
+      "asset_class": "metal",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-22T07:00:00Z",
+        "to": "2024-01-22T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-22.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "SpotCrude-2024-01-22",
+      "symbol": "SpotCrude",
+      "date": "2024-01-22",
+      "asset_class": "energy",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-22T13:00:00Z",
+        "to": "2024-01-22T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-22.json",
+      "status": "complete",
+      "protocol_flags": [
+        "prior_failed_m30_interval_refetched"
+      ]
+    },
+    {
+      "key": "US500-2024-01-23",
+      "symbol": "US500",
+      "date": "2024-01-23",
+      "asset_class": "equity_index",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-23T14:30:00Z",
+        "to": "2024-01-23T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-23.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "XAUUSD-2024-01-23",
+      "symbol": "XAUUSD",
+      "date": "2024-01-23",
+      "asset_class": "metal",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-23T07:00:00Z",
+        "to": "2024-01-23T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-23.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "SpotCrude-2024-01-23",
+      "symbol": "SpotCrude",
+      "date": "2024-01-23",
+      "asset_class": "energy",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-23T13:00:00Z",
+        "to": "2024-01-23T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-23.json",
+      "status": "complete",
+      "protocol_flags": [
+        "prior_failed_m30_interval_refetched"
+      ]
+    },
+    {
+      "key": "US500-2024-01-24",
+      "symbol": "US500",
+      "date": "2024-01-24",
+      "asset_class": "equity_index",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-24T14:30:00Z",
+        "to": "2024-01-24T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-24.json",
+      "status": "failed",
+      "protocol_flags": []
+    },
+    {
+      "key": "XAUUSD-2024-01-24",
+      "symbol": "XAUUSD",
+      "date": "2024-01-24",
+      "asset_class": "metal",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-24T07:00:00Z",
+        "to": "2024-01-24T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-24.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "SpotCrude-2024-01-24",
+      "symbol": "SpotCrude",
+      "date": "2024-01-24",
+      "asset_class": "energy",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-24T13:00:00Z",
+        "to": "2024-01-24T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-24.json",
+      "status": "complete",
+      "protocol_flags": [
+        "prior_failed_m30_interval_refetched"
+      ]
+    },
+    {
+      "key": "US500-2024-01-25",
+      "symbol": "US500",
+      "date": "2024-01-25",
+      "asset_class": "equity_index",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-25T14:30:00Z",
+        "to": "2024-01-25T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-25.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "XAUUSD-2024-01-25",
+      "symbol": "XAUUSD",
+      "date": "2024-01-25",
+      "asset_class": "metal",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-25T07:00:00Z",
+        "to": "2024-01-25T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-25.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "SpotCrude-2024-01-25",
+      "symbol": "SpotCrude",
+      "date": "2024-01-25",
+      "asset_class": "energy",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-25T13:00:00Z",
+        "to": "2024-01-25T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-25.json",
+      "status": "complete",
+      "protocol_flags": [
+        "prior_failed_m30_interval_refetched"
+      ]
+    },
+    {
+      "key": "US500-2024-01-26",
+      "symbol": "US500",
+      "date": "2024-01-26",
+      "asset_class": "equity_index",
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2024-01-26T14:30:00Z",
+        "to": "2024-01-26T18:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-26.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "XAUUSD-2024-01-26",
+      "symbol": "XAUUSD",
+      "date": "2024-01-26",
+      "asset_class": "metal",
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2024-01-26T07:00:00Z",
+        "to": "2024-01-26T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-26.json",
+      "status": "complete",
+      "protocol_flags": []
+    },
+    {
+      "key": "SpotCrude-2024-01-26",
+      "symbol": "SpotCrude",
+      "date": "2024-01-26",
+      "asset_class": "energy",
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2024-01-26T13:00:00Z",
+        "to": "2024-01-26T17:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "current_s3"
+        }
+      },
+      "source_path": "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-26.json",
+      "status": "complete",
+      "protocol_flags": [
+        "prior_failed_m30_interval_refetched"
+      ]
+    }
+  ],
+  "source_sha256": {
+    "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-22.json": "e8aef722f63949e2e696015672162e90a62f7ad3ca113021bc57056dab03f816",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-22.json": "7b9e2199b5047c942e570d67acd888e108bd6fe9d5a4d86c9b7087afe2e48aed",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-22.json": "af43b3d52c19cdbf6670f849409d6adf42862f69e43e9fc013cd2d10307f43f0",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-23.json": "5c3b322e0f45cd5736e7a00c806c20dc3d25b6834e1a7861445d1e9229830050",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-23.json": "a95118b0d51b74b464ff9c06c44fef06713cc0ab201029c2854f1268ea80b58e",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-23.json": "bd0f92b9361898c3d7c339a1c80899577bf3fb4afaf910eba9995f34db79ee49",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-24.json": "fe1eff4f17b88cdcd041f015360b54aa1d76ce02916854fa7d4c139227bf61d5",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-24.json": "d89ca4fffb7ad8aa3a00642c36727c5f8593a7a81e1231a3064e2db7b3ccb09d",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-24.json": "298271a8f8642835e523ffe8cf3139ad933b9584301e73da46a9cbe930c1c7fb",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-25.json": "1601fd40f4be5de797670558c8636475cbca917a4ff82e530f650cd20e240869",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-25.json": "54c0a47949df1bf4797ab8f4e3f9d0ef83f8f6cd1cbf516ff218d203c5f1e2bc",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-25.json": "97bd0f3dcdaacc396d717de24439bacbb6b98c8967626bf5eaf0b4421577df0f",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-US500-2024-01-26.json": "f9810350c950e186cec22d302100472a6a619357bc6e33895a49bbef21acc535",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-XAUUSD-2024-01-26.json": "cad5ad90a6b5e4a3d9b33a6cd31a4b5377f94917f666ca17801e5db7d5b00a19",
+    "/workspace/jiaoyi-three-year-pilot-18325/job-SpotCrude-2024-01-26.json": "9e8cf5c18dedfd66b55b8c13aa88bead953baa48a0eb416cbe982b2bdfa83030"
+  },
+  "prior_manifests": {
+    "docs/seasonal-execution-18315.json": "d6e354759d50213236aefe167c01c5cca8a2be167d1289c666a2672d82caf3b3",
+    "docs/three-year-execution-18324.json": "942e548d708857fea2469022976c81d81b809c5fda1a12ff494dd13910eb9b95",
+    "docs/class-batch-40-plan-18309-2026-11-07.json": "61a6df3a129c842afd3e289e131a13ce60194ceee543931cdf623ef47b903182",
+    "docs/peer-collection-plan-18338.json": "17f25975f6452dae90fdcb4a58567eaea06ae9309230765d04f0e3a191cb1daa"
+  },
+  "evidence_sha256": {
+    "docs/offline-repaired-engine-results-18331.json": "ca7fcbfbeee34f96f319345021037c3ef3651d52d47487f854fd9895779f0151",
+    "docs/clean_peer_collection_results_18338.json": "20e7d48c53905ad9b9ed6294161159b9c1b2186241898f534bf4966d35b8ecc3"
+  },
+  "limits": {
+    "peer_jobs": 10,
+    "primary_slots": 15,
+    "pages_per_job": 120,
+    "rows_per_job": 200000,
+    "seconds_per_job": 240,
+    "m30_requests": 10,
+    "attempts_per_job": 1,
+    "total_source_bytes": 96000000,
+    "bytes_per_file": 32000000
+  },
+  "rules": "Existing offline_repaired model unchanged. Peer confirmation affects macro only; S3 parity required.",
+  "costs": {
+    "primary_bps_per_side": 24,
+    "extra_commission": 0,
+    "calibration": "unverified",
+    "spread": "executable bid/ask, not double charged"
+  },
+  "cumulative": "Union prior \u211618,331 and \u211618,338 plus current S3 identities; conflicts stop publication; no duplicate January wins",
+  "known_failed_primary": "US500-2024-01-24",
+  "known_source_protocol_flags": "All five Crude sources inherit prior failed-M30 refetch flags",
+  "observations": "Previously studied development dates; equal date labels do not prove quote continuity or exact timestamp parity",
+  "validation_opened": false,
+  "financial_pass": false,
+  "production_changed": false
+}
