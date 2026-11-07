@@ -1,0 +1,39 @@
+{
+  "trace": "\u211618,316 \u00a72",
+  "recorded_at_utc": "2026-11-07T03:41:50.117196+00:00",
+  "reason": "Transport repair only: remove count=500 so from/to selects interval history. No model/date/cost change or retry.",
+  "prior_freeze_sha256": "021102d736b1af5dd058fae94b4095f4b18e4a4f0785979344000c421c2b6181",
+  "execution_sha256": "d6e354759d50213236aefe167c01c5cca8a2be167d1289c666a2672d82caf3b3",
+  "changed_sources": {
+    "ops/research/seasonal_pilot.py": {
+      "before": "0639977e26e40ab94fc4694d8b236393b63cfcd012bc99f594f82eb4024bf0b1",
+      "after": "4c6de8a468555519180d8d7bc81217577b4ad80fc8d37cdf262d502693f074af"
+    }
+  },
+  "prior_failed_m30_segments": 24,
+  "interrupted_tick_jobs": [
+    "US500-2024-01-24"
+  ],
+  "diagnostic_planned_segments": [
+    "2024_Q1_Winter-BTCUSD-0",
+    "2024_Q1_Winter-BTCUSD-1"
+  ],
+  "diagnostic_evidence": {
+    "count_mode": {
+      "rows": 500,
+      "hasMore": true
+    },
+    "interval_mode": {
+      "rows": 326,
+      "hasMore": false
+    }
+  },
+  "diagnostic_segment_hashes": {
+    "2024_Q1_Winter-BTCUSD-0": "081d4edd77c7f70085745b1f0f29274afff993363934ec9dd8d96ee3b55d4c43",
+    "2024_Q1_Winter-BTCUSD-1": "ae24d38d3d509e2564316dd7f628372448d48f254be28e1337920db452e14107"
+  },
+  "no_retry": true,
+  "dates_unchanged": true,
+  "model_binary_unchanged": true,
+  "financial_pass": false
+}

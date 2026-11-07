@@ -23,6 +23,8 @@ class SeasonalTests(unittest.TestCase):
 
     def test_bar_decoder_rejects_truncation_and_duplicate_or_future_bars(self):
         part=dict(symbol_id=1,**{'from':'2024-01-22T00:00:00Z','to':'2024-01-22T00:30:00Z'})
+        self.assertNotIn('count',pilot.bar_request(part))
+        self.assertEqual(pilot.bar_request(part)['toTimestamp'],int(pilot.instant(part['to']).timestamp()*1000)-1)
         at=int(pilot.instant(part['from']).timestamp()/60)
         raw=dict(utcTimestampInMinutes=at,low=100,deltaHigh=10,deltaOpen=2,deltaClose=7,volume=3)
         value=dict(period=8,symbolId=1,hasMore=False,trendbar=[raw])

@@ -104,11 +104,31 @@ def freeze(out,p,binary):
     target=out/'freeze.json'
     if target.exists():
         prior=json.loads(target.read_text())
-        if prior['source_sha256']!=hashes or prior['execution_sha256']!=sha(EXECUTION) or prior['binary_sha256']!=sha(binary):raise ValueError('source/manifest/binary changed since freeze')
+        if prior['execution_sha256']!=sha(EXECUTION) or prior['binary_sha256']!=sha(binary):raise ValueError('manifest/binary changed since freeze')
+        if prior['source_sha256']!=hashes:
+            amendment_path=ROOT/'docs/seasonal-collector-amendment-18316.json'
+            amendment=json.loads(amendment_path.read_text())
+            changed={name for name in set(prior['source_sha256'])|set(hashes) if prior['source_sha256'].get(name)!=hashes.get(name)}
+            expected=amendment['changed_sources']
+            if (sha(target)!=amendment['prior_freeze_sha256'] or amendment['execution_sha256']!=sha(EXECUTION)
+                    or changed!=set(expected) or any(expected[name]!={'before':prior['source_sha256'][name],'after':hashes[name]} for name in changed)):
+                raise ValueError('unapproved source drift')
+            phase=out/'collector-amendment.json'
+            value=dict(amendment_sha256=sha(amendment_path),amendment=amendment,source_sha256=hashes,
+                       commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip())
+            if phase.exists() and json.loads(phase.read_text())!=value:raise ValueError('collector phase changed')
+            save(phase,value)
         return
     if (out/'ledger.jsonl').exists():raise ValueError('cannot reconstruct missing pre-read provenance')
     save(target,dict(frozen_at_utc=stamp(dt.datetime.now(UTC)),commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         source_sha256=hashes,plan_sha256=p['plan_sha256'],execution_sha256=sha(EXECUTION),binary_sha256=sha(binary)))
+
+
+def bar_request(part):
+    # cTrader count mode can supersede fromTimestamp. Use the bounded interval only.
+    return dict(ctidTraderAccountId=ACCOUNT,symbolId=part['symbol_id'],period=8,
+                fromTimestamp=int(instant(part['from']).timestamp()*1000),
+                toTimestamp=int(instant(part['to']).timestamp()*1000)-1)
 
 
 def decode_bars(result,part):
@@ -147,7 +167,12 @@ def collect(out,p,binary):
         part_map={s['key']:s for s in p['bar_segments']}
         def run(key,operation):
             path=out/(key+'.json')
-            if key in ends:return json.loads(path.read_text())
+            if key in ends:
+                value=json.loads(path.read_text())
+                if value['status']=='captured_raw':
+                    try:return dict(status='complete',request=value['request'],bars=decode_bars(value['raw_response'],value['request']))
+                    except BrokerError as error:return dict(status='failed',error=str(error))
+                return value
             if path.exists() or key in starts:raise ValueError('unreceipted/spent source')
             receipt(out/'ledger.jsonl',dict(key=key,state='started',at=stamp(dt.datetime.now(UTC)),execution_sha256=sha(EXECUTION)))
             starts.append(key)
@@ -164,7 +189,7 @@ def collect(out,p,binary):
             print('finished',key,value['status'],value.get('error',''),flush=True)
             allowed_failures={'tick_row_budget','page_or_time_budget','tick_decode_failed',
                 'unresolvable_tick_truncation','missing_truncation_flag',
-                'bar_identity_or_truncation_unverified','invalid_m30','bar_row_budget'}
+                'invalid_m30','bar_row_budget'}
             if value['status']=='failed' and value.get('error') not in allowed_failures:
                 raise RuntimeError('transport/auth/unexpected source failure; preserve receipts, no retry')
             return value
@@ -179,7 +204,8 @@ def collect(out,p,binary):
                 if len(by_name[name])!=1 or by_name[name][0]['symbolId']!=j['symbol_id'] or not by_name[name][0].get('enabled',True):raise ValueError('symbol identity changed')
                 c=by_id[j['symbol_id']]
                 if any(int(c[k])!=j['contract'][v] for k,v in [('digits','digits'),('minVolume','min_volume'),('stepVolume','step_volume')]):raise ValueError('contract changed')
-            save(out/'metadata.json',dict(at=stamp(dt.datetime.now(UTC)),symbols=[by_name[n][0] for n in symbols],details=details))
+            metadata=out/('metadata-resume.json' if (out/'metadata.json').exists() else 'metadata.json')
+            save(metadata,dict(at=stamp(dt.datetime.now(UTC)),symbols=[by_name[n][0] for n in symbols],details=details))
             for j in p['jobs']:
                 key='job-'+j['key']
                 if key in ends:continue
@@ -188,9 +214,9 @@ def collect(out,p,binary):
                 for name in j['bar_segments']:
                     part=part_map[name]
                     def fetch(part=part):
-                        r=broker.request(2137,dict(ctidTraderAccountId=ACCOUNT,symbolId=part['symbol_id'],period=8,
-                            fromTimestamp=int(instant(part['from']).timestamp()*1000),toTimestamp=int(instant(part['to']).timestamp()*1000)-1,count=500))
-                        return dict(status='complete',request=part,bars=decode_bars(r,part))
+                        r=broker.request(2137,bar_request(part))
+                        try:return dict(status='complete',request=part,bars=decode_bars(r,part))
+                        except BrokerError as error:return dict(status='failed',error=str(error),request=part,raw_response=r)
                     parts.append(run('bar-'+name,fetch))
                 def fetch_job(j=j,parts=parts):
                     req=j['request'];a=instant(req['from']);b=instant(req['to'])
@@ -233,6 +259,7 @@ def replay(out,p,binary):
         rows.append(row)
     result=dict(trace='№18,316 §§1–8',plan_sha256=p['plan_sha256'],execution_sha256=sha(EXECUTION),provenance=frozen,
                 models=MODELS,rows=rows,receipts=es,financial_pass=False,validation_opened=False)
+    if (out/'collector-amendment.json').exists():result['collector_amendment']=json.loads((out/'collector-amendment.json').read_text())
     save(out/'replay-results.json',result)
     print(json.dumps(dict(status=dict(collections.Counter(r['status'] for r in rows)),models=len(MODELS))))
 
