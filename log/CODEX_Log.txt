@@ -1843,3 +1843,6 @@ Four-hour close separately reported. Previous May loss and censored trades retai
 Post-run assessment: all 40 tick sources and all preparation succeeded; 36/40 episodes recorded cost vetoes.
 Three requested window-close exits had gross returns <=0; lowering nonnegative costs on those same fills cannot create winners.
 Native outcomes and cumulative accounting unchanged: SHA256 3bee9a88c3c0ea3855dcaf7766477f37371fbeda74be15964fcbc759fdfa63d4. No extra collection, model tuning, financial PASS or deployment.
+
+[§LOG.140] №18,351 §§1–6 · 08-11-2026 05:20:33 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Frozen159 cached episodes; zero broker requests. Matched entries, 24/2/3.74bp cost ledgers. Separate tick censor/MTM and conditional contiguous M30 continuation; out-of-scope prior censoring retained. Requested LOG130 already occupied; append unique log index.

@@ -36,6 +36,7 @@ pub mod production_s3;
 pub mod seasonal;
 
 pub mod offline_repaired;
+pub mod option_ab;
 pub mod peer_evaluation;
 mod repaired_exit;
 pub mod three_year;
