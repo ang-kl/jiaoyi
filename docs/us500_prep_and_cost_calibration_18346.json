@@ -1,0 +1,1508 @@
+{
+  "trace": "\u211618,346",
+  "generated_at_sgt": "07-11-2026 22:36:01 SGT (+08:00)",
+  "freeze_commit": "ff1075884ffab54c35751506e4c109ef0ad07954",
+  "plan_sha256": "a8c864cd6c04005d6760f2179cc700afe9a11b60bd38e0d24d58cf90f885606e",
+  "us500_preparation_audit": {
+    "slots": [
+      {
+        "key": "US500-2023-01-23",
+        "status": "complete",
+        "sha256": "1b217a65b4a5ebb9aca75a541809babb7f3e50e8b1998d187684bee121d9dac6",
+        "m30_bars": 1384,
+        "positive_volume_bars": 1384,
+        "failed_components": 0,
+        "session_open_utc": "2023-01-23T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-01-24",
+        "status": "complete",
+        "sha256": "a563d9625e25eb37569f730ed9addb02f8ca1452eb05a2c191cf7d276872b6c8",
+        "m30_bars": 1417,
+        "positive_volume_bars": 1417,
+        "failed_components": 0,
+        "session_open_utc": "2023-01-24T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-01-25",
+        "status": "complete",
+        "sha256": "4302aac7c2753119934a4d74300514c4c51e25095f8e95600d6226efa22736da",
+        "m30_bars": 1465,
+        "positive_volume_bars": 1465,
+        "failed_components": 0,
+        "session_open_utc": "2023-01-25T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-01-26",
+        "status": "complete",
+        "sha256": "b211aa26537b6c1cfbb9f95b990b5cb95585abf69c4738e5eec481fcc5e048df",
+        "m30_bars": 1482,
+        "positive_volume_bars": 1482,
+        "failed_components": 0,
+        "session_open_utc": "2023-01-26T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-01-27",
+        "status": "complete",
+        "sha256": "6bdecda65792a4cb1738670d62b09ecc78b835789b9856cc6569ef8ff8ff3da4",
+        "m30_bars": 1482,
+        "positive_volume_bars": 1482,
+        "failed_components": 0,
+        "session_open_utc": "2023-01-27T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-07-24",
+        "status": "complete",
+        "sha256": "08acebbe211c13dbf2249f01cb670379d3e5a32808d864b84e1bfd5723b2a87b",
+        "m30_bars": 1411,
+        "positive_volume_bars": 1411,
+        "failed_components": 0,
+        "session_open_utc": "2023-07-24T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-07-25",
+        "status": "complete",
+        "sha256": "5a87bceb0c70f950d2100eb2eb0ab357905b0bef5a44e2b26211cf6b50fcd70f",
+        "m30_bars": 1442,
+        "positive_volume_bars": 1442,
+        "failed_components": 0,
+        "session_open_utc": "2023-07-25T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-07-26",
+        "status": "complete",
+        "sha256": "0b9d256374713e3e1084c275c8f17b94202e215137dc5df28c47ff17b3d0285c",
+        "m30_bars": 1488,
+        "positive_volume_bars": 1488,
+        "failed_components": 0,
+        "session_open_utc": "2023-07-26T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-07-27",
+        "status": "complete",
+        "sha256": "5f38e7f77734210d67fd5b4bbe2b716a3fe84c6578886bdaeaa52dab4709c12e",
+        "m30_bars": 1503,
+        "positive_volume_bars": 1503,
+        "failed_components": 0,
+        "session_open_utc": "2023-07-27T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2023-07-28",
+        "status": "complete",
+        "sha256": "6b3b2309c4c1478c4a1badbf11bd055387621306369104ffc909f2b8a2a64cc5",
+        "m30_bars": 1503,
+        "positive_volume_bars": 1503,
+        "failed_components": 0,
+        "session_open_utc": "2023-07-28T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2024-01-22",
+        "status": "complete",
+        "sha256": "e8aef722f63949e2e696015672162e90a62f7ad3ca113021bc57056dab03f816",
+        "m30_bars": 0,
+        "positive_volume_bars": 0,
+        "failed_components": 8,
+        "session_open_utc": "2024-01-22T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [
+            1705933800000,
+            1705935600000,
+            1705937400000,
+            1705939200000,
+            1705941000000,
+            1705942800000
+          ],
+          "complete": false
+        }
+      },
+      {
+        "key": "US500-2024-01-23",
+        "status": "complete",
+        "sha256": "5c3b322e0f45cd5736e7a00c806c20dc3d25b6834e1a7861445d1e9229830050",
+        "m30_bars": 0,
+        "positive_volume_bars": 0,
+        "failed_components": 8,
+        "session_open_utc": "2024-01-23T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [
+            1706020200000,
+            1706022000000,
+            1706023800000,
+            1706025600000,
+            1706027400000,
+            1706029200000
+          ],
+          "complete": false
+        }
+      },
+      {
+        "key": "US500-2024-01-24",
+        "status": "failed",
+        "sha256": "fe1eff4f17b88cdcd041f015360b54aa1d76ce02916854fa7d4c139227bf61d5",
+        "error": "retained_prior_failed_job"
+      },
+      {
+        "key": "US500-2024-01-25",
+        "status": "complete",
+        "sha256": "1601fd40f4be5de797670558c8636475cbca917a4ff82e530f650cd20e240869",
+        "m30_bars": 0,
+        "positive_volume_bars": 0,
+        "failed_components": 8,
+        "session_open_utc": "2024-01-25T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [
+            1706193000000,
+            1706194800000,
+            1706196600000,
+            1706198400000,
+            1706200200000,
+            1706202000000
+          ],
+          "complete": false
+        }
+      },
+      {
+        "key": "US500-2024-01-26",
+        "status": "complete",
+        "sha256": "f9810350c950e186cec22d302100472a6a619357bc6e33895a49bbef21acc535",
+        "m30_bars": 0,
+        "positive_volume_bars": 0,
+        "failed_components": 8,
+        "session_open_utc": "2024-01-26T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [
+            1706279400000,
+            1706281200000,
+            1706283000000,
+            1706284800000,
+            1706286600000,
+            1706288400000
+          ],
+          "complete": false
+        }
+      },
+      {
+        "key": "US500-2024-07-22",
+        "status": "complete",
+        "sha256": "30998d998f413ca8d3fefe5c4cec457c3fcf432eed1da54de02b185574262c3f",
+        "m30_bars": 1411,
+        "positive_volume_bars": 1411,
+        "failed_components": 0,
+        "session_open_utc": "2024-07-22T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2024-07-23",
+        "status": "complete",
+        "sha256": "9d4c0c555ae9e3af8b8c62dd1255ad46ceb2c8445965bcd83564ea5508430cc6",
+        "m30_bars": 1442,
+        "positive_volume_bars": 1442,
+        "failed_components": 0,
+        "session_open_utc": "2024-07-23T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2024-07-24",
+        "status": "complete",
+        "sha256": "192885778bde4f03c8d1a537e0190c30fe6ce96c17e988efa301757880e1144a",
+        "m30_bars": 1488,
+        "positive_volume_bars": 1488,
+        "failed_components": 0,
+        "session_open_utc": "2024-07-24T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2024-07-25",
+        "status": "complete",
+        "sha256": "75078f2a0db59ff228fb0fe2a837aa81f725a5adea9b56748f696f7eebbc96fd",
+        "m30_bars": 1503,
+        "positive_volume_bars": 1503,
+        "failed_components": 0,
+        "session_open_utc": "2024-07-25T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2024-07-26",
+        "status": "complete",
+        "sha256": "3e26ffa83af96002db46db1da6cf6220105814058358b179d856853285d05014",
+        "m30_bars": 1503,
+        "positive_volume_bars": 1503,
+        "failed_components": 0,
+        "session_open_utc": "2024-07-26T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-02-10",
+        "status": "complete",
+        "sha256": "71de29f2775ec2e46e9bb56048fde1962dd984c0e941d6d204b4142b9efe0bd7",
+        "m30_bars": 1361,
+        "positive_volume_bars": 1361,
+        "failed_components": 0,
+        "session_open_utc": "2025-02-10T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-02-11",
+        "status": "complete",
+        "sha256": "4e88f1abd2f1e6899da3105fe035700fd06cda5250008ae458893cd9c6237af3",
+        "m30_bars": 1392,
+        "positive_volume_bars": 1392,
+        "failed_components": 0,
+        "session_open_utc": "2025-02-11T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-02-12",
+        "status": "complete",
+        "sha256": "23cdf061a359c61d4d322fdc28ee5562d2b8a2ccb90c2a6708d7dd775cc6c279",
+        "m30_bars": 1438,
+        "positive_volume_bars": 1438,
+        "failed_components": 0,
+        "session_open_utc": "2025-02-12T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-02-13",
+        "status": "complete",
+        "sha256": "01862494cd97528a41c0bd132d781549b541157f94a3fcf7a50bdee48f902537",
+        "m30_bars": 1453,
+        "positive_volume_bars": 1453,
+        "failed_components": 0,
+        "session_open_utc": "2025-02-13T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-02-14",
+        "status": "complete",
+        "sha256": "1e5469dcde7723b208fdce21588b14b3d98c4e1918b9ac43b3dd99acffd9b1a3",
+        "m30_bars": 1453,
+        "positive_volume_bars": 1453,
+        "failed_components": 0,
+        "session_open_utc": "2025-02-14T14:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-07-21",
+        "status": "complete",
+        "sha256": "10feea1dc01815554ca09bc818a3627eb4d41f46cd911bbccb6445fba04d5b63",
+        "m30_bars": 1411,
+        "positive_volume_bars": 1411,
+        "failed_components": 0,
+        "session_open_utc": "2025-07-21T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-07-22",
+        "status": "complete",
+        "sha256": "159455122bb5ca523e841e4718078231753023fff640c39041c0b7894a0abae7",
+        "m30_bars": 1442,
+        "positive_volume_bars": 1442,
+        "failed_components": 0,
+        "session_open_utc": "2025-07-22T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-07-23",
+        "status": "complete",
+        "sha256": "15fd4c4e06be3277de9f9f1d6b6409e4edef5a3f1b743fda0f265cfb21f4cdc5",
+        "m30_bars": 1488,
+        "positive_volume_bars": 1488,
+        "failed_components": 0,
+        "session_open_utc": "2025-07-23T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-07-24",
+        "status": "complete",
+        "sha256": "343afa2a40a45eea51995f11dab6269bf178d4b56676c6faccad385216d888bb",
+        "m30_bars": 1503,
+        "positive_volume_bars": 1503,
+        "failed_components": 0,
+        "session_open_utc": "2025-07-24T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      },
+      {
+        "key": "US500-2025-07-25",
+        "status": "complete",
+        "sha256": "71a29c16bf5d8b2bd448af36d8d0d6bb54fc6d117d63788cf67bd7fc864a5c95",
+        "m30_bars": 1503,
+        "positive_volume_bars": 1503,
+        "failed_components": 0,
+        "session_open_utc": "2025-07-25T13:30:00Z",
+        "opening_range_180m": {
+          "required_bars": 6,
+          "missing_ts_ms": [],
+          "complete": true
+        }
+      }
+    ],
+    "failed_january_components": [
+      {
+        "file": "bar-2024_Q1_Winter-US500-5.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      },
+      {
+        "file": "bar-2024_Q1_Winter-US500-0.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      },
+      {
+        "file": "bar-2024_Q1_Winter-US500-1.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      },
+      {
+        "file": "bar-2024_Q1_Winter-US500-4.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      },
+      {
+        "file": "bar-2024_Q1_Winter-US500-3.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      },
+      {
+        "file": "bar-2024_Q1_Winter-US500-7.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      },
+      {
+        "file": "bar-2024_Q1_Winter-US500-2.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      },
+      {
+        "file": "bar-2024_Q1_Winter-US500-6.json",
+        "status": "failed",
+        "error": "bar_identity_or_truncation_unverified",
+        "sha256": "8f89ac566b455a56d0fac93bc9667fe8e519561e9bcf19334320205bf17cba7a"
+      }
+    ],
+    "missing_primary_slots": 1,
+    "empty_m30_slots": 4,
+    "opening_range_complete_slots": 25,
+    "nonempty_sources_below_proposed_1400": [
+      "US500-2023-01-23",
+      "US500-2025-02-10",
+      "US500-2025-02-11"
+    ],
+    "old_request_included_count_500": true,
+    "existing_transport_fix_commit": "67d21e6",
+    "prior_transport_diagnostic": {
+      "count_mode": {
+        "rows": 500,
+        "hasMore": true
+      },
+      "interval_mode": {
+        "rows": 326,
+        "hasMore": false
+      }
+    },
+    "recorded_failure": "bar_identity_or_truncation_unverified; interrupted tick job retained",
+    "exact_us500_response_predicate": "Not Verifiable: original rejected response body was not retained",
+    "calendar_2160_requirement_found": false,
+    "restored_episodes": 0,
+    "current_change": "Preserve distinct period, symbol, truncation and missing-completeness error codes; accepted data rules unchanged.",
+    "data_repair_status": "Not recoverable offline from retained failed responses; no fabricated M30 bars"
+  },
+  "cost_evidence": {
+    "source": "docs/oil-cost-and-replication-2026-11-06/cost-assessment.json",
+    "sha256": "c3b4d4a07eda16fda0b30a9a1d4b00a245b538dddc3abb28005e26977c217043",
+    "per_symbol": {
+      "US500": {
+        "attributed_entries": 0,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": null,
+        "max_entry_slippage_bps": null,
+        "proposed_bps_per_side": 2.0,
+        "calibrated": false
+      },
+      "NAS100": {
+        "attributed_entries": 0,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": null,
+        "max_entry_slippage_bps": null,
+        "proposed_bps_per_side": 2.0,
+        "calibrated": false
+      },
+      "XAUUSD": {
+        "attributed_entries": 0,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": null,
+        "max_entry_slippage_bps": null,
+        "proposed_bps_per_side": 2.0,
+        "calibrated": false
+      },
+      "XAGUSD": {
+        "attributed_entries": 0,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": null,
+        "max_entry_slippage_bps": null,
+        "proposed_bps_per_side": 2.0,
+        "calibrated": false
+      },
+      "SpotCrude": {
+        "attributed_entries": 3,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": -0.6299874002520189,
+        "max_entry_slippage_bps": 2.474481905351161,
+        "proposed_bps_per_side": 3.74,
+        "calibrated": false
+      },
+      "SpotBrent": {
+        "attributed_entries": 2,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": -1.3775749171159613,
+        "max_entry_slippage_bps": 0.9149047126746431,
+        "proposed_bps_per_side": 3.74,
+        "calibrated": false
+      },
+      "BTCUSD": {
+        "attributed_entries": 2,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": -0.6623197325733148,
+        "max_entry_slippage_bps": 0.018040646607626238,
+        "proposed_bps_per_side": 2.5,
+        "calibrated": false
+      },
+      "ETHUSD": {
+        "attributed_entries": 1,
+        "live_attributed_entries": 0,
+        "min_entry_slippage_bps": 4.435981670190622,
+        "max_entry_slippage_bps": 4.435981670190622,
+        "proposed_bps_per_side": 2.5,
+        "calibrated": false
+      }
+    },
+    "retained_total_attributed_entries": 13,
+    "source_newest_order_at_utc": "2026-11-05T23:00:07.356046Z",
+    "verified_round_trip_samples": 0,
+    "calibrated_per_side_bps": null,
+    "status": "NOT_VERIFIABLE",
+    "qualifications": {
+      "entry_arithmetic": "PASS for 13 retained entries",
+      "representative_live_entry_costs": "NOT_VERIFIABLE",
+      "paired_exit_dispatch_costs": "NOT_VERIFIABLE",
+      "complete_commission_swap_conversion_lifecycle": "NOT_VERIFIABLE",
+      "historical_2025_cost_transfer": "NOT_VERIFIABLE"
+    },
+    "warning": "Entry slippage is not spread, round-trip slippage, settled commissions or swaps. Demo 2026 entries do not calibrate historical 2023\u20132025/live costs."
+  },
+  "s3_two_stage": {
+    "ledger_a_stress_24bp": {
+      "entries": 10,
+      "closed_trades": 6,
+      "wins": 3,
+      "losses": 3,
+      "net_breakevens": 0,
+      "censored": 4,
+      "win_rate": 0.5,
+      "mean_net_r": -0.1889241966106268,
+      "profit_factor_r": 0.637193003854747,
+      "financial_pass": false,
+      "account_goal_73pct_20trade_satisfied": false
+    },
+    "ledger_b_unverified_cost_sensitivity": {
+      "entries": 10,
+      "closed_trades": 6,
+      "wins": 3,
+      "losses": 3,
+      "net_breakevens": 0,
+      "censored": 4,
+      "win_rate": 0.5,
+      "mean_net_r": 0.4178737388767728,
+      "profit_factor_r": 2.927197763372282,
+      "financial_pass": false,
+      "account_goal_73pct_20trade_satisfied": false
+    },
+    "entry_and_exit_paths_identical": true,
+    "admission_reserve_bps_per_side": 24,
+    "new_entries": 0,
+    "rows": [
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2023-01-26",
+        "traces": [
+          "docs/offline-repaired-engine-results-18331.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 0.994,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2023-01-26T13:00:02.437Z",
+          "fill": 81.149,
+          "initial_r": 0.72,
+          "session_end": "2023-01-26T20:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 0.994,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 81.149,
+          "best_executable": 81.962,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2023-01-26T14:54:29.456Z",
+              "price": 81.146,
+              "reason": "gap_through_stop",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.0041666666666668245,
+          "remaining_volume": 0,
+          "scenario_gross_r": -0.0041666666666668245,
+          "trail_applied": 1,
+          "trail_proposals": 1,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": -0.5451500000000002,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": -0.08846990277777794
+      },
+      {
+        "symbol": "SpotBrent",
+        "key": "SpotBrent-2023-01-26",
+        "traces": [
+          "docs/offline-repaired-engine-results-18331.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 0.685,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2023-01-26T10:30:02.627Z",
+          "fill": 86.906,
+          "initial_r": 0.496,
+          "session_end": "2023-01-26T20:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 0.685,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 86.906,
+          "best_executable": 87.586,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2023-01-26T13:48:12.962Z",
+              "price": 87.591,
+              "reason": "broker_take_profit",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": 1.38104838709675,
+          "remaining_volume": 0,
+          "scenario_gross_r": 1.38104838709675,
+          "trail_applied": 1,
+          "trail_proposals": 1,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": 0.5367080645160763,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": 1.2494720201612375
+      },
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2024-01-22",
+        "traces": [
+          "docs/offline-repaired-engine-results-18331.json",
+          "docs/jan2024_peer_parity_results_18342.json"
+        ],
+        "protocol_flags": [
+          "prior_failed_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 0.782,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-01-22T12:00:01.500Z",
+          "fill": 73.552,
+          "initial_r": 0.566,
+          "session_end": "2024-01-22T20:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 0.782,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 73.552,
+          "best_executable": 74.328,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-22T15:32:03.349Z",
+              "price": 74.334,
+              "reason": "broker_take_profit",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": 1.381625441696107,
+          "remaining_volume": 0,
+          "scenario_gross_r": 1.381625441696107,
+          "trail_applied": 1,
+          "trail_proposals": 1,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": 0.7545469964664248,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": 1.2839057173144814
+      },
+      {
+        "symbol": "SpotBrent",
+        "key": "SpotBrent-2024-01-22",
+        "traces": [
+          "docs/offline-repaired-engine-results-18331.json"
+        ],
+        "protocol_flags": [
+          "prior_failed_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 0.772,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-01-22T12:00:00.455Z",
+          "fill": 78.976,
+          "initial_r": 0.559,
+          "session_end": "2024-01-22T20:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 0.772,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 78.976,
+          "best_executable": 79.719,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-22T15:32:15.626Z",
+              "price": 79.748,
+              "reason": "broker_take_profit",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": 1.3810375670840886,
+          "remaining_volume": 0,
+          "scenario_gross_r": 1.3810375670840886,
+          "trail_applied": 1,
+          "trail_proposals": 1,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": 0.6995749552772909,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": 1.274842976744196
+      },
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2024-07-23",
+        "traces": [
+          "docs/offline-repaired-engine-results-18331.json"
+        ],
+        "protocol_flags": [
+          "prior_successful_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 0.634,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-07-23T13:00:00.254Z",
+          "fill": 79.027,
+          "initial_r": 0.459,
+          "session_end": "2024-07-23T20:00:00Z",
+          "side": "short",
+          "tp1_close_volume": 100,
+          "tp1_distance": 0.634,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 79.027,
+          "best_executable": 78.507,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-07-23T14:01:51.726Z",
+              "price": 79.027,
+              "reason": "stop",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.0,
+          "remaining_volume": 0,
+          "scenario_gross_r": -0.0,
+          "trail_applied": 1,
+          "trail_proposals": 1,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": -0.8264261437908498,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": -0.12878474074074076
+      },
+      {
+        "symbol": "BTCUSD",
+        "key": "BTCUSD-2024-05-14",
+        "traces": [
+          "docs/clean_peer_collection_results_18338.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 541.31,
+          "cadence": "s3_thirty_seconds",
+          "digits": 2,
+          "entered_at": "2024-05-14T03:30:00.896Z",
+          "fill": 62409.0,
+          "initial_r": 392.25,
+          "session_end": "2024-05-15T00:00:00Z",
+          "side": "short",
+          "tp1_close_volume": 1,
+          "tp1_distance": 541.31,
+          "volume": 1
+        },
+        "outcome": {
+          "active_stop": 62801.25,
+          "best_executable": 62354.0,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote",
+            "censored"
+          ],
+          "fills": [],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.0,
+          "remaining_volume": 1,
+          "scenario_gross_r": null,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": null,
+        "ledger_b_assumed_bps_per_side": 2.5,
+        "ledger_b_net_r": null
+      },
+      {
+        "symbol": "ETHUSD",
+        "key": "ETHUSD-2024-05-16",
+        "traces": [
+          "docs/clean_peer_collection_results_18338.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 27.94,
+          "cadence": "s3_thirty_seconds",
+          "digits": 2,
+          "entered_at": "2024-05-16T03:00:02.261Z",
+          "fill": 3003.05,
+          "initial_r": 20.24,
+          "session_end": "2024-05-17T00:00:00Z",
+          "side": "short",
+          "tp1_close_volume": 1,
+          "tp1_distance": 27.94,
+          "volume": 1
+        },
+        "outcome": {
+          "active_stop": 3023.29,
+          "best_executable": 3000.85,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote",
+            "censored"
+          ],
+          "fills": [],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.0,
+          "remaining_volume": 1,
+          "scenario_gross_r": null,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": null,
+        "ledger_b_assumed_bps_per_side": 2.5,
+        "ledger_b_net_r": null
+      },
+      {
+        "symbol": "NAS100",
+        "key": "NAS100-2025-05-15",
+        "traces": [
+          "docs/clean_peer_collection_results_18338.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 159.2,
+          "cadence": "s3_thirty_seconds",
+          "digits": 1,
+          "entered_at": "2025-05-15T16:00:00.307Z",
+          "fill": 21353.8,
+          "initial_r": 115.3,
+          "session_end": "2025-05-15T20:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 10,
+          "tp1_distance": 159.2,
+          "volume": 10
+        },
+        "outcome": {
+          "active_stop": 21238.5,
+          "best_executable": 21451.9,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote",
+            "censored"
+          ],
+          "fills": [],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.0,
+          "remaining_volume": 10,
+          "scenario_gross_r": null,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": null,
+        "ledger_b_assumed_bps_per_side": 2.0,
+        "ledger_b_net_r": null
+      },
+      {
+        "symbol": "ETHUSD",
+        "key": "ETHUSD-2025-05-15",
+        "traces": [
+          "docs/clean_peer_collection_results_18338.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 23.3,
+          "cadence": "s3_thirty_seconds",
+          "digits": 2,
+          "entered_at": "2025-05-15T00:30:00.403Z",
+          "fill": 2635.0,
+          "initial_r": 16.88,
+          "session_end": "2025-05-16T00:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 1,
+          "tp1_distance": 23.3,
+          "volume": 1
+        },
+        "outcome": {
+          "active_stop": 2618.12,
+          "best_executable": 2641.89,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2025-05-15T01:11:15.957Z",
+              "price": 2618.02,
+              "reason": "gap_through_stop",
+              "volume": 1
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -1.0059241706161148,
+          "remaining_volume": 0,
+          "scenario_gross_r": -1.0059241706161148,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": -1.7527990521327026,
+        "ledger_b_assumed_bps_per_side": 2.5,
+        "ledger_b_net_r": -1.0837236374407593
+      },
+      {
+        "symbol": "ETHUSD",
+        "key": "ETHUSD-2025-05-16",
+        "traces": [
+          "docs/clean_peer_collection_results_18338.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 26.61,
+          "cadence": "s3_thirty_seconds",
+          "digits": 2,
+          "entered_at": "2025-05-16T02:00:00.277Z",
+          "fill": 2569.13,
+          "initial_r": 19.28,
+          "session_end": "2025-05-17T00:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 1,
+          "tp1_distance": 26.61,
+          "volume": 1
+        },
+        "outcome": {
+          "active_stop": 2549.85,
+          "best_executable": 2584.09,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote",
+            "censored"
+          ],
+          "fills": [],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.0,
+          "remaining_volume": 1,
+          "scenario_gross_r": null,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": null,
+        "ledger_b_assumed_bps_per_side": 2.5,
+        "ledger_b_net_r": null
+      }
+    ]
+  },
+  "january_macro": {
+    "ledger_a_stress_24bp": {
+      "entries": 6,
+      "closed_trades": 6,
+      "wins": 2,
+      "losses": 4,
+      "net_breakevens": 0,
+      "censored": 0,
+      "win_rate": 0.3333333333333333,
+      "mean_net_r": -0.28899403603752366,
+      "profit_factor_r": 0.16730432931596612,
+      "financial_pass": false,
+      "account_goal_73pct_20trade_satisfied": false
+    },
+    "ledger_b_unverified_cost_sensitivity": {
+      "entries": 6,
+      "closed_trades": 6,
+      "wins": 4,
+      "losses": 2,
+      "net_breakevens": 0,
+      "censored": 0,
+      "win_rate": 0.6666666666666666,
+      "mean_net_r": 0.061330271996557106,
+      "profit_factor_r": 1.3751974972275034,
+      "financial_pass": false,
+      "account_goal_73pct_20trade_satisfied": false
+    },
+    "entry_and_exit_paths_identical": true,
+    "admission_reserve_bps_per_side": 24,
+    "new_entries": 0,
+    "rows": [
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2024-01-22",
+        "traces": [
+          "docs/jan2024_peer_parity_results_18342.json"
+        ],
+        "protocol_flags": [
+          "prior_failed_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 1.739,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-01-22T16:00:01.116Z",
+          "fill": 74.313,
+          "initial_r": 1.26,
+          "session_end": "2024-01-22T17:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 1.739,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 73.053,
+          "best_executable": 74.638,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-22T17:00:01.188Z",
+              "price": 74.598,
+              "reason": "session_end",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": 0.22619047619047347,
+          "remaining_volume": 0,
+          "scenario_gross_r": 0.22619047619047347,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": -0.05744952380952653,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": 0.1819899095238068
+      },
+      {
+        "symbol": "XAUUSD",
+        "key": "XAUUSD-2024-01-23",
+        "traces": [
+          "docs/jan2024_peer_parity_results_18342.json"
+        ],
+        "protocol_flags": [],
+        "entry": {
+          "broker_tp_distance": 14.96,
+          "cadence": "s3_thirty_seconds",
+          "digits": 2,
+          "entered_at": "2024-01-23T10:00:00.353Z",
+          "fill": 2028.6,
+          "initial_r": 10.84,
+          "session_end": "2024-01-23T11:00:00Z",
+          "side": "short",
+          "tp1_close_volume": 100,
+          "tp1_distance": 14.96,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 2039.44,
+          "best_executable": 2024.91,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-23T11:00:00.369Z",
+              "price": 2025.25,
+              "reason": "session_end",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": 0.30904059040589565,
+          "remaining_volume": 0,
+          "scenario_gross_r": 0.30904059040589565,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": -0.5884907749077575,
+        "ledger_b_assumed_bps_per_side": 2.0,
+        "ledger_b_net_r": 0.23424630996309123
+      },
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2024-01-23",
+        "traces": [
+          "docs/jan2024_peer_parity_results_18342.json"
+        ],
+        "protocol_flags": [
+          "prior_failed_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 2.098,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-01-23T16:00:01.990Z",
+          "fill": 74.767,
+          "initial_r": 1.52,
+          "session_end": "2024-01-23T17:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 2.098,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 73.247,
+          "best_executable": 75.101,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-23T17:00:00.339Z",
+              "price": 74.502,
+              "reason": "session_end",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.17434210526315827,
+          "remaining_volume": 0,
+          "scenario_gross_r": -0.17434210526315827,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": -0.41003000000000034,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": -0.21107013552631615
+      },
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2024-01-24",
+        "traces": [
+          "docs/jan2024_peer_parity_results_18342.json"
+        ],
+        "protocol_flags": [
+          "prior_failed_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 1.375,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-01-24T16:00:02.306Z",
+          "fill": 74.971,
+          "initial_r": 0.996,
+          "session_end": "2024-01-24T17:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 1.375,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 73.975,
+          "best_executable": 75.695,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-24T17:00:00.544Z",
+              "price": 75.645,
+              "reason": "session_end",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": 0.6767068273092293,
+          "remaining_volume": 0,
+          "scenario_gross_r": 0.6767068273092293,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": 0.3137767068273016,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": 0.6201502168674622
+      },
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2024-01-25",
+        "traces": [
+          "docs/jan2024_peer_parity_results_18342.json"
+        ],
+        "protocol_flags": [
+          "prior_failed_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 1.534,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-01-25T16:00:00.442Z",
+          "fill": 75.954,
+          "initial_r": 1.111,
+          "session_end": "2024-01-25T17:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 1.534,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 74.843,
+          "best_executable": 76.548,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-25T17:00:00.676Z",
+              "price": 76.358,
+              "reason": "session_end",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": 0.36363636363637314,
+          "remaining_volume": 0,
+          "scenario_gross_r": 0.36363636363637314,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": 0.0346095409541049,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": 0.31236301710171965
+      },
+      {
+        "symbol": "SpotCrude",
+        "key": "SpotCrude-2024-01-26",
+        "traces": [
+          "docs/jan2024_peer_parity_results_18342.json"
+        ],
+        "protocol_flags": [
+          "prior_failed_m30_interval_refetched"
+        ],
+        "entry": {
+          "broker_tp_distance": 1.67,
+          "cadence": "s3_thirty_seconds",
+          "digits": 3,
+          "entered_at": "2024-01-26T16:00:00.384Z",
+          "fill": 77.087,
+          "initial_r": 1.21,
+          "session_end": "2024-01-26T17:00:00Z",
+          "side": "long",
+          "tp1_close_volume": 100,
+          "tp1_distance": 1.67,
+          "volume": 100
+        },
+        "outcome": {
+          "active_stop": 75.877,
+          "best_executable": 77.092,
+          "cost_provenance": null,
+          "data_issues": [
+            "gap_before_quote"
+          ],
+          "fills": [
+            {
+              "at": "2024-01-26T17:00:00.680Z",
+              "price": 76.213,
+              "reason": "session_end",
+              "volume": 100
+            }
+          ],
+          "missing_evidence": [
+            "unqualified experimental exit policy and source continuity"
+          ],
+          "net_r": null,
+          "net_r_missing_reason": "offline policy and recorded quote evidence remain unqualified",
+          "qualified_gross_r": null,
+          "realized_scenario_gross_r": -0.7223140495867847,
+          "remaining_volume": 0,
+          "scenario_gross_r": -0.7223140495867847,
+          "trail_applied": 0,
+          "trail_proposals": 0,
+          "trail_rejected_on_next_quote": 0
+        },
+        "ledger_a_net_r": -1.0263801652892641,
+        "ledger_b_assumed_bps_per_side": 3.74,
+        "ledger_b_net_r": -0.7696976859504211
+      }
+    ]
+  },
+  "duplicate_s3_observations_removed": 1,
+  "new_broker_requests": 0,
+  "new_native_replays": 0,
+  "execution": "Independent accounting over existing native full SL/TP/two-stage fills; not a new strategy/admission replay.",
+  "financial_pass": false,
+  "validation_opened": false,
+  "production_changed": false,
+  "stage2_authorized": false
+}
