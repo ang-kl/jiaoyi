@@ -1586,3 +1586,17 @@ Verification:5class regressions;3collector tests;2report tests;research suite
 all80datasets. HTML checked in Chromium:40expandable panels,46tables,desktop
 and390pxmobile no page overflow. No new paid model call,order or Telegrammessage.
 CI/review/merge receipt to be recorded in PR. Time is Money.
+
+[§LOG.118] №18,310 §9 · 07-11-2026 09:06 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+PR177 automated review identified two reporting/provenance defects. Fixed:
+report generation now requires a receipt pair for every collected replay job,
+not merely matching started/finished sets; raw bytes must match both receipts
+and replay hashes. Fresh collection writes freeze.json before broker access;
+missing prior provenance or changed source/plan prevents resumed collection.
+Added two focused regressions: omitted receipts/raw tampering and provenance
+creation/preservation/changed-plan refusal. Research suite: 34 total, 33 passed,
+one existing conditional skip. Regenerated report with all 160 receipts checked.
+Scores, native episode evidence and original pre-read provenance are unchanged;
+no additional market collection or strategy adjustment. New CI required at the
+fixed PR head. Time is Money.

@@ -112,8 +112,7 @@ def table(headers, rows):
         '<tr>'+''.join('<td>'+e(x)+'</td>' for x in row)+'</tr>' for row in rows) + '</tbody></table></div>'
 
 
-def write_report(plan, results, evidence, destination):
-    summary = summarize(plan, results)
+def verify_receipts(plan, results, evidence):
     events = [json.loads(line) for line in (evidence/'ledger.jsonl').read_text().splitlines()]
     started = [e for e in events if e['state'] == 'started']
     finished = [e for e in events if e['state'] == 'finished']
@@ -121,6 +120,9 @@ def write_report(plan, results, evidence, destination):
         raise ValueError('duplicate collection receipts')
     if {e['key'] for e in started} != {e['key'] for e in finished}:
         raise ValueError('unresolved collection receipt')
+    collected = {r['key'] for r in results['rows'] if r['status'] != 'missing'}
+    if {e['key'] for e in finished} != collected:
+        raise ValueError('receipt coverage differs from collected replay jobs')
     if any(e['plan_sha256'] != digest(plan) for e in started):
         raise ValueError('collection plan hash mismatch')
     rows_by_key = {r['key']: r for r in results['rows']}
@@ -130,10 +132,17 @@ def write_report(plan, results, evidence, destination):
                 or rows_by_key[event['key']]['file_sha256'] != event['file_sha256']
                 or rows_by_key[event['key']]['status'] != event['status']):
             raise ValueError('source/receipt/replay mismatch')
-    summary['collection_receipts'] = events
+    return events
+
+
+def write_report(plan, results, evidence, destination):
+    summary = summarize(plan, results)
+    summary['collection_receipts'] = verify_receipts(plan, results, evidence)
     now = datetime.now(timezone(timedelta(hours=8))).strftime('%d-%m-%Y %H:%M SGT')
     title = 'Forty-symbol bounded backtest: five asset classes'
     provenance = json.loads((evidence/'freeze.json').read_text())
+    if provenance['plan_sha256'] != digest(plan) or not provenance['source_hashes'] or not provenance['commit']:
+        raise ValueError('missing or mismatched frozen provenance')
     summary['provenance'] = provenance
     summary['generated_at_sgt'] = now
     base = 'CLASS40_BACKTEST-18310-2026-11-07'
@@ -239,13 +248,17 @@ private environment variables (the collector requires Python `websockets`):
 `python ops/research/class_batch_report.py --evidence /workspace/jiaoyi-class40-evidence-20261107 --destination doc`
 
 Use the existing corpus for replay. The `collect` action is the separately bounded
-read phase: receipts are written before jobs; failed or uncertain jobs are not
+read phase: it automatically writes `freeze.json` with the commit, source hashes
+and plan hash before broker access; receipts are written before jobs. Missing
+pre-read provenance or changed sources prevent collection resumption. Failed or uncertain jobs are not
 silently retried. Never remove receipts to obtain a second budget.
 
 Three new collector checks cover signed delta decoding, disjoint truncated-page
 splitting/budgets, and rejection of order messages/wrong accounts. Existing class
 causality/session tests now include all 40 symbols. Rust format, core Clippy and
-focused tests passed locally; repository CI and merge receipt belong to the PR.
+focused tests passed locally. Review-driven regressions also enforce receipt
+coverage for every collected job and automatic pre-read provenance creation.
+Repository CI and merge receipt belong to the PR.
 
 ## §5. Reading the tables
 

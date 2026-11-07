@@ -32,6 +32,25 @@ def receipt(path, event):
         os.fsync(stream.fileno())
 
 
+def ensure_provenance(plan, output):
+    """Freeze actual source identity before any read; never reconstruct it afterwards."""
+    root = Path(__file__).resolve().parents[2]
+    files = list((root/'crates/jiaoyi-core/src').rglob('*.rs')) + [
+        root/'ops/research/broker_readonly.py', root/'ops/research/class_batch.py',
+        root/'crates/jiaoyi-core/examples/class_batch_replay.rs', root/'Cargo.lock']
+    hashes = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
+    target = output/'freeze.json'
+    if target.exists():
+        old = json.loads(target.read_text())
+        if old['plan_sha256'] != digest(plan) or old['source_hashes'] != hashes:
+            raise ValueError('frozen source or plan changed; collection cannot resume')
+        return
+    if (output/'ledger.jsonl').exists() or any(output.glob('job-*.json')):
+        raise ValueError('missing pre-read provenance; do not reconstruct after collection')
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+    save(target, dict(commit=commit, plan_sha256=digest(plan), source_hashes=hashes))
+
+
 def collect(plan, output):
     jobs = plan['jobs']
     if len(jobs) != 80 or len({j['request']['symbol'] for j in jobs}) != 40:
@@ -50,6 +69,7 @@ def collect(plan, output):
     frozen = output / 'plan.json'
     if frozen.exists() and json.loads(frozen.read_text()) != plan:
         raise ValueError('frozen plan differs')
+    ensure_provenance(plan, output)
     save(frozen, plan)
     ledger = output / 'ledger.jsonl'
     events = [json.loads(line) for line in ledger.read_text().splitlines()] if ledger.exists() else []

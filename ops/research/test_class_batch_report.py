@@ -1,5 +1,10 @@
 import unittest
-from class_batch_report import score, summarize
+import json
+import hashlib
+import tempfile
+from pathlib import Path
+from class_batch_report import score, summarize, verify_receipts
+from class_batch import digest, ensure_provenance
 
 
 def episode(value, reason='simulated_entry'):
@@ -31,3 +36,42 @@ class ScoreTests(unittest.TestCase):
     def test_missing_jobs_cannot_be_hidden_from_report(self):
         with self.assertRaisesRegex(ValueError, 'coverage differs'):
             summarize({'jobs': [{'key': 'expected'}]}, {'rows': []})
+
+
+class ProvenanceTests(unittest.TestCase):
+    def test_every_collected_job_requires_intact_receipts_and_raw_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            plan = {'test': True}
+            raw = root/'job-a.json'
+            raw.write_text('{}')
+            sha = hashlib.sha256(raw.read_bytes()).hexdigest()
+            results = {'rows': [{'key': 'a', 'status': 'complete', 'file_sha256': sha}]}
+            ledger = root/'ledger.jsonl'
+            ledger.write_text('')
+            with self.assertRaisesRegex(ValueError, 'receipt coverage'):
+                verify_receipts(plan, results, root)
+            events = [dict(key='a', state='started', plan_sha256=digest(plan)),
+                      dict(key='a', state='finished', status='complete', file_sha256=sha)]
+            ledger.write_text(''.join(json.dumps(e)+'\n' for e in events))
+            self.assertEqual(verify_receipts(plan, results, root), events)
+            raw.write_text('{"tampered":true}')
+            with self.assertRaisesRegex(ValueError, 'source/receipt/replay mismatch'):
+                verify_receipts(plan, results, root)
+
+    def test_fresh_collection_records_provenance_before_reads_and_preserves_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            ensure_provenance({'test': True}, root)
+            original = (root/'freeze.json').read_bytes()
+            manifest = json.loads(original)
+            self.assertTrue(manifest['commit'])
+            self.assertIn('ops/research/class_batch.py', manifest['source_hashes'])
+            ensure_provenance({'test': True}, root)
+            self.assertEqual((root/'freeze.json').read_bytes(), original)
+            with self.assertRaisesRegex(ValueError, 'frozen source or plan changed'):
+                ensure_provenance({'test': False}, root)
+            (root/'freeze.json').unlink()
+            (root/'ledger.jsonl').write_text('')
+            with self.assertRaisesRegex(ValueError, 'missing pre-read provenance'):
+                ensure_provenance({'test': True}, root)
