@@ -246,6 +246,17 @@ pub(super) fn study_impl(req: &Request, src: &Source, v7: bool) -> Result<Study,
 
 // The offline seasonal adapter separately validates its exact four-symbol scope.
 pub(super) fn study_validated(req: &Request, src: &Source, v7: bool) -> Result<Study, String> {
+    study_with_gate(req, src, v7, None)
+}
+
+// Only the offline repair adapter supplies an alternative admission threshold.
+// Costs and the existing target/exit calculation remain unchanged here.
+pub(super) fn study_with_gate(
+    req: &Request,
+    src: &Source,
+    v7: bool,
+    dynamic_bars: Option<&[super::seasonal::M30]>,
+) -> Result<Study, String> {
     validate_request(req)?;
     let c = &src.contract;
     let volume = req.tick_replay.as_ref().unwrap().volume;
@@ -353,9 +364,24 @@ pub(super) fn study_validated(req: &Request, src: &Source, v7: bool) -> Result<S
                             m.side = Some(side);
                             m.r = Some(r);
                             m.cost = Some(cost.total);
-                            if cost.total >= r {
+                            let decision_gate = if let Some(bars) = dynamic_bars {
+                                let Some(atr) = super::three_year::atr(bars, mark) else {
+                                    m.reason = "missing_atr14";
+                                    result.marks.push(m);
+                                    mark += Duration::minutes(30);
+                                    continue;
+                                };
+                                (2.5 * (q.quote.ask - q.quote.bid)).max(0.15 * atr)
+                            } else {
+                                cost.total
+                            };
+                            if decision_gate >= r {
                                 veto = true;
-                                m.reason = "cost_ge_r_session_veto";
+                                m.reason = if dynamic_bars.is_some() {
+                                    "dynamic_range_session_veto"
+                                } else {
+                                    "cost_ge_r_session_veto"
+                                };
                             } else {
                                 m.reason = "no_next_fresh_fill_quote_before_deadline";
                                 if let Some((fi, fq)) =
@@ -373,17 +399,27 @@ pub(super) fn study_validated(req: &Request, src: &Source, v7: bool) -> Result<S
                                     {
                                         m.reason = "direction_changed_before_simulated_fill";
                                     } else if v7
-                                        && cost_reserve(
-                                            req.spread,
-                                            req.commission_round_trip,
-                                            req.slippage_bps_per_side,
-                                            executable(&fq.quote, side),
-                                        )?
-                                        .total
-                                            >= r
+                                        && (if let Some(bars) = dynamic_bars {
+                                            (2.5 * (fq.quote.ask - fq.quote.bid)).max(
+                                                0.15 * super::three_year::atr(bars, mark)
+                                                    .ok_or("missing dispatch ATR")?,
+                                            )
+                                        } else {
+                                            cost_reserve(
+                                                req.spread,
+                                                req.commission_round_trip,
+                                                req.slippage_bps_per_side,
+                                                executable(&fq.quote, side),
+                                            )?
+                                            .total
+                                        }) >= r
                                     {
                                         veto = true;
-                                        m.reason = "dispatch_cost_ge_r_session_veto";
+                                        m.reason = if dynamic_bars.is_some() {
+                                            "dispatch_dynamic_range_session_veto"
+                                        } else {
+                                            "dispatch_cost_ge_r_session_veto"
+                                        };
                                     } else {
                                         let p = targets::plan(&targets::Input {
                                             side,
@@ -555,6 +591,51 @@ mod tests {
         e.available_at += Duration::seconds(1);
         assert!(prepared(&req, &src, &e).is_err());
         assert!(study(&req, &src).is_err());
+    }
+
+    #[test]
+    fn offline_dynamic_gate_uses_causal_price_units_and_rechecks_dispatch() {
+        let (mut req, mut src, _) = oil(false);
+        req.spread = 1.0; // Original reserve exceeds the fixture's 1R.
+        let mark = req.from + Duration::minutes(30);
+        let mut bars: Vec<_> = (0..15)
+            .map(|i| super::super::seasonal::M30 {
+                ts_ms: (mark - Duration::minutes((15 - i) * 30)).timestamp_millis(),
+                open_e5: 10000000,
+                high_e5: 10050000,
+                low_e5: 9950000,
+                close_e5: 10000000,
+                volume: 1,
+            })
+            .collect();
+        assert!(study_validated(&req, &src, true).unwrap().trade.is_none());
+        let a = study_with_gate(&req, &src, true, Some(&bars)).unwrap();
+        assert!(a.trade.is_some());
+        assert!(a.marks[0].cost.unwrap() > a.marks[0].r.unwrap());
+        // A bar opening at the decision is still incomplete and must not affect ATR.
+        bars.push(super::super::seasonal::M30 {
+            ts_ms: mark.timestamp_millis(),
+            open_e5: 10000000,
+            high_e5: 90000000,
+            low_e5: 100000,
+            close_e5: 80000000,
+            volume: 1,
+        });
+        let b = study_with_gate(&req, &src, true, Some(&bars)).unwrap();
+        assert_eq!(
+            serde_json::to_value(&a.trade).unwrap(),
+            serde_json::to_value(&b.trade).unwrap()
+        );
+        assert!(study_with_gate(&req, &src, true, Some(&[]))
+            .unwrap()
+            .trade
+            .is_none());
+        // The signal remains outside the band, but widening at dispatch fails G<R.
+        src.asks[1].price_e5 = 10500000;
+        src.bids[1].price_e5 = 10400000;
+        let c = study_with_gate(&req, &src, true, Some(&bars)).unwrap();
+        assert!(c.trade.is_none());
+        assert_eq!(c.marks[0].reason, "dispatch_dynamic_range_session_veto");
     }
     #[test]
     fn prepared_oil_dispatch_cost_consumes_session_without_entry() {

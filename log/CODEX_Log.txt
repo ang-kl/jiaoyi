@@ -1742,3 +1742,41 @@ previously successful intervals and also breach the no-repeat rule. JSON flags a
 with failed/successful subsets explicit; report and review block corrected before merge.
 Verified native models and score data are byte-equivalent under canonical hashing.
 No collection or model rerun; final CI and main-publication checks apply to this correction.
+
+[§LOG.126] №18,331 §§1–4 · 07-11-2026 15:49:31 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Owner requested gemini-code-1794036759689.md and supplied companion Bash. Both scripts
+hard-code favourable outcomes instead of replaying ticks; per-symbol totals and Bash
+review arithmetic disagree, and null CI fields can pass. Implement actual hypotheses
+offline instead. Markdown serial18331 governs; no separate18332 run. Grok log checked,
+unchanged latest17703. Frozen contract preserves120 slots/119 available datasets and
+all20 inherited source-protocol flags. No broker reads or missing-peer fabrication.
+New native two-stage exit, causal price-unit volatility admission and peer mapping;
+normal production path unchanged. Three new native checks plus existing48 pass.
+Pre-run baseline/hash checks and independent fill accounting required before reporting.
+No performance improvement claimed before measured outcomes. Time is Money; prepare to win.
+Pre-run full checks:51 native research tests passed;45 Python tests,44 passed/one existing skip;
+core Clippy/all-targets and format passed. Initial Python run caught3 old-study dependency
+failures after an experimental edit to exit_replay.rs. Restored that frozen file exactly
+and isolated the new exit engine in repaired_exit.rs; all checks pass without weakening
+the old plan or its guards. No market replay/outcome was run before this correction.
+All296 existing source component hashes verified before the experiment freeze.
+
+[§LOG.127] №18,331 §§5–8 · 07-11-2026 15:53:10 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Completed 119/119 cached native replays; retained all120 scheduled rows including one prior failure.
+Original baseline parity verified on all119; independent cost values checked:1314.
+No new broker reads, validation data, live changes or invented peer observations.
+Prior protocol failure affecting20 episodes remains inherited and disqualifying.
+Actual primary outcomes: {"s3_two_stage": {"episodes": 120, "entries": 5, "closed_trades": 5, "wins": 3, "losses": 2, "net_breakevens": 0, "gross_flat_exits": 1, "stop_amend_applied_episodes": 5, "censored_or_unavailable": 0, "nonentries": 115, "win_rate": 0.6, "mean_net_r": 0.12385077449379411, "profit_factor": 1.4514906994207677, "profit_factor_status": "finite", "reasons": {"inside_band_or_spread_too_wide": 65, "cost_ge_r_session_veto": 88, "session_cost_veto": 87, "simulated_entry": 5, "one_entry_already_consumed": 5, "missing_opening_volume_or_prepared_spread": 4, "failed": 1, "no_fresh_quote_in_mark_window": 14}, "financial_pass": false}, "s3_dynamic_gate": {"episodes": 120, "entries": 93, "closed_trades": 83, "wins": 1, "losses": 82, "net_breakevens": 0, "gross_flat_exits": 0, "stop_amend_applied_episodes": 84, "censored_or_unavailable": 10, "nonentries": 27, "win_rate": 0.012048192771084338, "mean_net_r": -3.0357109615354223, "profit_factor": 0.005577958023804867, "profit_factor_status": "finite", "reasons": {"direction_changed_before_simulated_fill": 2, "inside_band_or_spread_too_wide": 69, "simulated_entry": 93, "one_entry_already_consumed": 92, "no_next_fresh_fill_quote_before_deadline": 7, "missing_opening_volume_or_prepared_spread": 4, "failed": 1, "no_fresh_quote_in_mark_window": 14}, "financial_pass": false}, "s3_dynamic_two_stage": {"episodes": 120, "entries": 93, "closed_trades": 83, "wins": 6, "losses": 77, "net_breakevens": 0, "gross_flat_exits": 5, "stop_amend_applied_episodes": 37, "censored_or_unavailable": 10, "nonentries": 27, "win_rate": 0.07228915662650602, "mean_net_r": -2.961114410225816, "profit_factor": 0.010911360119554419, "profit_factor_status": "finite", "reasons": {"direction_changed_before_simulated_fill": 2, "inside_band_or_spread_too_wide": 69, "simulated_entry": 93, "one_entry_already_consumed": 92, "no_next_fresh_fill_quote_before_deadline": 7, "missing_opening_volume_or_prepared_spread": 4, "failed": 1, "no_fresh_quote_in_mark_window": 14}, "financial_pass": false}, "macro_180m_repaired": {"episodes": 120, "entries": 55, "closed_trades": 54, "wins": 11, "losses": 43, "net_breakevens": 0, "gross_flat_exits": 0, "stop_amend_applied_episodes": 0, "censored_or_unavailable": 1, "nonentries": 65, "win_rate": 0.2037037037037037, "mean_net_r": -0.36085391412972223, "profit_factor": 0.042088612455242175, "profit_factor_status": "finite", "reasons": {"simulated_entry": 55, "missing_required_class_peer": 55, "missing_opening_range": 4, "failed": 1, "peer_or_direction_veto": 2, "no_fresh_quote_in_mark_window": 2, "no_next_fresh_fill_quote_before_deadline": 1}, "financial_pass": false}}
+Published report contains per-symbol/class/year results, costs and matched comparisons.
+CI/actual merge receipt belongs to the PR; engineering success is not economic qualification.
+
+[§LOG.128] №18,331 §§8–10 · 07-11-2026 15:55:52 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Post-run assessment added without changing frozen code, native results or score values.
+Exit-only3/5 wins and+0.123851R are insufficient:3 closes have inherited protocol flags;
+two newly closed winners both repeat previously failed intervals. Two other closes
+average−0.004221R and retain other data limitations. Dynamic gate adds88 entries;
+86/93 have original cost reserve>=R. Gross mean is already negative, and primary
+costs worsen it. Combined6/83 wins,−2.961114R; macro11/54,−0.360854R. Reject dynamic
+substitution under tested assumptions; no promotion/tuning/additional collection.
+Recorded exact independent gross/cost decomposition in JSON and MD/HTML findings.
+Native rows and summaries unchanged by canonical hash; CI applies to final report head.

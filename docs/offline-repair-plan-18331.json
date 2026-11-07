@@ -1,0 +1,41 @@
+{
+  "trace": "\u211618,331",
+  "prepared_at_sgt": "07-11-2026 15:49:31 SGT (+08:00)",
+  "baseline_commit": "70564e78ce775b41b38dc1723d64a8cf56e02dc2",
+  "baseline_result_sha256": "03327b84101e4b4d6be7186b2657191adab13fd9e57e8ea144484c4b876a8e10",
+  "baseline_manifest_sha256": "942e548d708857fea2469022976c81d81b809c5fda1a12ff494dd13910eb9b95",
+  "contract_sha256": "62cc2af0effa2dec1a6ccfc36f3e6894bb216f1fe85c583e8ff46e1e9b65dff1",
+  "attachments": {
+    "gemini-code-1794036759689.md": "12d318bde02e92313d0998a7d6c43c7d40557b8a1279e5215ae92d03a61229af",
+    "run_repair_and_pr.bash": "9b3e84fc3f39778fe5d135171a2c04e3bc8f1e171f9c5eaa2ffa7ac7bc6613d3"
+  },
+  "symbols": [
+    "SpotCrude",
+    "SpotBrent",
+    "US500",
+    "XAUUSD"
+  ],
+  "scheduled_episodes": 120,
+  "completed_sources": 119,
+  "new_broker_requests": 0,
+  "validation_opened": false,
+  "financial_pass": false,
+  "models": [
+    "s3_two_stage",
+    "s3_dynamic_gate",
+    "s3_dynamic_two_stage",
+    "macro_180m_repaired"
+  ],
+  "primary_slippage_bps_per_side": 24,
+  "same_fill_sensitivity_bps": [
+    2,
+    3.74
+  ],
+  "net_costs_unchanged": true,
+  "limits": {
+    "candidate_sets": 1,
+    "native_replays": 119,
+    "seconds_per_replay": 90,
+    "bytes_per_input": 32000000
+  }
+}
