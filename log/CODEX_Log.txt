@@ -1647,3 +1647,38 @@ Verified four seasonal tests including interval request regression; amendment ac
 only the documented collector change and rejects model-binary drift. Continue only
 unspent jobs after green fix PR. Pilot report must disclose reduced coverage and
 79-or-fewer complete tick jobs, not claim the requested template's 80 verified.
+
+[§LOG.121] №18,316 §§3–12 · 07-11-2026 12:00:22 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Read log/GROK_Log.txt again: last serial remains №17,703. Completed the owner's
+Stage 1 scope after plan PR178 and transport repair PR179. Repair merged green
+67d21e6b75ae030c30a7e50bcc6c62fce22fec0d at 11:49:31 SGT (CI42335250445).
+Exactly80 episode receipts:79 complete/replayed,1 failed US500-2024-01-24;
+116 shared M30 receipts:90 complete,24 failed,2 captured diagnostic responses,
+of which1 decodes offline and1 remains unusable. Thus91/116 M30 components usable.
+No failed/uncertain job retry, date replacement, model change or budget reset.
+Raw source96,854,654bytes;1,824,274bid/askupdates;466successful tickpages.
+Interrupted job pages remain unknown within its reserved120-page allowance.
+Frozen native binary ce9fc93a960ecfc045674941bd5270c07a0fe09a310bc059935b525581f81919
+and original plan/execution hashes retained. No validation, Stage2 or live changes.
+Primary24bp/side trailing: S3 zeroentries (45episodecostvetoes,14missingopening
+preparations,1failedjob,20othernonentries); ORB30 wins1/3,mean−0.520942514R,
+PF0.268822343; ORB60 wins0/7,mean−0.782700128R,PF0. Both controls negative.
+At2bp/side identical fills,ORB30 is2/3wins,+0.203063475R but only3scenarios;
+ORB60 is4/7wins yet−0.185809679R andPF0.489119016:50%hit rate is insufficient.
+Both ORB matched deltas are negative against both controls; only2matchedweeks.
+ORB60 triggers the predeclared both-year stop-tuning rule. S3 winrate is unavailable,
+not0%. All80 episodes carry at least one preparation/sequence/source flag;79have
+same-millisecond quote groups, which does not prove illiquidity or missing ticks.
+Reports disclose collector defect, unequal preparation coverage, calendar omissions,
+uncalibrated costs and account-parity limits; no economic goal completion claimed.
+Added doc/SEASONAL_PILOT_REPORT-18316-2026-11-07.md and .html, plus requested
+ docs/seasonal-pilot-results-2024-2025.json with native scenarios, receipts, scores,
+source accounting and verification. No raw market data duplicated into Git.
+Independent verification:all196receiptpairs/hashes,all80denominators,protected-date
+exclusion,unchangedbinary,60sensitivityvalues,52closedcontrols and allscorecounts/means.
+Chromium desktop1440/mobile390: no page overflow or script errors; screenshot read.
+CI/merge receipt for report publication belongs in its PR; final Gemini block will
+include actual report mergecommit. Recommend independent cost/calendar/sequence
+verification before any new frozen hypothesis; no automatic expansion or deployment.
+Time is Money. Prepare to win; software checks are not financial progress.
