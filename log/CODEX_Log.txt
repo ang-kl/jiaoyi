@@ -1556,3 +1556,33 @@ Remaining oil preparation/account/dispatch/restart/exit-parity gaps explicit.
 No goal improvement claimed; zero newly qualified account trades. Logs checked:
 Grok latest17,703 unchanged; next serial18,309 subject to other AI updates.
 Required CI and publication receipt belong to report PR. Time is Money.
+
+[§LOG.117] №18,309–18,310 §§1–8 · 07-11-2026 09:01 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner authorised all-class tests for at least40symbols and merge when green.
+Rechecked GROK_Log.txt: latest17,703 unchanged. Preserved original20 research
+symbols and added20 in a research-only registry:7indices,14FX,4metals,3energy,
+12crypto; no China stocks/indices, no live-universe or strategy/risk changes.
+Forty exact demo49236051 symbol IDs and current contract sizes broker-rechecked.
+Frozen commit45e602a and plan before read:7/14July2025,80four-hour episodes,
+six existing hypotheses, fixed/trailing full exits,24bp/side,zero commission
+scenario, minimum native volume. No validation date opened or rule tuned.
+All80collections complete:380read pages,1,665,195bid+askupdates,72,992,563bytes.
+Append-only started/finished receipts reconciled with file and replay hashes.
+Native Rust CLI ran480separate studies;13distinct symbol/date episodes had an
+entry under at leastone rule. Competing rules/exit arms are not independent.
+FX:zeroentries allsixrules. Metals:all closed scenarios lost. Energy observed
+chop reversal:0/2wins,mean−0.644869R. Crypto strict/observed chop trailing:
+1/6 and1/7wins,means−0.922558R/−1.005885R. NAS100single indexwin+0.015979R
+cannot qualify an edge. No50%goal certified;zeroqualified account outcomes.
+Source completeness,current/historical contract mismatch,cost calibration,
+account admission and production-S3 entry parity remain unverified.
+Added doc/CLASS40_BACKTEST-18310-2026-11-07.{md,html,json} and -episodes.json,
+including perclass/persymbol six-rule/two-exit tables, reasons, evidence hashes,
+five next verification gates and independent AI review instructions. Rawquotes
+remain outsideGit under /workspace/jiaoyi-class40-evidence-20261107;notbackup.
+Verification:5class regressions;3collector tests;2report tests;research suite
+32tests,31passed/1existing skip;Rustfmt/coreClippy passed. Native hashes accepted
+all80datasets. HTML checked in Chromium:40expandable panels,46tables,desktop
+and390pxmobile no page overflow. No new paid model call,order or Telegrammessage.
+CI/review/merge receipt to be recorded in PR. Time is Money.
