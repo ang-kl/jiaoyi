@@ -1812,3 +1812,9 @@ S3 unchanged in14 replayed slots; primary failure and all source flags retained.
 Measured January macro: {"episodes": 15, "entries": 6, "closed_trades": 6, "wins": 2, "losses": 4, "net_breakevens": 0, "gross_flat_exits": 0, "stop_amend_applied_episodes": 0, "censored_or_unavailable": 0, "nonentries": 9, "win_rate": 0.3333333333333333, "mean_net_r": -0.28899403603752366, "profit_factor": 0.16730432931596612, "profit_factor_status": "finite", "reasons": {"missing_opening_range": 4, "peer_or_direction_veto": 2, "simulated_entry": 6, "failed": 1, "cost_ge_r_session_veto": 2}, "financial_pass": false}
 Deduplicated cumulative S3: {"episodes": 10, "entries": 10, "closed_trades": 6, "wins": 3, "losses": 3, "net_breakevens": 0, "gross_flat_exits": 1, "stop_amend_applied_episodes": 5, "censored_or_unavailable": 4, "nonentries": 0, "win_rate": 0.5, "mean_net_r": -0.188924196610622, "profit_factor": 0.6371930038547561, "profit_factor_status": "finite", "reasons": {"simulated_entry": 10, "inside_band_or_spread_too_wide": 9, "one_entry_already_consumed": 9, "no_fresh_quote_in_mark_window": 3}, "financial_pass": false}
 No financial PASS, production activation or validation opening; no fixed-count wins invented.
+
+[§LOG.134] №18,342 §§11–12 · 07-11-2026 21:13:15 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Post-run assessment: four US500 sources contain0 M30 bars after8 failed preparation components each;24January primary failed.
+New peers add only one gold macro loss; January macro2/6 wins and−0.288994R net.
+Cumulative S3 deduplicates January winner;3/6 closes,4 censored,−0.188924R.
+Native rows, scores and cumulative observations unchanged by canonical SHA256 cbe6768b90f7010ed8568b589683f95c2fcbc4c95edbae8e59d7286964a28ec8. No new collection, strategy change or qualification.

@@ -47,3 +47,13 @@ Cumulative S3 combines the measured №18,331 and №18,338 results with this ru
 [Frozen plan](../docs/jan2024-peer-plan-18342.json) · [Measured JSON](../docs/jan2024_peer_parity_results_18342.json). The JSON contains source/code/binary hashes, per-slot models, source failures, cumulative identities, controls and timing evidence. Raw sources remain outside Git and PostgreSQL. There were no new primary reads, paid model calls, live orders, risk changes or worker changes. Validation19August–5September2025 stays sealed.
 
 Assess the measured before/after macro results and net costs before proposing another bounded experiment. Peer availability is an engineering improvement, not proof of an entry edge. Do not extrapolate a small pooled sample to the account goal or expand sampling until a favourable win count appears.
+
+## §6. Post-run assessment: distinguish missing inputs from signal failure
+
+Four US500 primary tick files (22,23,25,26January) contain **zero M30 bars** after eight failed preparation components each. Its24January primary is a retained failed source. Although the new NAS100 peer jobs contain the required bars, all five equity slots remain unusable for a complete primary/peer signal evaluation. Zero US500 entries is therefore not evidence that a fully prepared equity signal failed. These primary preparation failures were retained, not recollected or relabelled as clean evidence.
+
+Compared with the same prior primary slots, peer data added exactly one macro entry: **XAUUSD-2024-01-23**, net **-0.588491R**. The five unchanged Crude trades supplied both January winners and retain inherited source-protocol flags. Across six closes, mean gross return was **+0.113153R**; assumed costs consumed **0.402147R**, leaving mean net **-0.288994R**. This small mixed-quality cohort does not establish a deployable edge. Costs must be measured, not reduced merely to obtain a positive result.
+
+No new S3 close was created by adding peers. The repeated January Crude winner was deduplicated; the previous May loss remains. Cumulative progress is **3wins/6unique closes**, four censored entries, mean **−0.188924R** and PF(R)**0.637193**. Neither the20-close milestone nor the per-account73% goal is met.
+
+The next data issue is the failed US500 preparation, not a lack of NAS100 peers. Investigate the retained failures before proposing any separately bounded source repair. The largest observed same-side peer update interval was136.441seconds; that alone does not prove missing ticks, but it rules out the supplied claim of universally continuous updates. This assessment changes no native outcomes, frozen rules, source files or financial qualification.
