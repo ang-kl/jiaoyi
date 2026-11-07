@@ -1,0 +1,269 @@
+{
+  "trace": "\u211618,308 \u00a7\u00a71\u20139; by Codex (GPT-6), effort not exposed",
+  "generated_at_utc": "2026-11-07T00:24:47.307458+00:00",
+  "reviewed_commit": "e8fdf1b448876aa189d2853b2cf44f2a398c803b",
+  "report_scope": "Consolidation; no new collection or performance experiment",
+  "sources_sha256": {
+    "docs/s3-oil-replay-18307-2026-11-07/verification.json": "0b2dcaae541f5af011166443f0aa5a38c0905b0da79499664e9d732da6118620",
+    "docs/oil-replication-results-2026-11-06/results.json": "f009150f8a4f5a5ce58f1cc9eff195fbe61063fe3f6e69bff30b5960cd65b32b",
+    "docs/s3-oil-replay-spec-18306-2026-11-07.md": "84d05fc5f54088d61ac5379356b8b8843e27d2aba8e8850b5cd3b953d2468a4b",
+    "crates/jiaoyi-core/src/research/production_s3.rs": "0fa0aaa4c40f6115197148001089b81d74eb1d3e3e9209c55cdd6cee670600f0",
+    "crates/jiaoyi-core/examples/production_s3_replay.rs": "74417eab44c53b29816224140e4908680878e4ffa0a755644906c7f8e95d5331",
+    "crates/jiaoyi-core/src/research/s3_ticks.rs": "96120d47b0a1f2bf2075a759f345a351619aaf53b8a59e6f408e8be542bba016",
+    "crates/jiaoyi/src/strategy3.rs": "8ae6e14c581126843585bfaba54f9c902ecf70e153aad25f5cbb08e501b7ba3c",
+    "docs/preregistration-2026-11-01-strategy3-v7.md": "73a09b7f0cef34fab8cf3fa1691fe7451b2bfbf1fad46fc99b725149d84be7ef"
+  },
+  "historical_compatibility_replays": [
+    {
+      "symbol": "BTCUSD",
+      "request": {
+        "account": 49236051,
+        "commission_round_trip": 0.0,
+        "from": "2025-10-06T00:00:00Z",
+        "slippage_bps_per_side": 24.0,
+        "spread": 15.0,
+        "symbol": "BTCUSD",
+        "tick_replay": {
+          "volume": 1
+        },
+        "to": "2025-10-06T04:00:00Z"
+      },
+      "input_sha256": "101c067360c49895125390081317da2046ba35e77a31a1a5aa1635860e0e6c9a",
+      "raw_local_path": "/workspace/jiaoyi-tick-replay-evidence/btc/result.json",
+      "raw_file_sha256": "9ed84a9fce158af49ac60931ec2a60fc8d6ffa1560f6d0e8039fa4ddf1232993",
+      "study_matches_saved_json": true,
+      "marks": 7,
+      "first_mark": {
+        "at": "2025-10-06T00:30:00Z",
+        "cost": 608.9837759999999,
+        "decision_at": "2025-10-06T00:30:00.253Z",
+        "r": 148.86,
+        "reason": "cost_ge_r_session_veto",
+        "side": "buy"
+      },
+      "cost_over_r": 4.0909833131801685,
+      "quality": {
+        "ask_ticks": 30032,
+        "bid_ticks": 30037,
+        "crossed": 0,
+        "long_intervals": 2,
+        "missing_side": 0,
+        "same_millisecond_groups": 30017,
+        "snapshots": 30052,
+        "stale_side": 0
+      },
+      "simulated_entries": 0,
+      "closed_trades": 0,
+      "net_win_rate": null,
+      "profit_factor": null
+    },
+    {
+      "symbol": "NatGas",
+      "request": {
+        "account": 49236051,
+        "commission_round_trip": 0.0,
+        "from": "2025-10-06T07:00:00Z",
+        "slippage_bps_per_side": 24.0,
+        "spread": 0.004,
+        "symbol": "NatGas",
+        "tick_replay": {
+          "volume": 10000
+        },
+        "to": "2025-10-06T11:00:00Z"
+      },
+      "input_sha256": "e1be45f34fe79dec5e9983855cc5c7550e5efd76687bf1a558e1b2e6a87933b2",
+      "raw_local_path": "/workspace/jiaoyi-tick-replay-evidence/natgas/result.json",
+      "raw_file_sha256": "7aaa3a9c64b5965fef773fc40e787b92d81f32b55428f9d28f30c8d20c454494",
+      "study_matches_saved_json": true,
+      "marks": 7,
+      "first_mark": {
+        "at": "2025-10-06T07:30:00Z",
+        "cost": 0.0197536,
+        "decision_at": "2025-10-06T07:30:00.483Z",
+        "r": 0.005,
+        "reason": "cost_ge_r_session_veto",
+        "side": "buy"
+      },
+      "cost_over_r": 3.95072,
+      "quality": {
+        "ask_ticks": 879,
+        "bid_ticks": 816,
+        "crossed": 0,
+        "long_intervals": 561,
+        "missing_side": 0,
+        "same_millisecond_groups": 466,
+        "snapshots": 1229,
+        "stale_side": 431
+      },
+      "simulated_entries": 0,
+      "closed_trades": 0,
+      "net_win_rate": null,
+      "profit_factor": null
+    }
+  ],
+  "synthetic": [
+    {
+      "symbol": "SpotCrude",
+      "request": {
+        "account": 42,
+        "commission_round_trip": 0.0,
+        "from": "2025-10-06T07:00:00Z",
+        "slippage_bps_per_side": 24.0,
+        "spread": 0.02,
+        "symbol": "SpotCrude",
+        "tick_replay": {
+          "volume": 4
+        },
+        "to": "2025-10-06T20:00:00Z"
+      },
+      "quality": {
+        "ask_ticks": 5,
+        "bid_ticks": 5,
+        "crossed": 0,
+        "long_intervals": 2,
+        "missing_side": 0,
+        "same_millisecond_groups": 5,
+        "snapshots": 5,
+        "stale_side": 0
+      },
+      "scheduled_marks": 24,
+      "supplied_snapshots": 5,
+      "trailing_scenario_net_r": 0.9772,
+      "baseline_scenario_net_r": null,
+      "qualified_net_r": null,
+      "financial_pass": false,
+      "algorithm_sha256": "2b60681a73ada4086d1e11444d9982650000936b7b721042726568a154c7b9f5"
+    },
+    {
+      "symbol": "SpotBrent",
+      "request": {
+        "account": 42,
+        "commission_round_trip": 0.0,
+        "from": "2025-10-06T07:00:00Z",
+        "slippage_bps_per_side": 24.0,
+        "spread": 0.02,
+        "symbol": "SpotBrent",
+        "tick_replay": {
+          "volume": 4
+        },
+        "to": "2025-10-06T20:00:00Z"
+      },
+      "quality": {
+        "ask_ticks": 5,
+        "bid_ticks": 5,
+        "crossed": 0,
+        "long_intervals": 2,
+        "missing_side": 0,
+        "same_millisecond_groups": 5,
+        "snapshots": 5,
+        "stale_side": 0
+      },
+      "scheduled_marks": 24,
+      "supplied_snapshots": 5,
+      "trailing_scenario_net_r": 1.0228,
+      "baseline_scenario_net_r": null,
+      "qualified_net_r": null,
+      "financial_pass": false,
+      "algorithm_sha256": "2b60681a73ada4086d1e11444d9982650000936b7b721042726568a154c7b9f5"
+    }
+  ],
+  "earlier_oil_candidate": {
+    "rule": "own_momentum",
+    "arm": "trailing",
+    "bps": 24.0,
+    "episodes": 20,
+    "closed": 9,
+    "wins": 3,
+    "net_win_rate": 0.3333333333333333,
+    "mean_net_r": -0.7255994257474717,
+    "profit_factor": 0.19643314501708461,
+    "skips": {
+      "candidate_cost_ge_r": 11
+    },
+    "per_symbol": {
+      "SpotCrude": {
+        "episodes": 10,
+        "expected": 10,
+        "closed": 6,
+        "censored": 0,
+        "wins": 2,
+        "net_win_rate": 0.3333333333333333,
+        "mean_net_r": -0.5569334774091699,
+        "lcb_net_r": -1.1604604652777875,
+        "lcb_method": "normal one-sided 90% IID ranking heuristic; not confidence in an edge",
+        "data_gaps": {},
+        "net_r": -3.3416008644550192,
+        "profit_factor": 0.3096241240980687,
+        "win_rate_wilson95": [
+          0.09677141110578363,
+          0.7000066848616004
+        ],
+        "passes_screen": false,
+        "reasons": [
+          "net win rate below50% or unavailable",
+          "net expectancy not positive",
+          "PF(R) not above1",
+          "a symbol lacks positive net price-unit evidence",
+          "a symbol lacks50% net wins"
+        ],
+        "symbols": {
+          "SpotCrude": {
+            "closed": 6,
+            "net_price_units": -1.6926287999999998
+          }
+        },
+        "financial_pass": false,
+        "skips": {
+          "candidate_cost_ge_r": 4
+        },
+        "max_scenario_drawdown_r": 4.840263081454627,
+        "distinct_closed_iso_weeks": 3
+      },
+      "SpotBrent": {
+        "episodes": 10,
+        "expected": 10,
+        "closed": 3,
+        "censored": 0,
+        "wins": 1,
+        "net_win_rate": 0.3333333333333333,
+        "mean_net_r": -1.0629313224240755,
+        "lcb_net_r": -1.8072544295464419,
+        "lcb_method": "normal one-sided 90% IID ranking heuristic; not confidence in an edge",
+        "data_gaps": {},
+        "net_r": -3.1887939672722263,
+        "profit_factor": 0.029728547271600896,
+        "win_rate_wilson95": [
+          0.061491944720398706,
+          0.7923403991979452
+        ],
+        "passes_screen": false,
+        "reasons": [
+          "insufficient closed scenarios",
+          "net win rate below50% or unavailable",
+          "net expectancy not positive",
+          "PF(R) not above1",
+          "a symbol lacks positive net price-unit evidence",
+          "a symbol lacks50% net wins",
+          "fewer than three closed ISO weeks"
+        ],
+        "symbols": {
+          "SpotBrent": {
+            "closed": 3,
+            "net_price_units": -1.5233392000000001
+          }
+        },
+        "financial_pass": false,
+        "skips": {
+          "candidate_cost_ge_r": 7
+        },
+        "max_scenario_drawdown_r": 3.2864967409948544,
+        "distinct_closed_iso_weeks": 2
+      }
+    },
+    "financial_pass": false
+  },
+  "historical_oil_run_with_new_adapter": false,
+  "earlier_raw_oil_rerun_this_task": false,
+  "validation_opened": false,
+  "new_qualified_account_trades": 0
+}
