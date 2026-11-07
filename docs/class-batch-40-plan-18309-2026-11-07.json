@@ -1,0 +1,2340 @@
+{
+  "trace": "\u211618,309; by Codex (GPT-6), effort not exposed",
+  "scope": "Owner requests tests across all supported asset classes and at least40symbols; research-only two-date pilot, not production-S3/account validation",
+  "classes": {
+    "equity_index": [
+      "US500",
+      "NAS100",
+      "US30",
+      "GER40",
+      "UK100",
+      "JPN225",
+      "AUS200"
+    ],
+    "fx": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "AUDUSD",
+      "USDCAD",
+      "NZDUSD",
+      "USDCHF",
+      "EURGBP",
+      "EURJPY",
+      "GBPJPY",
+      "AUDJPY",
+      "CADJPY",
+      "CHFJPY",
+      "EURAUD"
+    ],
+    "metal": [
+      "XAUUSD",
+      "XAGUSD",
+      "XPTUSD",
+      "XPDUSD"
+    ],
+    "energy": [
+      "NatGas",
+      "SpotCrude",
+      "SpotBrent"
+    ],
+    "crypto": [
+      "BTCUSD",
+      "ETHUSD",
+      "BCHUSD",
+      "LTCUSD",
+      "XRPUSD",
+      "ADAUSD",
+      "DOGEUSD",
+      "DOTUSD",
+      "LINKUSD",
+      "SOLUSD",
+      "XLMUSD",
+      "AVAXUSD"
+    ]
+  },
+  "development_dates": [
+    "2025-07-07",
+    "2025-07-14"
+  ],
+  "account": 49236051,
+  "metadata_retrieved_at_utc": "2026-11-07T00:35:05.381317+00:00",
+  "metadata": {
+    "US500": {
+      "symbol_id": 10013,
+      "digits": 1,
+      "min_volume": 10,
+      "step_volume": 10,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "NAS100": {
+      "symbol_id": 10014,
+      "digits": 1,
+      "min_volume": 10,
+      "step_volume": 10,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "US30": {
+      "symbol_id": 10015,
+      "digits": 1,
+      "min_volume": 10,
+      "step_volume": 10,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "GER40": {
+      "symbol_id": 10003,
+      "digits": 1,
+      "min_volume": 10,
+      "step_volume": 10,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "UK100": {
+      "symbol_id": 10011,
+      "digits": 1,
+      "min_volume": 10,
+      "step_volume": 10,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "JPN225": {
+      "symbol_id": 10006,
+      "digits": 1,
+      "min_volume": 1000,
+      "step_volume": 1000,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "AUS200": {
+      "symbol_id": 10000,
+      "digits": 1,
+      "min_volume": 10,
+      "step_volume": 10,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "EURUSD": {
+      "symbol_id": 1,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "GBPUSD": {
+      "symbol_id": 2,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "USDJPY": {
+      "symbol_id": 4,
+      "digits": 3,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "AUDUSD": {
+      "symbol_id": 5,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "USDCAD": {
+      "symbol_id": 8,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "NZDUSD": {
+      "symbol_id": 12,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "USDCHF": {
+      "symbol_id": 6,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "EURGBP": {
+      "symbol_id": 9,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "EURJPY": {
+      "symbol_id": 3,
+      "digits": 3,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "GBPJPY": {
+      "symbol_id": 7,
+      "digits": 3,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "AUDJPY": {
+      "symbol_id": 11,
+      "digits": 3,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "CADJPY": {
+      "symbol_id": 15,
+      "digits": 3,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "CHFJPY": {
+      "symbol_id": 13,
+      "digits": 3,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "EURAUD": {
+      "symbol_id": 14,
+      "digits": 5,
+      "min_volume": 100000,
+      "step_volume": 100000,
+      "lot_size": 10000000,
+      "historical_contract": "not_verified"
+    },
+    "XAUUSD": {
+      "symbol_id": 41,
+      "digits": 2,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "XAGUSD": {
+      "symbol_id": 42,
+      "digits": 3,
+      "min_volume": 5000,
+      "step_volume": 5000,
+      "lot_size": 500000,
+      "historical_contract": "not_verified"
+    },
+    "XPTUSD": {
+      "symbol_id": 74,
+      "digits": 2,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "XPDUSD": {
+      "symbol_id": 73,
+      "digits": 2,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "NatGas": {
+      "symbol_id": 10055,
+      "digits": 3,
+      "min_volume": 10000,
+      "step_volume": 10000,
+      "lot_size": 1000000,
+      "historical_contract": "not_verified"
+    },
+    "SpotCrude": {
+      "symbol_id": 10054,
+      "digits": 3,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "SpotBrent": {
+      "symbol_id": 10053,
+      "digits": 3,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "BTCUSD": {
+      "symbol_id": 10028,
+      "digits": 2,
+      "min_volume": 1,
+      "step_volume": 1,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "ETHUSD": {
+      "symbol_id": 10029,
+      "digits": 2,
+      "min_volume": 1,
+      "step_volume": 1,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "BCHUSD": {
+      "symbol_id": 10063,
+      "digits": 2,
+      "min_volume": 1,
+      "step_volume": 1,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "LTCUSD": {
+      "symbol_id": 10030,
+      "digits": 2,
+      "min_volume": 1,
+      "step_volume": 1,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "XRPUSD": {
+      "symbol_id": 10076,
+      "digits": 4,
+      "min_volume": 1000,
+      "step_volume": 100,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "ADAUSD": {
+      "symbol_id": 10095,
+      "digits": 4,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "DOGEUSD": {
+      "symbol_id": 10094,
+      "digits": 5,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 100000,
+      "historical_contract": "not_verified"
+    },
+    "DOTUSD": {
+      "symbol_id": 10072,
+      "digits": 3,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 1000,
+      "historical_contract": "not_verified"
+    },
+    "LINKUSD": {
+      "symbol_id": 10073,
+      "digits": 3,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 1000,
+      "historical_contract": "not_verified"
+    },
+    "SOLUSD": {
+      "symbol_id": 10737,
+      "digits": 2,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 100,
+      "historical_contract": "not_verified"
+    },
+    "XLMUSD": {
+      "symbol_id": 10074,
+      "digits": 4,
+      "min_volume": 1000,
+      "step_volume": 1000,
+      "lot_size": 10000,
+      "historical_contract": "not_verified"
+    },
+    "AVAXUSD": {
+      "symbol_id": 10738,
+      "digits": 3,
+      "min_volume": 100,
+      "step_volume": 100,
+      "lot_size": 1000,
+      "historical_contract": "not_verified"
+    }
+  },
+  "rules": [
+    "class_momentum1h",
+    "class_reversion1h",
+    "class_chop_reversion1h",
+    "class_momentum_observed1h",
+    "class_reversion_observed1h",
+    "class_chop_reversion_observed1h"
+  ],
+  "selection": "none; all six existing hypotheses reported; do not select winners after seeing these dates",
+  "costs": {
+    "reserve_bps_per_side": 24,
+    "commission_round_trip_scenario": 0,
+    "spread": "causal sampled bid/ask median; executable spread counted once",
+    "calibration": "not_verified"
+  },
+  "exits": "shared full SL/TP, fixed and original-R trailing; four-hour boundary plus5seconds; current contract minimum quantity",
+  "limits": {
+    "new_jobs": 80,
+    "symbols": 40,
+    "dates_per_symbol": 2,
+    "pages_per_job": 120,
+    "side_updates_per_job": 200000,
+    "seconds_per_job": 240,
+    "total_source_bytes": 256000000
+  },
+  "validation_opened": false,
+  "financial_pass": false,
+  "goals": {
+    "interim_net_win_rate": 0.5,
+    "original_net_win_rate": 0.73,
+    "original_reference_rr": 1.38,
+    "account_goal_window": 20,
+    "new_pilot_can_certify_goal": false
+  },
+  "jobs": [
+    {
+      "key": "US500-2025-07-07",
+      "date": "2025-07-07",
+      "class": "equity_index",
+      "symbol_id": 10013,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-07-07T13:30:00Z",
+        "to": "2025-07-07T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "US500-2025-07-14",
+      "date": "2025-07-14",
+      "class": "equity_index",
+      "symbol_id": 10013,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "US500",
+        "from": "2025-07-14T13:30:00Z",
+        "to": "2025-07-14T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "NAS100-2025-07-07",
+      "date": "2025-07-07",
+      "class": "equity_index",
+      "symbol_id": 10014,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2025-07-07T13:30:00Z",
+        "to": "2025-07-07T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "NAS100-2025-07-14",
+      "date": "2025-07-14",
+      "class": "equity_index",
+      "symbol_id": 10014,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "NAS100",
+        "from": "2025-07-14T13:30:00Z",
+        "to": "2025-07-14T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "US30-2025-07-07",
+      "date": "2025-07-07",
+      "class": "equity_index",
+      "symbol_id": 10015,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "US30",
+        "from": "2025-07-07T13:30:00Z",
+        "to": "2025-07-07T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "US30-2025-07-14",
+      "date": "2025-07-14",
+      "class": "equity_index",
+      "symbol_id": 10015,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "US30",
+        "from": "2025-07-14T13:30:00Z",
+        "to": "2025-07-14T17:30:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "GER40-2025-07-07",
+      "date": "2025-07-07",
+      "class": "equity_index",
+      "symbol_id": 10003,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "GER40",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "GER40-2025-07-14",
+      "date": "2025-07-14",
+      "class": "equity_index",
+      "symbol_id": 10003,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "GER40",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "UK100-2025-07-07",
+      "date": "2025-07-07",
+      "class": "equity_index",
+      "symbol_id": 10011,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "UK100",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "UK100-2025-07-14",
+      "date": "2025-07-14",
+      "class": "equity_index",
+      "symbol_id": 10011,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "UK100",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "JPN225-2025-07-07",
+      "date": "2025-07-07",
+      "class": "equity_index",
+      "symbol_id": 10006,
+      "contract": {
+        "digits": 1,
+        "min_volume": 1000,
+        "step_volume": 1000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "JPN225",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "JPN225-2025-07-14",
+      "date": "2025-07-14",
+      "class": "equity_index",
+      "symbol_id": 10006,
+      "contract": {
+        "digits": 1,
+        "min_volume": 1000,
+        "step_volume": 1000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "JPN225",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AUS200-2025-07-07",
+      "date": "2025-07-07",
+      "class": "equity_index",
+      "symbol_id": 10000,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AUS200",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AUS200-2025-07-14",
+      "date": "2025-07-14",
+      "class": "equity_index",
+      "symbol_id": 10000,
+      "contract": {
+        "digits": 1,
+        "min_volume": 10,
+        "step_volume": 10
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AUS200",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 1,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 1,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "GBPUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 2,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "GBPUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 2,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "GBPUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "USDJPY-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 4,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "USDJPY-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 4,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "USDJPY",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AUDUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 5,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AUDUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 5,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AUDUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "USDCAD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 8,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "USDCAD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 8,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "USDCAD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "NZDUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 12,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "NZDUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 12,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "NZDUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "USDCHF-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 6,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "USDCHF-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 6,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "USDCHF",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURGBP-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 9,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURGBP",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURGBP-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 9,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURGBP",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURJPY-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 3,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURJPY",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURJPY-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 3,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURJPY",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "GBPJPY-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 7,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "GBPJPY",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "GBPJPY-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 7,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "GBPJPY",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AUDJPY-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 11,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AUDJPY",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AUDJPY-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 11,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AUDJPY",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "CADJPY-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 15,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "CADJPY",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "CADJPY-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 15,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "CADJPY",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "CHFJPY-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 13,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "CHFJPY",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "CHFJPY-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 13,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "CHFJPY",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURAUD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "fx",
+      "symbol_id": 14,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURAUD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "EURAUD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "fx",
+      "symbol_id": 14,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100000,
+        "step_volume": 100000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "EURAUD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "metal",
+      "symbol_id": 41,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XAUUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "metal",
+      "symbol_id": 41,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XAUUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XAGUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "metal",
+      "symbol_id": 42,
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XAGUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "metal",
+      "symbol_id": 42,
+      "contract": {
+        "digits": 3,
+        "min_volume": 5000,
+        "step_volume": 5000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XAGUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 5000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XPTUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "metal",
+      "symbol_id": 74,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XPTUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XPTUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "metal",
+      "symbol_id": 74,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XPTUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XPDUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "metal",
+      "symbol_id": 73,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XPDUSD",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XPDUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "metal",
+      "symbol_id": 73,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XPDUSD",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "NatGas-2025-07-07",
+      "date": "2025-07-07",
+      "class": "energy",
+      "symbol_id": 10055,
+      "contract": {
+        "digits": 3,
+        "min_volume": 10000,
+        "step_volume": 10000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "NatGas-2025-07-14",
+      "date": "2025-07-14",
+      "class": "energy",
+      "symbol_id": 10055,
+      "contract": {
+        "digits": 3,
+        "min_volume": 10000,
+        "step_volume": 10000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "NatGas",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 10000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-07-07",
+      "date": "2025-07-07",
+      "class": "energy",
+      "symbol_id": 10054,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "SpotCrude-2025-07-14",
+      "date": "2025-07-14",
+      "class": "energy",
+      "symbol_id": 10054,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotCrude",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-07-07",
+      "date": "2025-07-07",
+      "class": "energy",
+      "symbol_id": 10053,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-07-07T07:00:00Z",
+        "to": "2025-07-07T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "SpotBrent-2025-07-14",
+      "date": "2025-07-14",
+      "class": "energy",
+      "symbol_id": 10053,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "SpotBrent",
+        "from": "2025-07-14T07:00:00Z",
+        "to": "2025-07-14T11:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "BTCUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10028,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "BTCUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10028,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "BTCUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "ETHUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10029,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "ETHUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10029,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "ETHUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "BCHUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10063,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "BCHUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "BCHUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10063,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "BCHUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "LTCUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10030,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "LTCUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "LTCUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10030,
+      "contract": {
+        "digits": 2,
+        "min_volume": 1,
+        "step_volume": 1
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "LTCUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XRPUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10076,
+      "contract": {
+        "digits": 4,
+        "min_volume": 1000,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XRPUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XRPUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10076,
+      "contract": {
+        "digits": 4,
+        "min_volume": 1000,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XRPUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "ADAUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10095,
+      "contract": {
+        "digits": 4,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "ADAUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "ADAUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10095,
+      "contract": {
+        "digits": 4,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "ADAUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "DOGEUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10094,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "DOGEUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "DOGEUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10094,
+      "contract": {
+        "digits": 5,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "DOGEUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "DOTUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10072,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "DOTUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "DOTUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10072,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "DOTUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "LINKUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10073,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "LINKUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "LINKUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10073,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "LINKUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "SOLUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10737,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "SOLUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "SOLUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10737,
+      "contract": {
+        "digits": 2,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "SOLUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XLMUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10074,
+      "contract": {
+        "digits": 4,
+        "min_volume": 1000,
+        "step_volume": 1000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XLMUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "XLMUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10074,
+      "contract": {
+        "digits": 4,
+        "min_volume": 1000,
+        "step_volume": 1000
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "XLMUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 1000,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AVAXUSD-2025-07-07",
+      "date": "2025-07-07",
+      "class": "crypto",
+      "symbol_id": 10738,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AVAXUSD",
+        "from": "2025-07-07T00:00:00Z",
+        "to": "2025-07-07T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    },
+    {
+      "key": "AVAXUSD-2025-07-14",
+      "date": "2025-07-14",
+      "class": "crypto",
+      "symbol_id": 10738,
+      "contract": {
+        "digits": 3,
+        "min_volume": 100,
+        "step_volume": 100
+      },
+      "request": {
+        "account": 49236051,
+        "symbol": "AVAXUSD",
+        "from": "2025-07-14T00:00:00Z",
+        "to": "2025-07-14T04:00:00Z",
+        "spread": 0.0,
+        "commission_round_trip": 0.0,
+        "slippage_bps_per_side": 24.0,
+        "tick_replay": {
+          "volume": 100,
+          "entry_rule": "class_momentum1h"
+        }
+      }
+    }
+  ]
+}
