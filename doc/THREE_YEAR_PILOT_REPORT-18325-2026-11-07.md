@@ -37,6 +37,15 @@ receipted current components. The guard was added after the frozen replay; resul
 remain attributable to the original plan merge and native binary, not the later guard.
 Any future collection needs an explicit cached-source plan and a new reviewed freeze.
 
+### §1.2. Findings and the next decision
+
+- **S3:** five entries, three completed closes and two censored positions. All three closes lose under the primary cost assumption (mean −0.872489 R). Eighty-eight episodes contain a primary cost veto. There is insufficient completed evidence for a stable win-rate claim.
+- **ORB-60:** eleven entries, ten closes, one win; primary mean −0.380611 R and PF0.142853. Repricing the same ten closes at2bp/side gives seven wins, mean +0.213981 R and PF3.885218. This is a small, uncalibrated sensitivity, not a backtest admitting all signals at lower costs. Protocol and coverage failures remain.
+- **Macro-180 price/peer hypothesis:**55 entries,54 closes,11 wins (20.37%); primary mean −0.360042 R. At2bp/side,27/54 win (50%) but mean remains −0.043191 R and PF0.728734. A50% win rate alone would not make this candidate profitable. Its primary means are negative in each sampled year.
+- **No demonstrated goal progress:** engineering execution is complete, but no candidate qualifies for financial deployment. Prior failed-interval repeats, missing peers, source sequencing, current contract/fee assumptions and insufficient matched evidence remain explicit limitations.
+
+The next justified decision is to independently verify actual broker costs and historical contract assumptions, and use an explicit cached-source plan that cannot repeat spent intervals. Do not choose lower costs merely because ORB's sensitivity improves. Any new entry-cost experiment needs its own frozen admission rules and development budget; Stage2 and validation remain closed. The frozen stopping flags apply to the tested S3 and Macro-180 candidates, with small-sample/protocol limitations retained; they do not prove all possible strategies lack an edge.
+
 ## §2. What was tested and retained
 
 Four symbols: SpotCrude, SpotBrent, US500 and XAUUSD; winter/summer weeks in 2023–2025.
