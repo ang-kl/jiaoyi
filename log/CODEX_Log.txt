@@ -1519,3 +1519,21 @@ Zero new broker history requests/backtests/qualified trades. 50% interim and
 environment, worker, database, Telegram, ZIP or new model API route change.
 Docs/JSON/link/hash/arithmetic/scope checks before PR; required CI and merge
 receipt on PR. Next serial 18,307 only after checking other AI logs. Time is Money.
+
+[§LOG.115] №18,307 §§1–5 · 07-11-2026 08:03 SGT;
+by <Codex (GPT-6), effort: not exposed>.
+Owner authorises weekend implementation/backtest repairs. Read main77afcca and
+Grok log (latest17,703 unchanged). Added bounded offline prepared S3 oil adapter:
+explicit positive opening volume and causal cost receipt, 45-day history view,
+final cost recheck and session veto, frozen payload, shared full exit engine.
+Network route refuses this evidence-dependent oil mode before collection.
+Legacy BTC/NatGas and class candidates preserved. Three new tests plus four
+existing S3 tests pass; core Clippy passes without allowances. Two synthetic
+full-session oil CLI runs and two exact retained market replays verified.
+Evidence/usage/remaining work: docs/s3-oil-replay-18307-2026-11-07/README.md.
+Historical oil performance not run: missing source/preparation evidence; no
+new collection allowance inferred, no sealed-date outcome evaluated. Account
+admission/restart/real transport and exit freshness parity remain incomplete.
+Synthetic returns are not goal progress. Zero new qualified trades; interim50%
+and original73%/1:1.38 latest20 per strategy/account remain unverified.
+Required CI/review/merge receipt on implementation PR. Time is Money.

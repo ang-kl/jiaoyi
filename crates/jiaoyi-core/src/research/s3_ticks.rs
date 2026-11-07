@@ -226,6 +226,20 @@ pub(super) fn net(req: &Request, input: &exits::Input, o: &exits::Outcome) -> Op
     )
 }
 pub fn study(req: &Request, src: &Source) -> Result<Study, String> {
+    if matches!(req.symbol.as_str(), "SpotCrude" | "SpotBrent")
+        && req
+            .tick_replay
+            .as_ref()
+            .is_some_and(|o| o.entry_rule.is_current())
+    {
+        return Err(
+            "oil current-S3 replay requires the offline preparation evidence adapter".into(),
+        );
+    }
+    study_impl(req, src, false)
+}
+
+pub(super) fn study_impl(req: &Request, src: &Source, v7: bool) -> Result<Study, String> {
     req.validate(Utc::now())?;
     validate_request(req)?;
     let c = &src.contract;
@@ -353,6 +367,18 @@ pub fn study(req: &Request, src: &Source) -> Result<Study, String> {
                                     ) != Some(side)
                                     {
                                         m.reason = "direction_changed_before_simulated_fill";
+                                    } else if v7
+                                        && cost_reserve(
+                                            req.spread,
+                                            req.commission_round_trip,
+                                            req.slippage_bps_per_side,
+                                            executable(&fq.quote, side),
+                                        )?
+                                        .total
+                                            >= r
+                                    {
+                                        veto = true;
+                                        m.reason = "dispatch_cost_ge_r_session_veto";
                                     } else {
                                         let p = targets::plan(&targets::Input {
                                             side,
@@ -492,6 +518,72 @@ mod tests {
             ts_ms: at.timestamp_millis(),
             price_e5: ((mid + 0.01) * 100000.0).round() as i64,
         });
+    }
+    fn oil(short: bool) -> (Request, Source, super::super::production_s3::Preparation) {
+        let (mut req, src) = fixture("NatGas", short);
+        req.symbol = "SpotCrude".into();
+        let evidence = super::super::production_s3::Preparation {
+            source: "synthetic fixture, not market evidence".into(),
+            available_at: req.from + Duration::minutes(30),
+            opening_bar_tick_volume: 10,
+            spread: req.spread,
+            commission_round_trip: req.commission_round_trip,
+        };
+        (req, src, evidence)
+    }
+    #[test]
+    fn prepared_oil_causal_marks_and_evidence() {
+        use super::super::production_s3::study as prepared;
+        let (mut req, mut src, mut e) = oil(false);
+        req.to = req.from + Duration::hours(13);
+        let out = prepared(&req, &src, &e).unwrap();
+        assert_eq!(out.marks.len(), 24);
+        let original = out.trade.unwrap().entry;
+        pair(&mut src, req.from + Duration::hours(12), 150.0);
+        assert_eq!(
+            prepared(&req, &src, &e).unwrap().trade.unwrap().entry,
+            original
+        );
+        e.opening_bar_tick_volume = 0;
+        assert!(prepared(&req, &src, &e).is_err());
+        e.opening_bar_tick_volume = 10;
+        e.available_at += Duration::seconds(1);
+        assert!(prepared(&req, &src, &e).is_err());
+        assert!(study(&req, &src).is_err());
+    }
+    #[test]
+    fn prepared_oil_dispatch_cost_consumes_session_without_entry() {
+        let (mut req, mut src, mut e) = oil(false);
+        req.spread = 0.5;
+        e.spread = req.spread;
+        src.bids.clear();
+        src.asks.clear();
+        pair(&mut src, req.from + Duration::seconds(1800), 104.0);
+        pair(&mut src, req.from + Duration::seconds(1801), 105.0);
+        let out = super::super::production_s3::study(&req, &src, &e).unwrap();
+        assert!(out.trade.is_none());
+        assert_eq!(out.marks[0].reason, "dispatch_cost_ge_r_session_veto");
+        assert_eq!(out.marks[1].reason, "session_cost_veto");
+        assert!(out.marks[0].cost.unwrap() < out.marks[0].r.unwrap());
+    }
+    #[test]
+    fn prepared_oil_full_exits_and_censoring_preserve_quality() {
+        for short in [false, true] {
+            let (req, mut src, e) = oil(short);
+            let out = super::super::production_s3::study(&req, &src, &e).unwrap();
+            assert!(out.quality.same_millisecond_groups > 0);
+            let t = out.trade.unwrap();
+            assert_eq!(t.exit_comparison.candidate.fills.len(), 2);
+            assert!(t.exit_comparison.candidate.net_r.is_none());
+            src.bids.truncate(2);
+            src.asks.truncate(2);
+            let t = super::super::production_s3::study(&req, &src, &e)
+                .unwrap()
+                .trade
+                .unwrap();
+            assert_eq!(t.exit_comparison.candidate.remaining_volume, 4);
+            assert!(t.trailing_scenario_net_r.is_none());
+        }
     }
     #[test]
     fn both_directions_partial_and_trailing_use_next_quote_original_r() {
