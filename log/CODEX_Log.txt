@@ -1780,3 +1780,12 @@ costs worsen it. Combined6/83 wins,−2.961114R; macro11/54,−0.360854R. Reject
 substitution under tested assumptions; no promotion/tuning/additional collection.
 Recorded exact independent gross/cost decomposition in JSON and MD/HTML findings.
 Native rows and summaries unchanged by canonical hash; CI applies to final report head.
+
+[§LOG.129] №18,334 §§1–5 · 07-11-2026 17:50:08 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Owner-selected s3_two_stage mainline design and Crude/Brent, US500/NAS100, XAUUSD/XAGUSD peer authorisation recorded.
+48 bp minimum retains strict spread+commission+two-sided reserve < R; floor alone is not the tested rule.
+Measured PR #183 result remains 3/5 wins, +0.12385077R, PF1.45149070; 3 closes protocol-flagged.
+Removed positive-expectancy guarantee; gross entry-price stop does not guarantee net breakeven.
+No production activation, new broker reads, validation opening or financial qualification.
+Checked GROK_Log.txt before choosing serial; latest recorded Grok serial remains №17,703.
+Publication requires explicit head-matched CI success and merged artifact verification.
