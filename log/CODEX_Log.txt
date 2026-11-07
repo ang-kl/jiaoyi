@@ -1828,3 +1828,7 @@ Completed offline audit; 0 restored US500 episodes. Distinct decoder errors adde
 S3 ledger A: {"entries": 10, "closed_trades": 6, "wins": 3, "losses": 3, "net_breakevens": 0, "censored": 4, "win_rate": 0.5, "mean_net_r": -0.1889241966106268, "profit_factor_r": 0.637193003854747, "financial_pass": false, "account_goal_73pct_20trade_satisfied": false}
 S3 ledger B (unverified sensitivity, same fills): {"entries": 10, "closed_trades": 6, "wins": 3, "losses": 3, "net_breakevens": 0, "censored": 4, "win_rate": 0.5, "mean_net_r": 0.4178737388767728, "profit_factor_r": 2.927197763372282, "financial_pass": false, "account_goal_73pct_20trade_satisfied": false}
 No empirical round-trip calibration, financial PASS, new entries, broker reads or live change.
+
+[§LOG.137] №18,348 §§1–6 · 07-11-2026 23:07:06 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
+Frozen 40 slots and receipt-based M30 partition. {"logical_jobs": 40, "attempts_per_component": 1, "tick_pages_per_job": 120, "ticks_per_job": 200000, "seconds_per_job": 240, "new_bar_requests": 55, "reused_bar_slices": 9, "blocked_bar_slices": 0, "bytes_per_file": 32000000, "total_source_bytes": 512000000}
+Legacy end-of-session model retained; requested four-hour close separately labelled. All prior losses/censoring retained; no financial PASS.
