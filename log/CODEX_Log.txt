@@ -1626,3 +1626,24 @@ core Clippy/format and native example build pass. No pilot price data collected 
 Plan SHA256: 2801e7267d90875bc1bafef20f7cee3469a98fe6c89ddeb8bba2ef79f7777d4e.
 Merge/CI receipt belongs to plan PR; actual pre-read freeze records its merged commit.
 Time is Money. Prepare to win; no financial progress claimed from engineering checks.
+
+[§LOG.120] №18,316 §§1–2 · 07-11-2026 11:43 SGT (+08:00);
+by <Codex (GPT-6), effort: not exposed>.
+Plan PR178 merged green at 11:37:21 SGT, commit5d712c5146b75d396b90311877abb106e3ed741a;
+automated review found no issues. Stage 1 began from that commit with frozen binary.
+Collector defect: passing count=500 alongside from/to invoked count-based M30 history,
+returning 500 bars and hasMore=true for a <=336-slot interval. Strict decoder rejected
+it. Before manual pause, 24 M30 segments failed; 12 tick jobs completed; reserved
+US500-2024-01-24 was interrupted and recorded failed/uncertain, never retried.
+Two still-unspent, predeclared BTC winter segments were captured with full raw
+responses and pre-read/finished receipts: count mode500/hasMore=true; interval-only
+mode326/hasMore=false. Both consume existing segment slots, not extra allowance.
+Fixed request builder to omit count, retained raw error responses, and stop immediately
+on unexpected/truncated bar response. The interval-mode capture decodes successfully.
+Old failures remain; captured sources may be decoded offline without refetching.
+Added explicit transport-only amendment keyed to original freeze, manifest and
+before/after collector hashes. Model binary, dates, hypotheses, costs and goals unchanged.
+Verified four seasonal tests including interval request regression; amendment accepts
+only the documented collector change and rejects model-binary drift. Continue only
+unspent jobs after green fix PR. Pilot report must disclose reduced coverage and
+79-or-fewer complete tick jobs, not claim the requested template's 80 verified.
