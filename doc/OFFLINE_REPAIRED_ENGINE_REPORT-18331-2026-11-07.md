@@ -8,6 +8,15 @@
 
 **No financial qualification or demonstrated progress towards the per-strategy/account 73% / reference R:R 1:1.38 latest-20 goal.** These are reused development dates, uncalibrated cost scenarios, and an inherited protocol failure affecting20 episodes. A 50% hit rate alone is insufficient. Validation stays sealed; no production entry, exit, registration, account or worker configuration changed.
 
+### §1.1. What the measured changes explain
+
+- **Two-stage exits alone:** unchanged five S3 entries, five closes, three wins (60%), mean +0.123851R and PF1.451491 at the primary costs. The original arm closed only three positions and censored two. The two newly closed winners both have inherited failed-interval protocol flags. Three of the five closes have protocol flags overall. The two closes without this particular flag have one win and mean −0.004221R; other quote-quality limitations remain. This is an exploratory lead, not a qualified improvement or proof that trailing caused the losses.
+- **Dynamic gate alone:** entries rise from5 to93 (88 added), with83 closes, only one net winner and mean −3.035711R. At entry,86/93 have the old cost reserve at least as large as R; median reserve is2.824972R. On the83 closes, mean gross return is already −0.199246R and modelled costs subtract another2.836465R. The volatility filter does not replace an economic cost check.
+- **Dynamic gate plus two-stage exits:** six wins from83 closes (7.23%), mean −2.961114R. Mean gross return remains −0.138772R. Even the uncalibrated2bp sensitivity has26/83 wins and mean −0.373967R. This combination does not solve the entry problem under either stated scenario.
+- **Macro:**11/54 wins remain20.37%; mean shifts from −0.360042R to −0.360854R. There are no additional entries, because NAS100/silver observations are absent. Mean gross return is −0.015200R before the modelled costs. Authorisation is implemented and tested; missing data still prevents the requested index/gold evaluation.
+
+**Decision:** retain the original production cost screen and trading rules. Reject the dynamic-gate substitution and combined candidate under these tested assumptions. Keep the five-entry exit-only result as a small, protocol-sensitive research observation; do not promote it or claim the50% per-class target. Any next exit study needs a separately frozen, representative dataset and defensible costs. Do not tune this sample further or automatically collect peer data.
+
 ## §2. What the supplied scripts actually did
 
 Both attachments loaded the previous result JSON but did not use it to replay ticks. They assigned 96 macro trades/52 wins and48 S3 trades/31 wins as constants. Their per-symbol S3 wins sum to32, conflicting with31 overall. The Bash review block's means/PFs also disagree with its own arithmetic. Its CI reader uses `.state` for CheckRuns and can treat null as green; its quoted heredoc prints the literal merge command. Those outputs were not executed or published as market evidence.
