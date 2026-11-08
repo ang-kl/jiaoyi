@@ -6,11 +6,11 @@
     "docs/rebuild_phase5b_exact_frozen_candidate_audit_18366.json": "2f3cf05f4ae50e033e6f8e07770848774cac6995a4ae90a9303b4ce61bd657c7"
   },
   "native_binary_sha256": {
-    "manifest_pullback_replay": "907b98b9848b27faca9cf2709369069e539727bc8c16fe5af34eaaebf9ec3180",
-    "native_target_sizing_replay": "797218021970d077bda9f07068b632bf92083106161abfd2e2d048dc636a50ba",
-    "rebuild_continuity_replay": "368f81b2086f7a0efd2aef71c88ecdef28f9922ebb7bcf3e98daea90ebe62bcc",
-    "replay_inventory_metadata": "3d26dee8126c6a4d198e7dcffb23555c739fcfa1b068debd0749796014686c79",
-    "tiered_pullback_replay": "5fc57c60a1fc9c6cd4eddd59157dd6276b9ab059b1aca611b10a36c867310fad"
+    "manifest_pullback_replay": "46e4de7124f4da0dca21d0504fb461c9870be7e3979449717b30c00a81df60a1",
+    "native_target_sizing_replay": "328cd4e34e99ce787f14685e28f885c629c5194cd36d338b3661445c420362b4",
+    "rebuild_continuity_replay": "0b518dac8321622b3b7ea735053b9ae6c2e1ea224682cda4c3db948b3d34b2bd",
+    "replay_inventory_metadata": "bbfb77b8f2fba7aaec9f3786250b9c1e6f52dc2a4b25c4ed8a590a42c51dec99",
+    "tiered_pullback_replay": "7ef662c8cf3d97ac06243ad9cbc452f3ff00deddac82ffcf809e06d53ac3d62a"
   },
   "new_broker_requests": 0,
   "operation": "historical_parity_and_offline_engineering_only",
@@ -28,7 +28,7 @@
     "crates/jiaoyi-core/examples/peer_collection_replay.rs": "ebac11931c4ad9b2cdced77338f7578c9427a512c52c81ca827de8d779421d0e",
     "crates/jiaoyi-core/examples/phase5_fixed_window_replay.rs": "2ae0678346e36ae22d206ea88ba3760b52933573fe0386b4fe9d59b5571e4322",
     "crates/jiaoyi-core/examples/production_s3_replay.rs": "74417eab44c53b29816224140e4908680878e4ffa0a755644906c7f8e95d5331",
-    "crates/jiaoyi-core/examples/rebuild_continuity_replay.rs": "244c186e0055699039868ee049803bb6695c7014856e9146d548e38fcb9e48b7",
+    "crates/jiaoyi-core/examples/rebuild_continuity_replay.rs": "c0a994d933b4159adb9c0d031d480d3503170b081757b49f0a307806a40b0da5",
     "crates/jiaoyi-core/examples/replay_inventory_metadata.rs": "0bc8c1ce746489151bd67ebbbb8e213e1d3f55f201c1c03dcf83a0fcda2e4c6c",
     "crates/jiaoyi-core/examples/s3_candidate_study.rs": "c9fdfd6ac14289b094e736013f26a2c6f7312b2ff722daaf532180861eec54ae",
     "crates/jiaoyi-core/examples/s3_exit_replay.rs": "13acbfa3bf9b8e29e166fd4646390384740cb33bf078f25d295a0ae8bbb53957",
@@ -58,7 +58,7 @@
     "crates/jiaoyi-core/src/research/peer_evaluation.rs": "24a3f8413761b5cda4522f809fc1b0daccc27cbaa9f338857bc2dcbca86c86a8",
     "crates/jiaoyi-core/src/research/production_s3.rs": "0fa0aaa4c40f6115197148001089b81d74eb1d3e3e9209c55cdd6cee670600f0",
     "crates/jiaoyi-core/src/research/rebuild.rs": "e3eed492af959f603da487ba881cd74dba263357391c1611c17828c244759520",
-    "crates/jiaoyi-core/src/research/rebuild_continuity.rs": "e2dd29b678b6b1befd861ff989a9e46eb0ebedbfac6199c21ee5bec6bd5d893e",
+    "crates/jiaoyi-core/src/research/rebuild_continuity.rs": "ed2e5b31049117cff836fc9974d299d0d4891587335253f1850c32add3314f41",
     "crates/jiaoyi-core/src/research/repaired_exit.rs": "a4e1c957c5bd5602a9b2c5e9222cd1af2507311051f7862612a68c28ee6807f3",
     "crates/jiaoyi-core/src/research/rng.rs": "8053a2b14f4fc44d68e5c5b925e708a87f00caaf337b76237c178104753280a8",
     "crates/jiaoyi-core/src/research/s3_signal.rs": "f8dfefea150ad908e655023804ae840dbb9fb83701a7ecc9af45dcb47cec4fd7",
@@ -84,7 +84,7 @@
     "docs/rebuild_rfc_registry_18368.json": "6bd36a36f3f4150d10819781039ce402682355e6b88c4858e4a1fca3e26152e5",
     "ops/research/phase4_forensics.py": "36db9c3c3669f3b723f349590042d5fb57e78779aa13210167dd48dbb06eaea7",
     "ops/research/phase5b_audit.py": "3c759a5e84c35e0e12ece9ebfc485f4cf4b12502fd3befc8d228534973138538",
-    "ops/research/rebuild.py": "8c69fba2120c81cb8468db2b0f5d600f7852393deb40ebe5a7fb0bbb60c7e06c",
+    "ops/research/rebuild.py": "a99fbffbaf7b8cac87dd71282d514178c9091fb25b8b87b71b4c25f838091486",
     "ops/research/rebuild_authority.py": "ef4b685424478791df6c356b2cf796ae191b4568c0a1cbd3fbc9587640052d1e",
     "ops/research/rebuild_evidence.py": "8788329fba0eefadc4858f485569e96cb7d90aeade1825deb302468fd3abbc64",
     "ops/research/rebuild_preflight.py": "c6fa24ed692497a22db9c1f5aae0d64d9b38914536683de0d9f40db2681265a6",

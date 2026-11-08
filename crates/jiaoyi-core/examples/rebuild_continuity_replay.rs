@@ -8,7 +8,6 @@ struct Request {
     input: manifest_pullback::Input,
     entry: exit_replay::Input,
     engine_version: String,
-    expected_outcome: serde_json::Value,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,7 +28,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &r.input,
             r.entry,
             &r.engine_version,
-            &r.expected_outcome
         )?)?
     );
     Ok(())

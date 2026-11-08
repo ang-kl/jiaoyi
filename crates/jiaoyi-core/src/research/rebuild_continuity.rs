@@ -90,7 +90,6 @@ pub fn verify_recorded_path(
     source: &super::manifest_pullback::Input,
     input: Input,
     engine_version: &str,
-    expected_outcome: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let (snapshots, _) = super::s3_ticks::snapshots(&source.request, &source.source)?;
     let end = source.request.to;
@@ -105,6 +104,10 @@ pub fn verify_recorded_path(
     if quotes.len() < 2 || input.session_end != end {
         return Err("recorded forced path or quote coverage missing".into());
     }
+    // Compare generated Values inside Rust, before a JSON float parse can
+    // introduce a one-ULP conversion difference. The caller also compares the
+    // emitted outcome to its immutable historical receipt.
+    let uninterrupted = super::option_ab::tick_run(&input, &snapshots, end, true)?;
     let split = quotes.len() / 2;
     let mut before = ContinuousReplay::new(input.clone(), engine_version)?;
     before.push_partition(&quotes[..split])?;
@@ -123,12 +126,12 @@ pub fn verify_recorded_path(
         )
         .candidate;
     let value = serde_json::to_value(outcome).map_err(|e| e.to_string())?;
-    if &value != expected_outcome {
-        return Err("recorded restart differs from frozen native outcome".into());
+    if value != uninterrupted["outcome"] {
+        return Err("partition/restart differs from uninterrupted native outcome".into());
     }
     Ok(
         serde_json::json!({"quotes":quotes.len(),"split_at":split,"checkpoint":final_checkpoint,
-        "original_outcome_parity":true,"financial_pass":false}),
+        "original_outcome_parity":true,"outcome":value,"financial_pass":false}),
     )
 }
 

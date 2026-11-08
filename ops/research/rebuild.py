@@ -252,10 +252,11 @@ def continuity():
         arm = row['native']['arms'][u.ARMS[2]]['forced']
         path = WORK/'continuity-input.json'
         save(path, {'input':read(old.WORK/('input-'+row['episode_id']+'.json')),'entry':arm['entry'],
-                    'engine_version':read(old.SPEC)['frozen_candidate_hypothesis']['exit_engine_source_sha256'],
-                    'expected_outcome':arm['outcome']})
+                    'engine_version':read(old.SPEC)['frozen_candidate_hypothesis']['exit_engine_source_sha256']})
         raw = subprocess.check_output([str(NATIVE/'rebuild_continuity_replay'),str(path)],timeout=120)
         proof = json.loads(raw)
+        require(proof.pop('outcome') == arm['outcome'], 'frozen_recorded_outcome_mismatch')
+        proof['frozen_outcome_sha256'] = canonical(arm['outcome'])
         require(proof['original_outcome_parity'] is True, 'recorded_continuity_failed')
         proofs.append({'episode_id':row['episode_id'],'input_sha256':sha(path),'proof':proof,
                        'output_sha256':hashlib.sha256(raw).hexdigest()})
