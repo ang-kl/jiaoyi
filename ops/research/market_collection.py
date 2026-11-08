@@ -18,6 +18,9 @@ import class_research
 
 
 def call(base, password, request=None):
+    if request is not None:
+        from rebuild_authority import require_collection_authority
+        require_collection_authority()
     headers = {"Authorization": "Bearer " + password, "Cache-Control": "no-cache"}
     data = None
     if request is not None:

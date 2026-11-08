@@ -149,6 +149,12 @@ fn start(
     mut envelope: Value,
     collection: bool,
 ) -> Response {
+    if let Err(reason) = jiaoyi_core::research::rebuild::collection_authority() {
+        return response(
+            StatusCode::LOCKED,
+            json!({"error":reason,"new_broker_requests":0}),
+        );
+    }
     let id = Utc::now().timestamp_micros().to_string();
     {
         let mut job = jobs.0.lock().unwrap();
@@ -203,6 +209,7 @@ async fn run(
     req: &Request,
     collection: bool,
 ) -> Result<Value, &'static str> {
+    jiaoyi_core::research::rebuild::collection_authority()?;
     let config = crate::config::Config::from_env().map_err(|_| "configuration_unavailable")?;
     let account = config
         .allowlist
@@ -441,6 +448,52 @@ fn validate_collection_source(
 pub struct TickBudget {
     pub pages: usize,
     pub rows: usize,
+}
+
+#[cfg(test)]
+mod rebuild_pause_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn research_entry_points_refuse_before_database_or_broker_access() {
+        let state = AppState {
+            pool: sqlx::postgres::PgPoolOptions::new()
+                .connect_lazy("postgres://unused:unused@127.0.0.1:1/unused")
+                .unwrap(),
+            loading: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            recorders: Default::default(),
+            history: Default::default(),
+            trading_loops: Default::default(),
+            strategy3_loops: Default::default(),
+            allowed_accounts: Arc::new([49236051].into_iter().collect()),
+        };
+        let request = Request {
+            account: 49236051,
+            symbol: "BTCUSD".into(),
+            from: "2024-01-01T00:00:00Z".parse().unwrap(),
+            to: "2024-01-01T04:00:00Z".parse().unwrap(),
+            spread: 0.,
+            commission_round_trip: 0.,
+            slippage_bps_per_side: 24.,
+            tick_replay: None,
+        };
+        for collection in [false, true] {
+            let jobs = Jobs::default();
+            let response = start(
+                state.clone(),
+                jobs.clone(),
+                request.clone(),
+                json!({}),
+                collection,
+            );
+            assert_eq!(response.status(), StatusCode::LOCKED);
+            assert!(jobs.0.lock().unwrap().is_null());
+            assert_eq!(
+                run(&state, &jobs, &request, collection).await.unwrap_err(),
+                jiaoyi_core::research::rebuild::COLLECTION_REFUSAL
+            );
+        }
+    }
 }
 pub async fn bounded_ticks(
     session: &jiaoyi_ctrader::AccountSession<'_>,

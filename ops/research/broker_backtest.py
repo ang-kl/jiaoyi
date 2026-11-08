@@ -11,6 +11,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise RuntimeError('Redirect refused; credentials were not forwarded')
 
 def call(base,password,body=None):
+    if body is not None:
+        from rebuild_authority import require_collection_authority
+        require_collection_authority()
     payload=None if body is None else json.dumps(body).encode()
     headers={'Authorization':'Bearer '+password,'Cache-Control':'no-cache'}
     if payload is not None:headers['Content-Type']='application/json'

@@ -17,6 +17,8 @@ class BrokerError(RuntimeError):
 
 class Broker:
     def __enter__(self):
+        from rebuild_authority import require_collection_authority
+        require_collection_authority()
         from websockets.sync.client import connect
         proxy = urllib.request.getproxies().get('https')
         if not proxy:
@@ -42,6 +44,8 @@ class Broker:
     def request(self, kind, payload):
         if kind not in READ_TYPES or payload.get('ctidTraderAccountId', ACCOUNT) != ACCOUNT:
             raise BrokerError('read_type_or_account_refused')
+        from rebuild_authority import require_collection_authority
+        require_collection_authority()
         time.sleep(max(0, .8 - (time.monotonic() - self.last)))
         self.counter += 1
         identity = 'research40-' + str(self.counter)
