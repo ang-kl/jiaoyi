@@ -89,9 +89,7 @@ async fn expiry_is_not_a_cost_veto_but_final_registered_cost_refusal_is_durable(
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn execution_only_v7_preserves_only_its_direct_v6_predecessors_session_cost_veto(
-    pool: PgPool,
-) {
+async fn pullback_cost_veto_does_not_inherit_legacy_band_distance_veto(pool: PgPool) {
     use sha2::{Digest, Sha256};
     let date = Utc::now().date_naive();
     let current = jiaoyi::strategy3::prereg_hash();
@@ -120,7 +118,13 @@ async fn execution_only_v7_preserves_only_its_direct_v6_predecessors_session_cos
     .await
     .unwrap();
     assert!(
-        jiaoyi::strategy3::session_cost_veto(&pool, 7, "BTCUSD", date, &current)
+        !jiaoyi::strategy3::session_cost_veto(&pool, 7, "BTCUSD", date, &current)
+            .await
+            .unwrap(),
+        "band-distance veto is not an observed-impulse-distance veto"
+    );
+    assert!(
+        s3::cost_skipped_in_session(&pool, 7, "BTCUSD", date, &previous)
             .await
             .unwrap()
     );
@@ -152,6 +156,6 @@ async fn execution_only_v7_preserves_only_its_direct_v6_predecessors_session_cos
         !s3::cost_skipped_in_session(&pool, 7, "BTCUSD", date, &current)
             .await
             .unwrap(),
-        "compatibility does not relabel historical evidence as v7"
+        "new registration does not relabel historical evidence"
     );
 }

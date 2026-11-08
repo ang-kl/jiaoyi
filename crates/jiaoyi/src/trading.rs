@@ -1153,6 +1153,7 @@ async fn lifted_by(pool: &PgPool, account_id: i64) -> jiaoyi_store::Result<Strin
 
 #[derive(Debug, Clone)]
 struct Sym {
+    entry_enabled: bool,
     id: i64,
     name: String,
     limits: Option<VolumeLimits>,
@@ -1788,6 +1789,10 @@ pub async fn run_session_with_levels_refresh(
         (Some(id), Some(q)) => q.asset_name(id).map(str::to_string),
         _ => None,
     };
+    let configured = jiaoyi_store::settings::snapshot(pool, Some(account_id))
+        .await?
+        .universe("universe.symbols")
+        .map_err(anyhow::Error::msg)?;
     for r in jiaoyi_store::latest_resolutions(pool, account_id).await? {
         let Some(id) = r.broker_symbol_id else {
             continue;
@@ -1811,6 +1816,11 @@ pub async fn run_session_with_levels_refresh(
         syms.insert(
             id,
             Sym {
+                // Extra S3 data discovery must not grant S1 new core entries.
+                // Preserve historical noncore resolution behaviour.
+                entry_enabled: !jiaoyi_core::strategy3::macro_pullback::CORE
+                    .contains(&r.name.as_str())
+                    || configured.iter().any(|(n, _)| n == &r.name),
                 id,
                 name: r.name.clone(),
                 limits,
@@ -2261,7 +2271,7 @@ async fn on_quote(
     manage_positions(ctx, d, sym, book, trail_amend_secs, false, Utc::now()).await?;
     // Previously the whole loop waited for refreshed levels. Keep that
     // restriction for new entries, while existing positions retain exits.
-    if !entries_ready {
+    if !entries_ready || !sym.entry_enabled {
         return Ok(());
     }
     // An entry, when the symbol has no Strategy 1 position.
@@ -2851,6 +2861,7 @@ mod tests {
             (
                 id,
                 Sym {
+                    entry_enabled: true,
                     id,
                     name: name.into(),
                     limits: None,

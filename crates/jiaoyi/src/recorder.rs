@@ -128,12 +128,12 @@ struct SessionSettings {
 
 async fn session_settings(pool: &PgPool, account_id: i64) -> anyhow::Result<SessionSettings> {
     let s = jiaoyi_store::settings::snapshot(pool, Some(account_id)).await?;
-    let names = s
-        .universe("universe.symbols")
-        .map_err(anyhow::Error::msg)?
-        .into_iter()
-        .map(|(n, _)| n)
-        .collect();
+    let names = crate::strategy3::data_universe(
+        s.universe("universe.symbols").map_err(anyhow::Error::msg)?,
+    )
+    .into_iter()
+    .map(|(n, _)| n)
+    .collect();
     let flush = s
         .integer("ticks.flush_millis")
         .map_err(anyhow::Error::msg)?;

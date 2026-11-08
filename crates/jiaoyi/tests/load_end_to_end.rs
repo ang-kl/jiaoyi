@@ -216,7 +216,9 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
     // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
     // Grok 4.7 · № 17,596 28-10: universe drop is one more version.
     assert_eq!(s.settings_version, Some(47));
-    assert_eq!((s.symbols_resolved, s.symbols_unresolved), (1, 2));
+    // Read-only core discovery adds seven missing names; XAUUSD was already
+    // configured and remains ambiguous. None is silently aliased.
+    assert_eq!((s.symbols_resolved, s.symbols_unresolved), (1, 9));
     assert_eq!(s.bars_inserted, 4018, "every closed bar");
     assert_eq!(s.forming_bars_dropped, 1, "today's bar is not stored");
     assert_eq!(s.spreads_measured, 1);
@@ -242,6 +244,9 @@ async fn a_full_load_stores_closed_bars_costs_resolutions_and_a_report(pool: PgP
     let res = store::latest_resolutions(&pool, A).await.unwrap();
     let by: HashMap<_, _> = res.iter().map(|r| (r.name.as_str(), r)).collect();
     assert_eq!(by["EURUSD"].broker_symbol_id, Some(1));
+    for core in jiaoyi_core::strategy3::macro_pullback::CORE {
+        assert!(by.contains_key(core));
+    }
     assert_eq!(by["XAUUSD"].status, "ambiguous");
     assert_eq!(by["XAUUSD"].candidate_ids, vec![7, 8]);
     assert_eq!(by["UKOIL"].status, "missing");

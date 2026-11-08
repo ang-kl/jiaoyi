@@ -128,6 +128,7 @@ pub async fn collect(pool: &PgPool, input: &Input) -> HashMap<String, Permission
             jiaoyi_store::latest_resolutions(pool, input.account_id).await,
         ) {
             if let Ok(universe) = settings.universe("universe.symbols") {
+                let universe = crate::strategy3::data_universe(universe);
                 let hash = crate::strategy3::prereg_hash();
                 for symbol in symbols {
                     let matches: Vec<_> = universe

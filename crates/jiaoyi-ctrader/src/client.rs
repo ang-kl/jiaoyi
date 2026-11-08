@@ -169,6 +169,10 @@ impl EntryState {
                 refusal
             })?;
         let mut receipt = guard.snapshot(quote, revision, now, monotonic_now);
+        if let crate::entry_guard::Signal::Pullback { peer, .. } = &guard.signal {
+            let peer_quote = peer.and_then(|(id, _)| self.quotes.get(&(guard.account_id, id)));
+            receipt["peer"] = guard.validate_peer(peer_quote, now)?;
+        }
         receipt["connection_generation"] = serde_json::json!(self.generation);
         receipt["stage"] = serde_json::json!("after_writer_lock");
         receipt["result"] = serde_json::json!("passed");
