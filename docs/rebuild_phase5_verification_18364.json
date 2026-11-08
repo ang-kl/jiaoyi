@@ -1,0 +1,199 @@
+{
+  "baseline_parity": {
+    "legacy_exact": 159,
+    "phase2_exact": 35
+  },
+  "byte_identical_complete_offline_runs": 2,
+  "candidate_id": "s3_macro_pullback_fixed_windows_v1",
+  "ci": "required check/docker/engineering on final PR head; see PR for outcome",
+  "class_screens": [
+    {
+      "C_minus_B_R_per_eligible_opportunity": 0.0332241642228739,
+      "asset_class": "crypto",
+      "financial_pass": false,
+      "priced_closes": 2,
+      "reasons": [
+        "fewer_than20_closes",
+        "fewer_than3_weeks",
+        "nonpositive_or_unavailable_stress_expectancy"
+      ],
+      "screen_passed": false,
+      "weeks": 1
+    },
+    {
+      "C_minus_B_R_per_eligible_opportunity": 0.0,
+      "asset_class": "energy",
+      "financial_pass": false,
+      "priced_closes": 0,
+      "reasons": [
+        "fewer_than20_closes",
+        "fewer_than3_weeks",
+        "below50pct_or_unavailable",
+        "nonpositive_or_unavailable_stress_expectancy",
+        "no_positive_C_minus_B_opportunity_return"
+      ],
+      "screen_passed": false,
+      "weeks": 0
+    },
+    {
+      "C_minus_B_R_per_eligible_opportunity": 0.0,
+      "asset_class": "equity_index",
+      "financial_pass": false,
+      "priced_closes": 0,
+      "reasons": [
+        "fewer_than20_closes",
+        "fewer_than3_weeks",
+        "below50pct_or_unavailable",
+        "nonpositive_or_unavailable_stress_expectancy",
+        "no_positive_C_minus_B_opportunity_return"
+      ],
+      "screen_passed": false,
+      "weeks": 0
+    },
+    {
+      "C_minus_B_R_per_eligible_opportunity": 0.0,
+      "asset_class": "metal",
+      "financial_pass": false,
+      "priced_closes": 0,
+      "reasons": [
+        "fewer_than20_closes",
+        "fewer_than3_weeks",
+        "below50pct_or_unavailable",
+        "nonpositive_or_unavailable_stress_expectancy",
+        "no_positive_C_minus_B_opportunity_return"
+      ],
+      "screen_passed": false,
+      "weeks": 0
+    }
+  ],
+  "collection": {
+    "broker_messages_this_connection": 1513,
+    "broker_specs_sha256": "b11dda587e13e54733b04ba14d41e337fd2ebc097bbee4456c22a29119acd223",
+    "cached_m30_slices_reused": 75,
+    "collection_complete_sha256": "4103d2eed862583be3be27ee43dffea9c9a1214201a2416b543a4b70d27abfa8",
+    "failed_components": [
+      {
+        "budget": {
+          "pages": 58,
+          "rows": 203364
+        },
+        "key": "job-NAS100-2024-08-12",
+        "reason": "tick_row_budget",
+        "status": "failed"
+      },
+      {
+        "budget": {
+          "pages": 62,
+          "rows": 201959
+        },
+        "key": "job-NAS100-2024-08-14",
+        "reason": "tick_row_budget",
+        "status": "failed"
+      }
+    ],
+    "ledger_components_reconciled": 399,
+    "ledger_sha256": "6a638062dcb3ba661a3292cd7968362ab71a9ba0a0013e205dcad5372e707d22",
+    "m30_requests_completed": 239,
+    "tick_sources_completed": 158,
+    "tick_sources_failed": 2
+  },
+  "coverage_before_outcomes_sha256": "a07fbf2b353090f5e45788334e013109096c6c166333949dab9e89e40ca18264",
+  "evaluation_network_guard": true,
+  "financial_pass": false,
+  "native_arithmetic_checks": 117,
+  "plan_sha256": "e3645201bac9598759b7986a225341ca794e900aeed666e038e2c61f83a2115b",
+  "production_strategy_files_count": 55,
+  "production_strategy_files_unchanged": {
+    "crates/jiaoyi-core/src/strategy3/band.rs": "483998e9e3a4206e1249b92d2804111c253f1a60db8f7902f00dc7a11a00f70c",
+    "crates/jiaoyi-core/src/strategy3/kelly.rs": "786a799a6bdca2861e2dcb16ba4ad931f55a516c47bf9aec821fdb8109f10c40",
+    "crates/jiaoyi-core/src/strategy3/mod.rs": "8a195ad48abc52949b01c2c42e51a57da701d2639d37fe49db0abe815e8761f3",
+    "crates/jiaoyi-core/src/strategy3/sessions.rs": "f60a556596c720ab9befb8932c615d1bf57b9ee6e1339d52b2d5559b655c91fa",
+    "crates/jiaoyi-core/src/strategy3/targets.rs": "e373c96e321c9349522408249c4a545572756eb8431c10185e4948208d680c44",
+    "crates/jiaoyi/src/admission.rs": "9d72416657e7f723fdc215fc9623c55f3fed21049b8b997cafd8e95d78df91aa",
+    "crates/jiaoyi/src/authority.rs": "2c4872593b27736278b5069c99a5be1fb5bd8fcf4ecc939d8597465da32ff330",
+    "crates/jiaoyi/src/broker_backtest.rs": "3cda37512fd224ccf800a33703981b2d8f65e88f9d7f3c3cf7d7520ac861ec00",
+    "crates/jiaoyi/src/config.rs": "58af98aec0c8bf97052bcc8cbbd436d990c10aa4a3db83698ba29b9d81aad189",
+    "crates/jiaoyi/src/edge/costs.rs": "ab869a86c6257078827c0d3b1b7acc5cf46b5c36669459f96fd004442bf1ecaa",
+    "crates/jiaoyi/src/edge/data.rs": "3eec46c0f24c50f3e3ccd7476418f2b6611ea7286230d5e005da80e635ab6468",
+    "crates/jiaoyi/src/edge/h1job.rs": "01275838c8bd690464a15f8e08b95eae2b7be8aae2202bd1ed2f0dc48c952522",
+    "crates/jiaoyi/src/edge/mod.rs": "168c677e96f30839e7f59e564a4a3cdb12b34c1c5cdf6f644810005e10c7ee8f",
+    "crates/jiaoyi/src/edge/prereg.rs": "6903fc61ece36f45ca7ae93159ce8562460c8d66536bf3d499521068fad14f67",
+    "crates/jiaoyi/src/edge/recheck.rs": "951a866d2248ec655171962ed43175f201ce80c03b57fafe109bf92f3c623c40",
+    "crates/jiaoyi/src/edge/routes.rs": "722c50e038a78c71ab6a144f7669aea226ca80604513763f1ef671dc092a00a5",
+    "crates/jiaoyi/src/edge/runner.rs": "7c2e801be4e5ae3bcea03c37cf54a942368284606bf4ef43b8c7e27ba55ec5c0",
+    "crates/jiaoyi/src/edge/sampler.rs": "0188ea1b76fd97b0e8b184c3ed9bbfe4a6f6b4df516f68c235158fbab3096f2d",
+    "crates/jiaoyi/src/fast_monitor.rs": "3f26a03ca930a78d9c5b09aa73cfd088ae64c8634b0f11efc6cc9c9cf152ed5b",
+    "crates/jiaoyi/src/fills.rs": "925ffc7c0245e156231810503f7a2403124c2b871a9cfa4168959de02b6c1ae9",
+    "crates/jiaoyi/src/history.rs": "72760ce83232f23150982570f491311354241bc0c5da27cb7c59da3246a41ef2",
+    "crates/jiaoyi/src/http.rs": "3ef6ddfec8067e17946b187216b9ca8f8a192b927c9e814d90d052118d6a8e20",
+    "crates/jiaoyi/src/lib.rs": "f2e8d6e2db6b85ffdb23b3733aa45c462c5096e9b7910c49af097951d7811a8a",
+    "crates/jiaoyi/src/limits.rs": "602c746d2f4c748815cdbad2f51756729d5bbb4f699b14cab2e2430ac68eb9c0",
+    "crates/jiaoyi/src/loader.rs": "a9bd0f25d60fecfe605f068573161796d200d177b035776a6d7856fd0c7b2e7c",
+    "crates/jiaoyi/src/main.rs": "1f10a081aca744a62a88165c760ef44e76a870f70c2d6e4c10018a7be8c62710",
+    "crates/jiaoyi/src/operations.rs": "d16a4719546195517f95a010f97472709dac91f24a81d17b760e6202b76ecf89",
+    "crates/jiaoyi/src/owner_assessments.mjs": "50d9ca9560ee031b6585a0494765f858b9b6e30673c4139373f86e62b23ef59a",
+    "crates/jiaoyi/src/owner_assessments.rs": "21ec2e1d8b1d805055ebfa1dd63af0b3768a89c362e52e76decd3e5f2fe3e425",
+    "crates/jiaoyi/src/quote_coverage.rs": "2f0680e2394c44cea1c00d9a807ad43ce2ebb78c7e7b9dbf0f9c6d4235168505",
+    "crates/jiaoyi/src/recorder.rs": "b2e8dd0d43f28caf48b078f364d5a2ccc7bab572c696ca78de2dd6b319aff622",
+    "crates/jiaoyi/src/report.rs": "2c24fd898d7cb4637df2de5b3e420ec72103e5e378162035f2167cb0809d24a1",
+    "crates/jiaoyi/src/research.rs": "b9e7414624d0888d809f11d7d6aa106694f78f63283c82371c1c6607b8d7d35a",
+    "crates/jiaoyi/src/service.rs": "bcca294cfc5d1d6e0830bf4778e0372d36a34e2f11df6c84d9789c74f5c263d8",
+    "crates/jiaoyi/src/setup_assessment.rs": "69c0dd42a18d1c5ca7b784ec9b587e28a4b1286054354794febe0df95ba271e1",
+    "crates/jiaoyi/src/setup_assessment/display.rs": "c06ab9a89c47350e6ead0288d86b8594eb592c2601f74dd595ba7075827478fd",
+    "crates/jiaoyi/src/setup_assessment/evaluate.rs": "9cbe1c35c859dd4621695a9ed252538a6691ff82762b31a8ea18dc1fa321d463",
+    "crates/jiaoyi/src/setup_assessment/health.rs": "dac96429dc8aec9f209eb48cb8d55114e662aac548ce41b4b77d7d583d380973",
+    "crates/jiaoyi/src/setup_assessment/permissions.rs": "3ab3375fa65a7401d123f9e33081591ae1e178c084fea78c60b50e929d99cc30",
+    "crates/jiaoyi/src/shutdown.rs": "17a95ae0ab48bca09bbcc2e4d221aa0f3fcea0372aef6a63cf89da08f9c7b088",
+    "crates/jiaoyi/src/status_page.rs": "c2834d46882ce37f2a00d9baf46c3311edc30bdd60fcec18f1dc306d8a8567b3",
+    "crates/jiaoyi/src/stock_preparation.rs": "57246a0bb840820166b814fdf41164f07695be73ebd7dc11fb938bc9fcfb8503",
+    "crates/jiaoyi/src/stop_loss_review.rs": "c82dd8c3497d76a529552a6c23d268c6e9a3a2f15628e905cd4ed64c6a3e7799",
+    "crates/jiaoyi/src/stop_loss_review/admission_tests.rs": "8f49e6db55ce05e91d33d3848e7a896f860899b2cac0aa93c08e2e22088d3a5d",
+    "crates/jiaoyi/src/stop_loss_review/session.rs": "02381d0821566a7f73f001e9a36fcdb4870dc2ae9c1049ab5818ed81874e2f19",
+    "crates/jiaoyi/src/strategy3.rs": "8ae6e14c581126843585bfaba54f9c902ecf70e153aad25f5cbb08e501b7ba3c",
+    "crates/jiaoyi/src/strategy3/preopen.rs": "03df1c8f16c10c723d8c2a0575a066b7bfa0b2d9302d9aae43b82126b9067f6b",
+    "crates/jiaoyi/src/supervisor.rs": "12660d5e53175fc88a2aaba1f4668042e74c94c9418c2e0da51e5b064e8ef4b6",
+    "crates/jiaoyi/src/telegram_report.rs": "c4ae51016bfe9b7e730c324c68d790806f5b21a0d5f7e1b2ccdd248a2c65f1a5",
+    "crates/jiaoyi/src/trading.rs": "d25cbf2fde13291117f33b703883a8d508b801c120a5dd8f3f9510059a69c81a",
+    "crates/jiaoyi/src/trading_report_data.rs": "71209624905136f1a899efa1e1b1929565bbcf5c88424487102057b06066c83e",
+    "crates/jiaoyi/src/trading_report_snapshot.rs": "37184624a4e6082727cd7db6873b7d17353e49ef1140fa641272dc5234672179",
+    "crates/jiaoyi/src/trading_report_view.rs": "c9bee667a9001d8abaa773dd77636615eb13cabb6828586772358576a74ae047",
+    "crates/jiaoyi/src/trail_receipts.rs": "1715d6f1e536c3928d7d729fc8bc3eb1cfeac9f4c7dec9449fbf6b7cdca5bd3d",
+    "crates/jiaoyi/src/trigger_pager.js": "5d08720924c7bb6e230ea5b1c636a327b99378750ff7c6624852d831527cb3e5"
+  },
+  "result_sha256": "6b770318ea0fb58339068acc2b1b56b91a5cb0c239bb7479ca5ea155a394dd1a",
+  "tests": {
+    "core_all_targets_clippy": "passed",
+    "new_focused_python": 3,
+    "new_focused_rust": 1,
+    "research_python_failed": 0,
+    "research_python_skipped": 1,
+    "research_python_total": 78
+  },
+  "trace": "№18,364",
+  "validation_opened": false,
+  "verified_at_sgt": "08-11-2026 14:33:24 SGT",
+  "visual_checks": [
+    {
+      "bodyWidth": 1280,
+      "brokenAnchors": 0,
+      "detailsOpen": false,
+      "heading": "Phase 5 — Fixed-window macro pullback: measured historical evaluation",
+      "page_errors": [],
+      "scrollTables": 10,
+      "tables": 10,
+      "viewport": "desktop",
+      "width": 1280
+    },
+    {
+      "bodyWidth": 390,
+      "brokenAnchors": 0,
+      "detailsOpen": false,
+      "heading": "Phase 5 — Fixed-window macro pullback: measured historical evaluation",
+      "page_errors": [],
+      "scrollTables": 10,
+      "tables": 10,
+      "viewport": "mobile",
+      "width": 390
+    }
+  ]
+}

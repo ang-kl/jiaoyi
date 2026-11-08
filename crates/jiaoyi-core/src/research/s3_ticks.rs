@@ -84,6 +84,12 @@ pub struct Study {
     pub notes: Vec<&'static str>,
 }
 pub fn validate_request(req: &Request) -> Result<(), String> {
+    validate_request_rule(req, None)
+}
+fn validate_request_rule(
+    req: &Request,
+    fixed_rule: Option<sessions::SessionRule>,
+) -> Result<(), String> {
     if req.to + Duration::seconds(5) > crate::seal::seal_instant() {
         return Err("five-second replay tail would cross the research seal".into());
     }
@@ -97,8 +103,11 @@ pub fn validate_request(req: &Request) -> Result<(), String> {
     if opts.entry_rule == super::opening_range::EntryRule::FxSessionDiagnostic {
         return super::fx_diagnostic::validate(req);
     }
-    let s = sessions::session_on(&req.rule(), req.from.date_naive())
-        .ok_or("no session on this date")?;
+    let s = sessions::session_on(
+        &fixed_rule.unwrap_or_else(|| req.rule()),
+        req.from.date_naive(),
+    )
+    .ok_or("no session on this date")?;
     if req.from != s.open || req.to > s.close || req.to - req.from > Duration::days(1) {
         return Err("tick replay starts at the session open and ends no later than its close (maximum 24 hours)".into());
     }
@@ -257,7 +266,7 @@ pub(super) fn study_with_gate(
     v7: bool,
     dynamic_bars: Option<&[super::seasonal::M30]>,
 ) -> Result<Study, String> {
-    study_with_policy(req, src, v7, dynamic_bars, None, 48.0)
+    study_with_policy(req, src, v7, dynamic_bars, None, 48.0, None)
 }
 
 // Explicit local-file experiment only. Public request validation remains 24bp.
@@ -278,7 +287,7 @@ pub(super) fn study_with_native_cost_floor(
     {
         return Err("unregistered offline native-cost experiment".into());
     }
-    study_with_policy(req, src, true, None, Some(bps), 48.0)
+    study_with_policy(req, src, true, None, Some(bps), 48.0, None)
 }
 
 // Manifest-only development adapter; HTTP/live validation and legacy experiments remain unchanged.
@@ -291,6 +300,44 @@ pub(super) fn study_manifest_policy(
     src: &Source,
     bps: f64,
     floor: f64,
+) -> Result<Study, String> {
+    study_manifest_session(req, src, bps, floor, None)
+}
+
+pub(super) fn study_manifest_fixed(
+    req: &Request,
+    src: &Source,
+    bps: f64,
+    floor: f64,
+) -> Result<Study, String> {
+    let open = match req.symbol.as_str() {
+        "SpotCrude" | "SpotBrent" => chrono::NaiveTime::from_hms_opt(13, 0, 0),
+        "US500" | "NAS100" => chrono::NaiveTime::from_hms_opt(14, 30, 0),
+        "XAUUSD" | "XAGUSD" => chrono::NaiveTime::from_hms_opt(7, 0, 0),
+        "BTCUSD" | "ETHUSD" => chrono::NaiveTime::from_hms_opt(0, 0, 0),
+        _ => return Err("unregistered fixed-window symbol".into()),
+    }
+    .unwrap();
+    if req.from.time() != open {
+        return Err("fixed-window opening mismatch".into());
+    }
+    let rule = if matches!(req.symbol.as_str(), "BTCUSD" | "ETHUSD") {
+        sessions::SessionRule::UtcDay
+    } else {
+        sessions::SessionRule::UtcWindow {
+            open,
+            close: (req.from + Duration::hours(4)).time(),
+        }
+    };
+    study_manifest_session(req, src, bps, floor, Some(rule))
+}
+
+fn study_manifest_session(
+    req: &Request,
+    src: &Source,
+    bps: f64,
+    floor: f64,
+    fixed_rule: Option<sessions::SessionRule>,
 ) -> Result<Study, String> {
     if ![24.0, 2.0, 3.74].contains(&bps)
         || ![48.0, 28.0].contains(&floor)
@@ -310,7 +357,7 @@ pub(super) fn study_manifest_policy(
     {
         return Err("unregistered manifest experiment".into());
     }
-    study_with_policy(req, src, true, None, Some(bps), floor)
+    study_with_policy(req, src, true, None, Some(bps), floor, fixed_rule)
 }
 
 fn range_floor(r: f64, price: f64) -> bool {
@@ -327,8 +374,9 @@ fn study_with_policy(
     dynamic_bars: Option<&[super::seasonal::M30]>,
     native_cost_bps: Option<f64>,
     floor: f64,
+    fixed_rule: Option<sessions::SessionRule>,
 ) -> Result<Study, String> {
-    validate_request(req)?;
+    validate_request_rule(req, fixed_rule)?;
     let mut native_req = req.clone();
     if let Some(bps) = native_cost_bps {
         native_req.slippage_bps_per_side = bps;
@@ -372,7 +420,9 @@ fn study_with_policy(
     if !req.tick_replay.as_ref().unwrap().entry_rule.is_current() {
         return super::opening_range::study(req, src, &quotes, quality);
     }
-    let session = sessions::session_on(&req.rule(), req.from.date_naive()).unwrap();
+    let rule = fixed_rule.unwrap_or_else(|| req.rule());
+    let session =
+        sessions::session_on(&rule, req.from.date_naive()).ok_or("no registered session")?;
     let bars: Vec<_> = src
         .bars
         .iter()
@@ -382,7 +432,7 @@ fn study_with_policy(
             close: b.close,
         })
         .collect();
-    let table = band::sigma_table(&req.rule(), &session, &bars);
+    let table = band::sigma_table(&rule, &session, &bars);
     let open = src
         .bars
         .iter()
@@ -401,7 +451,7 @@ fn study_with_policy(
     let mut mark = session.open + Duration::minutes(30);
     let mut veto = false;
     let mut entered = false;
-    while mark < req.to && mark < session.close - Duration::minutes(30) {
+    while mark < req.to && (fixed_rule.is_some() || mark < session.close - Duration::minutes(30)) {
         let mut m = Mark {
             at: mark,
             reason: "no_fresh_quote_in_mark_window",
@@ -670,6 +720,29 @@ mod tests {
         };
         (req, src, evidence)
     }
+    #[test]
+    fn fixed_window_is_explicit_and_legacy_validation_stays_native() {
+        let (mut req, mut src) = fixture("SpotCrude", false);
+        req.from += Duration::hours(13);
+        req.to = req.from + Duration::hours(4);
+        for b in &mut src.bars {
+            b.at += Duration::hours(13);
+        }
+        for t in src.bids.iter_mut().chain(src.asks.iter_mut()) {
+            t.ts_ms += 13 * 3_600_000;
+        }
+        assert!(validate_request(&req).is_err());
+        let fixed = study_manifest_fixed(&req, &src, 3.74, 48.0).unwrap();
+        assert_eq!(fixed.marks[0].at, req.from + Duration::minutes(30));
+        assert_eq!(
+            fixed.trade.unwrap().entry.entered_at,
+            req.from + Duration::seconds(1801)
+        );
+        req.from -= Duration::hours(1);
+        req.to -= Duration::hours(1);
+        assert!(study_manifest_fixed(&req, &src, 3.74, 48.0).is_err());
+    }
+
     #[test]
     fn prepared_oil_causal_marks_and_evidence() {
         use super::super::production_s3::study as prepared;
