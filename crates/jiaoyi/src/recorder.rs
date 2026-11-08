@@ -31,6 +31,9 @@ pub const RETRY_AFTER: Duration = Duration::from_secs(30);
 /// Partition maintenance, the settings re-read and the resolved-symbol check
 /// run this often.
 pub const MAINTAIN_EVERY: Duration = Duration::from_secs(3600);
+/// Late metadata resolution must not miss an entire session opening while
+/// waiting for hourly partition maintenance.
+pub const SYMBOL_REFRESH_EVERY: Duration = Duration::from_secs(30);
 /// Partitions created ahead of today.
 pub const PARTITIONS_AHEAD: u32 = 3;
 
@@ -68,6 +71,8 @@ async fn source_marker(
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct RecorderStatus {
     pub subscribed_symbols: Vec<i64>,
+    pub last_symbol_refresh_at: Option<DateTime<Utc>>,
+    pub subscription_updates: u64,
     pub sessions_started: u64,
     pub session_started_at: Option<DateTime<Utc>>,
     /// The `ticks.flush_millis` in force for the current session.
@@ -301,7 +306,7 @@ pub async fn record(
         s.partitions_dropped.extend(dropped)
     });
     let mut cfg = session_settings(pool, account.id()).await?;
-    let ids = ticks::resolved_symbol_ids(pool, account.id(), &cfg.names).await?;
+    let mut ids = ticks::resolved_symbol_ids(pool, account.id(), &cfg.names).await?;
     if ids.is_empty() {
         anyhow::bail!("no resolved symbols stored yet for this account; waiting for a data load");
     }
@@ -327,6 +332,7 @@ pub async fn record(
         let mut m = status.lock().unwrap();
         let s = m.entry(account.id()).or_default();
         s.subscribed_symbols = ids.clone();
+        s.last_symbol_refresh_at = Some(Utc::now());
         s.sessions_started += 1;
         s.session_started_at = Some(Utc::now());
         s.flush_millis = Some(cfg.flush_every.as_millis() as u64);
@@ -350,6 +356,8 @@ pub async fn record(
     let mut flush = tokio::time::interval_at(Instant::now() + cfg.flush_every, cfg.flush_every);
     let mut maintain =
         tokio::time::interval_at(Instant::now() + opts.maintain_every, opts.maintain_every);
+    let refresh_every = SYMBOL_REFRESH_EVERY.min(opts.maintain_every);
+    let mut refresh = tokio::time::interval_at(Instant::now() + refresh_every, refresh_every);
     let deadline = opts.until.map(tokio::time::sleep_until);
     tokio::pin!(deadline);
 
@@ -407,6 +415,39 @@ pub async fn record(
                     break Err(e);
                 }
             }
+            _ = refresh.tick() => {
+                let now_ids = match ticks::resolved_symbol_ids(pool, account.id(), &cfg.names).await {
+                    Ok(ids) => ids,
+                    Err(e) => break Err(e.into()),
+                };
+                let added: Vec<_> = now_ids.into_iter().filter(|id| !ids.contains(id)).collect();
+                if !added.is_empty() {
+                    let requested_at = Utc::now();
+                    if let Err(e) = session.subscribe_spots(&added).await {
+                        break Err(e.into());
+                    }
+                    let acknowledged_at = Utc::now();
+                    // Keep the original connection and sequence. These symbols
+                    // only became subscribed now; do not backdate their coverage
+                    // to the connection's original start marker.
+                    if let Err(e) = jiaoyi_store::trading::record_decision(
+                        pool, account.id(), None, "tick_subscription_added", "late_symbol_resolution",
+                        &json!({"session_id":session_id,"symbol_ids":added,
+                            "requested_at":requested_at,"acknowledged_at":acknowledged_at,
+                            "last_assigned_seq":seq.checked_sub(1).filter(|n| *n >= 0)}), None
+                    ).await {
+                        break Err(e.into());
+                    }
+                    ids.extend(added);
+                    ids.sort_unstable();
+                    ids.dedup();
+                    with_status(status, account.id(), |s| {
+                        s.subscribed_symbols = ids.clone();
+                        s.subscription_updates += 1;
+                    });
+                }
+                with_status(status, account.id(), |s| s.last_symbol_refresh_at = Some(Utc::now()));
+            }
             _ = maintain.tick() => {
                 match maintain_partitions(pool).await {
                     Ok(d) => with_status(status, account.id(), |s| s.partitions_dropped.extend(d)),
@@ -424,7 +465,9 @@ pub async fn record(
                     Err(e) => break Err(e),
                 }
                 match ticks::resolved_symbol_ids(pool, account.id(), &cfg.names).await {
-                    Ok(now_ids) if now_ids != ids => break Ok(()),
+                    // Additions use the incremental refresh above. Removals
+                    // still restart with the updated configured universe.
+                    Ok(now_ids) if ids.iter().any(|id| !now_ids.contains(id)) => break Ok(()),
                     Ok(_) => {}
                     Err(e) => break Err(e.into()),
                 }

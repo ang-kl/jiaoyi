@@ -212,7 +212,11 @@ impl EntryGuard {
         if let Some(c) = &self.cost {
             let price = if self.side == Side::Buy { ask } else { bid };
             let cost = cost_reserve(
-                c.prepared_spread,
+                if matches!(self.signal, Signal::Pullback { .. }) {
+                    c.prepared_spread.max(ask - bid)
+                } else {
+                    c.prepared_spread
+                },
                 c.commission_round_trip,
                 c.slippage_bps_per_side,
                 price,
@@ -400,6 +404,42 @@ mod tests {
             "ENTRY_EXPIRED"
         );
     }
+    #[test]
+    fn pullback_cost_guard_reprices_widened_current_spread() {
+        let now = Utc::now();
+        let mut g = guard();
+        g.side = Side::Buy;
+        g.signal = Signal::Pullback {
+            origin: 100.0,
+            level: 100.5,
+            planned_entry: 100.51,
+            price_digits: 2,
+            peer: None,
+        };
+        g.cost = Some(Cost {
+            prepared_spread: 0.02,
+            commission_round_trip: 0.0,
+            slippage_bps_per_side: 3.74,
+            original_r: 0.2,
+        });
+        let narrow = Quote {
+            bid: Some((100.49, now)),
+            ask: Some((100.51, now)),
+        };
+        assert!(g.validate(Some(&narrow), 0, now, Instant::now()).is_ok());
+        // Same ask and a valid midpoint retest; widening alone breaches C<R.
+        let wide = Quote {
+            bid: Some((100.3, now)),
+            ask: Some((100.51, now)),
+        };
+        assert_eq!(
+            g.validate(Some(&wide), 0, now, Instant::now())
+                .unwrap_err()
+                .code,
+            "ENTRY_COST_GE_R"
+        );
+    }
+
     #[test]
     fn pullback_writer_guard_refuses_peak_and_invalidated_origin() {
         let now = Utc::now();

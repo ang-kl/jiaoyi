@@ -146,6 +146,89 @@ async fn recording_start_links_to_exact_tick_session_without_claiming_coverage(p
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
+async fn late_core_resolution_adds_subscription_without_restarting_or_replaying_old_quotes(
+    pool: PgPool,
+) {
+    prepared(&pool).await;
+    let (conn, log) = FakeBroker {
+        account_id: ACCOUNT,
+        quotes: HashMap::from([
+            (1, vec![(Some(108_000), Some(108_008))]),
+            (2, vec![(Some(500_000), Some(500_010))]),
+        ]),
+        ..Default::default()
+    }
+    .spawn();
+    let status = recorder::StatusMap::default();
+    let p = pool.clone();
+    let st = status.clone();
+    let running = tokio::spawn(async move {
+        recorder::record(
+            &p,
+            &conn,
+            &broker(),
+            &account(),
+            &st,
+            recorder::RecordOptions {
+                until: Some(Instant::now() + Duration::from_secs(2)),
+                maintain_every: Duration::from_millis(50),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap()
+    });
+    timeout(Duration::from_secs(1), async {
+        while status
+            .lock()
+            .unwrap()
+            .get(&ACCOUNT)
+            .is_none_or(|s| s.sessions_started == 0)
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    // The loader discovers a core symbol after this recorder has subscribed.
+    // Add details and resolution atomically, as a complete metadata fixture.
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("INSERT INTO symbols (account_id,broker_symbol_id,name,asset_class,digits,pip_position,raw,read_at) VALUES ($1,2,'US500','equity_index',1,1,''::bytea,now())")
+        .bind(ACCOUNT).execute(&mut *tx).await.unwrap();
+    sqlx::query("INSERT INTO universe_resolutions (load_run_id,account_id,name,asset_class,status,broker_symbol_id) SELECT max(load_run_id),$1,'US500','equity_index','resolved',2 FROM universe_resolutions WHERE account_id=$1")
+        .bind(ACCOUNT).execute(&mut *tx).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        running.await.unwrap(),
+        2,
+        "no resubscription/replay of old symbol quotes"
+    );
+    let s = status.lock().unwrap()[&ACCOUNT].clone();
+    assert_eq!(s.subscribed_symbols, vec![1, 2]);
+    assert_eq!(s.sessions_started, 1);
+    assert_eq!(s.subscription_updates, 1);
+    assert!(s.last_symbol_refresh_at.is_some());
+    let rows: Vec<(i64, String, i64)> = sqlx::query_as(
+        "SELECT broker_symbol_id,session_id,seq FROM ticks WHERE account_id=$1 ORDER BY seq",
+    )
+    .bind(ACCOUNT)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!((rows[0].0, rows[1].0), (1, 2));
+    assert_eq!(rows[0].1, rows[1].1);
+    assert_eq!((rows[0].2, rows[1].2), (0, 1));
+    let receipt: Value = sqlx::query_scalar("SELECT detail FROM trading_decisions WHERE account_id=$1 AND kind='tick_subscription_added'")
+        .bind(ACCOUNT).fetch_one(&pool).await.unwrap();
+    assert_eq!(receipt["symbol_ids"], serde_json::json!([2]));
+    assert_eq!(receipt["session_id"], rows[1].1);
+    assert!(receipt["requested_at"].as_str().is_some());
+    assert!(receipt["acknowledged_at"].as_str().is_some());
+    assert!(log.lock().unwrap().orders.is_empty());
+    assert!(log.lock().unwrap().tick_requests.is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
 async fn actual_receiver_lag_is_persisted_without_fabricated_ticks(pool: PgPool) {
     prepared(&pool).await;
     const SENT: u64 = 5000;

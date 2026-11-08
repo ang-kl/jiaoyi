@@ -58,6 +58,8 @@ pub struct Prepared {
     pub table: Option<SigmaTable>,
     #[serde(default)]
     pub macro_context: Option<mp::Context>,
+    #[serde(default)]
+    pub macro_context_error: Option<String>,
     pub spread_ready: bool,
     pub commission_ready: bool,
     pub metadata_ready: bool,
@@ -84,6 +86,50 @@ impl Prepared {
             && self.session == session
             && self.prereg_hash == prereg_hash()
     }
+}
+
+/// Warm current/next sessions immediately, then retry only when useful. The
+/// next crypto session cannot have complete causal history until today's close.
+fn should_attempt(
+    previous: Option<&Prepared>,
+    spec: &Spec,
+    session: Session,
+    now: DateTime<Utc>,
+) -> bool {
+    if now >= session.close {
+        return false;
+    }
+    let Some(p) = previous else {
+        return true;
+    };
+    if p.symbol_id != spec.id || p.metadata_ready != spec.metadata_ready {
+        return true;
+    }
+    if p.ready() {
+        return false;
+    }
+    if now < session.open - chrono::Duration::minutes(START_MINUTES)
+        && !p.source_error
+        && p.macro_context_error.as_deref() == Some("macro_incomplete_or_noncausal_session")
+    {
+        return false;
+    }
+    if now >= session.open && p.source_cutoff_at < session.open {
+        return true;
+    }
+    now - p.completed_at >= chrono::Duration::from_std(PREPARE_RETRY).unwrap()
+}
+
+/// Prefer the current session regardless of HashMap insertion/iteration order;
+/// otherwise keep the nearest upcoming receipt. Never replace today's context
+/// with tomorrow's still-incomplete crypto preparation.
+pub fn preferred<'a>(
+    all: impl Iterator<Item = &'a Prepared>,
+    id: i64,
+    now: DateTime<Utc>,
+) -> Option<&'a Prepared> {
+    all.filter(|p| p.symbol_id == Some(id) && p.session.close > now)
+        .min_by_key(|p| (p.session.open > now, p.session.open))
 }
 
 /// Entry marks only; lunch and the last 30 minutes remain excluded by the
@@ -232,18 +278,7 @@ async fn run_attempt(
                     }
                 }
                 let now = Utc::now() + offset;
-                if session.open <= now
-                    || now < session.open - chrono::Duration::minutes(START_MINUTES)
-                {
-                    continue;
-                }
-                if attempts.get(&key).is_some_and(|p| {
-                    p.symbol_id == spec.id
-                        && p.metadata_ready == spec.metadata_ready
-                        && (p.ready()
-                            || now - p.completed_at
-                                < chrono::Duration::from_std(PREPARE_RETRY).unwrap())
-                }) {
+                if !should_attempt(attempts.get(&key), spec, session, now) {
                     continue;
                 }
                 let commission =
@@ -282,6 +317,9 @@ async fn run_attempt(
                     commission_ready: commission,
                     metadata_ready: spec.metadata_ready,
                     source_error: day.is_none(),
+                    macro_context_error: day
+                        .as_ref()
+                        .and_then(|d| d.macro_context.as_ref().err().cloned()),
                     macro_context: day
                         .as_ref()
                         .and_then(|d| d.macro_context.as_ref().ok().copied()),
@@ -411,6 +449,7 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
                 "deadline_met":p.as_ref().map(Prepared::on_time),
                 "history_ready":p.as_ref().map(|p|p.table.is_some() && p.missing_marks==0),
                 "macro_context_ready":p.as_ref().map(|p|p.macro_context.is_some()),
+                "macro_context_error":p.as_ref().and_then(|p|p.macro_context_error.as_deref()),
                 "spread_ready":p.as_ref().map(|p|p.spread_ready),"commission_ready":p.as_ref().map(|p|p.commission_ready),
                 "metadata_ready":p.as_ref().map(|p|p.metadata_ready),"missing_marks":p.as_ref().and_then(|p|p.table.as_ref().map(|_|p.missing_marks)),
                 "source_cutoff_at":p.as_ref().map(|p|p.source_cutoff_at)}));
@@ -457,12 +496,90 @@ mod tests {
                 drift_20: 0.02,
                 latest_bar_end: session.open - chrono::Duration::days(1),
             }),
+            macro_context_error: None,
             missing_marks: 0,
             spread_ready: true,
             commission_ready: true,
             metadata_ready: true,
             source_error: false,
         }
+    }
+
+    #[test]
+    fn warm_current_and_next_immediately_without_repeated_future_reads() {
+        let p = complete();
+        let spec = Spec {
+            symbol: p.symbol.clone(),
+            id: p.symbol_id,
+            rule: Some(SessionRule::UtcDay),
+            metadata_ready: true,
+        };
+        let early = p.session.open - chrono::Duration::hours(12);
+        assert!(should_attempt(None, &spec, p.session, early));
+        assert!(should_attempt(
+            None,
+            &spec,
+            p.session,
+            p.session.open + chrono::Duration::hours(1)
+        ));
+        let mut incomplete = p.clone();
+        incomplete.macro_context = None;
+        incomplete.macro_context_error = Some("macro_incomplete_or_noncausal_session".into());
+        incomplete.completed_at = early;
+        incomplete.source_cutoff_at = early;
+        assert!(!should_attempt(
+            Some(&incomplete),
+            &spec,
+            p.session,
+            early + chrono::Duration::hours(1)
+        ));
+        assert!(should_attempt(
+            Some(&incomplete),
+            &spec,
+            p.session,
+            p.session.open
+        ));
+        let mut failed = incomplete.clone();
+        failed.source_error = true;
+        assert!(
+            should_attempt(
+                Some(&failed),
+                &spec,
+                p.session,
+                early + chrono::Duration::minutes(5)
+            ),
+            "transient warm-up errors retry before T-20 too"
+        );
+
+        let next = Prepared {
+            session: Session {
+                open: p.session.open + chrono::Duration::days(1),
+                close: p.session.close + chrono::Duration::days(1),
+                date: p.session.date + chrono::Duration::days(1),
+                ..p.session
+            },
+            ..p.clone()
+        };
+        assert_eq!(
+            preferred(
+                [&next, &p].into_iter(),
+                p.symbol_id.unwrap(),
+                p.session.open
+            )
+            .unwrap()
+            .session,
+            p.session
+        );
+        assert_eq!(
+            preferred(
+                [&p, &next].into_iter(),
+                p.symbol_id.unwrap(),
+                p.session.open
+            )
+            .unwrap()
+            .session,
+            p.session
+        );
     }
 
     #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
