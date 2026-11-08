@@ -325,13 +325,23 @@ def preflight_file(path, stage='evaluation'):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['inventory', 'preflight', 'freeze', 'parity', 'run', 'report', 'verify-evidence'])
+    parser.add_argument('action', choices=['inventory', 'preflight', 'freeze', 'parity', 'run', 'report', 'verify-evidence', 'cost-reservation'])
     parser.add_argument('--stage', choices=['preparation', 'ticks', 'evaluation'], default='evaluation')
     parser.add_argument('--kind', choices=['money', 'cost', 'execution', 'financial', 'lifecycle'])
     parser.add_argument('--file', type=Path)
     args = parser.parse_args()
     network = offline_process()
     WORK.mkdir(exist_ok=True)
+    if args.action == 'cost-reservation':
+        from position_forensics import run as positions
+        from clean_reservation import run as reservation, WORK as evidence_work
+        from cost_reservation_report import build
+        evidence_work.mkdir(exist_ok=True)
+        positions(); reservation()
+        result = build()
+        print(json.dumps({'trace':result['trace'], 'new_broker_requests':0,
+            'rfc_gates_passed_now':result['rfc_gates_passed_now'],
+            'reservation':result['reservation']['summary']}, indent=2)); return
     if args.action == 'verify-evidence':
         require(args.kind and args.file, 'evidence_kind_and_file_required')
         print(json.dumps(evidence(args.kind, args.file), indent=2)); return
