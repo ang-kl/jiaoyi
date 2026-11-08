@@ -281,6 +281,19 @@ pub(super) fn study_with_native_cost_floor(
     study_with_policy(req, src, true, None, Some(bps))
 }
 
+// Manifest-only development adapter; HTTP/live validation and legacy experiments remain unchanged.
+pub(super) fn study_manifest_floor(req: &Request, src: &Source) -> Result<Study, String> {
+    if !matches!(
+        req.symbol.as_str(),
+        "SpotCrude" | "SpotBrent" | "US500" | "NAS100" | "XAUUSD" | "XAGUSD" | "BTCUSD" | "ETHUSD"
+    ) || req.to != req.from + Duration::hours(4)
+        || req.slippage_bps_per_side != 24.0
+    {
+        return Err("unregistered manifest experiment".into());
+    }
+    study_with_policy(req, src, true, None, Some(24.0))
+}
+
 fn range_floor(r: f64, price: f64) -> bool {
     r.is_finite() && price.is_finite() && price > 0.0 && r * 10000.0 >= 48.0 * price
 }
