@@ -8,7 +8,7 @@ All four accounts were already unpaused. This change replaces the new-entry 24bp
 
 **Stage 1 could not reach tick collection or replay.** All 112 new M30 requests decoded successfully, but only 30/40 episodes have complete required preparation. Both crypto symbols lack 77–96 expected M30 bars per episode. The mandatory all-40 preparation barrier correctly refused every tick request. There are **zero evaluated trades, no win rate and no measured improvement toward the goal**. This is a data-qualification failure, not a strategy-loss result.
 
-Release status at report creation: local focused tests pass; required CI, merge SHA and post-deployment account/preparation verification are recorded in the implementation PR's release receipt. All-eight readiness is deliberately false until both complete preparation and acknowledged subscriptions are observed. A live trading switch being ON does not override missing evidence or account risk gates.
+**Production activation verified:** PR #201 merged as `0f3b89c700a33f98891b47827b99df550bbe0cea` after all three CI checks passed. Railway runs that commit. Two subsequent snapshots verify all four accounts unpaused and progressing, **32/32 core subscriptions and 32/32 complete policy preparation contexts**, and 3.74 bp/side on every account. Coverage is the current crypto sessions and Monday's six non-crypto sessions; the next crypto session finalises at its boundary. See §10 for the measured release evidence. This successful deployment does not turn the historical preparation failure into a completed backtest.
 
 ## §1. Authority and two distinct policies
 
@@ -100,3 +100,22 @@ Production follow-through is different: the deployed early warm-up and explicit 
 - [Previous production report](PRODUCTION_UPGRADE_S3_MACRO_PULLBACK_V1-18377-2026-11-08.md)
 
 Raw market files remain in the bounded local evidence cache, not duplicated into Git. The committed JSON retains identities, missing timestamps and hashes for review. No ZIP or new paid model route was added.
+
+## §10. Verified activation after merge
+
+№18,380 §§14–18 · 08-11-2026 21:31 SGT · by <Codex (GPT-6), effort: not exposed>.
+
+Railway trading deployment `306a5080-1f2f-401b-923b-2b545499e8c7` reports SUCCESS at the production merge SHA. The previous deployment is REMOVED. Public homepage returns HTTP 200. Registration and exact production policy match on all four accounts. No verification order or account unpause mutation was required.
+
+| Account | Owner pause | Live reserve bp/side | Core subscriptions | Prepared contexts | Exit-check progress |
+| --- | --- | --- | --- | --- | --- |
+| 43002148 | False | 3.74 | 8/8 | 8/8 | 11 → 28 |
+| 46130058 | False | 3.74 | 8/8 | 8/8 | 11 → 28 |
+| 47790949 | False | 3.74 | 8/8 | 8/8 | 11 → 28 |
+| 49236051 | False | 3.74 | 8/8 | 8/8 | 11 → 28 |
+
+Snapshots at **21:29:40 and 21:30:24 SGT** show advancing quote and watchdog times, exit-check counts rising from 11 to 28 on every account, and healthy connected account loops. All eight broker IDs are subscribed, including US500 10013. The live account retains one broker-minimum position at a time.
+
+For each account, Monday's six non-crypto preparations are `prepared_on_time`; current BTC/ETH are `prepared_late` after the authorised restart, with complete band/macro inputs. These crypto labels describe the current session; future history cannot be final before the boundary. Complete policy context means the prepared sigma table, causal macro history, metadata, spread and commission inputs passed their existing gates. It is not a claim of authoritative historical holidays, guaranteed future quotes, sufficient margin or profitable signals.
+
+Local Rust workspace: 743 passed, one existing ignored. The final narrow preparation retry refinement passed its five focused cases, then all required GitHub checks passed on `42962eae6c3a78056fee0b53262e054c07241b66`. The combined JSON retains both deployment snapshots and public-health source hashes. This documentation follow-up changes no trading executable or research rule.
