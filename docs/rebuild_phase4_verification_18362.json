@@ -1,0 +1,53 @@
+{
+  "audit_checks": {
+    "future_jobs_overlap_checks": 160,
+    "independent_net_arithmetic_checks": 36,
+    "ledger_rows": 18,
+    "native_cache_receipts_verified": 18,
+    "new_broker_requests": 0,
+    "recorded_entry_and_exit_quote_checks": 36
+  },
+  "builder_sha256": "36db9c3c3669f3b723f349590042d5fb57e78779aa13210167dd48dbb06eaea7",
+  "byte_identical_complete_runs": 2,
+  "financial_pass": false,
+  "focused_new_tests": 5,
+  "html_layout_checks": [
+    {
+      "blankCells": 0,
+      "brokenAnchors": 0,
+      "contentsCollapsed": true,
+      "pageWidth": 1200,
+      "sections": 13,
+      "tables": 12,
+      "width": 1200
+    },
+    {
+      "blankCells": 0,
+      "brokenAnchors": 0,
+      "contentsCollapsed": true,
+      "pageWidth": 390,
+      "sections": 13,
+      "tables": 12,
+      "width": 390
+    }
+  ],
+  "inherited_phase3_parity": {
+    "full_m30_sessions": 35,
+    "legacy_episodes": 159,
+    "not_rerun_in_phase4": true
+  },
+  "new_broker_requests": 0,
+  "new_independent_observations": 0,
+  "phase3_commit": "145f9154426ba355d95cb2413f9d4a634a5051ef",
+  "research_python_tests": {
+    "failed": 0,
+    "run": 75,
+    "skipped": 1
+  },
+  "result_sha256": "2581b38797f917f78e7b09a4716fa38104cf12ffda2bf20a18416c8c9d05275a",
+  "scope_sha256": "0a41a266b50cea12c760c2d8e1d5963869d69ceefbc6c9d25df7f1d76de5e1f4",
+  "trace": "\u211618,362",
+  "unchanged_rust_files_against_phase3": 160,
+  "validation_opened": false,
+  "verified_at_sgt": "08-11-2026 10:27:35 SGT (+08:00)"
+}
