@@ -91,6 +91,7 @@ fn pullback(
     quotes: &[s3_ticks::Snapshot],
     origin: f64,
     to: DateTime<Utc>,
+    admission_bps: f64,
 ) -> Result<(Option<exits::Input>, Value), String> {
     let q = quotes
         .iter()
@@ -122,7 +123,7 @@ fn pullback(
             detail["at"] = json!(q.quote.at);
             return Ok((None, detail));
         }
-        let reserve = (q.quote.ask - q.quote.bid) + 2.0 * fill * 24.0 / 10000.0;
+        let reserve = (q.quote.ask - q.quote.bid) + 2.0 * fill * admission_bps / 10000.0;
         let risk = (((fill - origin).abs() + reserve) * scale).ceil() / scale;
         let distance = target(risk, original.digits)?;
         let entry = exits::Input {
@@ -182,6 +183,10 @@ fn paths(entry: &exits::Input, quotes: &[s3_ticks::Snapshot], i: &Input) -> Resu
     Ok(json!({"status":"admitted","strict":strict,"forced":forced,"continuation":continuation}))
 }
 pub fn study(i: &Input) -> Result<Value, String> {
+    study_policy(i, &super::tiered_pullback::Policy::default())
+}
+pub fn study_policy(i: &Input, policy: &super::tiered_pullback::Policy) -> Result<Value, String> {
+    policy.validate()?;
     if i.request.account <= 0
         || i.request.to != i.request.from + Duration::hours(4)
         || i.request.commission_round_trip != 0.0
@@ -218,19 +223,31 @@ pub fn study(i: &Input) -> Result<Value, String> {
         .ok_or("no causal prepared spread")?;
     let mut request = i.request.clone();
     request.spread = spread;
-    let native = s3_ticks::study_manifest_floor(&request, &i.source)?;
-    let marks = json!(native.marks);
-    let Some(t) = native.trade else {
+    let (entry, marks) = if policy.tier == "tier2" {
+        super::tiered_pullback::opening_impulse(i, &quotes, origin, spread, policy)?
+    } else {
+        let native = if policy.admission_bps == 24.0 && policy.threshold_bps == 48.0 {
+            s3_ticks::study_manifest_floor(&request, &i.source)?
+        } else {
+            s3_ticks::study_manifest_policy(
+                &request,
+                &i.source,
+                policy.admission_bps,
+                policy.threshold_bps,
+            )?
+        };
+        (native.trade.map(|t| t.entry), json!(native.marks))
+    };
+    let Some(mut a) = entry else {
         return Ok(
             json!({"arms":{},"status":"no_admitted_impulse","marks":marks,"quality":quality}),
         );
     };
-    let mut a = t.entry;
     a.tp1_close_volume = a.volume;
     a.tp1_distance = target(a.initial_r, a.digits)?;
     a.broker_tp_distance = a.tp1_distance;
     a.session_end = a.entered_at + Duration::hours(72);
-    let (b, detail) = pullback(&a, &quotes, origin, i.request.to)?;
+    let (b, detail) = pullback(&a, &quotes, origin, i.request.to, policy.admission_bps)?;
     let (reason, pass) = macro_filter(i, direction(&a));
     let empty =
         |reason: &str| json!({"status":reason,"strict":null,"forced":null,"continuation":null});
@@ -292,18 +309,18 @@ mod tests {
                 q(1, 100.0 + s * 1.3),
                 q(2, 100.0 + s * 0.98),
             ];
-            let (b, d) = pullback(&i, &quotes, 100.0, at() + Duration::hours(4)).unwrap();
+            let (b, d) = pullback(&i, &quotes, 100.0, at() + Duration::hours(4), 24.0).unwrap();
             let b = b.unwrap();
             assert_eq!(b.entered_at, at() + Duration::seconds(2));
             assert_eq!(d["status"], "entered");
             assert!(s * (b.fill - s * b.initial_r - 100.0) < 0.0);
             let bad = [quotes[0], q(2, 100.0 - s * 0.5)];
-            assert!(pullback(&i, &bad, 100.0, at() + Duration::hours(4))
+            assert!(pullback(&i, &bad, 100.0, at() + Duration::hours(4), 24.0)
                 .unwrap()
                 .0
                 .is_none());
             let same = [quotes[0], q(0, 100.0 + s * 0.98)];
-            assert!(pullback(&i, &same, 100.0, at() + Duration::hours(4))
+            assert!(pullback(&i, &same, 100.0, at() + Duration::hours(4), 24.0)
                 .unwrap()
                 .0
                 .is_none());

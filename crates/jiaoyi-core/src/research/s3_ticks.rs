@@ -257,7 +257,7 @@ pub(super) fn study_with_gate(
     v7: bool,
     dynamic_bars: Option<&[super::seasonal::M30]>,
 ) -> Result<Study, String> {
-    study_with_policy(req, src, v7, dynamic_bars, None)
+    study_with_policy(req, src, v7, dynamic_bars, None, 48.0)
 }
 
 // Explicit local-file experiment only. Public request validation remains 24bp.
@@ -278,24 +278,46 @@ pub(super) fn study_with_native_cost_floor(
     {
         return Err("unregistered offline native-cost experiment".into());
     }
-    study_with_policy(req, src, true, None, Some(bps))
+    study_with_policy(req, src, true, None, Some(bps), 48.0)
 }
 
 // Manifest-only development adapter; HTTP/live validation and legacy experiments remain unchanged.
 pub(super) fn study_manifest_floor(req: &Request, src: &Source) -> Result<Study, String> {
-    if !matches!(
-        req.symbol.as_str(),
-        "SpotCrude" | "SpotBrent" | "US500" | "NAS100" | "XAUUSD" | "XAGUSD" | "BTCUSD" | "ETHUSD"
-    ) || req.to != req.from + Duration::hours(4)
+    study_manifest_policy(req, src, 24.0, 48.0)
+}
+
+pub(super) fn study_manifest_policy(
+    req: &Request,
+    src: &Source,
+    bps: f64,
+    floor: f64,
+) -> Result<Study, String> {
+    if ![24.0, 2.0, 3.74].contains(&bps)
+        || ![48.0, 28.0].contains(&floor)
+        || !matches!(
+            req.symbol.as_str(),
+            "SpotCrude"
+                | "SpotBrent"
+                | "US500"
+                | "NAS100"
+                | "XAUUSD"
+                | "XAGUSD"
+                | "BTCUSD"
+                | "ETHUSD"
+        )
+        || req.to != req.from + Duration::hours(4)
         || req.slippage_bps_per_side != 24.0
     {
         return Err("unregistered manifest experiment".into());
     }
-    study_with_policy(req, src, true, None, Some(24.0))
+    study_with_policy(req, src, true, None, Some(bps), floor)
 }
 
 fn range_floor(r: f64, price: f64) -> bool {
-    r.is_finite() && price.is_finite() && price > 0.0 && r * 10000.0 >= 48.0 * price
+    range_floor_at(r, price, 48.0)
+}
+pub(super) fn range_floor_at(r: f64, price: f64, floor: f64) -> bool {
+    r.is_finite() && price.is_finite() && price > 0.0 && r * 10000.0 >= floor * price
 }
 
 fn study_with_policy(
@@ -304,6 +326,7 @@ fn study_with_policy(
     v7: bool,
     dynamic_bars: Option<&[super::seasonal::M30]>,
     native_cost_bps: Option<f64>,
+    floor: f64,
 ) -> Result<Study, String> {
     validate_request(req)?;
     let mut native_req = req.clone();
@@ -435,10 +458,20 @@ fn study_with_policy(
                                 } else {
                                     "cost_ge_r_session_veto"
                                 };
-                            } else if native_cost_bps.is_some() && !range_floor(r, price) {
+                            } else if native_cost_bps.is_some()
+                                && !if floor == 48.0 {
+                                    range_floor(r, price)
+                                } else {
+                                    range_floor_at(r, price, floor)
+                                }
+                            {
                                 // A low-volatility mark cannot enter. It does not create
                                 // a new durable veto; the existing cost veto stays first.
-                                m.reason = "range_below_48bp";
+                                m.reason = if floor == 48.0 {
+                                    "range_below_48bp"
+                                } else {
+                                    "range_below_28bp"
+                                };
                             } else {
                                 m.reason = "no_next_fresh_fill_quote_before_deadline";
                                 if let Some((fi, fq)) =
@@ -478,9 +511,13 @@ fn study_with_policy(
                                             "dispatch_cost_ge_r_session_veto"
                                         };
                                     } else if native_cost_bps.is_some()
-                                        && !range_floor(r, executable(&fq.quote, side))
+                                        && !range_floor_at(r, executable(&fq.quote, side), floor)
                                     {
-                                        m.reason = "dispatch_range_below_48bp";
+                                        m.reason = if floor == 48.0 {
+                                            "dispatch_range_below_48bp"
+                                        } else {
+                                            "dispatch_range_below_28bp"
+                                        };
                                     } else {
                                         let p = targets::plan(&targets::Input {
                                             side,
