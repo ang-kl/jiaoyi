@@ -206,7 +206,7 @@ Raw market evidence is indexed once; the partition-store implementation uses imm
 Machine result SHA256: `{sha(RESULT)}`. Draft for review.
 '''
     REPORT.write_text(report)
-    body = markdown_body(report)
+    body, _ = markdown_body(report)
     page = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jiaoyi RFC offline gates — №18,368</title><style>
 body{{font:16px/1.65 system-ui,sans-serif;color:#182330;background:#f6f8fb;margin:0;padding:24px}}main{{max-width:1250px;margin:auto;background:white;padding:28px;border-radius:14px}}h1{{font-size:30px;line-height:1.25}}h2{{margin-top:36px;border-top:1px solid #dce2e8;padding-top:20px}}h3{{margin-top:28px}}p,li{{max-width:1100px}}table{{border-collapse:collapse;width:100%;font-size:14px}}th,td{{padding:12px;text-align:left;vertical-align:top;border:1px solid #dce2e8}}th{{background:#e9eff6}}code,pre{{overflow-wrap:anywhere;white-space:pre-wrap}}a{{color:#075cb5}}.table-scroll{{overflow-x:auto}}@media(max-width:650px){{body{{padding:8px}}main{{padding:16px}}table{{min-width:700px}}h1{{font-size:25px}}}}</style><main>{body}</main></html>'''
     page = page.replace('<table>', '<div class="table-scroll"><table>').replace('</table>', '</table></div>')
