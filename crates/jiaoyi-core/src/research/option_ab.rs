@@ -88,7 +88,7 @@ fn bar_close(i: &exits::Input, price: f64, bar: &M30, bars: usize, reason: &str)
 }
 
 /// No bridging absent bars, no OHLC path invention, no double charging spread.
-fn continue_bars(
+pub(super) fn continue_bars(
     i: &exits::Input,
     tick: &Value,
     bars: &[M30],
@@ -176,7 +176,7 @@ fn continue_bars(
     Ok(unresolved("censored_end_of_cache", n, next, stop))
 }
 
-fn validate_future(req: &Request, bars: &[M30]) -> Result<(), String> {
+pub(super) fn validate_future(req: &Request, bars: &[M30]) -> Result<(), String> {
     let mut previous = None;
     for b in bars {
         let at = DateTime::from_timestamp_millis(b.ts_ms).ok_or("future timestamp")?;
