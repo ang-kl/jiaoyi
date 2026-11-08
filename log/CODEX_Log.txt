@@ -1872,3 +1872,6 @@ Frozen Phase2 manifest-driven runner and three-arm pullback experiment. Exact159
 
 [§LOG.148] №18,358 §§4–12 · 08-11-2026 08:12:59 SGT (+08:00); by <Codex (GPT-6), effort: not exposed>.
 Completed offline canonical runner:159 exact baseline paths/marks,35 qualified native-open four-hour core sessions,6 protected receipt rejections,58 cost arithmetic checks. Two Rust/four Python focused tests; Clippy/format and desktop/mobile report checks pass. Byte-identical resume with159+35 native cache hits. A24bp forced:0/3 wins,mean−1.064041R; B/C:2/2,mean+0.653291R,PF unavailable/no losses. Strict B/C:1 win,1 unresolved; one M30 approximation resolves the remainder. No incremental macro benefit or independent/account qualification;55 live/strategy files unchanged. Full cost/coverage/case tables and12 RFC gates documented. Results SHA256 50b14b847796c296293a01c3dff748b5a8b64888c6054ec77206afb926fd5862. No broker requests.
+
+[§LOG.149] №18,360 §§1–3 · 2026-11-08T09:16:43.833891+08:00; by <Codex (GPT-6), effort: not exposed>.
+Frozen Phase3 exact263 decomposition and separate35-session Tier1 / clean excluded Tier2,48/28bp thresholds,24/2/3.74bp admission plus fixed-entry stress repricing. No outcome evaluation yet. RequestedLOG134 occupied; append-only numbering retained. Zero broker calls/live changes.
