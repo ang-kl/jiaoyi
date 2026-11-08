@@ -10,6 +10,7 @@
 
 pub mod band;
 pub mod kelly;
+pub mod macro_pullback;
 pub mod sessions;
 pub mod targets;
 

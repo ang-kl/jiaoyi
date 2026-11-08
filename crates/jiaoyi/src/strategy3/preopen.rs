@@ -24,11 +24,14 @@ pub async fn specs(
     deposit: bool,
 ) -> anyhow::Result<Vec<Spec>> {
     let settings = jiaoyi_store::settings::snapshot(pool, Some(account)).await?;
-    let universe = settings
-        .universe("universe.symbols")
-        .map_err(anyhow::Error::msg)?;
+    let universe = data_universe(
+        settings
+            .universe("universe.symbols")
+            .map_err(anyhow::Error::msg)?,
+    );
     Ok(universe
         .into_iter()
+        .filter(|(symbol, _)| mp::peer(symbol).is_some())
         .map(|(symbol, class)| {
             let sym = syms.values().find(|s| s.name == symbol);
             Spec {
@@ -53,6 +56,8 @@ pub struct Prepared {
     pub source_cutoff_at: DateTime<Utc>,
     pub completed_at: DateTime<Utc>,
     pub table: Option<SigmaTable>,
+    #[serde(default)]
+    pub macro_context: Option<mp::Context>,
     pub spread_ready: bool,
     pub commission_ready: bool,
     pub metadata_ready: bool,
@@ -63,6 +68,7 @@ pub struct Prepared {
 impl Prepared {
     pub fn ready(&self) -> bool {
         self.table.is_some()
+            && self.macro_context.is_some()
             && self.missing_marks == 0
             && self.spread_ready
             && self.commission_ready
@@ -150,6 +156,18 @@ pub async fn run(
     connection: &AccountSession<'_>,
     specs: Vec<Spec>,
     tx: tokio::sync::watch::Sender<HashMap<String, Prepared>>,
+    stop: Shutdown,
+    offset: chrono::Duration,
+) -> anyhow::Result<()> {
+    let (_source, updates) = tokio::sync::watch::channel(specs);
+    run_with_updates(pool, connection, updates, tx, stop, offset).await
+}
+
+pub async fn run_with_updates(
+    pool: &PgPool,
+    connection: &AccountSession<'_>,
+    specs: tokio::sync::watch::Receiver<Vec<Spec>>,
+    tx: tokio::sync::watch::Sender<HashMap<String, Prepared>>,
     mut stop: Shutdown,
     offset: chrono::Duration,
 ) -> anyhow::Result<()> {
@@ -179,7 +197,7 @@ pub async fn run(
 async fn run_attempt(
     pool: &PgPool,
     connection: &AccountSession<'_>,
-    specs: Vec<Spec>,
+    specs: tokio::sync::watch::Receiver<Vec<Spec>>,
     tx: tokio::sync::watch::Sender<HashMap<String, Prepared>>,
     mut stop: Shutdown,
     offset: chrono::Duration,
@@ -191,6 +209,7 @@ async fn run_attempt(
     loop {
         tokio::select! { _=stop.wait()=>return Ok(()), _=tick.tick()=>{} }
         let now = Utc::now() + offset;
+        let specs = specs.borrow().clone();
         for spec in &specs {
             let Some(rule) = spec.rule else { continue };
             // Restore both the current and next session across reconnects.
@@ -219,8 +238,11 @@ async fn run_attempt(
                     continue;
                 }
                 if attempts.get(&key).is_some_and(|p| {
-                    p.ready()
-                        || now - p.completed_at < chrono::Duration::from_std(PREPARE_RETRY).unwrap()
+                    p.symbol_id == spec.id
+                        && p.metadata_ready == spec.metadata_ready
+                        && (p.ready()
+                            || now - p.completed_at
+                                < chrono::Duration::from_std(PREPARE_RETRY).unwrap())
                 }) {
                     continue;
                 }
@@ -260,6 +282,9 @@ async fn run_attempt(
                     commission_ready: commission,
                     metadata_ready: spec.metadata_ready,
                     source_error: day.is_none(),
+                    macro_context: day
+                        .as_ref()
+                        .and_then(|d| d.macro_context.as_ref().ok().copied()),
                     table: day.map(|d| d.table),
                 };
                 let reason = if p.on_time() {
@@ -333,12 +358,18 @@ async fn stored_many(
 /// Compact evidence for every configured symbol, including unresolved ones.
 pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::Result<Value> {
     let settings = jiaoyi_store::settings::snapshot(pool, Some(account)).await?;
-    let universe = settings
-        .universe("universe.symbols")
-        .map_err(anyhow::Error::msg)?;
+    let universe = data_universe(
+        settings
+            .universe("universe.symbols")
+            .map_err(anyhow::Error::msg)?,
+    );
     let mut planned = Vec::new();
     let mut requests = Vec::new();
     for (symbol, class) in universe {
+        if mp::peer(&symbol).is_none() {
+            planned.push((symbol, None));
+            continue;
+        }
         let Some(rule) = sessions::rule_for(&symbol, class) else {
             planned.push((symbol, None));
             continue;
@@ -355,7 +386,7 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
     let mut rows = Vec::new();
     for (symbol, session) in planned {
         let Some(session) = session else {
-            rows.push(json!({"symbol":symbol,"state":"no_registered_session"}));
+            rows.push(json!({"symbol":symbol,"state":if mp::peer(&symbol).is_none(){"symbol_retired_from_s3_core"}else{"no_registered_session"}}));
             continue;
         };
         let p = receipts
@@ -379,6 +410,7 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
                 "state":state,"completed_at":p.as_ref().map(|p|p.completed_at),
                 "deadline_met":p.as_ref().map(Prepared::on_time),
                 "history_ready":p.as_ref().map(|p|p.table.is_some() && p.missing_marks==0),
+                "macro_context_ready":p.as_ref().map(|p|p.macro_context.is_some()),
                 "spread_ready":p.as_ref().map(|p|p.spread_ready),"commission_ready":p.as_ref().map(|p|p.commission_ready),
                 "metadata_ready":p.as_ref().map(|p|p.metadata_ready),"missing_marks":p.as_ref().and_then(|p|p.table.as_ref().map(|_|p.missing_marks)),
                 "source_cutoff_at":p.as_ref().map(|p|p.source_cutoff_at)}));
@@ -419,6 +451,11 @@ mod tests {
                     .map(|m| (m, Ok(0.01)))
                     .collect::<BTreeMap<_, _>>(),
                 sessions_used: vec![],
+            }),
+            macro_context: Some(mp::Context {
+                drift_5: 0.01,
+                drift_20: 0.02,
+                latest_bar_end: session.open - chrono::Duration::days(1),
             }),
             missing_marks: 0,
             spread_ready: true,
@@ -560,18 +597,19 @@ mod tests {
             "one settings snapshot and one session batch regardless of universe size"
         );
         let rows = report["symbols"].as_array().unwrap();
-        assert_eq!(rows.len(), 11);
         assert_eq!(rows[0]["symbol"], "BTCUSD");
         assert_eq!(rows[0]["state"], "deadline_missed");
         assert_eq!(rows[2]["symbol"], "ETHUSD");
         assert_eq!(rows[2]["state"], "prepared_on_time");
-        for i in [4, 6, 8] {
-            assert_eq!(rows[i]["state"], "deadline_missed");
+        for name in ["SOLUSD", "ADAUSD", "DOGEUSD", "UNREGISTERED"] {
+            assert_eq!(
+                rows.iter().find(|r| r["symbol"] == name).unwrap()["state"],
+                "symbol_retired_from_s3_core"
+            );
         }
-        assert_eq!(
-            rows[10],
-            json!({"symbol":"UNREGISTERED","state":"no_registered_session"})
-        );
+        for name in mp::CORE {
+            assert!(rows.iter().any(|r| r["symbol"] == name));
+        }
         measured.close().await;
     }
     #[test]

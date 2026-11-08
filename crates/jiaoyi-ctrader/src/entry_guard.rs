@@ -20,8 +20,19 @@ pub struct Quote {
 
 #[derive(Debug, Clone)]
 pub enum Signal {
-    Trend { level: f64 },
-    Mark { band: band::Band },
+    Trend {
+        level: f64,
+    },
+    Mark {
+        band: band::Band,
+    },
+    Pullback {
+        origin: f64,
+        level: f64,
+        planned_entry: f64,
+        price_digits: i32,
+        peer: Option<(i64, f64)>,
+    },
 }
 
 /// Prepared spread/commission and the registered slippage formula. A live
@@ -82,6 +93,10 @@ impl EntryGuard {
             "deadline_elapsed": monotonic_now >= self.expires,
             "remaining_dispatch_ms": self.expires.saturating_duration_since(monotonic_now).as_millis(),
             "max_quote_age_ms": MAX_QUOTE_AGE.as_millis(),
+            "pullback_admitted_price": match &self.signal {
+                Signal::Pullback { planned_entry, price_digits, .. } => Some(serde_json::json!({"price":planned_entry,"digits":price_digits})),
+                _ => None,
+            },
         })
     }
 
@@ -156,12 +171,43 @@ impl EntryGuard {
                     Dir::Sell => Side::Sell,
                 })
             }
+            Signal::Pullback { origin, level, .. } => {
+                jiaoyi_core::strategy3::macro_pullback::retest(
+                    self.side == Side::Buy,
+                    *origin,
+                    *level,
+                    bid,
+                    ask,
+                )
+                .then_some(self.side)
+            }
         };
         if side != Some(self.side) {
             return Err(fail(
                 "ENTRY_SIGNAL_CHANGED",
                 "original selected side is no longer supported",
             ));
+        }
+        if let Signal::Pullback {
+            planned_entry,
+            price_digits,
+            ..
+        } = &self.signal
+        {
+            // Structural R and risk sizing used this price before admission.
+            // Re-scaling a moved entry here would bypass those account checks.
+            let executable = if self.side == Side::Buy { ask } else { bid };
+            let planned =
+                jiaoyi_core::strategy3::targets::price_ticks(*planned_entry, *price_digits)
+                    .filter(|n| *n > 0);
+            let current = jiaoyi_core::strategy3::targets::price_ticks(executable, *price_digits)
+                .filter(|n| *n > 0);
+            if planned.is_none() || current != planned {
+                return Err(fail(
+                    "ENTRY_PULLBACK_PRICE_CHANGED",
+                    "pullback executable price differs from admitted structural geometry",
+                ));
+            }
         }
         if let Some(c) = &self.cost {
             let price = if self.side == Side::Buy { ask } else { bid };
@@ -183,6 +229,53 @@ impl EntryGuard {
             }
         }
         Ok(())
+    }
+
+    /// Fresh peer observations may veto; unavailable/stale peers remain explicitly
+    /// optional under the owner's production revision, never synthetic returns.
+    pub(crate) fn validate_peer(
+        &self,
+        peer: Option<&Quote>,
+        now: DateTime<Utc>,
+    ) -> Result<serde_json::Value, GuardRefusal> {
+        let Signal::Pullback {
+            peer: Some((id, origin)),
+            ..
+        } = &self.signal
+        else {
+            return Ok(serde_json::json!({"status":"not_available"}));
+        };
+        let fresh = |q: Option<(f64, DateTime<Utc>)>| {
+            q.filter(|(p, t)| {
+                p.is_finite()
+                    && *p > 0.0
+                    && *t <= now
+                    && now
+                        .signed_duration_since(*t)
+                        .to_std()
+                        .is_ok_and(|d| d <= MAX_QUOTE_AGE)
+            })
+        };
+        let (Some((bid, bt)), Some((ask, at))) = (
+            peer.and_then(|q| fresh(q.bid)),
+            peer.and_then(|q| fresh(q.ask)),
+        ) else {
+            return Ok(serde_json::json!({"status":"unavailable_or_stale","symbol_id":id}));
+        };
+        let sign = if self.side == Side::Buy { 1.0 } else { -1.0 };
+        let detail = serde_json::json!({"symbol_id":id,"origin":origin,"bid":bid,"ask":ask,"bid_at":bt,"ask_at":at,"checked_at":now});
+        if !origin.is_finite()
+            || *origin <= 0.0
+            || bid > ask
+            || (bid + (ask - bid) / 2.0 - origin) * sign < 0.0
+        {
+            return Err(GuardRefusal {
+                code: "ENTRY_PEER_CONFLICT",
+                reason: "fresh peer opposes the selected impulse",
+                evidence: detail,
+            });
+        }
+        Ok(detail)
     }
 }
 
@@ -305,6 +398,100 @@ mod tests {
                 .unwrap_err()
                 .code,
             "ENTRY_EXPIRED"
+        );
+    }
+    #[test]
+    fn pullback_writer_guard_refuses_peak_and_invalidated_origin() {
+        let now = Utc::now();
+        for side in [Side::Buy, Side::Sell] {
+            let sign = if side == Side::Buy { 1.0 } else { -1.0 };
+            let mut g = guard();
+            g.side = side;
+            g.signal = Signal::Pullback {
+                origin: 100.0,
+                level: 100.0 + sign * 0.5,
+                planned_entry: 100.0 + sign * 0.51,
+                price_digits: 2,
+                peer: None,
+            };
+            let q = |mid| Quote {
+                bid: Some((mid - 0.01, now)),
+                ask: Some((mid + 0.01, now)),
+            };
+            assert_eq!(
+                g.validate(Some(&q(100.0 + sign)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_SIGNAL_CHANGED"
+            );
+            assert!(g
+                .validate(Some(&q(100.0 + sign * 0.5)), 0, now, Instant::now())
+                .is_ok());
+            // The midpoint remains inside the retest, but the stored R/size
+            // no longer describes this executable entry. It must be refused.
+            assert_eq!(
+                g.validate(Some(&q(100.0 + sign * 0.4)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_PULLBACK_PRICE_CHANGED"
+            );
+            assert_eq!(
+                g.validate(Some(&q(100.0)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_SIGNAL_CHANGED"
+            );
+            assert_eq!(
+                g.validate(Some(&q(100.0 - sign * 0.1)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_SIGNAL_CHANGED"
+            );
+        }
+    }
+    #[test]
+    fn peer_guard_vetoes_fresh_opposition_and_labels_missing_or_stale() {
+        let now = Utc::now();
+        let mut g = guard();
+        g.signal = Signal::Pullback {
+            origin: 100.0,
+            level: 100.5,
+            planned_entry: 100.51,
+            price_digits: 2,
+            peer: Some((22, 200.0)),
+        };
+        let peer = Quote {
+            bid: Some((199.0, now)),
+            ask: Some((199.5, now)),
+        };
+        assert_eq!(
+            g.validate_peer(Some(&peer), now).unwrap_err().code,
+            "ENTRY_PEER_CONFLICT"
+        );
+        assert_eq!(
+            g.validate_peer(Some(&peer), now + chrono::Duration::seconds(7))
+                .unwrap()["status"],
+            "unavailable_or_stale"
+        );
+        assert_eq!(
+            g.validate_peer(None, now).unwrap()["status"],
+            "unavailable_or_stale"
+        );
+        let neutral = Quote {
+            bid: Some((199.5, now)),
+            ask: Some((200.5, now)),
+        };
+        assert!(g.validate_peer(Some(&neutral), now).is_ok());
+        g.signal = Signal::Pullback {
+            origin: 100.0,
+            level: 100.5,
+            planned_entry: 100.51,
+            price_digits: 2,
+            peer: None,
+        };
+        assert_eq!(
+            g.validate_peer(None, now).unwrap()["status"],
+            "not_available"
         );
     }
 }

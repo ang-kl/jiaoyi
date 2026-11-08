@@ -2294,3 +2294,24 @@ async fn lost_trail_raw_receipt_is_fatal_to_s1_management(pool: PgPool) {
         "{error:#}"
     );
 }
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn s3_data_only_core_resolution_does_not_expand_s1_entries(pool: PgPool) {
+    loaded_with(&pool, &[(BTC, "BTCUSD", AssetClass::Crypto, 1)]).await;
+    jiaoyi_store::settings::change(
+        &pool,
+        "universe.symbols",
+        Some(DEMO),
+        Some(json!([{"name":"USDJPY","class":"fx"}])),
+        "test",
+        "BTC is S3-only data resolution",
+    )
+    .await
+    .unwrap();
+    let mut f = fake_on(&[BTC], 2_000);
+    f.fill_quotes = HashMap::from([(BTC, (3608.0, 3611.0))]);
+    f.quote_sequence = vec![(0, BTC, q(3608.0, 3611.0)), (500, BTC, q(3608.0, 3611.0))];
+    let log = trade(&pool, &f, 2, Environment::Demo).await;
+    assert!(log.lock().unwrap().orders.is_empty());
+    assert!(decisions(&pool).await.iter().any(|(k, _)| k == "reconcile"));
+}

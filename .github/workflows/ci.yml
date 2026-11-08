@@ -41,7 +41,7 @@ jobs:
       - name: research scorecards
         run: python3 -m unittest discover -s ops/research -p 'test_*.py'
       - name: research JSON parity and exit adapter
-        run: cargo test -p jiaoyi-core --example class_prediction_study --example context_exit_replay --locked
+        run: cargo test -p jiaoyi-core --example class_prediction_study --example context_exit_replay --example macro_pullback_replay --locked
       - name: test
         run: cargo test --workspace --locked
 

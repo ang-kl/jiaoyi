@@ -448,9 +448,11 @@ async fn run(
 ) -> anyhow::Result<()> {
     let settings = store::settings::snapshot(pool, Some(account.id())).await?;
     summary.settings_version = Some(settings.version);
-    let universe = settings
-        .universe("universe.symbols")
-        .map_err(anyhow::Error::msg)?;
+    let universe = crate::strategy3::data_universe(
+        settings
+            .universe("universe.symbols")
+            .map_err(anyhow::Error::msg)?,
+    );
     let spread_window = Duration::from_secs(
         settings
             .integer("spread.sample_secs")

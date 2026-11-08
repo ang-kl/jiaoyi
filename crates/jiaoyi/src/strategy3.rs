@@ -1,55 +1,29 @@
-//! Strategy 3: intraday momentum on the noise band.
-//!
-//! **Refinement, 27-10-2026 (v3).** The 25 Oct registration entered on the
-//! first tick beyond the band, with TP1 at 3R + C. The 27 Oct statements
-//! printed the barrier rate of that geometry (27–34% on the demos, 0% on
-//! ETH/metals/oils), and the measured median C was ~2.2R, so the barrier
-//! was ~5R. A no-drift process cannot hit that often enough to pay for the
-//! stops. This loop now trades the v3 registration:
-//!
-//! - Entry is a 30-minute mark decision on the mid, not the first tick.
-//! - A symbol is skipped when the cost reserve C is at least R.
-//! - `REQUIRED_RR` is 1.38. Owner, 27-10-2026: target near 1.4R.
-//!
-//! The rules are `docs/preregistration-2026-11-01-strategy3-v7.md`, embedded
-//! and hashed: every decision, intent and trade records that hash and the
-//! label `jiaoyi-s3`. The 25 Oct file remains the record of the rule that
-//! produced the statement losses. It is not the rule this loop trades.
-//!
-//! **Repeat, 28-10-2026 (v6).** Owner: “Proceed to fix.” One open per symbol
-//! per session. A cost skip is remembered for that session and not decided
-//! again. The band is not refit. Grok 4.7 · № 17,682.
-//!
-//! **Trailing, 28-10-2026 (v5).** Owner: “change the forbid.” The 25 Oct
-//! “no stop amends” sentence is retired. An owned position may trail its
-//! stop to best − R (long) or best + R (short). The amend carries the
-//! take-profit, so the target is not deleted. The stop never loosens.
-//!
-//! One loop per permitted account, demo and live:
-//! - **Sessions.** Each symbol trades its own session (`jiaoyi_core::strategy3::sessions`).
-//! - **Band.** At the session's first quote after 30 minutes, the M30 bars
-//!   of the last sessions are read from the broker. They give the session's
-//!   open and σ at each 30-minute mark. A session without a first bar with
-//!   ticks is a holiday.
-//! - **Entry.** Only at a 30-minute mark, within 5 seconds of it. The mid
-//!   above the upper band buys; the mid below the lower band sells. No
-//!   entry in the session's last 30 minutes, and at most one Strategy 3
-//!   position per symbol. If C ≥ R the entry is skipped.
-//! - **Exits** (bot-trade `risk_coverage_partial_v1`).
-//!   - The stop is R from the fill.
-//!   - The broker take-profit is TP2, or TP1 when the size cannot be split.
-//!   - At TP1 the trader closes the planned part.
-//!   - At the session end it closes what is left.
-//! - **Size.** A demo account sizes `trading.risk_pct` of fresh equity, floored
-//!   to the step, and skips below the minimum. A live account takes one
-//!   minimum trade at a time, at most `trading.min_volume_max_risk_pct` of
-//!   equity, and only while no position of this program is open on it.
-//! - **Budget.** Strategy 3's open risk at its stops stays within
-//!   `trading.s3_open_risk_pct` of equity.
-//!
-//! Every order goes through `jiaoyi_ctrader::trading::send`, the one gate.
+//! Strategy 3: owner-authorised macro pullback, production revision №18,377.
+//! Shared pure rules are in `jiaoyi_core::strategy3::macro_pullback`.
+//! WARNING — RETIRED LEGACY PEAK-BREAKOUT STRATEGY: DO NOT RESTORE OR MODIFY WITHOUT EXPLICIT HUMAN OWNER APPROVAL.
+//! Historical entry formulas are archived in doc/DEPRECATED_OLD_STRATEGY3_PEAK_BREAKOUT_DO_NOT_USE.md.
+//! Existing positions retain their recorded exit policy; new entries use only
+//! the eight core symbols, macro-aligned retracement and two-stage full exit.
+//! All sends retain the account, ownership, risk, margin and final quote gates.
 
 pub mod preopen;
+
+/// Read/monitor universe: retain configured names and resolve all eight S3
+/// core names. This does not write S1's configured entry universe.
+pub fn data_universe(mut names: Vec<(String, AssetClass)>) -> Vec<(String, AssetClass)> {
+    for name in mp::CORE {
+        if !names.iter().any(|(n, _)| n == name) {
+            let class = match name {
+                "SpotCrude" | "SpotBrent" => AssetClass::Energy,
+                "US500" | "NAS100" => AssetClass::EquityIndex,
+                "XAUUSD" | "XAGUSD" => AssetClass::Metal,
+                _ => AssetClass::Crypto,
+            };
+            names.push((name.to_owned(), class));
+        }
+    }
+    names
+}
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -58,6 +32,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::strategy3::band::{self, Band, SigmaTable, M30};
+use jiaoyi_core::strategy3::macro_pullback::{self as mp, ArmedPullback, Touch};
 use jiaoyi_core::strategy3::sessions::{self, Session, SessionRule};
 use jiaoyi_core::strategy3::targets::{self, Dir, Plan};
 use jiaoyi_core::strategy3::{cost_reserve, slippage_bps_per_side, CostReserve};
@@ -84,16 +59,16 @@ use crate::shutdown::Shutdown;
 use crate::trading::{fresh_equity, relative_stop, risk_at_stop, PgLedger};
 
 /// The strategy's name on every route and record.
-pub const STRATEGY: &str = "Strategy 3: intraday momentum";
+pub const STRATEGY: &str = "Strategy 3: macro pullback";
 /// The label on every position Strategy 3 opens.
 pub const LABEL: &str = "jiaoyi-s3";
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-11-01-strategy3-v7.md";
+pub const PREREG_FILE: &str = "docs/preregistration-2026-11-08-strategy3-macro-pullback.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-11-01-strategy3-v7.md");
+    include_str!("../../../docs/preregistration-2026-11-08-strategy3-macro-pullback.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -113,8 +88,8 @@ pub fn prereg_hash() -> String {
         .collect()
 }
 
-/// v7 changes dispatch only. A v6 cost veto already made for this session
-/// remains binding; this compatibility does not import any Kelly outcomes.
+/// The production impulse-risk cost veto is registration scoped. Historical
+/// v6/v7 inheritance remains in the evidence reviewer, not new admission.
 pub async fn session_cost_veto(
     pool: &PgPool,
     account_id: i64,
@@ -122,19 +97,8 @@ pub async fn session_cost_veto(
     date: chrono::NaiveDate,
     hash: &str,
 ) -> Result<bool, jiaoyi_store::sqlx::Error> {
-    if s3s::cost_skipped_in_session(pool, account_id, symbol, date, hash).await? {
-        return Ok(true);
-    }
-    if hash != prereg_hash() {
-        return Ok(false);
-    }
-    let predecessor: String = Sha256::digest(
-        include_str!("../../../docs/preregistration-2026-10-28-strategy3-v6.md").as_bytes(),
-    )
-    .iter()
-    .map(|b| format!("{b:02x}"))
-    .collect();
-    s3s::cost_skipped_in_session(pool, account_id, symbol, date, &predecessor).await
+    // The new impulse-risk definition must not inherit band-risk vetoes.
+    s3s::cost_skipped_in_session(pool, account_id, symbol, date, hash).await
 }
 
 fn dir_side(d: Dir) -> Side {
@@ -190,6 +154,16 @@ pub async fn rules(pool: &PgPool, account_id: i64, env: Environment) -> anyhow::
 /// a prepared session.
 // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115)
 pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
+    if mp::peer(&sym.name).is_none() {
+        return json!({"at":now,"reason":"symbol_retired_from_s3_core","reason_code":"symbol_retired_from_s3_core","distance_half_widths":null});
+    }
+    if let Some(a) = sym.pullback.filter(|a| a.session.trading_at(now)) {
+        let mid = sym.bid.zip(sym.ask).map(|(b, a)| (b + a) / 2.0);
+        return json!({"at":now,"production_policy":mp::POLICY,"state":"armed_pullback","open":a.origin,
+            "pullback_entry_ref":a.level,"bid":sym.bid,"ask":sym.ask,"mid":mid,
+            "distance_half_widths":mid.map(|m|if a.long {(m-a.level)/a.impulse_range}else{(a.level-m)/a.impulse_range}),
+            "reason":"waiting for 50% pullback"});
+    }
     let none = |why: &str| json!({"at": now, "bid": sym.bid, "ask": sym.ask, "distance_half_widths": null, "reason": why});
     let Some(rule) = sym.rule else {
         return none("no session rule for this symbol");
@@ -245,6 +219,74 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
 }
 
 // ---------------------------------------------------------------- pure parts
+
+/// Actor-side freshness; the socket reader repeats this at final transmission.
+pub fn fresh_s3_quote(sym: &Sym, now: DateTime<Utc>) -> Option<(f64, f64)> {
+    let fresh = |p: Option<f64>, t: Option<DateTime<Utc>>| {
+        p.zip(t)
+            .filter(|(p, t)| {
+                p.is_finite() && *p > 0.0 && *t <= now && now - *t <= chrono::Duration::seconds(6)
+            })
+            .map(|v| v.0)
+    };
+    let (bid, ask) = (fresh(sym.bid, sym.bid_at)?, fresh(sym.ask, sym.ask_at)?);
+    (bid <= ask).then_some((bid, ask))
+}
+
+/// Bound a send by both the quote's event time and native entry-window end.
+fn dispatch_budget(
+    session: Session,
+    quote_at: DateTime<Utc>,
+    checked_at: DateTime<Utc>,
+) -> Duration {
+    let deadline = (quote_at + chrono::Duration::seconds(5))
+        .min(session.close - chrono::Duration::minutes(30));
+    (deadline - checked_at)
+        .to_std()
+        .unwrap_or_default()
+        .min(Duration::from_secs(5))
+}
+
+/// Full-position target for the new production policy. Legacy plan_order is
+/// retained only for interpreting/testing the retired opening-plan arithmetic.
+pub fn pullback_order(e: &Entry, limits: &VolumeLimits, volume: i64) -> Result<Order, String> {
+    let ticks = targets::price_ticks(e.r, limits.digits).ok_or("invalid risk grid")?;
+    let distance = ((ticks
+        .checked_mul(138)
+        .and_then(|v| v.checked_add(99))
+        .ok_or("target overflow")?)
+        / 100) as f64
+        / 10_f64.powi(limits.digits);
+    let sign = if e.side == Dir::Buy { 1.0 } else { -1.0 };
+    let target = e.entry_price + sign * distance;
+    if !target.is_finite()
+        || target <= 0.0
+        || limits.min <= 0
+        || limits.step <= 0
+        || volume < limits.min
+        || volume % limits.step != 0
+        || limits.max.is_some_and(|m| volume > m)
+    {
+        return Err("invalid two-stage target or volume".into());
+    }
+    Ok(Order {
+        plan: Plan {
+            mode: targets::Mode::WholePositionMinimum,
+            initial_risk: e.r,
+            trigger: target,
+            broker_target: target,
+            runner_target: target,
+            volume,
+            close_volume: volume,
+            runner_volume: 0,
+            close_fraction: 1.0,
+            modeled_net_at_original_stop: -(volume as f64 / 100.0) * (e.r + e.cost.total),
+        },
+        relative_take_profit: distance_e5(distance, limits.digits),
+        tp1_distance: distance,
+        tp2_distance: distance,
+    })
+}
 
 /// The Chandelier stop: best − R for a long, best + R for a short.
 /// Returns `None` when the inputs are not a price or R is not positive.
@@ -572,6 +614,7 @@ pub struct PlanBasis {
     /// Frozen opening-plan distance, including its original reward policy
     /// and outward rounding. Never replan an old position with today's Q.
     pub tp1_distance: f64,
+    pub two_stage: bool,
 }
 
 /// The plan basis in a recorded order's detail (`entry`), if complete.
@@ -588,6 +631,7 @@ pub fn plan_basis(detail: &Value) -> Option<PlanBasis> {
         r: e["r"].as_f64()?,
         cost: e["cost"]["total"].as_f64()?,
         tp1_distance: detail["order"]["tp1_distance"].as_f64()?,
+        two_stage: detail["production_policy"].as_str() == Some(mp::POLICY),
     })
 }
 
@@ -786,9 +830,48 @@ impl Ledger for S3Ledger<'_> {
 pub struct Day {
     pub session: Session,
     pub open: Result<f64, String>,
+    pub opening_quote: Option<Value>,
     pub table: SigmaTable,
     pub spread: Result<(f64, i64), String>,
     pub prepared_at: DateTime<Utc>,
+    pub macro_context: Result<mp::Context, String>,
+}
+
+/// The first evidenced midpoint after native open. An M30 bid open is not
+/// a midpoint. Each leg must be recorded in the opening six-second window.
+async fn opening_midpoint(
+    pool: &PgPool,
+    account: i64,
+    symbol: i64,
+    s: Session,
+    now: DateTime<Utc>,
+) -> Result<(f64, Value), String> {
+    if now < s.open {
+        return Err("opening_midpoint_not_yet_observable".into());
+    }
+    let until = (s.open + chrono::Duration::seconds(6)).min(now);
+    let rows: Vec<(DateTime<Utc>, Option<i64>, Option<i64>)> = sqlx::query_as(
+        "SELECT received_at,bid_e5,ask_e5 FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2 AND received_at >= $3 AND received_at <= $4 ORDER BY received_at,session_id,seq LIMIT 10000")
+        .bind(account).bind(symbol).bind(s.open).bind(until).fetch_all(pool).await.map_err(|e|format!("opening_midpoint_read_failed: {e}"))?;
+    let (mut bid, mut ask) = (None, None);
+    for (at, b, a) in rows {
+        if let Some(b) = b {
+            bid = Some((b as f64 / 100000.0, at));
+        }
+        if let Some(a) = a {
+            ask = Some((a as f64 / 100000.0, at));
+        }
+        if let (Some((b, bt)), Some((a, at))) = (bid, ask) {
+            if b > 0.0 && a >= b {
+                let mid = b + (a - b) / 2.0;
+                return Ok((
+                    mid,
+                    json!({"source":"recorded_ticks_native_open_6s","bid":b,"ask":a,"mid":mid,"bid_at":bt,"ask_at":at,"observed_at":bt.max(at)}),
+                ));
+            }
+        }
+    }
+    Err("opening_midpoint_unavailable: no valid recorded two-sided quote in first 6 seconds".into())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -800,7 +883,7 @@ async fn load_day(
     rule: SessionRule,
     s: Session,
     now: DateTime<Utc>,
-    prepared_table: Option<SigmaTable>,
+    prepared_table: Option<(SigmaTable, mp::Context)>,
 ) -> Result<Day, (String, DateTime<Utc>)> {
     let from = if prepared_table.is_some() {
         s.open
@@ -834,9 +917,17 @@ async fn load_day(
                     close: c,
                 });
             }
-            let table = prepared_table.unwrap_or_else(|| band::sigma_table(&rule, &s, &bars));
-            let open = match (bars.iter().find(|b| b.open_time == s.open), first_volume) {
-                (Some(b), Some(v)) if v > 0 => Ok(b.open),
+            let (table, macro_context) = match prepared_table {
+                Some((table, context)) => (table, Ok(context)),
+                None => (
+                    band::sigma_table(&rule, &s, &bars),
+                    mp::context(&rule, s, &bars, now.min(s.open)),
+                ),
+            };
+            let observed_open = opening_midpoint(pool, account_id, symbol_id, s, now).await;
+            let opening_quote = observed_open.as_ref().ok().map(|(_, v)| v.clone());
+            let open = match first_volume {
+                Some(v) if v > 0 => observed_open.map(|(mid, _)| mid),
                 _ => Err(format!(
                     "no M30 bar with ticks at the session open {}: a holiday, skipped",
                     s.open
@@ -850,9 +941,11 @@ async fn load_day(
             Ok(Day {
                 session: s,
                 open,
+                opening_quote,
                 table,
                 spread,
                 prepared_at: now,
+                macro_context,
             })
         }
     }
@@ -879,6 +972,8 @@ pub struct Sym {
     pub entered_session: Option<chrono::NaiveDate>,
     /// Session date of a cost skip. Later marks do not decide it again.
     pub cost_skip_session: Option<chrono::NaiveDate>,
+    pub pullback: Option<ArmedPullback>,
+    pub pullback_loaded_session: Option<chrono::NaiveDate>,
 }
 
 /// A Strategy 3 position as reconciled, with its plan when recorded.
@@ -1060,10 +1155,20 @@ impl<'a, 'c> Trader<'a, 'c> {
             _ => None,
         };
         let snap = jiaoyi_store::settings::snapshot(pool, Some(account_id)).await?;
-        let universe = snap
-            .universe("universe.symbols")
-            .map_err(anyhow::Error::msg)?;
+        let mut universe = data_universe(
+            snap.universe("universe.symbols")
+                .map_err(anyhow::Error::msg)?,
+        );
         let resolutions = jiaoyi_store::latest_resolutions(pool, account_id).await?;
+        // Preserve data/exit subscriptions for historical owned positions even
+        // when their symbol has since left the configured entry universe.
+        for old in &resolutions {
+            if !universe.iter().any(|(n, _)| n == &old.name) {
+                if let Some(class) = AssetClass::parse(&old.asset_class) {
+                    universe.push((old.name.clone(), class));
+                }
+            }
+        }
         let mut syms = HashMap::new();
         for (name, class) in universe {
             let Some(id) = resolutions
@@ -1110,6 +1215,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                     last_decision_mark: None,
                     entered_session: None,
                     cost_skip_session: None,
+                    pullback: None,
+                    pullback_loaded_session: None,
                 },
             );
         }
@@ -1284,7 +1391,54 @@ impl<'a, 'c> Trader<'a, 'c> {
 
     /// Reconcile with the broker: Strategy 3's own positions, with their
     /// recorded plans, and the count of this program's positions.
+    /// The data loader can finish after the trading actor starts. Add newly
+    /// resolved core metadata without dropping existing position state.
+    async fn refresh_resolved_symbols(&mut self) -> anyhow::Result<()> {
+        let missing: Vec<&str> = mp::CORE
+            .into_iter()
+            .filter(|name| {
+                !self
+                    .syms
+                    .values()
+                    .any(|s| s.name == *name && s.limits.is_some() && s.quote.is_some())
+            })
+            .collect();
+        if missing.is_empty() {
+            return Ok(());
+        }
+        let resolutions = jiaoyi_store::latest_resolutions(self.pool, self.account_id()).await?;
+        if !resolutions
+            .iter()
+            .any(|r| missing.contains(&r.name.as_str()) && r.broker_symbol_id.is_some())
+        {
+            return Ok(());
+        }
+        let fresh = Trader::new(self.pool, self.allowlist, self.env, self.session).await?;
+        let mut added = Vec::new();
+        for (id, sym) in fresh.syms {
+            if let Some(existing) = self.syms.get_mut(&id) {
+                if existing.limits.is_none() {
+                    existing.limits = sym.limits;
+                }
+                if existing.quote.is_none() {
+                    existing.quote = sym.quote;
+                }
+            } else {
+                self.syms.insert(id, sym);
+                added.push(id);
+            }
+        }
+        if self.deposit.is_none() {
+            self.deposit = fresh.deposit;
+        }
+        if !added.is_empty() {
+            self.session.subscribe_spots(&added).await?;
+        }
+        Ok(())
+    }
+
     pub async fn reconcile(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
+        self.refresh_resolved_symbols().await?;
         let account_id = self.account_id();
         let res = self.session.reconcile().await?;
         let present: std::collections::HashSet<i64> =
@@ -1642,7 +1796,12 @@ impl<'a, 'c> Trader<'a, 'c> {
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         let fresh = match self.syms.get(&symbol_id).and_then(|x| x.day.as_ref()) {
-            Some(Ok(d)) => d.session.date != s.date,
+            Some(Ok(d)) => {
+                d.session.date != s.date
+                    || ((d.macro_context.is_err() || d.open.is_err())
+                        && now - d.prepared_at
+                            >= chrono::Duration::from_std(PREPARE_RETRY).unwrap_or_default())
+            }
             Some(Err((_, at))) => {
                 now - *at >= chrono::Duration::from_std(PREPARE_RETRY).unwrap_or_default()
             }
@@ -1660,7 +1819,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             .get(&symbol_id)
             .and_then(|sym| sym.preopen.as_ref())
             .filter(|p| p.matches(symbol_id, s) && p.table.is_some() && p.missing_marks == 0)
-            .and_then(|p| p.table.clone());
+            .and_then(|p| p.table.clone().zip(p.macro_context));
         let read = load_day(
             self.pool,
             self.session,
@@ -1678,6 +1837,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 let detail = json!({
                     "session_date": d.session.date, "open_at": d.session.open, "close_at": d.session.close,
                     "open": d.open.as_ref().ok(), "open_refused": d.open.as_ref().err(),
+                    "opening_quote": d.opening_quote,
                     "sigma_marks": d.table.marks.iter()
                         .map(|(m, v)| (m.to_string(), v.as_ref().map(|x| json!(x)).unwrap_or_else(|e| json!(e))))
                         .collect::<serde_json::Map<_, _>>(),
@@ -1685,6 +1845,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     "median_spread": d.spread.as_ref().ok().map(|x| x.0),
                     "spread_quotes": d.spread.as_ref().ok().map(|x| x.1),
                     "rule": rule.describe(),
+                    "macro_context": d.macro_context,
                 });
                 let reason = match &d.open {
                     Ok(o) => format!("session {} prepared: open {o}", d.session.date),
@@ -1934,7 +2095,29 @@ impl<'a, 'c> Trader<'a, 'c> {
         else {
             return Ok(());
         };
-        let Some(new_stop) = trail_price(o.side, best, r, current_stop, digits) else {
+        let two_stage = o.plan_basis.is_some_and(|b| b.two_stage);
+        if two_stage
+            && self
+                .syms
+                .get(&o.symbol_id)
+                .and_then(|s| fresh_s3_quote(s, now))
+                .is_none()
+        {
+            return Ok(());
+        }
+        let proposed = if two_stage {
+            mp::breakeven(
+                o.side == Side::Buy,
+                o.entry.unwrap_or(f64::NAN),
+                r,
+                p,
+                current_stop,
+                digits,
+            )
+        } else {
+            trail_price(o.side, best, r, current_stop, digits)
+        };
+        let Some(new_stop) = proposed else {
             return Ok(());
         };
         if o.last_amend
@@ -1942,8 +2125,8 @@ impl<'a, 'c> Trader<'a, 'c> {
         {
             return Ok(());
         }
-        // No amend in the session's last 30 minutes.
-        if let Some(sym) = self.syms.get(&o.symbol_id) {
+        // Legacy positions retain their original amendment window.
+        if let Some(sym) = self.syms.get(&o.symbol_id).filter(|_| !two_stage) {
             if let Some(session) = sym.rule.and_then(|rule| sessions::session_at(&rule, now)) {
                 if session.close - now < chrono::Duration::minutes(30) {
                     return Ok(());
@@ -1978,7 +2161,9 @@ impl<'a, 'c> Trader<'a, 'c> {
             ask,
             volume: Some(o.volume),
             detail: json!({"strategy": STRATEGY, "from_stop": current_stop, "best": best,
-                "r": r, "new_stop": new_stop, "open_entry_key": o.entry_key}),
+                "r": r, "new_stop": new_stop, "open_entry_key": o.entry_key,
+                "exit_policy": if two_stage { mp::POLICY } else { "legacy_recorded_plan" },
+                "checked_at": now, "mid": bid.zip(ask).map(|(b,a)|(b+a)/2.0)}),
         };
         let ledger = S3Ledger {
             inner: PgLedger {
@@ -2276,7 +2461,12 @@ impl<'a, 'c> Trader<'a, 'c> {
                     _ => None,
                 },
                 volume: vol,
-                detail: json!({"outcome": sent.outcome, "client_msg_id": sent.client_msg_id}),
+                detail: json!({"outcome": sent.outcome, "client_msg_id": sent.client_msg_id,
+                    "production_policy":ledger.order.detail["production_policy"],
+                    "decision_quote":{"bid":bid,"ask":ask,"mid":bid.zip(ask).map(|(b,a)|(b+a)/2.0),
+                    "at":ledger.order.decided_at,"at_ms":ledger.order.decided_at.timestamp_millis()},
+                    "sent_at_ms":sent_at.timestamp_millis(),"fill_at_ms":answered_at.map(|a|a.timestamp_millis()),
+                    "dispatch_quote_source":"trading_events.ENTRY_VALIDATED_BEFORE_SEND keyed by entry_key; decision quote is not dispatch quote"}),
             },
         )
         .await?;
@@ -2299,239 +2489,415 @@ impl<'a, 'c> Trader<'a, 'c> {
 
     /// An entry on a quote of a symbol with no Strategy 3 position.
     #[allow(clippy::neg_cmp_op_on_partial_ord)]
-    async fn entry(&mut self, symbol_id: i64, now: DateTime<Utc>) -> anyhow::Result<()> {
-        let sym = self.syms[&symbol_id].clone();
-        let name = sym.name.clone();
-        let Some(rule) = sym.rule else {
-            return Ok(());
-        };
-        let Some(s) = sessions::session_at(&rule, now) else {
-            return Ok(());
-        };
-        if band::entry_window(&s, now).is_err() {
+    async fn save_pullback(
+        &mut self,
+        id: i64,
+        s: Session,
+        now: DateTime<Utc>,
+        arm: Option<ArmedPullback>,
+        reason: &str,
+        detail: Value,
+    ) -> anyhow::Result<()> {
+        let sym = &self.syms[&id];
+        let quote = detail.get("impulse_quote").cloned().unwrap_or_else(
+            || json!({"bid":sym.bid,"ask":sym.ask,"bid_at":sym.bid_at,"ask_at":sym.ask_at}),
+        );
+        let mid = quote["bid"]
+            .as_f64()
+            .zip(quote["ask"].as_f64())
+            .map(|(b, a)| b + (a - b) / 2.0);
+        ts::record_decision(
+            self.pool,
+            self.account_id(),
+            Some(&sym.name),
+            "s3_pullback_state",
+            reason,
+            &json!({"production_policy":mp::POLICY,"prereg_hash":self.hash,"label":LABEL,
+                "session_date":s.date,"session":s,"at":now,"at_ms":now.timestamp_millis(),
+                "bid":quote["bid"],"ask":quote["ask"],"mid":mid,
+                "bid_at":quote["bid_at"],"ask_at":quote["ask_at"],"state":arm,"detail":detail}),
+            self.d.version,
+        )
+        .await?;
+        let sym = self.syms.get_mut(&id).unwrap();
+        sym.pullback = arm;
+        sym.pullback_loaded_session = Some(s.date);
+        Ok(())
+    }
+
+    async fn restore_pullback(
+        &mut self,
+        id: i64,
+        s: Session,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        if self.syms[&id].pullback_loaded_session == Some(s.date) {
             return Ok(());
         }
-        let Some(mark) = band::decision_mark(&s, now) else {
-            return Ok(());
-        };
-        let dispatch_remaining = (mark + chrono::Duration::seconds(band::MARK_WINDOW_SECS) - now)
-            .to_std()
-            .unwrap_or_default();
-        let dispatch_deadline = tokio::time::Instant::now() + dispatch_remaining;
-        let dispatch_revision = self.session.connection().entry_revision(self.account_id());
-        let (Some(bid), Some(ask)) = (sym.bid, sym.ask) else {
-            return Ok(());
-        };
-        if !bid.is_finite() || !ask.is_finite() || bid > ask {
-            return Ok(());
-        }
-        if sym.last_decision_mark.is_some_and(|at| at >= mark) {
-            return Ok(());
-        }
-        // The session veto is durable, unlike the per-connection symbol cache.
-        // A failed read must not consume this mark or permit a new entry.
-        if cost_skip_stands(sym.cost_skip_session, s.date) {
-            return Ok(());
-        }
-        if session_cost_veto(self.pool, self.account_id(), &name, s.date, &self.hash).await? {
-            self.syms.get_mut(&symbol_id).unwrap().cost_skip_session = Some(s.date);
-            tracing::info!(account = self.account_id(), symbol = %name,
-                session_date = %s.date, prereg_hash = %self.hash,
-                "strategy 3 restored durable session cost veto");
-            return Ok(());
-        }
-        // Persist the first eligible quote before any preparation or entry
-        // gate. An inside/no-band/refused decision must not be retried on a
-        // later crossing within this mark, including after reconnect.
-        let previous: Option<Option<String>> = jiaoyi_store::sqlx::query_scalar(
-            "SELECT detail->>'decision_mark' FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_mark_decision' ORDER BY id DESC LIMIT 1")
-            .bind(self.account_id()).bind(&name).fetch_optional(self.pool).await?;
-        if let Some(at) = previous
-            .flatten()
-            .and_then(|s| s.parse::<DateTime<Utc>>().ok())
-        {
-            if at >= mark {
-                self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(at);
-                return Ok(());
+        let raw:Option<Value>=sqlx::query_scalar("SELECT detail FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_pullback_state' AND detail->>'prereg_hash'=$3 AND detail->>'session_date'=$4 ORDER BY id DESC LIMIT 1")
+            .bind(self.account_id()).bind(&self.syms[&id].name).bind(&self.hash).bind(s.date.to_string()).fetch_optional(self.pool).await?;
+        let arm = match raw.as_ref().map(|v| &v["state"]).filter(|v| !v.is_null()) {
+            Some(v) => {
+                let a: ArmedPullback = serde_json::from_value(v.clone())?;
+                anyhow::ensure!(
+                    raw.as_ref()
+                        .is_some_and(|v| v["production_policy"] == mp::POLICY)
+                        && a.session == s
+                        && band::decision_mark(&s, a.armed_at).is_some()
+                        && band::entry_window(&s, a.armed_at).is_ok()
+                        && a.armed_at <= now
+                        && a.origin.is_finite()
+                        && a.origin > 0.0
+                        && a.extreme.is_finite()
+                        && a.level == a.origin + 0.5 * (a.extreme - a.origin)
+                        && a.impulse_range == (a.extreme - a.origin).abs()
+                        && a.extreme > 0.0
+                        && (a.extreme > a.origin) == a.long
+                        && a.impulse_bps == a.impulse_range / a.origin * 10000.0
+                        && a.impulse_bps >= mp::IMPULSE_FLOOR_BPS
+                        && mp::aligns(a.macro_context, a.long, s.open),
+                    "stored pullback state failed identity/math checks"
+                );
+                Some(a)
             }
-        }
-        if sym.entered_session == Some(s.date) {
-            self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(mark);
-            return Ok(());
-        }
-        let prior = s3s::opens_in_session(self.pool, self.account_id(), symbol_id, s.date).await?;
-        if session_already_entered(prior) {
-            if let Some(x) = self.syms.get_mut(&symbol_id) {
-                x.entered_session = Some(s.date);
-                x.last_decision_mark = Some(mark);
-            }
-            self.skip(
-                symbol_id,
-                &name,
-                "one entry already recorded for this symbol in this session",
-                json!({"session_date": s.date, "opens": prior}),
-                now,
-            )
-            .await;
-            return Ok(());
-        }
-        ts::record_decision(self.pool, self.account_id(), Some(&name), "s3_mark_decision",
-            "first eligible quote consumed this decision mark",
-            &json!({"strategy":STRATEGY,"label":LABEL,"prereg_hash":self.hash,"decision_mark":mark,"decided_at":now,"bid":bid,"ask":ask}),
-            self.d.version).await?;
-        self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(mark);
-        if sym
-            .last_try
-            .is_some_and(|t| now - t < chrono::Duration::from_std(ENTRY_RETRY).unwrap_or_default())
-        {
-            return Ok(());
-        }
-        if let Some(retry_at) = self.funding_retry_at.filter(|t| now < *t) {
-            self.d
-                .note(
-                    Some(&name),
-                    "funding_backoff",
-                    "the broker rejected an entry for insufficient funds: account entry retries wait; exits continue",
-                    json!({"retry_at": retry_at}),
-                )
-                .await;
-            return Ok(());
-        }
-        self.prepare(symbol_id, s, now).await?;
-        let mut sym = self.syms[&symbol_id].clone();
-        sym.bid = Some(bid);
-        sym.ask = Some(ask);
-        let day = match &sym.day {
-            Some(Ok(d)) if d.session.date == s.date => d.clone(),
-            _ => return Ok(()),
+            None => None,
         };
-        let Ok(open) = day.open.clone() else {
-            return Ok(());
+        let sym = self.syms.get_mut(&id).unwrap();
+        sym.pullback = arm;
+        sym.pullback_loaded_session = Some(s.date);
+        Ok(())
+    }
+
+    fn peer_evidence(&self, symbol: &str, now: DateTime<Utc>) -> (Option<f64>, Option<(i64, f64)>) {
+        let Some(peer) =
+            mp::peer(symbol).and_then(|name| self.syms.values().find(|s| s.name == name))
+        else {
+            return (None, None);
         };
-        let (side, b) = match signal(&day.table, &s, open, now, sym.bid, sym.ask) {
-            Ok(Some(x)) => x,
-            Ok(None) => return Ok(()),
-            Err(why) => {
-                self.d.note(Some(&name), "no_band", &why, json!({})).await;
-                return Ok(());
-            }
+        let Some(Ok(day)) = peer.day.as_ref() else {
+            return (None, None);
         };
-        let entry_price = match side {
-            Dir::Buy => sym.ask,
-            Dir::Sell => sym.bid,
+        if !day.session.trading_at(now) {
+            return (None, None);
         }
-        .unwrap_or(f64::NAN);
-        let mut detail = json!({
-            "session_date": s.date, "decided_at": now, "bid": sym.bid, "ask": sym.ask,
-            "side": side, "band": b, "open": open, "sigma": b.sigma,
-        });
-        let Some(limits) = sym.limits else {
-            self.skip(
-                symbol_id,
-                &name,
-                "the symbol's volume rules are not stored",
-                detail,
-                now,
-            )
-            .await;
-            return Ok(());
+        let Ok(origin) = day.open else {
+            return (None, None);
         };
-        // Keep the actual entry-time grid and UTC session for later replay;
-        // today's symbol metadata or calendar must not replace this snapshot.
-        detail["volume_limits"] = json!(limits);
-        detail["session"] = json!(s);
-        let spread = match &day.spread {
-            Ok((m, _)) => *m,
-            Err(why) => {
-                self.skip(symbol_id, &name, why, detail, now).await;
-                return Ok(());
-            }
-        };
-        let Some(rate) = self.rate(symbol_id) else {
-            self.skip(
-                symbol_id,
-                &name,
-                "no broker quote→deposit rate for this symbol yet",
-                detail,
-                now,
-            )
-            .await;
-            return Ok(());
-        };
+        let check = Some((peer.id, origin));
+        let movement = fresh_s3_quote(peer, now).map(|(b, a)| ((b + a) / 2.0 - origin) / origin);
+        (movement, check)
+    }
+
+    async fn entry_cost(
+        &mut self,
+        sym: &Sym,
+        day: &Day,
+        price: f64,
+    ) -> Result<(CostReserve, f64, f64, f64), String> {
+        let spread = day.spread.as_ref().map(|v| v.0).map_err(Clone::clone)?;
+        let rate = self
+            .rate(sym.id)
+            .ok_or("no broker quote→deposit rate for this symbol yet")?;
         if self
             .commission_read
             .is_none_or(|t| t.elapsed() >= COMMISSION_REFRESH)
         {
             self.read_commission().await;
         }
-        let commission_rt = match &self.commission {
-            Ok(book) => {
-                let (per_unit, label) = book
-                    .per_class
-                    .get(sym.class.as_str())
-                    .cloned()
-                    .unwrap_or((book.overall_median, "estimated: the overall median".into()));
-                detail["commission_label"] = json!(label);
-                2.0 * per_unit / rate
-            }
-            Err(why) => {
-                self.skip(
-                    symbol_id,
-                    &name,
-                    &format!("commission not measured: {why}"),
-                    detail,
-                    now,
-                )
-                .await;
-                return Ok(());
-            }
-        };
-        let cost = match cost_reserve(
+        let book = self.commission.as_ref().map_err(Clone::clone)?;
+        let per_unit = book
+            .per_class
+            .get(sym.class.as_str())
+            .map_or(book.overall_median, |v| v.0);
+        let commission_rt = 2.0 * per_unit / rate;
+        let cost = cost_reserve(
             spread,
             commission_rt,
             slippage_bps_per_side(sym.class),
-            entry_price,
+            price,
+        )?;
+        Ok((cost, spread, commission_rt, rate))
+    }
+
+    async fn entry(&mut self, symbol_id: i64, now: DateTime<Utc>) -> anyhow::Result<()> {
+        // The running actor compares queued event time with the wall clock;
+        // direct deterministic callers supply their own clock through `now`.
+        let checked_at = if self.protect_during_reads {
+            Utc::now() + self.event_offset
+        } else {
+            now
+        };
+        let sym = self.syms[&symbol_id].clone();
+        let name = sym.name.clone();
+        if mp::peer(&name).is_none() {
+            self.d.note(Some(&name),"inactive","symbol_retired_from_s3_core",json!({"reason_code":"symbol_retired_from_s3_core","production_policy":mp::POLICY})).await;
+            return Ok(());
+        }
+        let Some(rule) = sym.rule else {
+            return Ok(());
+        };
+        let Some(s) = sessions::session_at(&rule, now) else {
+            if let Some(a) = sym.pullback {
+                self.save_pullback(
+                    symbol_id,
+                    a.session,
+                    now,
+                    None,
+                    "pullback_not_reached_expired",
+                    json!({}),
+                )
+                .await?;
+            }
+            return Ok(());
+        };
+        self.restore_pullback(symbol_id, s, now).await?;
+        if let Some(a) = self.syms[&symbol_id].pullback {
+            if now >= s.close - chrono::Duration::minutes(30) {
+                self.save_pullback(
+                    symbol_id,
+                    s,
+                    now,
+                    None,
+                    "pullback_not_reached_expired",
+                    json!({"armed":a}),
+                )
+                .await?;
+                return Ok(());
+            }
+            let Some((bid, ask)) = fresh_s3_quote(&self.syms[&symbol_id], checked_at) else {
+                return Ok(());
+            };
+            match a.touch(bid, ask, now) {
+                Touch::Waiting => {}
+                Touch::Expired | Touch::Invalidated => {
+                    self.save_pullback(
+                        symbol_id,
+                        s,
+                        now,
+                        None,
+                        if a.touch(bid, ask, now) == Touch::Expired {
+                            "pullback_not_reached_expired"
+                        } else {
+                            "pullback_origin_invalidated"
+                        },
+                        json!({"armed":a}),
+                    )
+                    .await?
+                }
+                Touch::Trigger => {
+                    let deadline =
+                        tokio::time::Instant::now() + dispatch_budget(s, now, checked_at);
+                    let revision = self.session.connection().entry_revision(self.account_id());
+                    // Consumption precedes all awaited admission work. Crash or
+                    // uncertain send cannot restore the old trigger as fresh.
+                    self.save_pullback(
+                        symbol_id,
+                        s,
+                        now,
+                        None,
+                        "pullback_trigger_consumed",
+                        json!({"armed":a}),
+                    )
+                    .await?;
+                    self.dispatch_pullback(symbol_id, a, bid, ask, now, deadline, revision)
+                        .await?;
+                }
+            }
+            return Ok(());
+        }
+        if band::entry_window(&s, now).is_err() {
+            return Ok(());
+        }
+        let Some(mark) = band::decision_mark(&s, now) else {
+            return Ok(());
+        };
+        let Some((bid, ask)) = fresh_s3_quote(&self.syms[&symbol_id], checked_at) else {
+            return Ok(());
+        };
+        if sym.last_decision_mark.is_some_and(|at| at >= mark)
+            || sym.entered_session == Some(s.date)
+        {
+            return Ok(());
+        }
+        if cost_skip_stands(sym.cost_skip_session, s.date)
+            || session_cost_veto(self.pool, self.account_id(), &name, s.date, &self.hash).await?
+        {
+            self.syms.get_mut(&symbol_id).unwrap().cost_skip_session = Some(s.date);
+            return Ok(());
+        }
+        let prior:Option<String>=sqlx::query_scalar("SELECT detail->>'decision_mark' FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_mark_decision' AND detail->>'prereg_hash'=$3 ORDER BY id DESC LIMIT 1")
+            .bind(self.account_id()).bind(&name).bind(&self.hash).fetch_optional(self.pool).await?.flatten();
+        if prior
+            .and_then(|v| v.parse::<DateTime<Utc>>().ok())
+            .is_some_and(|at| at >= mark)
+        {
+            return Ok(());
+        }
+        if session_already_entered(
+            s3s::opens_in_session(self.pool, self.account_id(), symbol_id, s.date).await?,
         ) {
-            Ok(c) => c,
-            Err(why) => {
-                self.skip(symbol_id, &name, &why, detail, now).await;
+            self.syms.get_mut(&symbol_id).unwrap().entered_session = Some(s.date);
+            return Ok(());
+        }
+        let impulse_quote =
+            json!({"bid":bid,"ask":ask,"bid_at":sym.bid_at,"ask_at":sym.ask_at,"received_at":now});
+        ts::record_decision(self.pool,self.account_id(),Some(&name),"s3_mark_decision","first eligible quote consumed impulse mark",
+            &json!({"production_policy":mp::POLICY,"prereg_hash":self.hash,"decision_mark":mark,"decided_at":now,"bid":bid,"ask":ask}),self.d.version).await?;
+        self.syms.get_mut(&symbol_id).unwrap().last_decision_mark = Some(mark);
+        self.prepare(symbol_id, s, now).await?;
+        // Prepare the paired session through the same exit-preserving reader.
+        if let Some(peer) = mp::peer(&name)
+            .and_then(|p| self.syms.values().find(|v| v.name == p))
+            .cloned()
+        {
+            if let Some(ps) = peer.rule.and_then(|r| sessions::session_at(&r, now)) {
+                self.prepare(peer.id, ps, now).await?;
+            }
+        }
+        let sym = self.syms[&symbol_id].clone();
+        let Some(Ok(day)) = sym.day.as_ref() else {
+            return Ok(());
+        };
+        let (Ok(open), Ok(context)) = (day.open.as_ref(), day.macro_context.as_ref()) else {
+            self.save_pullback(
+                symbol_id,
+                s,
+                now,
+                None,
+                "macro_preparation_unavailable",
+                json!({"open":day.open,"opening_quote":day.opening_quote,"macro_context":day.macro_context}),
+            )
+            .await?;
+            return Ok(());
+        };
+        let b = match band::band_at(&day.table, &s, *open, mark) {
+            Ok(v) => v,
+            Err(e) => {
+                self.save_pullback(symbol_id, s, now, None, "no_band", json!({"reason":e}))
+                    .await?;
                 return Ok(());
             }
         };
-        let rel = relative_stop(b.half_width, limits.digits);
-        let r_price = rel as f64 / 100_000.0;
-        // v3 cost gate (27-10-2026). The statements measured median C ≈ 2.2R,
-        // so TP1 sat near 5R and a no-drift process hit it ~16% of the time.
-        // Skip when the reserve is at least the stop. This does not change Q.
-        if !(r_price > 0.0) || cost.total >= r_price {
-            detail["strategy"] = json!(STRATEGY);
-            detail["label"] = json!(LABEL);
-            detail["prereg_hash"] = json!(self.hash);
-            detail["skip_code"] = json!("cost_ge_r");
-            let reason = format!(
-                "cost reserve C ({:.6}) >= R ({:.6}): barrier too far for a no-drift process; skipped",
-                cost.total, r_price
-            );
-            // This is execution state, not best-effort reporting. Persist it
-            // before the cache suppresses subsequent quotes for this session.
-            ts::record_decision(
-                self.pool,
-                self.account_id(),
-                Some(&name),
-                "s3_skip",
-                &reason,
-                &detail,
-                self.d.version,
-            )
-            .await?;
-            if let Some(x) = self.syms.get_mut(&symbol_id) {
-                x.cost_skip_session = Some(s.date);
-                x.last_try = Some(now);
+        let Some(side) = band::mark_decision(&b, Some(bid), Some(ask)) else {
+            return Ok(());
+        };
+        let price = if side == Dir::Buy { ask } else { bid };
+        let cost = match self.entry_cost(&sym, day, price).await {
+            Ok(v) => v.0,
+            Err(e) => {
+                self.save_pullback(
+                    symbol_id,
+                    s,
+                    now,
+                    None,
+                    "cost_evidence_unavailable",
+                    json!({"reason":e}),
+                )
+                .await?;
+                return Ok(());
             }
-            tracing::info!(account = self.account_id(), symbol = %name,
-                kind = "skip", reason, prereg_hash = %self.hash, "strategy 3 decision");
+        };
+        let (peer_move, _) = self.peer_evidence(&name, now);
+        match ArmedPullback::arm(&name, s, b, bid, ask, now, *context, peer_move, cost.total) {
+            Ok(a) => {
+                self.save_pullback(
+                    symbol_id,
+                    s,
+                    now,
+                    Some(a),
+                    "armed_pullback",
+                    json!({"band":b,"cost":cost,"peer_move":peer_move,"opening_quote":day.opening_quote,"impulse_quote":impulse_quote}),
+                )
+                .await?
+            }
+            Err(reason) => {
+                if reason == "cost_ge_r" {
+                    ts::record_decision(self.pool,self.account_id(),Some(&name),"s3_skip",reason,
+                        &json!({"skip_code":reason,"prereg_hash":self.hash,"label":LABEL,"session_date":s.date,"cost":cost,"band":b,"at":now}),self.d.version).await?;
+                    self.syms.get_mut(&symbol_id).unwrap().cost_skip_session = Some(s.date);
+                }
+                self.save_pullback(
+                    symbol_id,
+                    s,
+                    now,
+                    None,
+                    reason,
+                    json!({"band":b,"cost":cost,"macro_context":context,"peer_move":peer_move,"impulse_quote":impulse_quote}),
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn dispatch_pullback(
+        &mut self,
+        symbol_id: i64,
+        armed: ArmedPullback,
+        bid: f64,
+        ask: f64,
+        now: DateTime<Utc>,
+        dispatch_deadline: tokio::time::Instant,
+        dispatch_revision: u64,
+    ) -> anyhow::Result<()> {
+        let s = armed.session;
+        let side = if armed.long { Dir::Buy } else { Dir::Sell };
+        let name = self.syms[&symbol_id].name.clone();
+        if mp::peer(&name).is_none() || band::entry_window(&s, now).is_err() {
             return Ok(());
         }
+        if self.syms[&symbol_id]
+            .last_try
+            .is_some_and(|t| now - t < chrono::Duration::seconds(60))
+        {
+            return Ok(());
+        }
+        if self.funding_retry_at.is_some_and(|t| now < t) {
+            return Ok(());
+        }
+        if session_already_entered(
+            s3s::opens_in_session(self.pool, self.account_id(), symbol_id, s.date).await?,
+        ) {
+            return Ok(());
+        }
+        self.prepare(symbol_id, s, now).await?;
+        let mut sym = self.syms[&symbol_id].clone();
+        sym.bid = Some(bid);
+        sym.ask = Some(ask);
+        let Some(Ok(day)) = sym.day.as_ref() else {
+            return Ok(());
+        };
+        let b = band::band_at(&day.table, &s, armed.origin, armed.armed_at)
+            .map_err(anyhow::Error::msg)?;
+        let Some(limits) = sym.limits else {
+            return Ok(());
+        };
+        let entry_price = if armed.long { ask } else { bid };
+        let (cost, spread, commission_rt, rate) =
+            match self.entry_cost(&sym, day, entry_price).await {
+                Ok(v) => v,
+                Err(e) => {
+                    self.skip(symbol_id, &name, &e, json!({"armed":armed}), now)
+                        .await;
+                    return Ok(());
+                }
+            };
+        let geometry = mp::geometry(
+            armed.long,
+            entry_price,
+            armed.origin,
+            cost.total,
+            limits.digits,
+        )
+        .map_err(anyhow::Error::msg)?;
+        let rel = relative_stop(geometry.risk, limits.digits);
+        let r_price = armed.impulse_range;
+        let mut detail = json!({"production_policy":mp::POLICY,"model":mp::MODEL,"armed":armed,
+            "session_date":s.date,"session":s,"decided_at":now,"bid":bid,"ask":ask,"mid":(bid+ask)/2.0,
+            "side":side,"band":b,"open":armed.origin,"macro_context":armed.macro_context,"volume_limits":limits,
+            "cost":cost,"geometry":geometry,"opening_quote":day.opening_quote,"at_ms":now.timestamp_millis()});
+        let (_, peer_check) = self.peer_evidence(&name, now);
         let e = Entry {
             side,
             band: b,
@@ -2641,7 +3007,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
         };
         detail["sizing"] = json!(sized);
-        let order = match plan_order(&e, &limits, sized.volume) {
+        let order = match pullback_order(&e, &limits, sized.volume) {
             Ok(o) => o,
             Err(why) => {
                 self.skip(symbol_id, &name, &why, detail, now).await;
@@ -2657,14 +3023,21 @@ impl<'a, 'c> Trader<'a, 'c> {
             return Ok(());
         }
         detail["dispatch_policy"] = json!(jiaoyi_ctrader::entry_guard::POLICY);
-        detail["dispatch_deadline"] =
-            json!(mark + chrono::Duration::seconds(band::MARK_WINDOW_SECS));
+        detail["dispatch_deadline"] = json!(
+            (now + chrono::Duration::seconds(5)).min(s.close - chrono::Duration::minutes(30))
+        );
         let entry_guard = jiaoyi_ctrader::entry_guard::EntryGuard {
             connection_generation: self.session.connection().entry_generation(),
             account_id: self.account_id(),
             symbol_id,
             side: dir_side(side),
-            signal: jiaoyi_ctrader::entry_guard::Signal::Mark { band: b },
+            signal: jiaoyi_ctrader::entry_guard::Signal::Pullback {
+                origin: armed.origin,
+                level: armed.level,
+                planned_entry: entry_price,
+                price_digits: limits.digits,
+                peer: peer_check,
+            },
             cost: Some(jiaoyi_ctrader::entry_guard::Cost {
                 prepared_spread: spread,
                 commission_round_trip: commission_rt,
@@ -3036,7 +3409,12 @@ impl<'a, 'c> Trader<'a, 'c> {
         })();
         let mut detail = json!({"strategy": STRATEGY, "reason": reason, "deal_id": deal.deal_id,
             "order_id": deal.order_id, "level": decision_price,
-            "open_entry_key": own.and_then(|o| o.entry_key.clone())});
+            "open_entry_key": own.and_then(|o| o.entry_key.clone()),
+            "received_at_ms":m.received_at.timestamp_millis(),
+            "quote_observation":{"bid":bid,"ask":ask,"mid":bid.zip(ask).map(|(b,a)|(b+a)/2.0),
+                "bid_at":sym.and_then(|s|s.bid_at),"ask_at":sym.and_then(|s|s.ask_at)},
+            "level_label_authority":"nearest-stored-level proxy; raw execution retains broker fields",
+            "exit_dispatch_quote":null});
         if let Some(s) = scored {
             detail["result_r"] = json!(s.result_r);
             detail["banks_a_win"] = json!(s.banks_a_win);
@@ -3260,7 +3638,15 @@ pub async fn run_session_with_event_offset(
     exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let specs = preopen::specs(pool, account_id, &t.syms, t.deposit.is_some()).await?;
     let (prepared_tx, mut prepared_rx) = tokio::sync::watch::channel(HashMap::new());
-    let preparation = preopen::run(pool, session, specs, prepared_tx, shutdown.clone(), offset);
+    let (specs_tx, specs_rx) = tokio::sync::watch::channel(specs);
+    let preparation = preopen::run_with_updates(
+        pool,
+        session,
+        specs_rx,
+        prepared_tx,
+        shutdown.clone(),
+        offset,
+    );
     tokio::pin!(preparation);
     initializing.complete();
     let management = async {
@@ -3282,7 +3668,10 @@ pub async fn run_session_with_event_offset(
                         }
                     }
                 }
-                _ = reconcile_tick.tick() => crate::fast_monitor::observe(live, account_id, "reconcile", t.reconcile(Utc::now())).await?,
+                _ = reconcile_tick.tick() => {
+                    crate::fast_monitor::observe(live, account_id, "reconcile", t.reconcile(Utc::now())).await?;
+                    specs_tx.send_replace(preopen::specs(pool, account_id, &t.syms, t.deposit.is_some()).await?);
+                },
                 _ = clock.tick() => crate::fast_monitor::observe(live, account_id, "session_exit", t.session_end(Utc::now()+offset)).await?,
                 _ = exits.tick() => crate::fast_monitor::observe(live,account_id,"registered_exits",t.check_exits(Utc::now()+offset)).await?,
                 m = execs.recv() => match m {
@@ -3381,6 +3770,8 @@ pub async fn health(
             "trades": if r.as_ref().is_some_and(|r| r.paused) { "paused by the owner: no new entry" } else { "yes" },
             "sizing": if env == "live" { "one broker-minimum trade at a time" } else { "risk_pct of fresh equity" },
             "prereg_file": PREREG_FILE,
+            "active_production_model": mp::MODEL, "production_policy": mp::POLICY,
+            "active_symbols": mp::CORE,
             "prereg_hash": prereg_hash(),
             "open_positions": rec.as_ref().map(|(_, d)| d["positions"].clone()).unwrap_or(json!([])),
             "last_reconcile_at": rec.map(|(at, _)| at),
@@ -3540,6 +3931,34 @@ mod tests {
     }
 
     #[test]
+    fn queued_quote_budget_cannot_extend_trigger_or_session_deadline() {
+        let s = sessions::session_on(
+            &sessions::rule_for("BTCUSD", AssetClass::Crypto).unwrap(),
+            Utc::now().date_naive(),
+        )
+        .unwrap();
+        let t = s.open + chrono::Duration::minutes(30);
+        assert_eq!(dispatch_budget(s, t, t), Duration::from_secs(5));
+        assert_eq!(
+            dispatch_budget(s, t, t + chrono::Duration::seconds(4)),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            dispatch_budget(s, t, t + chrono::Duration::seconds(6)),
+            Duration::ZERO
+        );
+        let near_end = s.close - chrono::Duration::minutes(30) - chrono::Duration::seconds(1);
+        assert_eq!(
+            dispatch_budget(s, near_end, near_end),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            dispatch_budget(s, near_end, near_end + chrono::Duration::seconds(2)),
+            Duration::ZERO
+        );
+    }
+
+    #[test]
     fn test_peer_coherence_unanimity() {
         let (c, mean, unanimous) =
             peer_coherence(&[-9.39, -18.46, -0.20, -5.92, -3.37, -10.63]).unwrap();
@@ -3629,6 +4048,7 @@ mod tests {
             r: 450.0,
             cost: 301.208,
             tp1_distance: 922.21,
+            two_stage: false,
         };
         let close = |v| tp1_close_volume(&b, &BTC, v);
         assert_eq!(close(13), 8, "the planned close");
@@ -3649,7 +4069,8 @@ mod tests {
                 entry: 60_455.0,
                 r: 450.0,
                 cost: 301.208,
-                tp1_distance: 922.21
+                tp1_distance: 922.21,
+                two_stage: false
             })
         );
         assert_eq!(plan_basis(&json!({"entry": {"side": "buy"}})), None);
@@ -3659,7 +4080,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-11-01-strategy3-v7.md"
+            "/../../docs/preregistration-2026-11-08-strategy3-macro-pullback.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)
@@ -3667,9 +4088,9 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect();
         assert_eq!(disk_hash, prereg_hash());
-        assert!(PREREG_TEXT.contains("one entry"));
-        assert!(PREREG_TEXT.contains("cost skip"));
-        assert!(PREREG_TEXT.contains("Do not refit the band"));
+        assert!(PREREG_TEXT.contains(mp::POLICY));
+        assert!(PREREG_TEXT.contains("one recorded entry"));
+        assert!(PREREG_TEXT.contains("50%"));
         assert!(session_already_entered(1));
         assert!(!session_already_entered(0));
         let day = chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();

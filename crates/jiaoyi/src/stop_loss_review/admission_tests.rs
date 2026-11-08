@@ -3,19 +3,22 @@ use super::*;
 use jiaoyi_store::strategy3::{record_order, OrderRow};
 
 async fn opening(pool: &PgPool, account: i64) -> OrderRow {
+    opening_with_stop(pool, account, 100000).await
+}
+async fn opening_with_stop(pool: &PgPool, account: i64, relative_stop: i64) -> OrderRow {
     let at = Utc::now() - Duration::hours(2);
     let key = format!("s3:{account}:opening");
     sqlx::query("INSERT INTO accounts(account_id,environment,login_missing_reason,currency,role_missing_reason,enabled) VALUES($1,'demo','unread','USD','unread',true)")
         .bind(account).execute(pool).await.unwrap();
-    sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk,created_at) VALUES($1,$2,$2,'open',1,'buy',100,100000,10,11,$3)")
-        .bind(account).bind(&key).bind(at).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk,created_at) VALUES($1,$2,$2,'open',1,'buy',100,$4,10,11,$3)")
+        .bind(account).bind(&key).bind(at).bind(relative_stop).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,position_id,deal_id,symbol_id,volume,received_at,raw) VALUES($1,$2,2126,'ORDER_FILLED',$1,$1*10,1,100,$3,''::bytea)")
         .bind(account).bind(&key).bind(at).execute(pool).await.unwrap();
     OrderRow {
         account_id: account,
         entry_key: key,
         label: "jiaoyi-s3".into(),
-        prereg_hash: crate::strategy3::prereg_hash(),
+        prereg_hash: v7_hash(),
         kind: "open".into(),
         symbol: "BTCUSD".into(),
         symbol_id: 1,
@@ -218,6 +221,15 @@ async fn unsupported_missing_contradictory_and_same_time_evidence_remains_unknow
     }
 }
 
+pub(super) fn v7_hash() -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(include_bytes!(
+            "../../../../docs/preregistration-2026-11-01-strategy3-v7.md"
+        ))
+    )
+}
+
 fn v6_hash() -> String {
     format!(
         "{:x}",
@@ -236,11 +248,7 @@ async fn v7_inherits_only_prior_v6_cost_veto_without_rewriting_v6_history(pool: 
         }
         record_case(&pool, &open).await;
         let mut veto = open.clone();
-        veto.prereg_hash = if account == 5 {
-            crate::strategy3::prereg_hash()
-        } else {
-            v6_hash()
-        };
+        veto.prereg_hash = if account == 5 { v7_hash() } else { v6_hash() };
         let at = match account {
             2 => open.decided_at + Duration::seconds(1),
             3 => open.decided_at,
@@ -280,8 +288,7 @@ async fn v7_inherits_only_prior_v6_cost_veto_without_rewriting_v6_history(pool: 
         );
         assert_eq!(case["checks"]["first_recorded_session_entry"], true);
         assert_eq!(
-            case["checks"]["preregistration_matches_current_reference"],
-            !matches!(account, 4 | 5),
+            case["checks"]["preregistration_matches_current_reference"], false,
             "historical recognition must not relabel v6 as the current registration"
         );
     }
@@ -340,5 +347,149 @@ async fn only_v7_uses_unsent_evidence_known_at_the_original_opening(pool: PgPool
             "account {account}: only a known durable unsent outcome releases v7 allowance"
         );
         assert_eq!(case["checks"]["no_prior_recorded_session_cost_veto"], true);
+    }
+}
+
+#[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+async fn pullback_review_uses_arm_not_peak_and_does_not_inherit_legacy_cost_veto(pool: PgPool) {
+    use jiaoyi_core::strategy3::{band::Band, cost_reserve, targets::Dir};
+    use jiaoyi_ctrader::trading::VolumeLimits;
+    for account in 1..=6 {
+        let planned_cost = cost_reserve(0.02, 0.0, 24.0, 100.51).unwrap();
+        let planned = mp::geometry(true, 100.51, 100.0, planned_cost.total, 2).unwrap();
+        let mut open = opening_with_stop(
+            &pool,
+            account,
+            crate::trading::relative_stop(planned.risk, 2),
+        )
+        .await;
+        open.prereg_hash = crate::strategy3::prereg_hash();
+        let at = open.decided_at;
+        let session = Session {
+            date: at.date_naive(),
+            open: at - Duration::minutes(45),
+            close: at + Duration::hours(4),
+            lunch: None,
+        };
+        let band = Band {
+            open: 100.0,
+            sigma: 0.004,
+            lower: 99.6,
+            upper: 100.4,
+            half_width: 0.4,
+            minutes: 30.0,
+        };
+        let context = mp::Context {
+            drift_5: 0.01,
+            drift_20: 0.02,
+            latest_bar_end: session.open,
+        };
+        let arm_cost = cost_reserve(0.02, 0.0, 24.0, 101.01).unwrap();
+        let mut armed = mp::ArmedPullback::arm(
+            "BTCUSD",
+            session,
+            band,
+            100.99,
+            101.01,
+            session.open + Duration::minutes(30),
+            context,
+            None,
+            arm_cost.total,
+        )
+        .unwrap();
+        let limits = VolumeLimits {
+            min: 100,
+            step: 100,
+            max: None,
+            digits: 2,
+        };
+        let cost = cost_reserve(0.02, 0.0, 24.0, 100.51).unwrap();
+        let g = mp::geometry(true, 100.51, 100.0, cost.total, 2).unwrap();
+        let relative = crate::trading::relative_stop(g.risk, 2);
+        let entry = crate::strategy3::Entry {
+            side: Dir::Buy,
+            band,
+            entry_price: 100.51,
+            relative_stop: relative,
+            r: g.risk,
+            cost,
+        };
+        let order = crate::strategy3::pullback_order(&entry, &limits, 100).unwrap();
+        if account == 2 {
+            armed.macro_context.drift_20 = -0.02;
+        }
+        open.bid = Some(100.49);
+        open.ask = Some(100.51);
+        open.detail = json!({"production_policy":mp::POLICY,"session_date":session.date,"session":session,
+            "decided_at":at,"armed":armed,"macro_context":armed.macro_context,"band":band,
+            "bid":100.49,"ask":100.51,"entry":entry,"volume_limits":limits,"order":order});
+        if account == 4 {
+            open.detail["bid"] = json!(100.99);
+            open.detail["ask"] = json!(101.01);
+        }
+        if account != 3 {
+            let arm_receipt = json!({"production_policy":mp::POLICY,"prereg_hash":open.prereg_hash,
+                "state":armed,"bid":100.99,"ask":101.01,
+                "detail":{"band":band,"cost":arm_cost,"peer_move":null}});
+            sqlx::query("INSERT INTO trading_decisions(account_id,symbol,kind,reason,detail,at) VALUES($1,'BTCUSD','s3_pullback_state','armed_pullback',$2,$3)")
+                .bind(account).bind(arm_receipt).bind(armed.armed_at).execute(&pool).await.unwrap();
+            let guard = json!({"policy":jiaoyi_ctrader::entry_guard::POLICY,"account_id":account,"symbol_id":1,
+                "stage":"after_writer_lock","result":"passed","deadline_elapsed":false,
+                "account_revision":0,"expected_account_revision":0,"selected_side":"buy",
+                "bid":{"price":100.49,"receipt_age_ms":0},"ask":{"price":100.51,"receipt_age_ms":0},
+                "pullback_admitted_price":{"price":100.51,"digits":2}});
+            sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,received_at,raw) VALUES($1,$2,0,'ENTRY_VALIDATED_BEFORE_SEND',$3,$4)")
+                .bind(account).bind(&open.entry_key).bind(at).bind(serde_json::to_vec(&guard).unwrap()).execute(&pool).await.unwrap();
+        }
+        // Only the new policy's own cost veto applies, never legacy v6/v7.
+        let mut veto = open.clone();
+        if account != 5 {
+            veto.prereg_hash = v6_hash();
+        }
+        skip(&pool, &veto, at - Duration::minutes(1), true).await;
+        if account == 6 {
+            let prior = OrderRow {
+                entry_key: "s3:6:proven-unsent".into(),
+                decided_at: at - Duration::minutes(1),
+                ..open.clone()
+            };
+            record_order(&pool, &prior).await.unwrap();
+            sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,received_at,raw) VALUES(6,$1,0,'REFUSED_BEFORE_SEND',$2,''::bytea)")
+                .bind(prior.entry_key).bind(at-Duration::seconds(1)).execute(&pool).await.unwrap();
+        }
+        record_case(&pool, &open).await;
+    }
+    let out = evidence(&pool, &[1, 2, 3, 4, 5, 6]).await.unwrap();
+    for c in out["cases"].as_array().unwrap() {
+        let id = c["account_id"].as_i64().unwrap();
+        let checks = &c["checks"];
+        assert_eq!(checks["preregistration_matches_current_reference"], true);
+        assert_eq!(checks["entry_trigger_valid"], id != 4, "retouch {id}");
+        assert_eq!(
+            checks["original_decision_mark_valid"], true,
+            "arm mark, not later entry"
+        );
+        assert_eq!(checks["original_macro_alignment_valid"], id != 2);
+        assert_eq!(
+            checks["original_impulse_valid"],
+            if id == 3 { Value::Null } else { json!(id != 2) }
+        );
+        assert_eq!(checks["original_stop_geometry_valid"], true);
+        assert_eq!(checks["original_target_geometry_valid"], true);
+        assert_eq!(
+            checks["final_dispatch_guard_verified"],
+            if id == 3 { Value::Null } else { json!(true) }
+        );
+        assert_eq!(checks["no_prior_recorded_session_cost_veto"], id != 5);
+        assert_eq!(checks["first_recorded_session_entry"], true);
+        assert_eq!(
+            c["original_entry"]["rule_registration"],
+            crate::strategy3::PREREG_FILE
+        );
+        assert_eq!(c["original_entry"]["setup_complete"], id != 3);
+        assert_eq!(
+            c["net_costs_complete"], false,
+            "missing history must never become measured costs"
+        );
     }
 }
