@@ -1,0 +1,54 @@
+{
+  "all12_rfc_gates_satisfied": false,
+  "byte_identical_complete_runs": 2,
+  "causal_context_checks": 256,
+  "clippy_warnings_denied": "passed",
+  "code_commit": "07239c822f55d22437672da5588f88255df1e0ae",
+  "core_rust_tests": {
+    "failed": 0,
+    "passed": 135
+  },
+  "cost_arithmetic_checks": 3190,
+  "financial_pass": false,
+  "focused_new_tests": {
+    "python": 2,
+    "rust": 1
+  },
+  "format": "passed",
+  "html_layout_checks": [
+    {
+      "brokenAnchors": 0,
+      "contentsCollapsed": true,
+      "pageWidth": 1200,
+      "sections": 13,
+      "tables": 12,
+      "width": 1200
+    },
+    {
+      "brokenAnchors": 0,
+      "contentsCollapsed": true,
+      "pageWidth": 390,
+      "sections": 13,
+      "tables": 12,
+      "width": 390
+    }
+  ],
+  "impulse_floor_checks": 188,
+  "legacy_parity_episodes": 159,
+  "new_broker_requests": 0,
+  "phase2_parity_sessions": 35,
+  "plan_sha256": "9bed468064a81efbe78827f7e376e09254377c4477ac54fad1d5b798877139e9",
+  "production_strategy_files_unchanged": 55,
+  "quarantined_receipt_rejections": 6,
+  "research_python_tests": {
+    "failed": 0,
+    "run": 70,
+    "skipped": 1
+  },
+  "result_sha256": "d35aae8b82889b8bc4168646828978195bd438becdb72898016b2220cbd000d8",
+  "resume_native_cache_hits": 1406,
+  "retained_macro_paths_identical_to_B": 52,
+  "trace": "\u211618,360",
+  "variant_evaluations": 1212,
+  "verified_at_sgt": "08-11-2026 09:28:48 SGT (+08:00)"
+}

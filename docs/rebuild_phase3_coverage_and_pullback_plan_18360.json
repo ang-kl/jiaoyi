@@ -1,0 +1,142 @@
+{
+  "schema": "jiaoyi.offline-tiered-experiment.v1",
+  "trace": "№18,360",
+  "frozen_at_sgt": "2026-11-08T09:16:43.833891+08:00",
+  "phase1_commit": "be21b197e47fafbfe8a9978813c8f74eca8492a1",
+  "input_hashes": {
+    "docs/rebuild_phase1_unified_replay_manifest_18355.json": "622e0d1d3ab3a718d6ecc94bd0de342089d22f66beaf73b0858e30842a6e5a29",
+    "docs/rebuild_phase1_session_calendars_18355.json": "c8eccc375e3a227f7a43c13e4d4d795d92079a68de951ad5f5e3623573ecb67a",
+    "docs/rebuild_phase1_cost_and_contract_inventory_18355.json": "3de980dfca4f531045a99d46fc435587a6ec945110c78dd7c974e8216f930da2",
+    "docs/rebuild_phase1_scope_18355.json": "eae57859cc87640238c6acb1f62463a702e6cea2db8110145fb6d37dd7282adb",
+    "docs/native_target_sizing_offline_plan_18353.json": "01ac6d99acfab79e7e2ea631c13863ad044d2a24ab8e10957594cc22486d284a",
+    "docs/native_target_sizing_offline_results_18353.json": "d4bff3b6fd9791105add4760630cd11ca8a472e689608480d73b04150965bab1",
+    "docs/rebuild_phase2_runner_and_pullback_plan_18358.json": "94c5f2c37131908ea6d3cd76f337003e1ff197232cea3311626ac385f149e338",
+    "docs/rebuild_phase2_runner_and_pullback_results_18358.json": "50b14b847796c296293a01c3dff748b5a8b64888c6054ec77206afb926fd5862"
+  },
+  "new_broker_requests": 0,
+  "live_rules_changed": false,
+  "validation_opened": false,
+  "financial_pass": false,
+  "symbols": [
+    "SpotCrude",
+    "SpotBrent",
+    "US500",
+    "NAS100",
+    "XAUUSD",
+    "XAGUSD",
+    "BTCUSD",
+    "ETHUSD"
+  ],
+  "peer_pairs": [
+    [
+      "SpotCrude",
+      "SpotBrent"
+    ],
+    [
+      "US500",
+      "NAS100"
+    ],
+    [
+      "XAUUSD",
+      "XAGUSD"
+    ],
+    [
+      "BTCUSD",
+      "ETHUSD"
+    ]
+  ],
+  "arms": [
+    "arm_a_breakout_baseline",
+    "arm_b_pure_pullback_retest",
+    "arm_c_macro_filtered_pullback"
+  ],
+  "baseline_parity": {
+    "required_episodes": 159,
+    "reference": "docs/native_target_sizing_offline_results_18353.json",
+    "compare": "Every legacy baseline24 decision mark, strict path and forced path exactly. Reuse original source preparation and window; never replace with augmented prep during parity. Abort new arms on any mismatch.",
+    "phase2_required_sessions": 35
+  },
+  "eligibility": {
+    "denominator": "263 eligible core definitions;35 Phase2 selected;228 exclusions. Quarantined and failed tick receipts already outside263, enumerate separately without double counting.",
+    "tier1": "Exactly35 Phase2 sessions and exact original normalized inputs; verify byte-equivalent native outcomes before any new arms.",
+    "tier2": "Only Phase2-excluded clean_first_read definitions, never repeats or unverified history. Native-open full4h source interval, fresh opening quote within5s, both sides through boundary minus6s, fresh quote at30m within5s and first30m spread required. Range uses all fresh quotes strictly before30m. Receipt completeness does not prove continuous executable history.",
+    "dedup": "One account/symbol/date across both tiers. Tier1 priority, then longest qualified tick interval, then receipt SHA256, before outcomes.",
+    "m30_sources": "Tier2 context uses verified standalone segments with first collection-ledger provenance and eligible clean_first_read episode bars only; exclude embedded repeat/unverified sources. Retain full original store for159/35 parity.",
+    "protected": "Reject all6 quarantined hashes before price loading; all dependencies outside19Aug–5Sep2025 and before24Oct2025."
+  },
+  "window": {
+    "new_comparison": "Native coded strategy open to open+4h; all new entries before end. Oil is07-11UTC, unlike old inherited07-17UTC source/13-17 reporting boundary.",
+    "strict": "Actual SL/TP exits inside four-hour observation window; surviving positions censored, never counted as losses or wins.",
+    "forced": "Separate fresh quote at/after boundary within5s, existing broker bracket first; missing tail stays censored.",
+    "continuation": "At most72 elapsed hours after fill using consecutive M30 bars from exactly window-end; stop at first missing bar, protected interval, ambiguous OHLC path or partial deadline bar. No holiday/weekend gap bridging; short ask uses disclosed frozen entry-spread proxy; financing remains unverified."
+  },
+  "impulse": {
+    "signal": "Tier1 existing sigma-band marks. Tier2 symmetric fixed opening-mid band radius=max(abs(mid-open_mid)) over fresh quotes strictly within first30min, rounded to contract grid. Half-hour marks from30m through before4h; same fresh decision/next-later-quote within5s, executable bid beyond upper or ask below lower, full C<R durable cost veto before threshold and floor at decision/dispatch. One first admitted impulse only.",
+    "one_attempt": "First admitted baseline impulse only; one entry maximum per arm/session. No retry or retune after macro rejection or no pullback.",
+    "open_mid": "First fresh recorded bid/ask midpoint within5s of native session open. Native baseline sigma keeps original M30-bid opening reference for parity.",
+    "extreme": "Freeze the midpoint at the baseline impulse dispatch/fill quote. No future maximum/minimum; no moving retracement target.",
+    "tier2_warning": "Opening-range radius is a predeclared causal volatility proxy, not historical sigma; tiers are different hypotheses and never pooled."
+  },
+  "pullback": {
+    "retracement": 0.5,
+    "entry": "Origin+0.5*(frozen impulse midpoint-origin); buy level rounded down, sell rounded up to contract grid. First strictly later fresh executable ask<=buy level or bid>=sell level before window-end; fill at observed executable price, no unobserved limit fill. Queue availability remains unverified.",
+    "invalidation": "Reject a first touch at or beyond the impulse origin, wrong impulse sign or invalid positive grid. Do not reinterpret an overshoot as an attractive entry.",
+    "risk": "Same Phase2 structural stop, replacing24 by the registered admission reserve (24,2,3.74). Geometry changes by admission scenario; same-entry repricing at all3 costs holds geometry fixed.",
+    "floor": "Registered28 or48bp applies to impulse R, not resized pullback R."
+  },
+  "exit": {
+    "initial_stop_r": -1.0,
+    "breakeven_trigger_r": 1.0,
+    "breakeven_stop_r": 0.0,
+    "gross_target_r": 1.38,
+    "target_rounding": "outward integer grid",
+    "state_machine": "Reuse TwoStageReplay: old brackets first, entry-price amend on a strictly later valid quote, no partial exit or further trailing. Entry-price stop is not net breakeven."
+  },
+  "macro_context": {
+    "nature": "Multi-day technical price-trend proxy only; no news, fundamental or institutional-flow evidence.",
+    "drift": "Last5 and20 completed coded sessions before this session open; net drift=last session final M30 close/oldest session first M30 open-1. All relevant bars must be present and closed before open. Both own drifts strictly align with impulse sign; zero does not confirm.",
+    "peer": "Same account and date, symmetric locked peer. If an eligible peer episode exists, require complete causal45-day peer context and neither5d nor20d drift opposing the impulse. Missing peer context blocks C. If no eligible same-date peer episode exists, permit with explicit peer_absent flag, per owner conditional rule.",
+    "tier2": "Fixed last5/20 coded-session endpoint drift: require oldest session first M30 open and most recent prior-session final M30 close, all causal before open. Interior gaps do not enter endpoint arithmetic; record them. No shorter-horizon fallback. Missing endpoints blocks C and is not a directional success. Same-date clean peer applies the same endpoint rule."
+  },
+  "costs": {
+    "primary_bps_per_side": 24.0,
+    "same_entry_sensitivity_bps_per_side": [
+      2.0,
+      3.74
+    ],
+    "spread": "Actual bid/ask fills charge spread once; never deduct quoted spread again.",
+    "benchmark": "Join13 retained demo entry observations by account and symbol, reporting n and dates. Same-account median signed entry slippage with assumed2 or3.74bp exit sensitivity only; no other-account pooling, no default zero for missing entry benchmark.",
+    "unknown": "Round-trip slippage, commission, swap, conversion, queue and historical-contract terms remain unverified; omitted components mean partial-cost scenario, not actual net profit.",
+    "admission_matrix": "Explicit3 admission assumptions x2 thresholds x2 separate tiers; retain C<R. Therefore24bp normally excludes28–48bp risk. Reprice low-cost admitted paths at24bp to directly measure stress drag, with no silent gate removal."
+  },
+  "verification": [
+    "159 exact legacy baseline paths/marks before new arms",
+    "Focused symmetric pullback/no-same-tick/origin-gap test",
+    "Causal context, account isolation and optional-peer test",
+    "Source hash, protected alias, missing coverage, offline-network and deterministic resume regression checks",
+    "Independent exit-cost arithmetic and unchanged live rule hashes",
+    "263=35+228 and200+20+8 exclusion provenance;6 protected receipt rejection",
+    "Exact35 Phase2 outputs before variants; paired B-to-C winner/loser veto reasons",
+    "Moderate28–48 impulse subgroup and side-by-side fixed-entry stress repricing",
+    "Tier2 causal opening range, threshold/dispatch and cost veto tests"
+  ],
+  "stop_rule": "Single frozen12 tier/threshold/admission cells,3 arms,3 resolution views,all registered cost columns. No outcome-driven tuning; missing sources remain missing. Existing development data only, no independent holdout.",
+  "goal": {
+    "original_win_rate": 0.73,
+    "reference_rr": 1.38,
+    "window": 20,
+    "scope": "each strategy/account",
+    "interim_research_win_rate": 0.5,
+    "new_independent_observations": 0
+  },
+  "phase2_commit": "98fef7aff7d2a82d40fe7ca49fc468e8a079b46e",
+  "thresholds_bps": [
+    48.0,
+    28.0
+  ],
+  "admission_bps_per_side": [
+    24.0,
+    2.0,
+    3.74
+  ]
+}
