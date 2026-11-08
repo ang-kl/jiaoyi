@@ -1,0 +1,462 @@
+{
+  "by_symbol": {
+    "BTCUSD": {
+      "complete_45d_episodes": 0,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 96,
+        "2024-11-12": 94,
+        "2024-11-13": 81,
+        "2024-11-14": 77,
+        "2024-11-15": 77
+      },
+      "missing_unique_slots": 96,
+      "opening_reference_count": 5
+    },
+    "ETHUSD": {
+      "complete_45d_episodes": 0,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 96,
+        "2024-11-12": 94,
+        "2024-11-13": 81,
+        "2024-11-14": 77,
+        "2024-11-15": 77
+      },
+      "missing_unique_slots": 96,
+      "opening_reference_count": 5
+    },
+    "NAS100": {
+      "complete_45d_episodes": 5,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 0,
+        "2024-11-12": 0,
+        "2024-11-13": 0,
+        "2024-11-14": 0,
+        "2024-11-15": 0
+      },
+      "missing_unique_slots": 0,
+      "opening_reference_count": 5
+    },
+    "SpotBrent": {
+      "complete_45d_episodes": 5,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 0,
+        "2024-11-12": 0,
+        "2024-11-13": 0,
+        "2024-11-14": 0,
+        "2024-11-15": 0
+      },
+      "missing_unique_slots": 0,
+      "opening_reference_count": 5
+    },
+    "SpotCrude": {
+      "complete_45d_episodes": 5,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 0,
+        "2024-11-12": 0,
+        "2024-11-13": 0,
+        "2024-11-14": 0,
+        "2024-11-15": 0
+      },
+      "missing_unique_slots": 0,
+      "opening_reference_count": 5
+    },
+    "US500": {
+      "complete_45d_episodes": 5,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 0,
+        "2024-11-12": 0,
+        "2024-11-13": 0,
+        "2024-11-14": 0,
+        "2024-11-15": 0
+      },
+      "missing_unique_slots": 0,
+      "opening_reference_count": 5
+    },
+    "XAGUSD": {
+      "complete_45d_episodes": 5,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 0,
+        "2024-11-12": 0,
+        "2024-11-13": 0,
+        "2024-11-14": 0,
+        "2024-11-15": 0
+      },
+      "missing_unique_slots": 0,
+      "opening_reference_count": 5
+    },
+    "XAUUSD": {
+      "complete_45d_episodes": 5,
+      "episodes": 5,
+      "missing_by_date": {
+        "2024-11-11": 0,
+        "2024-11-12": 0,
+        "2024-11-13": 0,
+        "2024-11-14": 0,
+        "2024-11-15": 0
+      },
+      "missing_unique_slots": 0,
+      "opening_reference_count": 5
+    }
+  },
+  "calendar_evidence": {
+    "captured_contracts": {
+      "BTCUSD": {
+        "holiday": [
+          {
+            "description": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+            "endSecond": 46800,
+            "holidayDate": 20428,
+            "holidayId": 3942,
+            "isRecurring": false,
+            "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 36000
+          }
+        ],
+        "schedule": [
+          {
+            "endSecond": 61140,
+            "startSecond": 0
+          },
+          {
+            "endSecond": 147540,
+            "startSecond": 61260
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 147660
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 234060
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 320460
+          },
+          {
+            "endSecond": 493140,
+            "startSecond": 406860
+          },
+          {
+            "endSecond": 579540,
+            "startSecond": 493260
+          },
+          {
+            "endSecond": 604799,
+            "startSecond": 579660
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "symbolId": 10028
+      },
+      "ETHUSD": {
+        "holiday": [
+          {
+            "description": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+            "endSecond": 46800,
+            "holidayDate": 20428,
+            "holidayId": 3942,
+            "isRecurring": false,
+            "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+            "scheduleTimeZone": "Europe/Bucharest",
+            "startSecond": 36000
+          }
+        ],
+        "schedule": [
+          {
+            "endSecond": 61140,
+            "startSecond": 0
+          },
+          {
+            "endSecond": 147540,
+            "startSecond": 61260
+          },
+          {
+            "endSecond": 233940,
+            "startSecond": 147660
+          },
+          {
+            "endSecond": 320340,
+            "startSecond": 234060
+          },
+          {
+            "endSecond": 406740,
+            "startSecond": 320460
+          },
+          {
+            "endSecond": 493140,
+            "startSecond": 406860
+          },
+          {
+            "endSecond": 579540,
+            "startSecond": 493260
+          },
+          {
+            "endSecond": 604799,
+            "startSecond": 579660
+          }
+        ],
+        "scheduleTimeZone": "America/New_York",
+        "symbolId": 10029
+      }
+    },
+    "historical_2024_authority": false,
+    "path": "docs/rebuild_rfc_gates_5_to_9_evidence_18370.json",
+    "sha256": "b84058c8c2af8a634c5d3dd385ec223c074bdb9a430ac2418d5df96afa76c878"
+  },
+  "capability_boundary": "Trusted local Stage1 runner. Plan-bound permit verifies intervals/type/account/prep; append-only runner ledger enforces one attempt and refuses incomplete or duplicate receipts. It is not a sandbox for arbitrary malicious Python callers.",
+  "collection_ledger_sha256": "167bd17b32f7c316046781bd095184fdf93f8ad1dc3c2dc1affa20bc8c4a50f0",
+  "conclusion": "30 of40 native histories complete; all10 crypto histories have77\u201396 missing bars. All40 opening references exist. Simultaneous repeated BTC/ETH gaps suggest broker availability/session differences, but current2026 schedules do not prove2024 closures. Frozen Phase4 calendar remains unchanged, so Gate3 correctly stops all ticks.",
+  "crypto_gap_details": {
+    "BTCUSD": {
+      "missing_intervals": [
+        {
+          "from": "2024-09-27T21:00:00Z",
+          "to": "2024-09-27T22:00:00Z"
+        },
+        {
+          "from": "2024-09-28T08:00:00Z",
+          "to": "2024-09-28T14:30:00Z"
+        },
+        {
+          "from": "2024-09-29T08:00:00Z",
+          "to": "2024-09-29T10:00:00Z"
+        },
+        {
+          "from": "2024-10-04T21:00:00Z",
+          "to": "2024-10-04T22:00:00Z"
+        },
+        {
+          "from": "2024-10-05T06:00:00Z",
+          "to": "2024-10-05T15:00:00Z"
+        },
+        {
+          "from": "2024-10-06T08:00:00Z",
+          "to": "2024-10-06T10:00:00Z"
+        },
+        {
+          "from": "2024-10-11T21:00:00Z",
+          "to": "2024-10-11T22:00:00Z"
+        },
+        {
+          "from": "2024-10-12T06:00:00Z",
+          "to": "2024-10-12T08:30:00Z"
+        },
+        {
+          "from": "2024-10-13T08:00:00Z",
+          "to": "2024-10-13T10:00:00Z"
+        },
+        {
+          "from": "2024-10-18T21:00:00Z",
+          "to": "2024-10-18T22:00:00Z"
+        },
+        {
+          "from": "2024-10-19T07:00:00Z",
+          "to": "2024-10-19T10:00:00Z"
+        },
+        {
+          "from": "2024-10-20T08:00:00Z",
+          "to": "2024-10-20T10:00:00Z"
+        },
+        {
+          "from": "2024-10-25T21:00:00Z",
+          "to": "2024-10-25T22:00:00Z"
+        },
+        {
+          "from": "2024-10-27T08:00:00Z",
+          "to": "2024-10-27T10:00:00Z"
+        },
+        {
+          "from": "2024-11-01T21:00:00Z",
+          "to": "2024-11-01T22:00:00Z"
+        },
+        {
+          "from": "2024-11-02T10:00:00Z",
+          "to": "2024-11-02T15:00:00Z"
+        },
+        {
+          "from": "2024-11-03T08:00:00Z",
+          "to": "2024-11-03T10:00:00Z"
+        },
+        {
+          "from": "2024-11-08T22:00:00Z",
+          "to": "2024-11-08T23:00:00Z"
+        },
+        {
+          "from": "2024-11-09T08:00:00Z",
+          "to": "2024-11-09T09:00:00Z"
+        },
+        {
+          "from": "2024-11-10T08:00:00Z",
+          "to": "2024-11-10T10:00:00Z"
+        }
+      ],
+      "utc_weekday_time_counts": {
+        "Fri 21:00": 6,
+        "Fri 21:30": 6,
+        "Fri 22:00": 1,
+        "Fri 22:30": 1,
+        "Sat 06:00": 2,
+        "Sat 06:30": 2,
+        "Sat 07:00": 3,
+        "Sat 07:30": 3,
+        "Sat 08:00": 5,
+        "Sat 08:30": 4,
+        "Sat 09:00": 3,
+        "Sat 09:30": 3,
+        "Sat 10:00": 3,
+        "Sat 10:30": 3,
+        "Sat 11:00": 3,
+        "Sat 11:30": 3,
+        "Sat 12:00": 3,
+        "Sat 12:30": 3,
+        "Sat 13:00": 3,
+        "Sat 13:30": 3,
+        "Sat 14:00": 3,
+        "Sat 14:30": 2,
+        "Sun 08:00": 7,
+        "Sun 08:30": 7,
+        "Sun 09:00": 7,
+        "Sun 09:30": 7
+      }
+    },
+    "ETHUSD": {
+      "missing_intervals": [
+        {
+          "from": "2024-09-27T21:00:00Z",
+          "to": "2024-09-27T22:00:00Z"
+        },
+        {
+          "from": "2024-09-28T08:00:00Z",
+          "to": "2024-09-28T14:30:00Z"
+        },
+        {
+          "from": "2024-09-29T08:00:00Z",
+          "to": "2024-09-29T10:00:00Z"
+        },
+        {
+          "from": "2024-10-04T21:00:00Z",
+          "to": "2024-10-04T22:00:00Z"
+        },
+        {
+          "from": "2024-10-05T06:00:00Z",
+          "to": "2024-10-05T15:00:00Z"
+        },
+        {
+          "from": "2024-10-06T08:00:00Z",
+          "to": "2024-10-06T10:00:00Z"
+        },
+        {
+          "from": "2024-10-11T21:00:00Z",
+          "to": "2024-10-11T22:00:00Z"
+        },
+        {
+          "from": "2024-10-12T06:00:00Z",
+          "to": "2024-10-12T08:30:00Z"
+        },
+        {
+          "from": "2024-10-13T08:00:00Z",
+          "to": "2024-10-13T10:00:00Z"
+        },
+        {
+          "from": "2024-10-18T21:00:00Z",
+          "to": "2024-10-18T22:00:00Z"
+        },
+        {
+          "from": "2024-10-19T07:00:00Z",
+          "to": "2024-10-19T10:00:00Z"
+        },
+        {
+          "from": "2024-10-20T08:00:00Z",
+          "to": "2024-10-20T10:00:00Z"
+        },
+        {
+          "from": "2024-10-25T21:00:00Z",
+          "to": "2024-10-25T22:00:00Z"
+        },
+        {
+          "from": "2024-10-27T08:00:00Z",
+          "to": "2024-10-27T10:00:00Z"
+        },
+        {
+          "from": "2024-11-01T21:00:00Z",
+          "to": "2024-11-01T22:00:00Z"
+        },
+        {
+          "from": "2024-11-02T10:00:00Z",
+          "to": "2024-11-02T15:00:00Z"
+        },
+        {
+          "from": "2024-11-03T08:00:00Z",
+          "to": "2024-11-03T10:00:00Z"
+        },
+        {
+          "from": "2024-11-08T22:00:00Z",
+          "to": "2024-11-08T23:00:00Z"
+        },
+        {
+          "from": "2024-11-09T08:00:00Z",
+          "to": "2024-11-09T09:00:00Z"
+        },
+        {
+          "from": "2024-11-10T08:00:00Z",
+          "to": "2024-11-10T10:00:00Z"
+        }
+      ],
+      "utc_weekday_time_counts": {
+        "Fri 21:00": 6,
+        "Fri 21:30": 6,
+        "Fri 22:00": 1,
+        "Fri 22:30": 1,
+        "Sat 06:00": 2,
+        "Sat 06:30": 2,
+        "Sat 07:00": 3,
+        "Sat 07:30": 3,
+        "Sat 08:00": 5,
+        "Sat 08:30": 4,
+        "Sat 09:00": 3,
+        "Sat 09:30": 3,
+        "Sat 10:00": 3,
+        "Sat 10:30": 3,
+        "Sat 11:00": 3,
+        "Sat 11:30": 3,
+        "Sat 12:00": 3,
+        "Sat 12:30": 3,
+        "Sat 13:00": 3,
+        "Sat 13:30": 3,
+        "Sat 14:00": 3,
+        "Sat 14:30": 2,
+        "Sun 08:00": 7,
+        "Sun 08:30": 7,
+        "Sun 09:00": 7,
+        "Sun 09:30": 7
+      }
+    }
+  },
+  "financial_pass": false,
+  "new_broker_requests_by_this_audit": 0,
+  "next_step": "A separately versioned calendar/dependency policy requires authoritative historical closures or a newly declared partial-history hypothesis; do not refill spent intervals or drop crypto from this frozen40 denominator. Any changed candidate evaluated on this already collected week must disclose reused preparation/price inspection and cannot inherit the original frozen candidate qualification.",
+  "plan_sha256": "84ba8fb36dcad6a14ed6293d3559374580e33f3c6ea4e015af3371c127998497",
+  "receipt_reconciliation": {
+    "all_requests_after_freeze": true,
+    "all_requests_match_frozen_intervals": true,
+    "all_verified_files": 141,
+    "failed_receipts": 0,
+    "hashes_reconciled": 112,
+    "requests_started": 112,
+    "reused_cached_source_hashes_reconciled": 29,
+    "tick_requests": 0,
+    "unique_receipts_finished": 112
+  },
+  "status": "blocked_preparation_before_ticks",
+  "trace": "\u211618,380",
+  "validation_opened": false
+}

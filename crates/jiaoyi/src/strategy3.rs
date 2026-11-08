@@ -35,7 +35,7 @@ use jiaoyi_core::strategy3::band::{self, Band, SigmaTable, M30};
 use jiaoyi_core::strategy3::macro_pullback::{self as mp, ArmedPullback, Touch};
 use jiaoyi_core::strategy3::sessions::{self, Session, SessionRule};
 use jiaoyi_core::strategy3::targets::{self, Dir, Plan};
-use jiaoyi_core::strategy3::{cost_reserve, slippage_bps_per_side, CostReserve};
+use jiaoyi_core::strategy3::{cost_reserve, CostReserve};
 use jiaoyi_core::universe::AssetClass;
 use jiaoyi_ctrader::trading::{
     self as gate, Command, EventRecord, Intent, IntentWrite, Ledger, Outcome, Policy, SendError,
@@ -65,10 +65,10 @@ pub const LABEL: &str = "jiaoyi-s3";
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-11-08-strategy3-macro-pullback.md";
+pub const PREREG_FILE: &str = "docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-11-08-strategy3-macro-pullback.md");
+    include_str!("../../../docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -213,8 +213,11 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
         "bid": sym.bid,
         "ask": sym.ask,
         "nearer_edge": edge,
+        "macro_context_ready": day.macro_context.is_ok(),
+        "macro_context_error": day.macro_context.as_ref().err(),
         "distance_half_widths": distance.filter(|d| d.is_finite()),
-        "reason": if distance.is_none() { Some("no quote yet") } else { None },
+        "reason": day.macro_context.as_ref().err().map(String::as_str)
+            .or_else(|| distance.is_none().then_some("no quote yet")),
     })
 }
 
@@ -631,7 +634,9 @@ pub fn plan_basis(detail: &Value) -> Option<PlanBasis> {
         r: e["r"].as_f64()?,
         cost: e["cost"]["total"].as_f64()?,
         tp1_distance: detail["order"]["tp1_distance"].as_f64()?,
-        two_stage: detail["production_policy"].as_str() == Some(mp::POLICY),
+        two_stage: detail["production_policy"]
+            .as_str()
+            .is_some_and(mp::two_stage_policy),
     })
 }
 
@@ -1847,9 +1852,9 @@ impl<'a, 'c> Trader<'a, 'c> {
                     "rule": rule.describe(),
                     "macro_context": d.macro_context,
                 });
-                let reason = match &d.open {
-                    Ok(o) => format!("session {} prepared: open {o}", d.session.date),
-                    Err(why) => why.clone(),
+                let reason = match (&d.open, &d.macro_context) {
+                    (Err(why), _) | (_, Err(why)) => format!("session preparation incomplete: {why}"),
+                    (Ok(o), Ok(_)) => format!("session {} opening reference and macro prepared: open {o}; sigma checked per mark", d.session.date),
                 };
                 self.d.note(Some(&name), "session", &reason, detail).await;
             }
@@ -2162,7 +2167,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             volume: Some(o.volume),
             detail: json!({"strategy": STRATEGY, "from_stop": current_stop, "best": best,
                 "r": r, "new_stop": new_stop, "open_entry_key": o.entry_key,
-                "exit_policy": if two_stage { mp::POLICY } else { "legacy_recorded_plan" },
+                "exit_policy": if two_stage { "recorded_two_stage_entry_plan" } else { "legacy_recorded_plan" },
                 "checked_at": now, "mid": bid.zip(ask).map(|(b,a)|(b+a)/2.0)}),
         };
         let ledger = S3Ledger {
@@ -2591,10 +2596,17 @@ impl<'a, 'c> Trader<'a, 'c> {
     async fn entry_cost(
         &mut self,
         sym: &Sym,
-        day: &Day,
+        _day: &Day,
         price: f64,
     ) -> Result<(CostReserve, f64, f64, f64), String> {
-        let spread = day.spread.as_ref().map(|v| v.0).map_err(Clone::clone)?;
+        let spread = match (sym.bid, sym.ask) {
+            (Some(bid), Some(ask))
+                if bid.is_finite() && ask.is_finite() && bid > 0.0 && ask >= bid =>
+            {
+                ask - bid
+            }
+            _ => return Err("current executable spread unavailable".into()),
+        };
         let rate = self
             .rate(sym.id)
             .ok_or("no broker quote→deposit rate for this symbol yet")?;
@@ -2610,12 +2622,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             .get(sym.class.as_str())
             .map_or(book.overall_median, |v| v.0);
         let commission_rt = 2.0 * per_unit / rate;
-        let cost = cost_reserve(
-            spread,
-            commission_rt,
-            slippage_bps_per_side(sym.class),
-            price,
-        )?;
+        let cost = cost_reserve(spread, commission_rt, mp::LIVE_SLIPPAGE_BPS_PER_SIDE, price)?;
         Ok((cost, spread, commission_rt, rate))
     }
 
@@ -3041,7 +3048,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             cost: Some(jiaoyi_ctrader::entry_guard::Cost {
                 prepared_spread: spread,
                 commission_round_trip: commission_rt,
-                slippage_bps_per_side: slippage_bps_per_side(sym.class),
+                slippage_bps_per_side: mp::LIVE_SLIPPAGE_BPS_PER_SIDE,
                 original_r: r_price,
             }),
             expires: dispatch_deadline,
@@ -3656,8 +3663,8 @@ pub async fn run_session_with_event_offset(
                 changed=prepared_rx.changed()=>{
                     if changed.is_err() {return Ok(())}
                     let ready=prepared_rx.borrow_and_update().clone();
-                    for p in ready.values() {
-                        if let Some(sym)=p.symbol_id.and_then(|id|t.syms.get_mut(&id)) {sym.preopen=Some(p.clone());}
+                    for (id, sym) in &mut t.syms {
+                        sym.preopen=preopen::preferred(ready.values(), *id, Utc::now()+offset).cloned();
                     }
                 },
                 _ = shutdown.wait() => return Ok(()),
@@ -3772,6 +3779,9 @@ pub async fn health(
             "prereg_file": PREREG_FILE,
             "active_production_model": mp::MODEL, "production_policy": mp::POLICY,
             "active_symbols": mp::CORE,
+            "live_cost_reserve_bps_per_side": mp::LIVE_SLIPPAGE_BPS_PER_SIDE,
+            "live_cost_evidence_status": "owner_selected_allowance_not_verified_round_trip_calibration",
+            "spread_basis": "current_two_sided_quote_plus_recorded_commission",
             "prereg_hash": prereg_hash(),
             "open_positions": rec.as_ref().map(|(_, d)| d["positions"].clone()).unwrap_or(json!([])),
             "last_reconcile_at": rec.map(|(at, _)| at),
@@ -4074,13 +4084,21 @@ mod tests {
             })
         );
         assert_eq!(plan_basis(&json!({"entry": {"side": "buy"}})), None);
+        for policy in ["s3_macro_pullback_owner_18377_v1", mp::POLICY] {
+            let mut saved = detail.clone();
+            saved["production_policy"] = json!(policy);
+            assert!(
+                plan_basis(&saved).unwrap().two_stage,
+                "old recorded pullbacks must not become legacy Chandelier exits"
+            );
+        }
     }
 
     #[test]
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-11-08-strategy3-macro-pullback.md"
+            "/../../docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)

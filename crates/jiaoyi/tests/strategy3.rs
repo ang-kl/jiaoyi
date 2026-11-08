@@ -1127,10 +1127,9 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
         _=tokio::time::sleep(std::time::Duration::from_secs(2))=>{},
     }
     let l = log.lock().unwrap();
-    assert_eq!(
-        l.trendbar_requests.len(),
-        1,
-        "the flat symbol's history request started"
+    assert!(
+        l.trendbar_requests.iter().any(|request| request.0 == OTHER),
+        "the flat symbol's history request started alongside background warm-up"
     );
     assert!(
         l.orders.is_empty(),
@@ -1785,25 +1784,25 @@ async fn an_impulse_waits_for_pullback_then_locks_breakeven_and_full_target(pool
         .unwrap();
         let o = orders(&log);
         assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
-        assert_eq!(o[0].relative_stop_loss, Some(76_121_000));
-        assert_eq!(o[0].relative_take_profit, Some(105_047_000));
-        assert_eq!(o[0].volume, 7);
+        assert_eq!(o[0].relative_stop_loss, Some(51_623_000));
+        assert_eq!(o[0].relative_take_profit, Some(71_240_000));
+        assert_eq!(o[0].volume, 11);
         let pid = t.own.values().next().unwrap().position_id;
         assert!(t.own[&pid].plan_basis.unwrap().two_stage);
         assert!(!t.own[&pid].partial);
-        t.on_quote(BTC, Some(61_223.20), Some(61_228.20), at(31))
+        t.on_quote(BTC, Some(60_978.22), Some(60_983.22), at(31))
             .await
             .unwrap();
         assert!(
             log.lock().unwrap().amends.is_empty(),
             "no stop tightening below +1R"
         );
-        t.on_quote(BTC, Some(61_223.21), Some(61_228.21), at(32))
+        t.on_quote(BTC, Some(60_978.23), Some(60_983.23), at(32))
             .await
             .unwrap();
         assert_eq!(log.lock().unwrap().amends.len(), 1);
         assert_eq!(t.own[&pid].stop, Some(60_462.0));
-        t.on_quote(BTC, Some(61_300.0), Some(61_305.0), at(33))
+        t.on_quote(BTC, Some(61_000.0), Some(61_005.0), at(33))
             .await
             .unwrap();
         assert_eq!(
@@ -1812,10 +1811,10 @@ async fn an_impulse_waits_for_pullback_then_locks_breakeven_and_full_target(pool
             "BE is a stage, not a continuing trail"
         );
         let target = t.own[&pid].take_profit.unwrap();
-        assert_eq!(target, 61_512.47);
+        assert_eq!(target, 61_174.40);
         let p = f.positions.lock().unwrap()[0].clone();
         t.server_event(&jiaoyi_ctrader::testkit::server_fill(
-            DEMO, p, 991, target, 7, true, false,
+            DEMO, p, 991, target, 11, true, false,
         ))
         .await
         .unwrap();
@@ -2007,7 +2006,7 @@ async fn live_takes_one_minimum_trade_only_with_no_other_program_position(pool: 
             assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
             assert_eq!(o[0].volume, 1);
             // Every new position uses the full 1.38R broker target.
-            assert_eq!(o[0].relative_take_profit, Some(105_047_000));
+            assert_eq!(o[0].relative_take_profit, Some(71_240_000));
         }
     );
 }
@@ -3288,7 +3287,7 @@ async fn the_owners_pause_stops_new_entries_and_the_exits_still_run(pool: PgPool
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1, "{:?}", decisions(&pool).await);
-        assert_eq!(orders(&log)[0].volume, 7);
+        assert_eq!(orders(&log)[0].volume, 11);
         // Paused again: the position keeps its exits.
         owner_sets_pause(&pool, 1).await;
         t.enter_pullback(BTC, Some(61_384.21), Some(62_118.0), at(61))
@@ -3302,7 +3301,7 @@ async fn the_owners_pause_stops_new_entries_and_the_exits_still_run(pool: PgPool
         );
         t.reconcile(Utc::now()).await.unwrap();
         t.session_end(at(24 * 60)).await.unwrap();
-        assert_eq!(closes(&log), vec![7], "full session end while paused");
+        assert_eq!(closes(&log), vec![11], "full session end while paused");
         assert_eq!(orders(&log).len(), 1, "no new entry");
     });
     // Only the owner wrote the pause.
@@ -4546,10 +4545,9 @@ async fn quantity_persistence_failure_ends_s3_actor(pool: PgPool, during_read: b
         "no later management after lost evidence"
     );
     if during_read {
-        assert_eq!(
-            log.trendbar_requests.len(),
-            1,
-            "failure occurred inside the held-read exit pump"
+        assert!(
+            (1..=2).contains(&log.trendbar_requests.len()),
+            "fatal receipt failure interrupts entry and concurrent warm-up before further pages"
         );
     }
     let positions = f.positions.lock().unwrap();

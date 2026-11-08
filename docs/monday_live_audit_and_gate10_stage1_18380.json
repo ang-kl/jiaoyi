@@ -1,0 +1,1047 @@
+{
+  "trace": "№18,380",
+  "generated_at_sgt": "2026-11-08T21:17:07.490426+08:00",
+  "status": "production_fix_verified_locally_stage1_blocked_preparation_release_pending",
+  "monday_live_readiness": {
+    "observed_before_release": {
+      "observed_at": "2026-11-08T13:08:48.082918+00:00",
+      "source": "live-audit-health.json",
+      "mutations_performed": 0,
+      "accounts": [
+        {
+          "account_id": 43002148,
+          "s3_paused": false,
+          "s1_paused": false,
+          "s3_loop": "alive",
+          "s1_loop": "alive",
+          "recorder_subscribed_ids": [
+            2,
+            4,
+            5,
+            12,
+            41,
+            42,
+            10000,
+            10003,
+            10006,
+            10011,
+            10014,
+            10015,
+            10026,
+            10027,
+            10052,
+            10053,
+            10054
+          ],
+          "core_with_populated_band": [
+            "BTCUSD",
+            "ETHUSD"
+          ],
+          "current_contract_core_symbol_ids": {
+            "XAUUSD": 41,
+            "XAGUSD": 42,
+            "US500": 10013,
+            "NAS100": 10014,
+            "BTCUSD": 10026,
+            "ETHUSD": 10027,
+            "SpotBrent": 10052,
+            "SpotCrude": 10053
+          },
+          "core_recorder_subscription_proof": {
+            "XAUUSD": true,
+            "XAGUSD": true,
+            "US500": false,
+            "NAS100": true,
+            "BTCUSD": true,
+            "ETHUSD": true,
+            "SpotBrent": true,
+            "SpotCrude": true
+          },
+          "macro_preparation_verified": false,
+          "macro_preparation_note": "Band/open evidence alone does not establish complete causal 5d/20d M30 context."
+        },
+        {
+          "account_id": 46130058,
+          "s3_paused": false,
+          "s1_paused": false,
+          "s3_loop": "alive",
+          "s1_loop": "alive",
+          "recorder_subscribed_ids": [
+            2,
+            4,
+            5,
+            12,
+            41,
+            42,
+            10000,
+            10003,
+            10006,
+            10011,
+            10014,
+            10015,
+            10028,
+            10029,
+            10053,
+            10054,
+            10055
+          ],
+          "core_with_populated_band": [
+            "BTCUSD",
+            "ETHUSD"
+          ],
+          "current_contract_core_symbol_ids": {
+            "XAUUSD": 41,
+            "XAGUSD": 42,
+            "US500": 10013,
+            "NAS100": 10014,
+            "BTCUSD": 10028,
+            "ETHUSD": 10029,
+            "SpotBrent": 10053,
+            "SpotCrude": 10054
+          },
+          "core_recorder_subscription_proof": {
+            "XAUUSD": true,
+            "XAGUSD": true,
+            "US500": false,
+            "NAS100": true,
+            "BTCUSD": true,
+            "ETHUSD": true,
+            "SpotBrent": true,
+            "SpotCrude": true
+          },
+          "macro_preparation_verified": false,
+          "macro_preparation_note": "Band/open evidence alone does not establish complete causal 5d/20d M30 context."
+        },
+        {
+          "account_id": 47790949,
+          "s3_paused": false,
+          "s1_paused": false,
+          "s3_loop": "alive",
+          "s1_loop": "alive",
+          "recorder_subscribed_ids": [
+            2,
+            4,
+            5,
+            12,
+            41,
+            42,
+            10000,
+            10003,
+            10006,
+            10011,
+            10014,
+            10015,
+            10028,
+            10029,
+            10053,
+            10054,
+            10055
+          ],
+          "core_with_populated_band": [
+            "BTCUSD",
+            "ETHUSD"
+          ],
+          "current_contract_core_symbol_ids": {
+            "XAUUSD": 41,
+            "XAGUSD": 42,
+            "US500": 10013,
+            "NAS100": 10014,
+            "BTCUSD": 10028,
+            "ETHUSD": 10029,
+            "SpotBrent": 10053,
+            "SpotCrude": 10054
+          },
+          "core_recorder_subscription_proof": {
+            "XAUUSD": true,
+            "XAGUSD": true,
+            "US500": false,
+            "NAS100": true,
+            "BTCUSD": true,
+            "ETHUSD": true,
+            "SpotBrent": true,
+            "SpotCrude": true
+          },
+          "macro_preparation_verified": false,
+          "macro_preparation_note": "Band/open evidence alone does not establish complete causal 5d/20d M30 context."
+        },
+        {
+          "account_id": 49236051,
+          "s3_paused": false,
+          "s1_paused": false,
+          "s3_loop": "alive",
+          "s1_loop": "alive",
+          "recorder_subscribed_ids": [
+            2,
+            4,
+            5,
+            12,
+            41,
+            42,
+            10000,
+            10003,
+            10006,
+            10011,
+            10014,
+            10015,
+            10028,
+            10029,
+            10053,
+            10054,
+            10055
+          ],
+          "core_with_populated_band": [
+            "BTCUSD",
+            "ETHUSD"
+          ],
+          "current_contract_core_symbol_ids": {
+            "XAUUSD": 41,
+            "XAGUSD": 42,
+            "US500": 10013,
+            "NAS100": 10014,
+            "BTCUSD": 10028,
+            "ETHUSD": 10029,
+            "SpotBrent": 10053,
+            "SpotCrude": 10054
+          },
+          "core_recorder_subscription_proof": {
+            "XAUUSD": true,
+            "XAGUSD": true,
+            "US500": false,
+            "NAS100": true,
+            "BTCUSD": true,
+            "ETHUSD": true,
+            "SpotBrent": true,
+            "SpotCrude": true
+          },
+          "macro_preparation_verified": false,
+          "macro_preparation_note": "Band/open evidence alone does not establish complete causal 5d/20d M30 context."
+        }
+      ],
+      "findings": [
+        "All four enabled runtime account loops alive and S1/S3 owner pause false.",
+        "S3 current BTCUSD/ETHUSD band/open populated at 13:00UTC; public evidence does not certify their macro context. Monday other core preparation not started.",
+        "Confirmed all4 recorders lackUS500 brokerSymbolId10013, despite same-day contract and subsequent successful18-symbol loader resolution; recorderrefresh previouslyhourly.",
+        "No production HTTP route writes trading settings; no unpause needed."
+      ]
+    },
+    "all_4_accounts_switched_on_unpaused": true,
+    "all_8_core_symbols_m30_warmed_and_subscribed": false,
+    "post_deploy_readiness": "pending_release_verification_in_PR",
+    "new_policy": {
+      "trace": "№18,380",
+      "policy": "s3_macro_pullback_owner_18380_v1",
+      "registration": "docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md",
+      "live_cost_reserve_bps_per_side": 3.74,
+      "cost_evidence_status": "owner_selected_allowance_not_verified_round_trip_calibration",
+      "cost_formula": "current_two_sided_spread + recorded_commission_round_trip + 2*3.74bps*executable_price",
+      "stress_research_reserve_unchanged": 24.0,
+      "impulse_floor_bps": 48.0,
+      "fixes": [
+        "Live admission and structural geometry use3.74pluscurrentexecutable spread;finalwriter neverlowersadmittedspreadand repricesawideningcurrent spread onlyforPullback signals",
+        "Previous18377two-stagepositionsretainoriginalRandexits;stoplossreviewrecognisesboth registrations andtheir ownreceipts",
+        "Currentandnearestupcoming sessionswarm immediately afterstart;incompletehistoryretriesbounded5minutesevenbeforeT-20",
+        "Onlyexplicitfuture-dependentmacrohistorywaitsuntilT-20;finalpriorbartriggerscausalretryatopen",
+        "CurrentprepcontextpreferredovernextsessionregardlessHashMaporder",
+        "Macroreadiness/error exposedinpreopenandtrigger-distancehealth;openingreferencealoneisnotreportedfullyprepared"
+      ],
+      "warmup_contract": {
+        "history_window_calendar_days": 45,
+        "current_and_next_attempt_on_start": true,
+        "complete_only_when_all_required_active_slots_exist": true,
+        "noncrypto_weekends_already_excluded": true,
+        "missing_active_bars_never_filled_or_ignored": true,
+        "future_crypto_final_bar_cannot_be_ready_before_session_open": true,
+        "current_crypto_broker_closed_full_M30_slots": 0,
+        "current_schedule_authority": "captured18370symbolweeklyintervals;2mindailyNYmaintenance(or6minliveFriday)doesnotauthorisedroppingwholeM30bar",
+        "missing_peer_policy": "optional unavailable receipt; onlyfreshopposingpeer veto",
+        "all8_ready_claim_requires": "postdeployaccount/symbolspecificcompletepreparedcontextANDbrokeracksubscriptionids;configurednamesaloneinsufficient",
+        "early_transient_failure_retry_seconds": 300,
+        "suppressed_until_T20_only_for_error": "macro_incomplete_or_noncausal_session"
+      },
+      "tests": {
+        "core_macro_pullback": {
+          "passed": 9
+        },
+        "preopen": {
+          "passed": 5
+        },
+        "stop_loss_review": {
+          "passed": 17
+        },
+        "entry_guard": {
+          "passed": 7
+        },
+        "s3_integration": {
+          "passed": 78,
+          "ignored": 1
+        },
+        "compile_workspace_tests": "PASS",
+        "clippy_workspace_all_targets": "PASS"
+      },
+      "limitations": [
+        "3.74isexplicitowneroperationalallowance;externalfullroundtripcostevidenceincomplete",
+        "Historical2023/2024cryptoFriday/Saturdaymissingbarscannotbeexplainedbycurrent2026near24/7schedule",
+        "Authoritativeholidays/shortsessionsnotinvented;trulyincompleteactivehistoryremainsexplicitrefusal"
+      ],
+      "financial_pass": false,
+      "new_verification_orders": 0,
+      "completed_at_utc": "2026-11-08T13:14:44.991791+00:00"
+    },
+    "current_crypto_calendar_evidence": {
+      "trace": "№18,380",
+      "as_of_utc": "2026-11-08T13:14:57.906953+00:00",
+      "source_file": "docs/rebuild_rfc_gates_5_to_9_audit_18370.json",
+      "source_sha256": "e37b00490dd05cf1caf530d8675211a81ed4316a3633716445709e7824a42522",
+      "current_broker_schedule_authority": [
+        {
+          "account_id": 49236051,
+          "symbol": "BTCUSD",
+          "symbol_id": 10028,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:57:55.157238+00:00",
+          "broker_symbol_sha256": "73456d45f77e88fc5c084747ab56316c2519f5eef8a5340a36ad713e5a051479",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2025-12-06",
+              "holiday_id": 3942,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+              "recurring": false,
+              "timezone": "Europe/Bucharest",
+              "utc_bounds": {
+                "from": "2025-12-06T08:00:00+00:00",
+                "to": "2025-12-06T11:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        },
+        {
+          "account_id": 49236051,
+          "symbol": "ETHUSD",
+          "symbol_id": 10029,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:57:55.157238+00:00",
+          "broker_symbol_sha256": "0eae7f9be7899ff7fea31423109dd1d20986f56578b1e6e050fd8585a1a554e6",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2025-12-06",
+              "holiday_id": 3942,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+              "recurring": false,
+              "timezone": "Europe/Bucharest",
+              "utc_bounds": {
+                "from": "2025-12-06T08:00:00+00:00",
+                "to": "2025-12-06T11:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        },
+        {
+          "account_id": 46130058,
+          "symbol": "BTCUSD",
+          "symbol_id": 10028,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:58:00.058269+00:00",
+          "broker_symbol_sha256": "73456d45f77e88fc5c084747ab56316c2519f5eef8a5340a36ad713e5a051479",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2025-12-06",
+              "holiday_id": 3942,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+              "recurring": false,
+              "timezone": "Europe/Bucharest",
+              "utc_bounds": {
+                "from": "2025-12-06T08:00:00+00:00",
+                "to": "2025-12-06T11:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        },
+        {
+          "account_id": 46130058,
+          "symbol": "ETHUSD",
+          "symbol_id": 10029,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:58:00.058269+00:00",
+          "broker_symbol_sha256": "0eae7f9be7899ff7fea31423109dd1d20986f56578b1e6e050fd8585a1a554e6",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2025-12-06",
+              "holiday_id": 3942,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+              "recurring": false,
+              "timezone": "Europe/Bucharest",
+              "utc_bounds": {
+                "from": "2025-12-06T08:00:00+00:00",
+                "to": "2025-12-06T11:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "BTCUSD",
+          "symbol_id": 10028,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:58:04.991932+00:00",
+          "broker_symbol_sha256": "73456d45f77e88fc5c084747ab56316c2519f5eef8a5340a36ad713e5a051479",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2025-12-06",
+              "holiday_id": 3942,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+              "recurring": false,
+              "timezone": "Europe/Bucharest",
+              "utc_bounds": {
+                "from": "2025-12-06T08:00:00+00:00",
+                "to": "2025-12-06T11:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "ETHUSD",
+          "symbol_id": 10029,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:58:04.991932+00:00",
+          "broker_symbol_sha256": "0eae7f9be7899ff7fea31423109dd1d20986f56578b1e6e050fd8585a1a554e6",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2025-12-06",
+              "holiday_id": 3942,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance Break - 06/12/2025 - 10:00-13:00 (UTC+2)",
+              "recurring": false,
+              "timezone": "Europe/Bucharest",
+              "utc_bounds": {
+                "from": "2025-12-06T08:00:00+00:00",
+                "to": "2025-12-06T11:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        },
+        {
+          "account_id": 43002148,
+          "symbol": "BTCUSD",
+          "symbol_id": 10026,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:58:09.904354+00:00",
+          "broker_symbol_sha256": "60fd742da46e3ff75d16e56892f978b9ce1dd05c377c3a2784d3ba61d73c339e",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:55",
+              "local_to": "17:01",
+              "duration_seconds": 360
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2026-09-19",
+              "holiday_id": 4438,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance 19.09.2026",
+              "recurring": false,
+              "timezone": "Europe/Moscow",
+              "utc_bounds": {
+                "from": "2026-09-19T00:00:00+00:00",
+                "to": "2026-09-19T05:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        },
+        {
+          "account_id": 43002148,
+          "symbol": "ETHUSD",
+          "symbol_id": 10027,
+          "broker_timezone": "America/New_York",
+          "captured_at_utc": "2026-11-08T09:58:09.904354+00:00",
+          "broker_symbol_sha256": "e698c60e0ffe9e2d9ca37505bc1241d8f22769622c860962bec607e4aa5ba0ff",
+          "historical_2023_2025_authority": false,
+          "declared_daily_closures": [
+            {
+              "weekday_since_sunday": 0,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 1,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 2,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 3,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 4,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            },
+            {
+              "weekday_since_sunday": 5,
+              "local_from": "16:55",
+              "local_to": "17:01",
+              "duration_seconds": 360
+            },
+            {
+              "weekday_since_sunday": 6,
+              "local_from": "16:59",
+              "local_to": "17:01",
+              "duration_seconds": 120
+            }
+          ],
+          "dated_holidays": [
+            {
+              "date": "2026-09-19",
+              "holiday_id": 4438,
+              "interpretation": "broker-declared exception at capture; not proof of earlier schedules or realised trading",
+              "name": "Weekend Maintenance 19.09.2026",
+              "recurring": false,
+              "timezone": "Europe/Moscow",
+              "utc_bounds": {
+                "from": "2026-09-19T00:00:00+00:00",
+                "to": "2026-09-19T05:00:00+00:00"
+              }
+            }
+          ],
+          "fully_closed_m30_slots_per_week": 0
+        }
+      ],
+      "finding": "Near-24/7 schedules contain daily 2-minute breaks; live Friday break is 6 minutes. No weekly closure covers an entire M30 slot. Listed dated closures do not fall within 45 days before 2026-11-09.",
+      "historical_gap_explanation": "Current schedules cannot establish historical2024 closures. Repeated missingFriday/Saturday bars remain unavailable/unverified and cannot be silently omitted.",
+      "current_45day_m30_file_available_offline": false,
+      "current_runtime_evidence": "Existingpublichealth provescryptoopeningbandonly, notfullmacrocoverage; pendingnewpreparationtelemetry will expose exactmacro readiness.",
+      "new_broker_requests": 0,
+      "code_changes_for_this_audit": 0
+    }
+  },
+  "gate10_stage1_backtest": {
+    "barrier_refusal": "preparation_must_be_decoded_before_ticks",
+    "episodes_scheduled": 40,
+    "excluded": [],
+    "failed_sources": 0,
+    "financial_pass": false,
+    "frozen_engine_commit": "a0d7aea148e73550cc63993228b4ef9b368f0c43",
+    "gap_audit_sha256": "6e750f9614b1c4e8fc4b46170b1b0cf3cd8a7e55744813877d3467da418188ba",
+    "generated_at_sgt": "2026-11-08T21:12:37.546579+08:00",
+    "new_m30_segments_fetched": 112,
+    "new_tick_episodes_fetched": 0,
+    "opening_reference_m30_requests": 8,
+    "plan_sha256": "84ba8fb36dcad6a14ed6293d3559374580e33f3c6ea4e015af3371c127998497",
+    "preparation_complete_episodes": 30,
+    "receipt_reconciliation": {
+      "all_requests_after_freeze": true,
+      "all_requests_match_frozen_intervals": true,
+      "all_verified_files": 141,
+      "failed_receipts": 0,
+      "hashes_reconciled": 112,
+      "requests_started": 112,
+      "reused_cached_source_hashes_reconciled": 29,
+      "tick_requests": 0,
+      "unique_receipts_finished": 112
+    },
+    "reused_m30_segments": 29,
+    "schema": "jiaoyi.gate9-stage1-results.v1",
+    "selected_week": {
+      "cached_unique_slots": 2786,
+      "dates": [
+        "2024-11-11",
+        "2024-11-12",
+        "2024-11-13",
+        "2024-11-14",
+        "2024-11-15"
+      ],
+      "monday": "2024-11-11",
+      "verified_cache_files": 29
+    },
+    "source_scope": "Frozen Phase4 candidate; not current production owner18380. Oneweek cannot qualify multiweek financial gates.",
+    "status": "blocked_preparation_before_ticks",
+    "symbol_preparation": {
+      "BTCUSD": {
+        "complete_45d_episodes": 0,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 96,
+          "2024-11-12": 94,
+          "2024-11-13": 81,
+          "2024-11-14": 77,
+          "2024-11-15": 77
+        },
+        "missing_unique_slots": 96,
+        "opening_reference_count": 5
+      },
+      "ETHUSD": {
+        "complete_45d_episodes": 0,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 96,
+          "2024-11-12": 94,
+          "2024-11-13": 81,
+          "2024-11-14": 77,
+          "2024-11-15": 77
+        },
+        "missing_unique_slots": 96,
+        "opening_reference_count": 5
+      },
+      "NAS100": {
+        "complete_45d_episodes": 5,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 0,
+          "2024-11-12": 0,
+          "2024-11-13": 0,
+          "2024-11-14": 0,
+          "2024-11-15": 0
+        },
+        "missing_unique_slots": 0,
+        "opening_reference_count": 5
+      },
+      "SpotBrent": {
+        "complete_45d_episodes": 5,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 0,
+          "2024-11-12": 0,
+          "2024-11-13": 0,
+          "2024-11-14": 0,
+          "2024-11-15": 0
+        },
+        "missing_unique_slots": 0,
+        "opening_reference_count": 5
+      },
+      "SpotCrude": {
+        "complete_45d_episodes": 5,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 0,
+          "2024-11-12": 0,
+          "2024-11-13": 0,
+          "2024-11-14": 0,
+          "2024-11-15": 0
+        },
+        "missing_unique_slots": 0,
+        "opening_reference_count": 5
+      },
+      "US500": {
+        "complete_45d_episodes": 5,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 0,
+          "2024-11-12": 0,
+          "2024-11-13": 0,
+          "2024-11-14": 0,
+          "2024-11-15": 0
+        },
+        "missing_unique_slots": 0,
+        "opening_reference_count": 5
+      },
+      "XAGUSD": {
+        "complete_45d_episodes": 5,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 0,
+          "2024-11-12": 0,
+          "2024-11-13": 0,
+          "2024-11-14": 0,
+          "2024-11-15": 0
+        },
+        "missing_unique_slots": 0,
+        "opening_reference_count": 5
+      },
+      "XAUUSD": {
+        "complete_45d_episodes": 5,
+        "episodes": 5,
+        "missing_by_date": {
+          "2024-11-11": 0,
+          "2024-11-12": 0,
+          "2024-11-13": 0,
+          "2024-11-14": 0,
+          "2024-11-15": 0
+        },
+        "missing_unique_slots": 0,
+        "opening_reference_count": 5
+      }
+    },
+    "tier1_native_episodes_completed": 0,
+    "trace": "№18,380",
+    "validation_opened": false
+  },
+  "goal_progress": {
+    "target_net_win_rate": 0.73,
+    "required_wins_latest20": 15,
+    "target_gross_reward_r": 1.38,
+    "scope": "each_strategy_each_account",
+    "new_independent_evaluated_trades": 0,
+    "win_rate_delta": null,
+    "financial_pass": false,
+    "reason": "Preparation barrier prevented tick collection and replay; engineering fixes do not establish financial improvement."
+  },
+  "validation_opened": false,
+  "manual_verification_orders": 0,
+  "new_m30_requests": 112,
+  "new_tick_requests": 0,
+  "artifacts": {
+    "docs/gate9_stage1_plan_18380.json": "84ba8fb36dcad6a14ed6293d3559374580e33f3c6ea4e015af3371c127998497",
+    "docs/gate9_stage1_results_18380.json": "a9d7ff095630c11fab4f6412183964a47bdfe4a4b40c9940662af41e51e27a9f",
+    "docs/gate9_stage1_gap_audit_18380.json": "6e750f9614b1c4e8fc4b46170b1b0cf3cd8a7e55744813877d3467da418188ba"
+  },
+  "verification": {
+    "focused_rust": {
+      "core_macro_pullback": {
+        "passed": 9
+      },
+      "preopen": {
+        "passed": 5
+      },
+      "stop_loss_review": {
+        "passed": 17
+      },
+      "entry_guard": {
+        "passed": 7
+      },
+      "s3_integration": {
+        "passed": 78,
+        "ignored": 1
+      },
+      "compile_workspace_tests": "PASS",
+      "clippy_workspace_all_targets": "PASS"
+    },
+    "recorder_provenance_passed": 4,
+    "research_python_passed": 108,
+    "research_python_skipped": 1,
+    "html_desktop_mobile": "PASS",
+    "clippy_final_all_targets": "PASS",
+    "full_workspace_and_ci": "release_receipts_in_PR"
+  }
+}

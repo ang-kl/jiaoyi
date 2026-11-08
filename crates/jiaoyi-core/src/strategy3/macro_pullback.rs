@@ -11,7 +11,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const MODEL: &str = "s3_macro_pullback_v1";
-pub const POLICY: &str = "s3_macro_pullback_owner_18377_v1";
+pub const POLICY: &str = "s3_macro_pullback_owner_18380_v1";
+/// Explicit owner-selected allowance, not a statistically calibrated full
+/// round-trip execution-cost estimate. The 24bp stress model stays in research.
+pub const LIVE_SLIPPAGE_BPS_PER_SIDE: f64 = 3.74;
+pub fn two_stage_policy(policy: &str) -> bool {
+    matches!(
+        policy,
+        "s3_macro_pullback_owner_18377_v1" | "s3_macro_pullback_owner_18380_v1"
+    )
+}
 pub const CORE: [&str; 8] = [
     "SpotCrude",
     "SpotBrent",
@@ -593,6 +602,77 @@ mod tests {
             },
         )
     }
+    #[test]
+    fn production_allowance_is_separate_from_research_stress_and_keeps_floor() {
+        let (session, b, c) = setup(true);
+        let at = session.open + Duration::minutes(30);
+        let (bid, ask) = (100.474, 100.486); // exactly 48bp midpoint impulse
+        let operational =
+            super::super::cost_reserve(ask - bid, 0.0, LIVE_SLIPPAGE_BPS_PER_SIDE, ask).unwrap();
+        let stress = super::super::cost_reserve(ask - bid, 0.0, 24.0, ask).unwrap();
+        assert!(ArmedPullback::arm(
+            "BTCUSD",
+            session,
+            b,
+            bid,
+            ask,
+            at,
+            c,
+            None,
+            operational.total
+        )
+        .is_ok());
+        assert_eq!(
+            ArmedPullback::arm("BTCUSD", session, b, bid, ask, at, c, None, stress.total),
+            Err("cost_ge_r")
+        );
+        assert_eq!(
+            ArmedPullback::arm(
+                "BTCUSD",
+                session,
+                b,
+                100.46,
+                100.48,
+                at,
+                c,
+                None,
+                operational.total
+            ),
+            Err("impulse_below_48bps")
+        );
+        assert!(two_stage_policy("s3_macro_pullback_owner_18377_v1"));
+        assert!(two_stage_policy(POLICY));
+        assert!(!two_stage_policy("unknown_future_policy"));
+    }
+
+    #[test]
+    fn monday_macro_excludes_weekends_but_never_fills_a_missing_active_slot() {
+        let rule = sessions::rule_for("US500", crate::universe::AssetClass::EquityIndex).unwrap();
+        let session =
+            sessions::session_on(&rule, chrono::NaiveDate::from_ymd_opt(2026, 11, 9).unwrap())
+                .unwrap();
+        let mut bars = Vec::new();
+        for ago in 1..=45 {
+            if let Some(s) = sessions::session_on(&rule, session.date - Duration::days(ago)) {
+                let mut at = s.open;
+                while at + Duration::minutes(30) <= s.close {
+                    bars.push(M30 {
+                        open_time: at,
+                        open: 100.0,
+                        close: 101.0,
+                    });
+                    at += Duration::minutes(30);
+                }
+            }
+        }
+        assert!(context(&rule, session, &bars, session.open).is_ok());
+        bars.remove(0);
+        assert_eq!(
+            context(&rule, session, &bars, session.open),
+            Err("macro_missing_m30_segment".into())
+        );
+    }
+
     #[test]
     fn fractional_fill_breakeven_uses_first_non_losing_price_tick() {
         assert_eq!(breakeven(true, 100.005, 1.0, 100.995, 99.0, 2), None);

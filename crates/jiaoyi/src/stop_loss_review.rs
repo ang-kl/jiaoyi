@@ -95,7 +95,7 @@ LEFT JOIN LATERAL (
      AND NOT EXISTS (SELECT 1 FROM trading_events other
        WHERE other.account_id=o.account_id AND other.entry_key=o.entry_key
          AND other.kind<>'REFUSED_BEFORE_SEND' AND other.received_at<=s3.decided_at)
- ) unsent ON s3.prereg_hash IN ($5,$6)
+ ) unsent ON s3.prereg_hash IN ($5,$6,$7)
  WHERE o.account_id=r.account_id AND o.symbol_id=s3.symbol_id
    AND o.session_date=s3.session_date AND o.kind='open' AND o.entry_key<>s3.entry_key
    AND o.decided_at<=s3.decided_at
@@ -183,7 +183,10 @@ fn pullback_facts(
         ) {
             let peer_move = r["detail"]["peer_move"].as_f64();
             f.impulse = Some(
-                r["production_policy"] == mp::POLICY
+                r["production_policy"] == setup["production_policy"]
+                    && r["production_policy"]
+                        .as_str()
+                        .is_some_and(mp::two_stage_policy)
                     && r["state"] == json!(a)
                     && mp::ArmedPullback::arm(
                         symbol,
@@ -284,6 +287,10 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         include_bytes!("../../../docs/preregistration-2026-11-01-strategy3-v7.md").as_slice(),
         include_bytes!("../../../docs/preregistration-2026-11-08-strategy3-macro-pullback.md")
             .as_slice(),
+        include_bytes!(
+            "../../../docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md"
+        )
+        .as_slice(),
     ]
     .map(|text| format!("{:x}", Sha256::digest(text)));
     let rows = sqlx::query(CANDIDATES)
@@ -293,6 +300,7 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         .bind(&admission_hashes[0])
         .bind(&admission_hashes[1])
         .bind(&admission_hashes[2])
+        .bind(&admission_hashes[3])
         .fetch_all(pool)
         .await?;
     let mut cases = Vec::new();
@@ -336,8 +344,12 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
                 .as_ref()
                 .is_some_and(|h| admission_hashes[..2].contains(h));
         let pullback = strategy == "s3"
-            && registered == Some(true)
-            && setup["production_policy"] == mp::POLICY;
+            && saved_hash
+                .as_ref()
+                .is_some_and(|h| admission_hashes[2..].contains(h))
+            && setup["production_policy"]
+                .as_str()
+                .is_some_and(mp::two_stage_policy);
         let rules_known = strategy == "s1" || legacy_mark || pullback;
         let mut macro_alignment = None;
         let mut impulse = None;

@@ -16,9 +16,21 @@ class BrokerError(RuntimeError):
 
 
 class Broker:
+    def __init__(self, authority=None):
+        self.authority = authority
+
+    def authorize(self, kind=None, payload=None):
+        if self.authority is not None:
+            from stage1_gate9 import Stage1Authority
+            if not isinstance(self.authority, Stage1Authority):
+                raise BrokerError('unknown_research_capability')
+            self.authority.authorize(kind, payload)
+        else:
+            from rebuild_authority import require_collection_authority
+            require_collection_authority()
+
     def __enter__(self):
-        from rebuild_authority import require_collection_authority
-        require_collection_authority()
+        self.authorize()
         from websockets.sync.client import connect
         proxy = urllib.request.getproxies().get('https')
         if not proxy:
@@ -44,8 +56,7 @@ class Broker:
     def request(self, kind, payload):
         if kind not in READ_TYPES or payload.get('ctidTraderAccountId', ACCOUNT) != ACCOUNT:
             raise BrokerError('read_type_or_account_refused')
-        from rebuild_authority import require_collection_authority
-        require_collection_authority()
+        self.authorize(kind, payload)
         time.sleep(max(0, .8 - (time.monotonic() - self.last)))
         self.counter += 1
         identity = 'research40-' + str(self.counter)
