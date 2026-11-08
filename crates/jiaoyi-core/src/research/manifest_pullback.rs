@@ -186,6 +186,31 @@ pub fn study(i: &Input) -> Result<Value, String> {
     study_policy(i, &super::tiered_pullback::Policy::default())
 }
 pub fn study_policy(i: &Input, policy: &super::tiered_pullback::Policy) -> Result<Value, String> {
+    study_window(i, policy, false)
+}
+
+/// Explicitly renamed Phase 5 research candidate; no HTTP/live caller.
+pub fn study_fixed_window(i: &Input, bars: &[M30]) -> Result<Value, String> {
+    let policy = super::tiered_pullback::Policy {
+        tier: "tier1".into(),
+        threshold_bps: 48.0,
+        admission_bps: 3.74,
+    };
+    let mut value = study_window(i, &policy, true)?;
+    let (quotes, _) = s3_ticks::snapshots(&i.request, &i.source)?;
+    value["candidate_id"] = json!("s3_macro_pullback_fixed_windows_v1");
+    value["controls"] = json!({
+        "always_long": seasonal::control(&i.request, &i.source, bars, &quotes, true)?,
+        "own_momentum": seasonal::control(&i.request, &i.source, bars, &quotes, false)?,
+    });
+    Ok(value)
+}
+
+fn study_window(
+    i: &Input,
+    policy: &super::tiered_pullback::Policy,
+    fixed: bool,
+) -> Result<Value, String> {
     policy.validate()?;
     if i.request.account <= 0
         || i.request.to != i.request.from + Duration::hours(4)
@@ -226,7 +251,14 @@ pub fn study_policy(i: &Input, policy: &super::tiered_pullback::Policy) -> Resul
     let (entry, marks) = if policy.tier == "tier2" {
         super::tiered_pullback::opening_impulse(i, &quotes, origin, spread, policy)?
     } else {
-        let native = if policy.admission_bps == 24.0 && policy.threshold_bps == 48.0 {
+        let native = if fixed {
+            s3_ticks::study_manifest_fixed(
+                &request,
+                &i.source,
+                policy.admission_bps,
+                policy.threshold_bps,
+            )?
+        } else if policy.admission_bps == 24.0 && policy.threshold_bps == 48.0 {
             s3_ticks::study_manifest_floor(&request, &i.source)?
         } else {
             s3_ticks::study_manifest_policy(
