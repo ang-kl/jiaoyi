@@ -1,0 +1,834 @@
+{
+  "trace": "№18,382",
+  "verified_at_sgt": "2026-11-08T22:19:29.857284+08:00",
+  "results_sha256": "6da64e121cc83cb71a2e0abdc69f86b552146903c3409e22f7382ace3ee7e05d",
+  "independent_audit": {
+    "trace": "№18,382",
+    "status": "PASS_INDEPENDENT_SOURCE_ARITHMETIC_AND_DENOMINATOR_REVIEW",
+    "reviewed_at_sgt": "2026-11-08T22:15:09.500215+08:00",
+    "results_sha256": "6da64e121cc83cb71a2e0abdc69f86b552146903c3409e22f7382ace3ee7e05d",
+    "plan_sha256": "9d41df1089e6c7f9af01a10cff3d6c452f3f57d221fa0b657bae31102da0180a",
+    "tick_receipts_verified": 30,
+    "m30_source_hashes_verified": 141,
+    "new_broker_requests_by_audit": 0,
+    "rows_evaluated": 24,
+    "certified_episodes": 5,
+    "diagnostic_episodes": 19,
+    "quality_counts": {
+      "gaps_over_6s": 19
+    },
+    "native_net_r_equations_checked": 12,
+    "control_summary_fields_checked": 36,
+    "strict_classes": {},
+    "candidate_scores": {
+      "continuation": {
+        "24": {
+          "cost_unavailable": 0,
+          "entries": 0,
+          "episodes": 24,
+          "financial_pass": false,
+          "losses": 0,
+          "mean_gross_r": null,
+          "mean_net_r": null,
+          "net_flat": 0,
+          "net_win_rate": null,
+          "no_entry": 24,
+          "priced_closed": 0,
+          "profit_factor": null,
+          "profit_factor_status": "unavailable",
+          "unresolved": 0,
+          "wins": 0
+        },
+        "3.74": {
+          "cost_unavailable": 0,
+          "entries": 0,
+          "episodes": 24,
+          "financial_pass": false,
+          "losses": 0,
+          "mean_gross_r": null,
+          "mean_net_r": null,
+          "net_flat": 0,
+          "net_win_rate": null,
+          "no_entry": 24,
+          "priced_closed": 0,
+          "profit_factor": null,
+          "profit_factor_status": "unavailable",
+          "unresolved": 0,
+          "wins": 0
+        }
+      },
+      "forced": {
+        "24": {
+          "cost_unavailable": 0,
+          "entries": 0,
+          "episodes": 24,
+          "financial_pass": false,
+          "losses": 0,
+          "mean_gross_r": null,
+          "mean_net_r": null,
+          "net_flat": 0,
+          "net_win_rate": null,
+          "no_entry": 24,
+          "priced_closed": 0,
+          "profit_factor": null,
+          "profit_factor_status": "unavailable",
+          "unresolved": 0,
+          "wins": 0
+        },
+        "3.74": {
+          "cost_unavailable": 0,
+          "entries": 0,
+          "episodes": 24,
+          "financial_pass": false,
+          "losses": 0,
+          "mean_gross_r": null,
+          "mean_net_r": null,
+          "net_flat": 0,
+          "net_win_rate": null,
+          "no_entry": 24,
+          "priced_closed": 0,
+          "profit_factor": null,
+          "profit_factor_status": "unavailable",
+          "unresolved": 0,
+          "wins": 0
+        }
+      },
+      "strict": {
+        "24": {
+          "cost_unavailable": 0,
+          "entries": 0,
+          "episodes": 24,
+          "financial_pass": false,
+          "losses": 0,
+          "mean_gross_r": null,
+          "mean_net_r": null,
+          "net_flat": 0,
+          "net_win_rate": null,
+          "no_entry": 24,
+          "priced_closed": 0,
+          "profit_factor": null,
+          "profit_factor_status": "unavailable",
+          "unresolved": 0,
+          "wins": 0
+        },
+        "3.74": {
+          "cost_unavailable": 0,
+          "entries": 0,
+          "episodes": 24,
+          "financial_pass": false,
+          "losses": 0,
+          "mean_gross_r": null,
+          "mean_net_r": null,
+          "net_flat": 0,
+          "net_win_rate": null,
+          "no_entry": 24,
+          "priced_closed": 0,
+          "profit_factor": null,
+          "profit_factor_status": "unavailable",
+          "unresolved": 0,
+          "wins": 0
+        }
+      }
+    },
+    "candidate_trade_paths": [],
+    "quality_per_episode": [
+      {
+        "episode_id": "US500-2024-11-11",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731335400000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731349800845,
+          "unexpected_gaps": 916
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "NAS100-2024-11-11",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731335400000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731349804810,
+          "unexpected_gaps": 0
+        },
+        "gate3_refusal": null
+      },
+      {
+        "episode_id": "XAUUSD-2024-11-11",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731308400000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731322804923,
+          "unexpected_gaps": 22
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "XAGUSD-2024-11-11",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731308400000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731322804929,
+          "unexpected_gaps": 435
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "US500-2024-11-12",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731421800000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731436204888,
+          "unexpected_gaps": 666
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "NAS100-2024-11-12",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731421800000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731436204899,
+          "unexpected_gaps": 0
+        },
+        "gate3_refusal": null
+      },
+      {
+        "episode_id": "XAUUSD-2024-11-12",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731394800000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731409204948,
+          "unexpected_gaps": 7
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "XAGUSD-2024-11-12",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731394800000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731409204817,
+          "unexpected_gaps": 210
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "SpotCrude-2024-11-13",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731481200000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731495600959,
+          "unexpected_gaps": 1555
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "SpotBrent-2024-11-13",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731481200000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731495600226,
+          "unexpected_gaps": 1542
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "US500-2024-11-13",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731508200000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731522602159,
+          "unexpected_gaps": 354
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "NAS100-2024-11-13",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731508200000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731522604988,
+          "unexpected_gaps": 0
+        },
+        "gate3_refusal": null
+      },
+      {
+        "episode_id": "XAUUSD-2024-11-13",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731481200000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731495603737,
+          "unexpected_gaps": 43
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "XAGUSD-2024-11-13",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731481200000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731495603737,
+          "unexpected_gaps": 463
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "SpotCrude-2024-11-14",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731567600000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731582004102,
+          "unexpected_gaps": 1481
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "SpotBrent-2024-11-14",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731567600000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731582001899,
+          "unexpected_gaps": 1497
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "US500-2024-11-14",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731594600000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731609004187,
+          "unexpected_gaps": 316
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "NAS100-2024-11-14",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731594600000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731609004899,
+          "unexpected_gaps": 0
+        },
+        "gate3_refusal": null
+      },
+      {
+        "episode_id": "XAUUSD-2024-11-14",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731567600000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731582004670,
+          "unexpected_gaps": 3
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "XAGUSD-2024-11-14",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731567600000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731582004537,
+          "unexpected_gaps": 197
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "US500-2024-11-15",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731681000000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731695404376,
+          "unexpected_gaps": 134
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "NAS100-2024-11-15",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731681000000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731695404916,
+          "unexpected_gaps": 0
+        },
+        "gate3_refusal": null
+      },
+      {
+        "episode_id": "XAUUSD-2024-11-15",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731654000000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731668404677,
+          "unexpected_gaps": 21
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      },
+      {
+        "episode_id": "XAGUSD-2024-11-15",
+        "path": {
+          "closing_tail_fresh": true,
+          "from_ms": 1731654000000,
+          "opening_fresh": true,
+          "ordering_ambiguous": false,
+          "through_ms": 1731668404673,
+          "unexpected_gaps": 285
+        },
+        "gate3_refusal": "unqualified_path_continuity"
+      }
+    ],
+    "financial_pass": false,
+    "metrics_definition": "Strict closed includes initial stop, accepted breakeven stop, and target. Breakeven counts gross stop geometry; net_flat counts after-reserve zero. Forced totals count all priced admitted paths; they are not added to strict totals. Means/PF use consistent corresponding closed-path net values. Null means/PF with no trades are preserved.",
+    "limits": [
+      "No new cost calibration or live rule changes. Frozen Phase4 research engine differs from current deployed live candidate.",
+      "Any path with >6s same-side gaps or same-millisecond ordering ambiguity is diagnostic, not execution-certified.",
+      "Successful tick source is not automatically a qualified execution path.",
+      "The 10 blocked crypto definitions remain in the original40 denominator."
+    ],
+    "raw_quote_path_independent_verification": {
+      "episodes": 30,
+      "missing_fresh_open": 6,
+      "missing_fresh_close": 0,
+      "gapped_sources": 25,
+      "ambiguous_sources": 0,
+      "source_results": [
+        {
+          "episode_id": "SpotCrude-2024-11-11",
+          "opening_fresh": false,
+          "closing_fresh": true,
+          "gaps_over_6s": 1313,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotBrent-2024-11-11",
+          "opening_fresh": false,
+          "closing_fresh": true,
+          "gaps_over_6s": 1319,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "US500-2024-11-11",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 916,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "NAS100-2024-11-11",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 0,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAUUSD-2024-11-11",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 22,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAGUSD-2024-11-11",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 435,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotCrude-2024-11-12",
+          "opening_fresh": false,
+          "closing_fresh": true,
+          "gaps_over_6s": 1442,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotBrent-2024-11-12",
+          "opening_fresh": false,
+          "closing_fresh": true,
+          "gaps_over_6s": 1489,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "US500-2024-11-12",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 666,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "NAS100-2024-11-12",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 0,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAUUSD-2024-11-12",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 7,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAGUSD-2024-11-12",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 210,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotCrude-2024-11-13",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 1555,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotBrent-2024-11-13",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 1542,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "US500-2024-11-13",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 354,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "NAS100-2024-11-13",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 0,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAUUSD-2024-11-13",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 43,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAGUSD-2024-11-13",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 463,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotCrude-2024-11-14",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 1481,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotBrent-2024-11-14",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 1497,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "US500-2024-11-14",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 316,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "NAS100-2024-11-14",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 0,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAUUSD-2024-11-14",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 3,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAGUSD-2024-11-14",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 197,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotCrude-2024-11-15",
+          "opening_fresh": false,
+          "closing_fresh": true,
+          "gaps_over_6s": 1556,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "SpotBrent-2024-11-15",
+          "opening_fresh": false,
+          "closing_fresh": true,
+          "gaps_over_6s": 1520,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "US500-2024-11-15",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 134,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "NAS100-2024-11-15",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 0,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAUUSD-2024-11-15",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 21,
+          "same_side_ordering_ambiguous": false
+        },
+        {
+          "episode_id": "XAGUSD-2024-11-15",
+          "opening_fresh": true,
+          "closing_fresh": true,
+          "gaps_over_6s": 285,
+          "same_side_ordering_ambiguous": false
+        }
+      ],
+      "interpretation": "Recorded update gaps are conservative qualification refusals. They do not prove ticks were lost: unchanged quotes need not emit a tick."
+    },
+    "candidate_no_entry_decomposition": {
+      "no_admitted_impulse": 21,
+      "impulse_but_no_50percent_retest": 3,
+      "same_impulses_also_macro_disagree": 3,
+      "incremental_macro_filter_benefit_demonstrated": false
+    }
+  },
+  "repeat_replays": {
+    "all_passed": true,
+    "control_replays": 24,
+    "native_replays": 24,
+    "new_broker_requests": 0,
+    "rows": [
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "US500-2024-11-11",
+        "native_output_sha256": "37a343689518d98453c2336314c782fe655dc5833168f73ca6bf1ea7fea9a9d9"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "NAS100-2024-11-11",
+        "native_output_sha256": "c3e2ef9461c1fa5b027904e7164ca15bc5cbd524f8ad0b659fb3c192c77584d2"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAUUSD-2024-11-11",
+        "native_output_sha256": "4396ef9a03f8704a4015ff2f7f51e0f5de91c3013e23e278a97e5b9d7f78d377"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAGUSD-2024-11-11",
+        "native_output_sha256": "0b7bea3aaa8a38912a4c13dfc0cb060bd270339167b2dd4b7869ab4cb09f3cf9"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "US500-2024-11-12",
+        "native_output_sha256": "a4288693f8e9015937616bba9713c46bda90a305f201f04e7bcb9ccf54493fce"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "NAS100-2024-11-12",
+        "native_output_sha256": "3afa364d11c73dd678ba58d99d6df1f7b8c6ec975de1f259eca66ceca71f75ae"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAUUSD-2024-11-12",
+        "native_output_sha256": "186030fbf289741185ff9becfe21b5cf1453d2e891e6da01499e600725c99526"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAGUSD-2024-11-12",
+        "native_output_sha256": "79b7c79af887bfb5c0537ac6eaba61494647a3e8fdbbc591c5d410acbf36bf7d"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "SpotCrude-2024-11-13",
+        "native_output_sha256": "6be85f8a6d54c795471be81d4a42a76fb9e617459f67e4067febf07c39ff514e"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "SpotBrent-2024-11-13",
+        "native_output_sha256": "b0a78e36a62a0f385ea9bd52a3783beaa42b0bb31e11309b5948d3bb9928ee52"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "US500-2024-11-13",
+        "native_output_sha256": "062ced43898c43f1145b6699223590d18a971908635892aee7224e15ec497fad"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "NAS100-2024-11-13",
+        "native_output_sha256": "bbab990490ec62d6e7b4740c2aebf0be9a254f6674cc3a5fcdf5d0b0e0dc78df"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAUUSD-2024-11-13",
+        "native_output_sha256": "4b37f68f8c977e08f8c8601c2274523cdbe1e8bdfd9d39124278db0ad956ca8d"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAGUSD-2024-11-13",
+        "native_output_sha256": "a12201ad061edba460886399ba84cc049be887547a0118665f75e29b4b82d31f"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "SpotCrude-2024-11-14",
+        "native_output_sha256": "1639eea6b7e5b0426d522b2fefff1158431b9ddce2452ea222f526d60e8c650f"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "SpotBrent-2024-11-14",
+        "native_output_sha256": "a5d6182b13a67bc7fcc74179bc9b8c69f08cfb181dec0a36228cc24025684e1b"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "US500-2024-11-14",
+        "native_output_sha256": "2d76bd6a9c383b86311bad5ac7ccacfae18010cdebfd31b7994144396e5658be"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "NAS100-2024-11-14",
+        "native_output_sha256": "b2456afadc12aaab5cda0892b99c79ef998ce7fa89a224e7777faffab338ae24"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAUUSD-2024-11-14",
+        "native_output_sha256": "696267db3438167654f8bf18fd1cfcfd537eb62437bec5b19e9242674ebe8ad9"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAGUSD-2024-11-14",
+        "native_output_sha256": "2c21622891ffda3c4ef15b5fe9182ac31f79f13b50c75da0eb15b70e8cb80f7d"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "US500-2024-11-15",
+        "native_output_sha256": "61251f11a19ed365e7fb94f56cc71e4a8f777736fdbba49e3640dea978f77344"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "NAS100-2024-11-15",
+        "native_output_sha256": "a0e9b9825f42db618f6dfb2ce597b5e1fe9263036353b808001df5a4fa468592"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAUUSD-2024-11-15",
+        "native_output_sha256": "4641d38e8e7cc3e393ba95340196f7ba6af38319b1aa9b0c8f6032b66d7072ba"
+      },
+      {
+        "byte_identical_native": true,
+        "control_canonical_json_identical": true,
+        "episode_id": "XAGUSD-2024-11-15",
+        "native_output_sha256": "ffc1dad7c0efe09190ce8c1ba8f0a9f79c78666b03c6d30d2d9e672a76fd0287"
+      }
+    ]
+  },
+  "production_boundary": {
+    "production_files_compared": 218,
+    "changed_files": [],
+    "deployment_before": {
+      "id": "306a5080-1f2f-401b-923b-2b545499e8c7",
+      "status": "SUCCESS",
+      "commit": "0f3b89c700a33f98891b47827b99df550bbe0cea"
+    },
+    "deployment_after": {
+      "id": "306a5080-1f2f-401b-923b-2b545499e8c7",
+      "status": "SUCCESS",
+      "commit": "0f3b89c700a33f98891b47827b99df550bbe0cea"
+    },
+    "unchanged": true
+  },
+  "tests": {
+    "total": 114,
+    "passed": 113,
+    "skipped": 1,
+    "failed": 0,
+    "log_sha256": "a004edbb08faab0ed0ce9ef8042d3a94b88650363ae66edeeb1e2f7cb56b4627"
+  },
+  "ci_status": "required_before_merge_see_pull_request"
+}
