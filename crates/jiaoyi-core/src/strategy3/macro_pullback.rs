@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const MODEL: &str = "s3_macro_pullback_v1";
-pub const POLICY: &str = "s3_macro_pullback_owner_18392_v1";
+pub const POLICY: &str = "s3_macro_pullback_owner_18407_v1";
 /// Retained by the original bounded replay; its historical semantics do not change.
 pub const LEGACY_REPLAY_POLICY: &str = "s3_macro_pullback_owner_18380_v1";
 pub const BOUNCE_FRACTION: f64 = 0.10;
@@ -24,6 +24,7 @@ pub fn two_stage_policy(policy: &str) -> bool {
         "s3_macro_pullback_owner_18377_v1"
             | "s3_macro_pullback_owner_18380_v1"
             | "s3_macro_pullback_owner_18392_v1"
+            | "s3_macro_pullback_owner_18407_v1"
     )
 }
 pub const CORE: [&str; 8] = [
@@ -135,6 +136,106 @@ pub struct ArmedPullback {
     pub armed_at: DateTime<Utc>,
     pub session: Session,
     pub macro_context: Context,
+    #[serde(default, skip_serializing_if = "ConfirmationState::is_default")]
+    pub confirmation: ConfirmationState,
+}
+
+/// New production state is omitted from historical arms until first observed.
+/// Original arming time/context remain immutable; extension changes only price
+/// geometry and clears any touch belonging to the old impulse.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+pub struct ConfirmationState {
+    pub last_quote_at: Option<DateTime<Utc>>,
+    pub touched_at: Option<DateTime<Utc>>,
+    pub turn_extreme: Option<f64>,
+    pub turn_extreme_at: Option<DateTime<Utc>>,
+    pub invalidated: bool,
+}
+impl ConfirmationState {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+pub const MAX_RETRACEMENT: f64 = 0.618;
+pub const MIN_CONFIRMED_RETRACEMENT: f64 = 0.40;
+pub const TURN_FRACTION: f64 = 0.08;
+pub const PEER_HOLD_BPS: f64 = 24.0;
+const FRACTION_EPS: f64 = 1e-10;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmationUpdate {
+    Waiting,
+    Extended,
+    Touched,
+    Trigger,
+    InvalidatedDeep,
+    Expired,
+    InvalidState,
+}
+
+/// Self-contained immutable evidence carried to the final writer. The writer
+/// must separately enforce quote freshness, generation/account revision, peer
+/// hold, cost, margin and order identity. This evidence never grants authority.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct TurnProof {
+    pub origin: f64,
+    pub extreme: f64,
+    pub long: bool,
+    pub touched_at: DateTime<Utc>,
+    pub turn_extreme: f64,
+    pub turn_extreme_at: DateTime<Utc>,
+    pub confirmed_at: DateTime<Utc>,
+    pub confirmed_bid: f64,
+    pub confirmed_ask: f64,
+}
+
+pub fn retracement_fraction(long: bool, origin: f64, extreme: f64, mid: f64) -> Option<f64> {
+    if ![origin, extreme, mid]
+        .into_iter()
+        .all(|v| v.is_finite() && v > 0.0)
+        || (extreme > origin) != long
+        || extreme == origin
+    {
+        return None;
+    }
+    let sign = if long { 1.0 } else { -1.0 };
+    Some((extreme - mid) * sign / (extreme - origin).abs())
+}
+
+/// Validate both the recorded later confirmation and the current writer quote.
+/// A sign-only peer check is intentionally not part of this price-path helper.
+pub fn confirmed_retest(p: &TurnProof, bid: f64, ask: f64, at: DateTime<Utc>) -> bool {
+    if ![bid, ask, p.confirmed_bid, p.confirmed_ask]
+        .into_iter()
+        .all(|v| v.is_finite() && v > 0.0)
+        || bid > ask
+        || p.confirmed_bid > p.confirmed_ask
+        || p.touched_at > p.turn_extreme_at
+        || p.turn_extreme_at >= p.confirmed_at
+        || p.confirmed_at > at
+    {
+        return false;
+    }
+    let Some(deepest) = retracement_fraction(p.long, p.origin, p.extreme, p.turn_extreme) else {
+        return false;
+    };
+    if !(0.5 - FRACTION_EPS..=MAX_RETRACEMENT + FRACTION_EPS).contains(&deepest) {
+        return false;
+    }
+    let sign = if p.long { 1.0 } else { -1.0 };
+    let range = (p.extreme - p.origin).abs();
+    [
+        p.confirmed_bid + (p.confirmed_ask - p.confirmed_bid) / 2.0,
+        bid + (ask - bid) / 2.0,
+    ]
+    .into_iter()
+    .all(|mid| {
+        retracement_fraction(p.long, p.origin, p.extreme, mid).is_some_and(|f| {
+            (MIN_CONFIRMED_RETRACEMENT - FRACTION_EPS..=MAX_RETRACEMENT + FRACTION_EPS).contains(&f)
+                && (mid - p.turn_extreme) * sign / range + FRACTION_EPS >= TURN_FRACTION
+        })
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,8 +363,138 @@ impl ArmedPullback {
             armed_at: at,
             session,
             macro_context: context,
+            confirmation: ConfirmationState::default(),
         })
     }
+    /// Apply exactly one fresh, monotonically ordered quote under policy18407.
+    /// The actor is responsible for checking both bid/ask receipt ages before
+    /// calling this method; stale/duplicate timestamps never manufacture a turn.
+    pub fn advance_confirmed(
+        &mut self,
+        expires_at: DateTime<Utc>,
+        bid: f64,
+        ask: f64,
+        at: DateTime<Utc>,
+    ) -> ConfirmationUpdate {
+        if at >= expires_at {
+            return ConfirmationUpdate::Expired;
+        }
+        if self.confirmation.invalidated {
+            return ConfirmationUpdate::InvalidatedDeep;
+        }
+        if at <= self.armed_at
+            || self
+                .confirmation
+                .last_quote_at
+                .is_some_and(|last| at <= last)
+            || ![bid, ask].into_iter().all(|v| v.is_finite() && v > 0.0)
+            || bid > ask
+        {
+            return ConfirmationUpdate::Waiting;
+        }
+        if expires_at <= self.armed_at || !self.confirmation_state_valid() {
+            return ConfirmationUpdate::InvalidState;
+        }
+        let mid = bid + (ask - bid) / 2.0;
+        let Some(fraction) = retracement_fraction(self.long, self.origin, self.extreme, mid) else {
+            return ConfirmationUpdate::InvalidState;
+        };
+        self.confirmation.last_quote_at = Some(at);
+        if fraction < 0.0 {
+            self.extreme = mid;
+            self.impulse_range = (mid - self.origin).abs();
+            self.impulse_bps = self.impulse_range / self.origin * 10000.0;
+            self.level = self.origin + 0.5 * (mid - self.origin);
+            self.confirmation = ConfirmationState {
+                last_quote_at: Some(at),
+                ..Default::default()
+            };
+            return ConfirmationUpdate::Extended;
+        }
+        if fraction > MAX_RETRACEMENT + FRACTION_EPS {
+            self.confirmation.invalidated = true;
+            return ConfirmationUpdate::InvalidatedDeep;
+        }
+        if fraction >= 0.5 - FRACTION_EPS {
+            let deeper = self.confirmation.turn_extreme.is_none_or(|old| {
+                if self.long {
+                    mid < old
+                } else {
+                    mid > old
+                }
+            });
+            if deeper {
+                self.confirmation.touched_at.get_or_insert(at);
+                self.confirmation.turn_extreme = Some(mid);
+                self.confirmation.turn_extreme_at = Some(at);
+                return ConfirmationUpdate::Touched;
+            }
+        }
+        if self.confirmation_proof(bid, ask, at).is_some() {
+            ConfirmationUpdate::Trigger
+        } else {
+            ConfirmationUpdate::Waiting
+        }
+    }
+
+    /// Reject corrupt restored evidence before extending or dispatching an arm.
+    pub fn confirmation_state_valid(&self) -> bool {
+        if ![
+            self.origin,
+            self.extreme,
+            self.level,
+            self.impulse_range,
+            self.impulse_bps,
+        ]
+        .into_iter()
+        .all(|v| v.is_finite() && v > 0.0)
+            || (self.extreme > self.origin) != self.long
+            || ((self.extreme - self.origin).abs() - self.impulse_range).abs() > 1e-8
+            || (self.level - (self.origin + 0.5 * (self.extreme - self.origin))).abs() > 1e-8
+            || (self.impulse_bps - self.impulse_range / self.origin * 10000.0).abs() > 1e-8
+            || self.impulse_bps < IMPULSE_FLOOR_BPS
+        {
+            return false;
+        }
+        let s = self.confirmation;
+        if s.last_quote_at.is_some_and(|at| at <= self.armed_at) {
+            return false;
+        }
+        match (s.touched_at, s.turn_extreme, s.turn_extreme_at) {
+            (None, None, None) => true,
+            (Some(touch), Some(mid), Some(deep)) => {
+                touch > self.armed_at
+                    && touch <= deep
+                    && s.last_quote_at.is_some_and(|last| deep <= last)
+                    && retracement_fraction(self.long, self.origin, self.extreme, mid).is_some_and(
+                        |f| (0.5 - FRACTION_EPS..=MAX_RETRACEMENT + FRACTION_EPS).contains(&f),
+                    )
+            }
+            _ => false,
+        }
+    }
+
+    pub fn confirmation_proof(&self, bid: f64, ask: f64, at: DateTime<Utc>) -> Option<TurnProof> {
+        if self.confirmation.invalidated
+            || self.confirmation.last_quote_at != Some(at)
+            || !self.confirmation_state_valid()
+        {
+            return None;
+        }
+        let p = TurnProof {
+            origin: self.origin,
+            extreme: self.extreme,
+            long: self.long,
+            touched_at: self.confirmation.touched_at?,
+            turn_extreme: self.confirmation.turn_extreme?,
+            turn_extreme_at: self.confirmation.turn_extreme_at?,
+            confirmed_at: at,
+            confirmed_bid: bid,
+            confirmed_ask: ask,
+        };
+        confirmed_retest(&p, bid, ask, at).then_some(p)
+    }
+
     /// An explicitly bounded production arm can survive an adjacent crypto
     /// window. Only the original strict 50% touch can trigger; bounce tolerance
     /// is permitted after that touch, never to manufacture the first trigger.
@@ -772,6 +1003,188 @@ mod tests {
             },
         )
     }
+    fn confirmation_arm(long: bool) -> ArmedPullback {
+        let (session, band, context) = setup(long);
+        let extreme = if long { 101.0 } else { 99.0 };
+        ArmedPullback::arm_window(
+            "BTCUSD",
+            session,
+            band,
+            extreme - 0.01,
+            extreme + 0.01,
+            session.open + Duration::minutes(30),
+            context,
+            None,
+            0.2,
+        )
+        .unwrap()
+    }
+    fn advance_fraction(a: &mut ArmedPullback, fraction: f64, seconds: i64) -> ConfirmationUpdate {
+        let sign = if a.long { 1.0 } else { -1.0 };
+        let mid = a.extreme - sign * fraction * a.impulse_range;
+        let at = a.armed_at + Duration::seconds(seconds);
+        a.advance_confirmed(a.session.close, mid - 0.01, mid + 0.01, at)
+    }
+
+    #[test]
+    fn running_extreme_reanchors_midpoint_and_discards_old_touch() {
+        for long in [true, false] {
+            let mut a = confirmation_arm(long);
+            assert_eq!(
+                advance_fraction(&mut a, 0.55, 1),
+                ConfirmationUpdate::Touched
+            );
+            let sign = if long { 1.0 } else { -1.0 };
+            let old_at = a.armed_at;
+            let mid = a.extreme + sign * 0.5;
+            assert_eq!(
+                a.advance_confirmed(
+                    a.session.close,
+                    mid - 0.01,
+                    mid + 0.01,
+                    old_at + Duration::seconds(2)
+                ),
+                ConfirmationUpdate::Extended
+            );
+            assert_eq!(a.armed_at, old_at);
+            assert!((a.impulse_range - 1.5).abs() < 1e-10);
+            assert!((a.impulse_bps - 150.0).abs() < 1e-8);
+            assert!((a.level - (100.0 + sign * 0.75)).abs() < 1e-10);
+            assert_eq!(a.confirmation.touched_at, None);
+            assert_eq!(
+                advance_fraction(&mut a, 0.42, 3),
+                ConfirmationUpdate::Waiting
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.50, 4),
+                ConfirmationUpdate::Touched
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.42, 5),
+                ConfirmationUpdate::Trigger
+            );
+        }
+    }
+
+    #[test]
+    fn confirmation_requires_later_eight_percent_turn_and_deepest_touch() {
+        for long in [true, false] {
+            let mut a = confirmation_arm(long);
+            assert_eq!(
+                advance_fraction(&mut a, 0.49, 1),
+                ConfirmationUpdate::Waiting
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.50, 2),
+                ConfirmationUpdate::Touched
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.60, 3),
+                ConfirmationUpdate::Touched
+            );
+            let before = a;
+            assert_eq!(
+                advance_fraction(&mut a, 0.52, 3),
+                ConfirmationUpdate::Waiting
+            );
+            assert_eq!(a, before, "same timestamp cannot be a subsequent quote");
+            assert_eq!(
+                advance_fraction(&mut a, 0.521, 4),
+                ConfirmationUpdate::Waiting
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.52, 5),
+                ConfirmationUpdate::Trigger
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.399, 6),
+                ConfirmationUpdate::Waiting
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.40, 7),
+                ConfirmationUpdate::Trigger
+            );
+        }
+    }
+
+    #[test]
+    fn deep_retracement_is_terminal_even_before_a_touch_and_at_boundaries() {
+        for long in [true, false] {
+            let mut a = confirmation_arm(long);
+            assert_eq!(
+                advance_fraction(&mut a, 0.618, 1),
+                ConfirmationUpdate::Touched
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.538, 2),
+                ConfirmationUpdate::Trigger
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.619, 3),
+                ConfirmationUpdate::InvalidatedDeep
+            );
+            assert_eq!(
+                advance_fraction(&mut a, 0.40, 4),
+                ConfirmationUpdate::InvalidatedDeep
+            );
+            let mut b = confirmation_arm(long);
+            assert_eq!(
+                advance_fraction(&mut b, 0.7851, 1),
+                ConfirmationUpdate::InvalidatedDeep
+            );
+            assert!(b.confirmation.touched_at.is_none());
+        }
+    }
+
+    #[test]
+    fn confirmation_proof_survives_restart_and_writer_rechecks_price_and_time() {
+        for long in [true, false] {
+            let mut a = confirmation_arm(long);
+            assert_eq!(
+                advance_fraction(&mut a, 0.50, 1),
+                ConfirmationUpdate::Touched
+            );
+            a = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
+            assert!(a.confirmation_state_valid());
+            assert_eq!(
+                advance_fraction(&mut a, 0.42, 2),
+                ConfirmationUpdate::Trigger
+            );
+            let sign = if long { 1.0 } else { -1.0 };
+            let mid = a.extreme - sign * 0.42 * a.impulse_range;
+            let at = a.armed_at + Duration::seconds(2);
+            let proof = a.confirmation_proof(mid - 0.01, mid + 0.01, at).unwrap();
+            assert!(confirmed_retest(&proof, mid - 0.01, mid + 0.01, at));
+            for bad_fraction in [0.399, 0.43, 0.619] {
+                let mid = a.extreme - sign * bad_fraction * a.impulse_range;
+                assert!(!confirmed_retest(&proof, mid - 0.01, mid + 0.01, at));
+            }
+            let mut forged = proof;
+            forged.turn_extreme_at = at;
+            assert!(!confirmed_retest(&forged, mid - 0.01, mid + 0.01, at));
+            assert!(!confirmed_retest(
+                &proof,
+                mid - 0.01,
+                mid + 0.01,
+                at - Duration::seconds(1)
+            ));
+            let mut malformed = a;
+            malformed.confirmation.turn_extreme_at = None;
+            assert!(!malformed.confirmation_state_valid());
+        }
+    }
+
+    #[test]
+    fn historical_arm_json_and_policy_remain_compatible() {
+        let a = confirmation_arm(true);
+        let value = serde_json::to_value(a).unwrap();
+        assert!(value.get("confirmation").is_none());
+        assert_eq!(serde_json::from_value::<ArmedPullback>(value).unwrap(), a);
+        assert!(two_stage_policy("s3_macro_pullback_owner_18392_v1"));
+        assert!(two_stage_policy(POLICY));
+        assert_eq!(LEGACY_REPLAY_POLICY, "s3_macro_pullback_owner_18380_v1");
+    }
+
     #[test]
     fn bounded_bounce_geometry_preserves_origin_and_funded_relative_risk() {
         for long in [true, false] {
@@ -898,7 +1311,7 @@ mod tests {
             .is_ok());
         }
         assert_eq!(LEGACY_REPLAY_POLICY, "s3_macro_pullback_owner_18380_v1");
-        assert_eq!(POLICY, "s3_macro_pullback_owner_18392_v1");
+        assert_eq!(POLICY, "s3_macro_pullback_owner_18407_v1");
     }
 
     #[test]

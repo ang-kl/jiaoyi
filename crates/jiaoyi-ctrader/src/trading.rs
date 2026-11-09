@@ -754,6 +754,7 @@ pub struct PreparedEntry {
     generation: u64,
     revision: u64,
     captured_at: tokio::time::Instant,
+    occupied_symbols: Vec<i64>,
     pub receipt: crate::margin::Receipt,
     pub calendar: crate::market_hours::ContractCalendar,
 }
@@ -961,6 +962,12 @@ pub async fn prepare_entry<L: Ledger>(
         revision,
         epoch,
         captured_at,
+        occupied_symbols: book
+            .position
+            .iter()
+            .map(|p| p.trade_data.symbol_id)
+            .chain(book.order.iter().map(|o| o.trade_data.symbol_id))
+            .collect(),
         receipt,
         calendar,
     };
@@ -991,6 +998,11 @@ pub async fn send_prepared_entry<L: Ledger>(
         crate::entry_guard::Signal::PullbackBounded {
             margin: Some(proof),
             calendar,
+            ..
+        }
+        | crate::entry_guard::Signal::PullbackConfirmed {
+            margin: Some(proof),
+            calendar: Some(calendar),
             ..
         } if Some(proof) == prepared.receipt.fx_guard.as_ref()
             && calendar == &prepared.calendar => {}
@@ -1073,6 +1085,40 @@ pub async fn send_entry<L: Ledger>(
             .into())
         }
     }
+    let mut guard = guard.clone();
+    if matches!(
+        guard.signal,
+        crate::entry_guard::Signal::PullbackConfirmed { calendar: None, .. }
+    ) {
+        // The fallback path has no cached preparation. Obtain the same broker
+        // schedule proof; final writer validation still refuses absent evidence.
+        let symbols = session
+            .symbols_by_id(&[guard.symbol_id])
+            .await
+            .map_err(|e| Refused {
+                reason: format!("broker calendar unavailable: {e}"),
+            })?;
+        let mut matching = symbols
+            .symbol
+            .iter()
+            .filter(|s| s.symbol_id == guard.symbol_id);
+        let symbol = matching.next().ok_or_else(|| Refused {
+            reason: "broker calendar symbol missing".into(),
+        })?;
+        if matching.next().is_some() {
+            return Err(Refused {
+                reason: "broker calendar symbol ambiguous".into(),
+            }
+            .into());
+        }
+        let proof =
+            crate::market_hours::ContractCalendar::from_symbol(symbol).map_err(|e| Refused {
+                reason: format!("broker calendar invalid: {e:?}"),
+            })?;
+        if let crate::entry_guard::Signal::PullbackConfirmed { calendar, .. } = &mut guard.signal {
+            *calendar = Some(proof);
+        }
+    }
     send_inner(
         session,
         allowlist,
@@ -1081,7 +1127,7 @@ pub async fn send_entry<L: Ledger>(
         cmd,
         entry_key,
         wait,
-        Some(guard),
+        Some(&guard),
         None,
     )
     .await
@@ -1114,8 +1160,28 @@ async fn send_inner<L: Ledger>(
         Command::Open { .. } => {
             if let Some(prepared) = prepared {
                 prepared.validate(session, &ledger.admission_namespace(), &cmd, policy)?;
+                if let Some(guard) = guard {
+                    guard
+                        .validate_pair_occupancy(&prepared.occupied_symbols)
+                        .map_err(|reason| Refused {
+                            reason: reason.into(),
+                        })?;
+                }
             } else {
-                broker_entry_admission(session, ledger, &cmd, true).await?;
+                let (_, _, book) = broker_entry_admission(session, ledger, &cmd, true).await?;
+                if let Some(guard) = guard {
+                    let occupied: Vec<_> = book
+                        .position
+                        .iter()
+                        .map(|p| p.trade_data.symbol_id)
+                        .chain(book.order.iter().map(|o| o.trade_data.symbol_id))
+                        .collect();
+                    guard
+                        .validate_pair_occupancy(&occupied)
+                        .map_err(|reason| Refused {
+                            reason: reason.into(),
+                        })?;
+                }
             }
             // Every attempted send invalidates all older prepared snapshots,
             // across S1/S3 connections, including uncertain socket outcomes.

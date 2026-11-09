@@ -271,6 +271,25 @@ fn fake(fill: (f64, f64)) -> FakeBroker {
                 ..Default::default()
             })
             .collect(),
+        symbols: [BTC, 23, 1022]
+            .into_iter()
+            .map(|symbol_id| ProtoOaSymbol {
+                symbol_id,
+                digits: 2,
+                pip_position: 2,
+                min_volume: Some(1),
+                step_volume: Some(1),
+                max_volume: Some(100_000),
+                trading_mode: Some(0),
+                enable_short_selling: Some(true),
+                schedule_time_zone: Some("UTC".into()),
+                schedule: vec![jiaoyi_ctrader::messages::ProtoOaInterval {
+                    start_second: 0,
+                    end_second: 604800,
+                }],
+                ..Default::default()
+            })
+            .collect(),
         m30_bars: HashMap::from([(BTC, bars(10, 20))]),
         fill_quotes: HashMap::from([(BTC, fill)]),
         trader: Some(ProtoOaTrader {
@@ -542,7 +561,50 @@ impl WireTrader<'_, '_> {
         let peak = OPEN + 2.0 * (mid - OPEN);
         self.on_quote(symbol, Some(peak - 2.5), Some(peak + 2.5), now)
             .await?;
-        self.on_quote(symbol, bid, ask, now + Duration::milliseconds(1))
+        // The new policy needs an observed touch and a later turn; preserve
+        // the caller's intended entry midpoint by touching 58.1% first and
+        // returning to 50%. The two timestamps are distinct broker quotes.
+        self.confirmation_peer(symbol, now).await?;
+        let touch_mid = peak - 0.581 * (peak - OPEN);
+        self.on_quote(
+            symbol,
+            Some(touch_mid - 2.5),
+            Some(touch_mid + 2.5),
+            now + Duration::milliseconds(1),
+        )
+        .await?;
+        self.on_quote(symbol, bid, ask, now + Duration::milliseconds(2))
+            .await
+    }
+
+    /// Explicit synthetic matching peer for entry fixtures. Historical-position
+    /// fixtures do not call this helper. Feed its quote through the connection
+    /// reader, so the final writer independently sees the peer evidence.
+    async fn confirmation_peer(&mut self, symbol: i64, now: DateTime<Utc>) -> anyhow::Result<()> {
+        let source = self.syms[&symbol].clone();
+        let Some(arm) = source.pullback else {
+            return Ok(());
+        };
+        let Some(peer_name) = jiaoyi_core::strategy3::macro_pullback::peer(&source.name) else {
+            return Ok(());
+        };
+        let peer_id = self
+            .syms
+            .values()
+            .find(|s| s.name == peer_name)
+            .map(|s| s.id)
+            .unwrap_or(1022);
+        self.syms.entry(peer_id).or_insert_with(|| {
+            let mut peer = source.clone();
+            peer.id = peer_id;
+            peer.name = peer_name.into();
+            peer.pullback = None;
+            peer.entered_session = None;
+            peer.last_decision_mark = None;
+            peer
+        });
+        let price = OPEN * (1.0 + if arm.long { 0.003 } else { -0.003 });
+        self.on_quote(peer_id, Some(price - 2.5), Some(price + 2.5), now)
             .await
     }
 
@@ -572,6 +634,9 @@ impl WireTrader<'_, '_> {
         })
         .await
         .expect("the fake quote must pass through the connection reader");
+        // The actor fixture uses a native-session clock. Its immutable turn
+        // proof must cross to the same wall clock as the real socket writer.
+        self.inner.set_event_offset_for_test(now - Utc::now());
         self.inner.on_quote(symbol, bid, ask, now).await
     }
 }
@@ -1067,7 +1132,7 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
         "universe.symbols",
         Some(DEMO),
         Some(json!([
-            {"name":"BTCUSD","class":"crypto"},{"name":"ETHUSD","class":"crypto"}
+            {"name":"BTCUSD","class":"crypto"},{"name":"XAUUSD","class":"metal"}
         ])),
         "test",
         "two-symbol exit starvation fixture",
@@ -1075,7 +1140,12 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
     .await
     .unwrap();
     let run = store::start_run(&pool, DEMO).await.unwrap();
-    for (id, name) in [(BTC, "BTCUSD"), (OTHER, "ETHUSD")] {
+    for (id, name) in [(BTC, "BTCUSD"), (OTHER, "XAUUSD")] {
+        let class = if id == BTC {
+            AssetClass::Crypto
+        } else {
+            AssetClass::Metal
+        };
         let s = ProtoOaSymbol {
             symbol_id: id,
             digits: 2,
@@ -1086,7 +1156,7 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
         };
         store::upsert_symbol(
             &pool,
-            &loader::symbol_row(DEMO, name, AssetClass::Crypto, Some(true), &s, Utc::now()),
+            &loader::symbol_row(DEMO, name, class, Some(true), &s, Utc::now()),
         )
         .await
         .unwrap();
@@ -1095,7 +1165,7 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
             run,
             DEMO,
             name,
-            AssetClass::Crypto,
+            class,
             &Resolution::Resolved { symbol_id: id },
         )
         .await
@@ -1131,7 +1201,7 @@ async fn slow_session_bars_do_not_starve_another_positions_tp1(pool: PgPool) {
     let (_trigger, mut stop) = shutdown::channel();
     let live = trading::LivenessMap::default();
     let list = allowlist();
-    let offset = at(30) - Utc::now();
+    let offset = london_fixture().open + Duration::minutes(30) - Utc::now();
     tokio::select! {
         r=strategy3::run_session_with_event_offset(&pool,&list,Environment::Demo,&session,&live,&mut ends,&mut stop,offset)=>r.unwrap(),
         _=tokio::time::sleep(std::time::Duration::from_secs(2))=>{},
@@ -1837,33 +1907,51 @@ async fn an_impulse_waits_for_pullback_then_locks_breakeven_and_full_target(pool
         reconcile_with_scoped_recovery(&mut t, at(30)).await;
         t.on_quote(
             BTC,
+            Some(60_380.885),
+            Some(60_385.885),
+            at(30) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert!(
+            orders(&log).is_empty(),
+            "zone touch alone must never dispatch"
+        );
+        t.confirmation_peer(BTC, at(30) + Duration::seconds(1))
+            .await
+            .unwrap();
+        t.on_quote(
+            BTC,
             Some(60_455.0),
             Some(60_460.0),
-            at(30) + Duration::seconds(1),
+            at(30) + Duration::seconds(2),
         )
         .await
         .unwrap();
         let o = orders(&log);
         assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
-        assert_eq!(o[0].relative_stop_loss, Some(51_623_000));
-        assert_eq!(o[0].relative_take_profit, Some(71_240_000));
-        assert_eq!(o[0].volume, 11);
+        // The confirmed turn permits a rebound to the 40% retracement edge:
+        // reserve entry60,551.50 plus full56.292522 cost =607.80R distance.
+        // Cold and prepared dispatch now fund the same worst allowed price.
+        assert_eq!(o[0].relative_stop_loss, Some(60_780_000));
+        assert_eq!(o[0].relative_take_profit, Some(83_877_000));
+        assert_eq!(o[0].volume, 9);
         let pid = t.own.values().next().unwrap().position_id;
         assert!(t.own[&pid].plan_basis.unwrap().two_stage);
         assert!(!t.own[&pid].partial);
-        t.on_quote(BTC, Some(60_978.22), Some(60_983.22), at(31))
+        t.on_quote(BTC, Some(61_069.79), Some(61_074.79), at(31))
             .await
             .unwrap();
         assert!(
             log.lock().unwrap().amends.is_empty(),
             "no stop tightening below +1R"
         );
-        t.on_quote(BTC, Some(60_978.23), Some(60_983.23), at(32))
+        t.on_quote(BTC, Some(61_069.80), Some(61_074.80), at(32))
             .await
             .unwrap();
         assert_eq!(log.lock().unwrap().amends.len(), 1);
         assert_eq!(t.own[&pid].stop, Some(60_462.0));
-        t.on_quote(BTC, Some(61_000.0), Some(61_005.0), at(33))
+        t.on_quote(BTC, Some(61_100.0), Some(61_105.0), at(33))
             .await
             .unwrap();
         assert_eq!(
@@ -1872,10 +1960,10 @@ async fn an_impulse_waits_for_pullback_then_locks_breakeven_and_full_target(pool
             "BE is a stage, not a continuing trail"
         );
         let target = t.own[&pid].take_profit.unwrap();
-        assert_eq!(target, 61_174.40);
+        assert_eq!(target, 61_300.77);
         let p = f.positions.lock().unwrap()[0].clone();
         t.server_event(&jiaoyi_ctrader::testkit::server_fill(
-            DEMO, p, 991, target, 11, true, false,
+            DEMO, p, 991, target, 9, true, false,
         ))
         .await
         .unwrap();
@@ -1916,9 +2004,24 @@ async fn a_short_impulse_waits_for_the_fresh_midpoint_retest(pool: PgPool) {
         assert!(orders(&log).is_empty());
         t.on_quote(
             BTC,
+            Some(59_614.115),
+            Some(59_619.115),
+            at(30) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        assert!(
+            orders(&log).is_empty(),
+            "short must observe a turn after zone touch"
+        );
+        t.confirmation_peer(BTC, at(30) + Duration::seconds(1))
+            .await
+            .unwrap();
+        t.on_quote(
+            BTC,
             Some(59_540.0),
             Some(59_545.0),
-            at(30) + Duration::seconds(1),
+            at(30) + Duration::seconds(2),
         )
         .await
         .unwrap();
@@ -1943,9 +2046,11 @@ async fn production_crypto_first_and_last_half_hour_still_require_a_fresh_retest
                 .await
                 .unwrap();
             assert_eq!(
-                t.syms[&BTC].pullback,
-                Some(armed),
-                "last half-hour keeps the valid arm"
+                t.syms[&BTC]
+                    .pullback
+                    .map(|a| (a.origin, a.extreme, a.level, a.armed_at)),
+                Some((armed.origin, armed.extreme, armed.level, armed.armed_at)),
+                "last half-hour keeps the valid arm geometry"
             );
             assert!(orders(&log).is_empty());
         }
@@ -2073,7 +2178,7 @@ async fn live_takes_one_minimum_trade_only_with_no_other_program_position(pool: 
             assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
             assert_eq!(o[0].volume, 1);
             // Every new position uses the full 1.38R broker target.
-            assert_eq!(o[0].relative_take_profit, Some(71_240_000));
+            assert_eq!(o[0].relative_take_profit, Some(83_877_000));
         }
     );
 }
@@ -3067,8 +3172,8 @@ async fn an_unconfirmed_strategy_3_open_adopted_at_reconcile_is_listed(pool: PgP
 }
 
 fn second_prepared_crypto(t: &mut strategy3::Trader<'_, '_>) -> i64 {
-    // Two independent USD-quoted crypto symbols use the same deterministic
-    // price/session fixture; their broker identities and retry state differ.
+    // The paired crypto symbols share deterministic price/session fixtures,
+    // while their broker identities and retry state remain distinct.
     let id = BTC + 1;
     let mut other = t.syms[&BTC].clone();
     other.id = id;
@@ -3084,6 +3189,45 @@ fn second_prepared_crypto(t: &mut strategy3::Trader<'_, '_>) -> i64 {
     other.last_decision_mark = None;
     t.syms.insert(id, other);
     id
+}
+
+/// A genuine London entry window, including when CI happens on a weekend.
+fn london_fixture() -> Session {
+    use jiaoyi_core::strategy3::production_sessions::{self as prod, Market};
+    (0..7)
+        .find_map(|days| {
+            prod::windows_on(Market::Metal, today().date - Duration::days(days))
+                .get(1)
+                .copied()
+        })
+        .unwrap()
+}
+
+/// Independent class fixture for account-level guards. BTC/ETH deliberately
+/// cannot exercise these paths while BTC is occupied under the pair policy.
+fn independent_prepared_metal(t: &mut strategy3::Trader<'_, '_>) -> (i64, DateTime<Utc>) {
+    use jiaoyi_core::strategy3::production_sessions as prod;
+    let session = london_fixture();
+    let id = BTC + 1;
+    let mut other = t.syms[&BTC].clone();
+    other.id = id;
+    other.name = "XAUUSD".into();
+    other.class = AssetClass::Metal;
+    other.rule = prod::rule_for("XAUUSD", AssetClass::Metal);
+    if let Some(Ok(day)) = other.day.as_mut() {
+        let offset = session.open - day.session.open;
+        if let Ok(context) = day.macro_context.as_mut() {
+            context.latest_bar_end += offset;
+        }
+        day.prepared_at += offset;
+        day.session = session;
+    }
+    other.pullback = None;
+    other.entered_session = None;
+    other.last_try = None;
+    other.last_decision_mark = None;
+    t.syms.insert(id, other);
+    (id, session.open + Duration::minutes(30))
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
@@ -3169,13 +3313,13 @@ async fn funding_backoff_keeps_the_open_positions_tp1(pool: PgPool) {
     f.reject_orders = Some("NOT_ENOUGH_MONEY".into());
     with_trader!(&pool, f, Environment::Demo, |t, log| {
         t.prepare(BTC, today(), at(30)).await.unwrap();
-        let other = second_prepared_crypto(&mut t);
+        let (other, entry_at) = independent_prepared_metal(&mut t);
         t.reconcile(Utc::now()).await.unwrap();
         t.enter_pullback(
             other,
             Some(60_455.0),
             Some(60_460.0),
-            at(30) + Duration::seconds(1),
+            entry_at + Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -3188,7 +3332,7 @@ async fn funding_backoff_keeps_the_open_positions_tp1(pool: PgPool) {
             BTC,
             Some(61_384.21),
             Some(62_118.0),
-            at(30) + Duration::seconds(2),
+            entry_at + Duration::seconds(2),
         )
         .await
         .unwrap();
@@ -3366,7 +3510,7 @@ async fn the_owners_pause_stops_new_entries_and_the_exits_still_run(pool: PgPool
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1, "{:?}", decisions(&pool).await);
-        assert_eq!(orders(&log)[0].volume, 11);
+        assert_eq!(orders(&log)[0].volume, 9);
         // Paused again: the position keeps its exits.
         owner_sets_pause(&pool, 1).await;
         t.enter_pullback(BTC, Some(61_384.21), Some(62_118.0), at(61))
@@ -3380,7 +3524,7 @@ async fn the_owners_pause_stops_new_entries_and_the_exits_still_run(pool: PgPool
         );
         t.reconcile(Utc::now()).await.unwrap();
         t.session_end(at(24 * 60)).await.unwrap();
-        assert_eq!(closes(&log), vec![11], "full session end while paused");
+        assert_eq!(closes(&log), vec![9], "full session end while paused");
         assert_eq!(orders(&log).len(), 1, "no new entry");
     });
     // Only the owner wrote the pause.
@@ -4739,13 +4883,13 @@ async fn unqualified_position_cannot_free_demo_budget_for_another_symbol(pool: P
         f.positions.lock().unwrap()[0].trade_data.volume *= 2;
         t.reconcile(Utc::now()).await.unwrap();
         assert!(t.own.is_empty(), "unproved quantity is not managed");
-        let other = second_prepared_crypto(&mut t);
+        let (other, entry_at) = independent_prepared_metal(&mut t);
         t.syms.get_mut(&other).unwrap().entered_session = None;
         t.enter_pullback(
             other,
             Some(60_455.0),
             Some(60_460.0),
-            at(30) + Duration::seconds(1),
+            entry_at + Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -5249,5 +5393,268 @@ async fn external_position_cancels_armed_setup_and_release_requires_a_new_impuls
             "human symbol lock releases automatically"
         );
         assert!(orders(&log).is_empty());
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn peer_position_cancels_durable_arm_and_release_requires_a_new_impulse(pool: PgPool) {
+    const ETH: i64 = BTC + 1;
+    loaded(&pool).await;
+    let symbol = ProtoOaSymbol {
+        symbol_id: ETH,
+        digits: 2,
+        pip_position: 2,
+        min_volume: Some(1),
+        step_volume: Some(1),
+        ..Default::default()
+    };
+    store::upsert_symbol(
+        &pool,
+        &loader::symbol_row(
+            DEMO,
+            "ETHUSD",
+            AssetClass::Crypto,
+            Some(true),
+            &symbol,
+            Utc::now(),
+        ),
+    )
+    .await
+    .unwrap();
+    let run = store::start_run(&pool, DEMO).await.unwrap();
+    for (id, name) in [(BTC, "BTCUSD"), (ETH, "ETHUSD")] {
+        store::record_resolution(
+            &pool,
+            run,
+            DEMO,
+            name,
+            AssetClass::Crypto,
+            &Resolution::Resolved { symbol_id: id },
+        )
+        .await
+        .unwrap();
+    }
+    store::finish_run(
+        &pool,
+        run,
+        "ok",
+        &store::RunSummary {
+            listed_symbols: Some(json!([{"id":BTC,"quote_asset_id":1,"base_asset_id":9},
+            {"id":ETH,"quote_asset_id":1,"base_asset_id":9}])),
+            assets: Some(json!([{"asset_id":1,"name":"USD"},{"asset_id":9,"name":"BTC"}])),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let mut f = fake((60700.0, 60705.0));
+    f.m30_bars.insert(ETH, bars(10, 20));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60700.0), Some(60705.0), at(60))
+            .await
+            .unwrap();
+        assert!(t.syms[&BTC].pullback.is_some());
+        let mut sibling = s3_position(9987, 1, 60705.0);
+        sibling.trade_data.symbol_id = ETH;
+        sibling.trade_data.label = None; // External sibling exposure also consumes the pair.
+        f.positions.lock().unwrap().push(sibling);
+        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+            .await
+            .unwrap();
+        t.reconcile(at(60) + Duration::seconds(1)).await.unwrap();
+        t.on_quote(
+            BTC,
+            Some(60350.0),
+            Some(60355.0),
+            at(60) + Duration::seconds(2),
+        )
+        .await
+        .unwrap();
+        assert!(
+            t.syms[&BTC].pullback.is_none(),
+            "peer occupation must tombstone restored arm"
+        );
+        assert!(decisions(&pool)
+            .await
+            .iter()
+            .any(|(_, why)| why.contains("pair_risk_reservation_active")));
+        assert!(orders(&log).is_empty());
+        assert!(closes(&log).is_empty());
+        assert!(log.lock().unwrap().amends.is_empty());
+        f.positions.lock().unwrap().clear();
+        t.reconcile(at(90)).await.unwrap();
+        t.on_quote(BTC, Some(60000.0), Some(60005.0), at(90))
+            .await
+            .unwrap();
+        assert!(
+            t.syms[&BTC].pullback.is_none(),
+            "released pair cannot resurrect missed causal state"
+        );
+        t.on_quote(
+            BTC,
+            Some(60700.0),
+            Some(60705.0),
+            at(90) + Duration::seconds(4),
+        )
+        .await
+        .unwrap();
+        assert!(t.syms[&BTC].pullback.is_some());
+        assert!(orders(&log).is_empty());
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn running_extension_survives_restart_and_deep_retracement_disarms(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60_912.5), Some(60_917.5), at(30))
+            .await
+            .unwrap();
+        t.on_quote(
+            BTC,
+            Some(61_197.5),
+            Some(61_202.5),
+            at(30) + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        let extended = t.syms[&BTC].pullback.unwrap();
+        assert_eq!(extended.extreme, 61_200.0);
+        assert_eq!(extended.level, 60_600.0);
+        assert_eq!(extended.impulse_range, 1_200.0);
+        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+            .await
+            .unwrap();
+        t.reconcile(at(30) + Duration::seconds(2)).await.unwrap();
+        // 58.1% retracement touches but cannot enter without a later turn.
+        t.on_quote(
+            BTC,
+            Some(60_500.3),
+            Some(60_505.3),
+            at(30) + Duration::seconds(3),
+        )
+        .await
+        .unwrap();
+        assert_eq!(t.syms[&BTC].pullback.unwrap().extreme, 61_200.0);
+        assert!(orders(&log).is_empty());
+        // A 62% retracement invalidates the extended arm before an order.
+        t.on_quote(
+            BTC,
+            Some(60_453.5),
+            Some(60_458.5),
+            at(30) + Duration::seconds(4),
+        )
+        .await
+        .unwrap();
+        assert!(t.syms[&BTC].pullback.is_none());
+        assert!(decisions(&pool)
+            .await
+            .iter()
+            .any(|(_, why)| why.contains("invalidated_deep_retracement_gt_61_8pct")));
+        assert!(orders(&log).is_empty());
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn unresolved_sibling_intent_survives_restart_until_explicit_terminal_receipt(pool: PgPool) {
+    loaded(&pool).await;
+    let key = format!("s3:{DEMO}:{BTC}:uncertain-before-restart");
+    sqlx::query("INSERT INTO trading_intents (account_id,entry_key,client_msg_id,kind,symbol_id,side,volume,relative_stop,risk,max_risk,created_at) VALUES ($1,$2,'pair-uncertain','open',$3,'buy',1,50000000,5.0,60.0,now()-interval '1 hour')")
+        .bind(DEMO).bind(&key).bind(BTC).execute(&pool).await.unwrap();
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.prepare(BTC, today(), at(30)).await.unwrap();
+        let other = second_prepared_crypto(&mut t);
+        t.on_quote(other, Some(60_700.0), Some(60_705.0), at(30))
+            .await
+            .unwrap();
+        assert!(t.syms[&other].pullback.is_none());
+        assert!(orders(&log).is_empty());
+        assert!(decisions(&pool)
+            .await
+            .iter()
+            .any(|(_, r)| r == "pair_risk_reservation_active"));
+        assert_eq!(
+            store::trading::open_intents_unresolved(&pool, DEMO)
+                .await
+                .unwrap()
+                .len(),
+            1,
+            "broker-flat reconciliation cannot settle an unconfirmed opening by elapsed time"
+        );
+        store::trading::record_event(
+            &pool,
+            &store::trading::EventRow {
+                account_id: DEMO,
+                entry_key: Some(key.clone()),
+                client_msg_id: Some("pair-uncertain".into()),
+                payload_type: 2126,
+                kind: "ORDER_REJECTED".into(),
+                position_id: None,
+                order_id: None,
+                deal_id: None,
+                symbol_id: Some(BTC),
+                side: Some("buy".into()),
+                price: None,
+                volume: Some(1),
+                stop_loss: None,
+                label: Some("jiaoyi-s3".into()),
+                error_code: Some("REJECTED".into()),
+                description: None,
+                is_server_event: None,
+                raw: vec![],
+                received_at: Utc::now(),
+            },
+        )
+        .await
+        .unwrap();
+        t.reconcile(at(60)).await.unwrap();
+        t.on_quote(other, Some(60_700.0), Some(60_705.0), at(60))
+            .await
+            .unwrap();
+        assert!(
+            t.syms[&other].pullback.is_some(),
+            "explicit broker rejection releases the pair for a fresh impulse"
+        );
+        assert!(
+            orders(&log).is_empty(),
+            "a new impulse still needs its own later confirmed pullback"
+        );
+    });
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn demo_broker_minimum_cannot_override_the_normal_trade_budget(pool: PgPool) {
+    loaded(&pool).await;
+    // 1 BTC minimum exposes more than the $60 ordinary 0.6% budget, even
+    // though it fits the old $1,000 10% minimum-volume exception.
+    sqlx::query("UPDATE symbols SET min_volume=100, volume_step=100 WHERE account_id=$1 AND broker_symbol_id=$2")
+        .bind(DEMO).bind(BTC).execute(&pool).await.unwrap();
+    let f = fake((60_455.0, 60_462.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.enter_pullback(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        assert!(
+            orders(&log).is_empty(),
+            "minimum sizing cannot raise the authorised per-trade budget"
+        );
+        let notes = decisions(&pool).await;
+        assert!(
+            notes
+                .iter()
+                .any(|(kind, why)| kind == "s3_skip"
+                    && why == "min_volume_exceeds_trade_risk_budget"),
+            "{notes:?}"
+        );
+        let sent: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM trading_intents WHERE account_id=$1 AND kind='open'",
+        )
+        .bind(DEMO)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(sent, 0);
     });
 }

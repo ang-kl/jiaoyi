@@ -20,6 +20,7 @@ use sqlx::PgPool;
 
 const ACCOUNT: i64 = 49236051;
 const BTC: i64 = 22;
+const ETH: i64 = 23;
 const OPEN: f64 = 60_000.0;
 fn e5(price: f64) -> i64 {
     (price * 100_000.0).round() as i64
@@ -60,7 +61,7 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         ("trading.margin_level_floor_pct", json!(200)),
         (
             "universe.symbols",
-            json!([{"name":"BTCUSD","class":"crypto"}]),
+            json!([{"name":"BTCUSD","class":"crypto"},{"name":"ETHUSD","class":"crypto"}]),
         ),
     ] {
         settings::change(
@@ -74,37 +75,34 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         .await
         .unwrap();
     }
-    store::upsert_symbol(
-        &pool,
-        &loader::symbol_row(
-            ACCOUNT,
-            "BTCUSD",
-            AssetClass::Crypto,
-            Some(true),
-            &contract,
-            now,
-        ),
-    )
-    .await
-    .unwrap();
     let run = store::start_run(&pool, ACCOUNT).await.unwrap();
-    store::record_resolution(
-        &pool,
-        run,
-        ACCOUNT,
-        "BTCUSD",
-        AssetClass::Crypto,
-        &Resolution::Resolved { symbol_id: BTC },
-    )
-    .await
-    .unwrap();
+    for (id, name) in [(BTC, "BTCUSD"), (ETH, "ETHUSD")] {
+        let mut symbol = contract.clone();
+        symbol.symbol_id = id;
+        store::upsert_symbol(
+            &pool,
+            &loader::symbol_row(ACCOUNT, name, AssetClass::Crypto, Some(true), &symbol, now),
+        )
+        .await
+        .unwrap();
+        store::record_resolution(
+            &pool,
+            run,
+            ACCOUNT,
+            name,
+            AssetClass::Crypto,
+            &Resolution::Resolved { symbol_id: id },
+        )
+        .await
+        .unwrap();
+    }
     store::finish_run(
         &pool,
         run,
         "ok",
         &store::RunSummary {
-            listed_symbols: Some(json!([{"id":BTC,"quote_asset_id":1,"base_asset_id":9}])),
-            assets: Some(json!([{"asset_id":1,"name":"USD"},{"asset_id":9,"name":"BTC"}])),
+            listed_symbols: Some(json!([{"id":BTC,"quote_asset_id":1,"base_asset_id":9},{"id":ETH,"quote_asset_id":1,"base_asset_id":10}])),
+            assets: Some(json!([{"asset_id":1,"name":"USD"},{"asset_id":9,"name":"BTC"},{"asset_id":10,"name":"ETH"}])),
             ..Default::default()
         },
     )
@@ -168,6 +166,16 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         bid_e5: Some(e5(OPEN - 2.5)),
         ask_e5: Some(e5(OPEN + 2.5)),
     });
+    let peer_quotes: Vec<_> = quotes
+        .iter()
+        .cloned()
+        .map(|mut q| {
+            q.broker_symbol_id = ETH;
+            q.session_id.push_str("-peer");
+            q
+        })
+        .collect();
+    quotes.extend(peer_quotes);
     store::ticks::insert(&pool, &quotes).await.unwrap();
 
     // All prior same-slot bars are causal. Positive multi-day drift and 75bp
@@ -202,15 +210,24 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
     let (spots, _) = tokio::sync::broadcast::channel(128);
     let fake = FakeBroker {
         account_id: ACCOUNT,
-        assets: vec![(1, "USD".into()), (9, "BTC".into())],
-        light_symbols: vec![ProtoOaLightSymbol {
-            symbol_id: BTC,
-            base_asset_id: Some(9),
-            quote_asset_id: Some(1),
-            ..Default::default()
-        }],
-        symbols: vec![contract],
-        m30_bars: HashMap::from([(BTC, bars)]),
+        assets: vec![(1, "USD".into()), (9, "BTC".into()), (10, "ETH".into())],
+        light_symbols: [(BTC, 9), (ETH, 10)]
+            .into_iter()
+            .map(|(symbol_id, base)| ProtoOaLightSymbol {
+                symbol_id,
+                base_asset_id: Some(base),
+                quote_asset_id: Some(1),
+                ..Default::default()
+            })
+            .collect(),
+        symbols: [BTC, ETH]
+            .into_iter()
+            .map(|symbol_id| ProtoOaSymbol {
+                symbol_id,
+                ..contract.clone()
+            })
+            .collect(),
+        m30_bars: HashMap::from([(BTC, bars.clone()), (ETH, bars)]),
         fill_quotes: HashMap::from([(BTC, (60_227.5, 60_232.5))]),
         spot_events: Some(spots.clone()),
         trader: Some(ProtoOaTrader {
@@ -258,11 +275,11 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         Duration::zero(),
     );
     tokio::pin!(actor);
-    let emit = |mid: f64| {
+    let emit = |symbol_id: i64, mid: f64| {
         spots
             .send(ProtoOaSpotEvent {
                 ctid_trader_account_id: ACCOUNT,
-                symbol_id: BTC,
+                symbol_id,
                 bid: Some(e5(mid - 2.5) as u64),
                 ask: Some(e5(mid + 2.5) as u64),
                 ..Default::default()
@@ -273,7 +290,8 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         // The genuine actor must arm and publish a reusable admission. A direct
         // Trader fixture would bypass this lane and cannot satisfy the barrier.
         loop {
-            emit(60_460.0);
+            emit(ETH, 60_180.0); //30bp peer hold, below its own75bp impulse.
+            emit(BTC, 60_460.0);
             tokio::time::sleep(WallDuration::from_millis(50)).await;
             let ready = live
                 .lock()
@@ -299,16 +317,32 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
             warm_margin_rows, 0,
             "unused background receipts must not grow the database"
         );
+        // 58.1% retracement touches the zone but cannot itself dispatch.
+        emit(BTC, 60_192.74);
+        loop {
+            let touched: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM trading_decisions WHERE account_id=$1 AND symbol='BTCUSD' AND reason='pullback_zone_touched')")
+                .bind(ACCOUNT).fetch_one(&pool).await.unwrap();
+            if touched {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            log.lock().unwrap().orders.is_empty(),
+            "zone touch alone cannot dispatch"
+        );
+        emit(ETH, 60_180.0);
         let payload_start = log.lock().unwrap().payload_types.len();
-        let touched = std::time::Instant::now();
-        emit(60_230.0);
+        let confirmed = std::time::Instant::now();
+        emit(BTC, 60_230.0); //Later8.1% turn, still inside the admission zone.
         loop {
             if !log.lock().unwrap().orders.is_empty() {
                 break;
             }
             tokio::time::sleep(WallDuration::from_millis(1)).await;
         }
-        let elapsed = touched.elapsed();
+        let elapsed = confirmed.elapsed();
         let payloads = log.lock().unwrap().payload_types[payload_start..].to_vec();
         let write = payloads
             .iter()
@@ -326,16 +360,16 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
             !payloads[..write]
                 .iter()
                 .any(|p| forbidden.iter().any(|f| *p == *f as u32)),
-            "prepared touch made a new broker admission/history request: {:?}",
+            "prepared confirmation made a new broker admission/history request: {:?}",
             &payloads[..write]
         );
         assert!(
             elapsed < WallDuration::from_millis(250),
-            "touch to fake-broker order: {elapsed:?}"
+            "confirmed turn to fake-broker order: {elapsed:?}"
         );
         // A duplicate fresh quote must not duplicate the consumed durable arm.
         for _ in 0..3 {
-            emit(60_230.0);
+            emit(BTC, 60_230.0);
             tokio::time::sleep(WallDuration::from_millis(30)).await;
         }
         let raw: Vec<u8> = loop {
@@ -346,7 +380,19 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         };
         let receipt: Value = serde_json::from_slice(&raw).unwrap();
         assert_eq!(receipt["result"], "passed");
-        assert_eq!(receipt["pullback_admitted_price"]["bounded"], true);
+        let admission = &receipt["pullback_admitted_price"];
+        assert_eq!(admission["policy"], "s3_macro_pullback_owner_18407_v1");
+        assert_eq!(admission["peer_min_signed_bps"], 24.0);
+        let proof: jiaoyi_core::strategy3::macro_pullback::TurnProof =
+            serde_json::from_value(admission["confirmed_turn"].clone()).unwrap();
+        assert!(proof.touched_at < proof.confirmed_at);
+        assert!(proof.long);
+        assert_eq!(proof.turn_extreme, 60_192.74);
+        assert_eq!(
+            (proof.confirmed_bid, proof.confirmed_ask),
+            (60_227.5, 60_232.5)
+        );
+        assert_eq!(admission["price"], 60_278.5);
         assert_eq!(receipt["broker_calendar_symbol_id"], BTC);
         assert!(receipt["fx_margin_revalidation"].is_object());
         let intents: i64 = sqlx::query_scalar(
@@ -367,7 +413,7 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
             (intents, records, log.lock().unwrap().orders.len()),
             (1, 1, 1)
         );
-        eprintln!("production actor touch-to-write {elapsed:?}; one durable intent, zero intervening admission/history reads");
+        eprintln!("production actor confirmed-turn-to-write {elapsed:?}; one durable intent, zero intervening admission/history reads");
         stop.fire();
     };
     let result = tokio::time::timeout(WallDuration::from_secs(30), async {

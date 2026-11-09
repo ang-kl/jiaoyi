@@ -510,7 +510,16 @@ async fn bounded_pullback_review_separates_trigger_bound_and_window_history(pool
             "../../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18392.md"
         ))
     );
-    for account in 1..=6 {
+    for account in 1..=7 {
+        // This fixture hashes the historical 18392 registration and proves
+        // its single-touch bounded writer semantics. Never relabel it with
+        // today's stronger confirmation policy. Account 7 intentionally
+        // mismatches the new policy and old hash, which must stay unknown.
+        let policy = if account == 7 {
+            mp::POLICY
+        } else {
+            "s3_macro_pullback_owner_18392_v1"
+        };
         let planned_cost = cost_reserve(0.02, 0.0, 3.74, 100.61).unwrap();
         let planned_risk = mp::geometry(true, 100.61, 100.0, planned_cost.total, 2)
             .unwrap()
@@ -572,10 +581,10 @@ async fn bounded_pullback_review_separates_trigger_bound_and_window_history(pool
         open.session_date = Some(session.date);
         open.bid = Some(100.49);
         open.ask = Some(100.51);
-        open.detail = json!({"production_policy":mp::POLICY,"session_date":session.date,"session":session,
+        open.detail = json!({"production_policy":policy,"session_date":session.date,"session":session,
             "decided_at":at,"armed":armed,"macro_context":context,"band":band,
             "bid":100.49,"ask":100.51,"entry":entry,"volume_limits":limits,"order":order});
-        let receipt = json!({"production_policy":mp::POLICY,"prereg_hash":hash,"state":armed,
+        let receipt = json!({"production_policy":policy,"prereg_hash":hash,"state":armed,
             "detail":{"impulse_quote":{"bid":100.99,"ask":101.01},"band":band,"cost":arm_cost,"peer_move":null}});
         sqlx::query("INSERT INTO trading_decisions(account_id,symbol,kind,reason,detail,at) VALUES($1,'BTCUSD','s3_pullback_state','armed_pullback',$2,$3)")
             .bind(account).bind(receipt).bind(armed.armed_at).execute(&pool).await.unwrap();
@@ -630,11 +639,26 @@ async fn bounded_pullback_review_separates_trigger_bound_and_window_history(pool
             .execute(&pool).await.unwrap();
         record_case(&pool, &open).await;
     }
-    let out = evidence(&pool, &[1, 2, 3, 4, 5, 6]).await.unwrap();
-    assert_eq!(out["cases"].as_array().unwrap().len(), 6);
+    let out = evidence(&pool, &[1, 2, 3, 4, 5, 6, 7]).await.unwrap();
+    assert_eq!(out["cases"].as_array().unwrap().len(), 7);
     for case in out["cases"].as_array().unwrap() {
         let account = case["account_id"].as_i64().unwrap();
         let checks = &case["checks"];
+        if account == 7 {
+            for name in [
+                "original_session_valid",
+                "original_decision_mark_valid",
+                "original_impulse_valid",
+                "entry_trigger_valid",
+                "final_dispatch_guard_verified",
+            ] {
+                assert!(
+                    checks[name].is_null(),
+                    "mismatched current policy must not inherit historical proof: {name}"
+                );
+            }
+            continue;
+        }
         for name in [
             "original_session_valid",
             "original_decision_mark_valid",
