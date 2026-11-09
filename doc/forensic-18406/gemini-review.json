@@ -1,0 +1,95 @@
+{
+  "trace": "№18,406",
+  "status": "forensic_inspection_completed",
+  "as_of_sgt": "2026-11-09T16:45:00+08:00",
+  "production_changed": false,
+  "anatomy_account_id": 46130058,
+  "other_accounts_full_ledger": "trade-ledger.json",
+  "all_15_audited_positions_closed": true,
+  "combined_demo_net_pnl_usd": -788.68,
+  "todays_5_bot_trades_audit": {
+    "ETHUSD_1330_sell": {
+      "open_mid": 2138.72,
+      "impulse_extreme": 2127.39,
+      "pullback_ref": 2133.055,
+      "entry_fill": 2132.21,
+      "sl": 2143.61,
+      "tp": 2116.47,
+      "exit_fill": 2116.3,
+      "exit_reason": "take_profit",
+      "current_status": "closed",
+      "math_verified_correct": true
+    },
+    "SpotCrude_1533_sell": {
+      "open_mid": 90.326,
+      "impulse_extreme": 89.886,
+      "pullback_ref": 90.106,
+      "entry_fill": 90.103,
+      "sl": 90.476,
+      "tp": 89.588,
+      "exit_fill": 90.498,
+      "exit_reason": "stop_loss",
+      "current_status": "closed",
+      "math_verified_correct": true,
+      "why_entered_at_1533_and_stopped_at_1558": "Strict frozen-reference midpoint touch; brief 0.3753R favourable excursion, then reversal through original stop.",
+      "code_bug_or_market_reversal": "Valid frozen-reference pullback then market reversal; frozen extreme is not the running low."
+    },
+    "SpotBrent_1533_sell": {
+      "open_mid": 99.89,
+      "impulse_extreme": 99.294,
+      "pullback_ref": 99.592,
+      "entry_fill": 99.59,
+      "sl": 100.08,
+      "tp": 98.913,
+      "exit_fill": 100.076,
+      "exit_reason": "stop_loss",
+      "current_status": "closed",
+      "math_verified_correct": true,
+      "why_entered_at_1533_and_stopped_at_1602": "Strict frozen-reference touch; brief 0.5918R favourable excursion, then reversal; no +1R trigger."
+    },
+    "US500_1605_sell": {
+      "open_mid": 7398.6,
+      "impulse_extreme": 7363.0,
+      "pullback_ref": 7380.8,
+      "entry_fill": 7380.2,
+      "sl": 7407.8,
+      "tp": 7342.1,
+      "exit_fill": 7408.1,
+      "exit_reason": "stop_loss",
+      "current_status": "closed",
+      "math_verified_correct": true,
+      "decision_mark": "15:30:00 SGT",
+      "armed_at_sgt": "15:46:24.197717",
+      "closed_at_sgt": "16:43:24.003000"
+    },
+    "NAS100_1620_sell": {
+      "open_mid": 26947.15,
+      "impulse_extreme": 26815.15,
+      "pullback_ref": 26881.15,
+      "entry_fill": 26880,
+      "sl": 26981.1,
+      "tp": 26740.4,
+      "exit_fill": 26982,
+      "exit_reason": "stop_loss",
+      "current_status": "closed",
+      "math_verified_correct": true,
+      "decision_mark": "15:30:00 SGT",
+      "armed_at_sgt": "15:36:12.720800",
+      "closed_at_sgt": "16:43:21.424000"
+    }
+  },
+  "flaws_and_bugs_found": [
+    "Frozen impulse reference ignores later extensions; NAS100 entered after 78.5% retracement of the observed full decline.",
+    "No pair/class risk cap in S3 entry path; 3% aggregate S3 risk cap remains.",
+    "Demo broker-minimum exception raised NAS100 initial risk to 1.2496% on account 49236051.",
+    "Historical price-drift and peer-sign filters did not reject these intraday recoveries.",
+    "Existing 18380 replay is not exact parity for deployed 18392 production policy."
+  ],
+  "recommended_fixes": [
+    "Account-scoped pair risk reservation covering pending and open positions.",
+    "Separate demo minimum-risk policy tied to the normal trade budget; skip when legal minimum is too large.",
+    "Exact 18392 replay and receipt-parity verification before financial claims.",
+    "Freeze and independently test one causal extension/reversal-confirmation hypothesis."
+  ],
+  "financial_pass": false
+}
