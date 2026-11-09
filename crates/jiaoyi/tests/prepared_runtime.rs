@@ -289,6 +289,16 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
             log.lock().unwrap().orders.is_empty(),
             "arming does not place an order"
         );
+        let warm_margin_rows: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM trading_decisions WHERE kind='margin_admission'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            warm_margin_rows, 0,
+            "unused background receipts must not grow the database"
+        );
         let payload_start = log.lock().unwrap().payload_types.len();
         let touched = std::time::Instant::now();
         emit(60_230.0);

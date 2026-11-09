@@ -811,6 +811,7 @@ async fn broker_entry_admission<L: Ledger>(
     session: &AccountSession<'_>,
     ledger: &L,
     cmd: &Command,
+    persist_receipt: bool,
 ) -> Result<
     (
         crate::margin::Receipt,
@@ -855,12 +856,14 @@ async fn broker_entry_admission<L: Ledger>(
         .as_ref()
         .cloned()
         .unwrap_or_else(|e| crate::margin::Receipt::unavailable(e.clone()));
-    ledger
-        .record_margin(account_id, symbol_id, &receipt)
-        .await
-        .map_err(|reason| Refused {
-            reason: format!("margin receipt could not be recorded: {reason}"),
-        })?;
+    if persist_receipt {
+        ledger
+            .record_margin(account_id, symbol_id, &receipt)
+            .await
+            .map_err(|reason| Refused {
+                reason: format!("margin receipt could not be recorded: {reason}"),
+            })?;
+    }
     let receipt = result.map_err(|reason| Refused {
         reason: format!("margin buffer: {reason}"),
     })?;
@@ -892,7 +895,9 @@ pub async fn prepare_entry<L: Ledger>(
     };
     let symbol_ids = [*symbol_id];
     let (admission, symbols) = tokio::join!(
-        broker_entry_admission(session, ledger, command),
+        // Unused warm receipts stay in memory. The chosen S3 proof is stored
+        // atomically with its intent/order; do not write one row per refresh.
+        broker_entry_admission(session, ledger, command, false),
         session.symbols_by_id(&symbol_ids)
     );
     let (mut receipt, _, book) = admission?;
@@ -1096,7 +1101,7 @@ async fn send_inner<L: Ledger>(
             if let Some(prepared) = prepared {
                 prepared.validate(session, &ledger.admission_namespace(), &cmd, policy)?;
             } else {
-                broker_entry_admission(session, ledger, &cmd).await?;
+                broker_entry_admission(session, ledger, &cmd, true).await?;
             }
             // Every attempted send invalidates all older prepared snapshots,
             // across S1/S3 connections, including uncertain socket outcomes.
