@@ -1,0 +1,2456 @@
+//! The connection to a cTrader Open API proxy.
+//!
+//! One background task reads frames and routes them: a response goes to the
+//! request waiting on its `clientMsgId`; a spot event goes to the spot
+//! broadcast; disconnect and token-invalidated events are logged and kept.
+//! Another task sends a heartbeat every 10 seconds (the proxy expects one
+//! within 30 s of silence; `ProtoHeartbeatEvent` docs).
+//!
+//! Every outgoing read frame goes through [`Connection::send_message`], which
+//! calls [`check_sendable`] before writing. The one other write path,
+//! [`Connection::send_trading_frame`], is crate-private, checks
+//! [`check_tradable`] instead, and is called only by `crate::trading::send`
+//! (the order gate). Execution events, order errors and unmatched error
+//! responses go to the execution broadcast.
+
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::Duration;
+
+use chrono::{DateTime, Utc};
+use jiaoyi_core::allowlist::PermittedAccount;
+use jiaoyi_core::secret::Secret;
+use prost::Message;
+use rust_decimal::Decimal;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::{broadcast, oneshot, Mutex};
+use tokio::task::{AbortHandle, JoinHandle};
+use tokio::time::Instant;
+
+use crate::entry_guard::{EntryGuard, GuardRefusal, Quote};
+use crate::frame::{read_frame, write_frame, FrameError};
+use crate::payload::{
+    check_sendable, check_tradable, payload_name, NotSendable, Request, Response,
+};
+use crate::pb::{
+    self, ProtoErrorRes, ProtoMessage, ProtoOaErrorRes, ProtoOaPayloadType as Oa, ProtoOaSpotEvent,
+    ProtoOaTrendbar, ProtoOaTrendbarPeriod, ProtoPayloadType as Common,
+};
+
+/// The proxy drops a connection after 30 s of silence; send well inside that.
+pub const HEARTBEAT_EVERY: Duration = Duration::from_secs(10);
+/// Spotware limits historical-data requests to 5 per second; stay under it.
+pub const HISTORICAL_MIN_GAP: Duration = Duration::from_millis(250);
+/// Longest D1 window asked for in one request (one year plus a day).
+pub const D1_WINDOW_DAYS: i64 = 366;
+/// Stop walking back through history after this many empty windows in a row.
+pub const EMPTY_WINDOWS_TO_STOP: u32 = 3;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ClientError {
+    #[error(transparent)]
+    NotSendable(#[from] NotSendable),
+    #[error(transparent)]
+    EntryRefused(#[from] GuardRefusal),
+    #[error("frame: {0}")]
+    Frame(#[from] FrameError),
+    #[error("connect: {0}")]
+    Connect(String),
+    #[error("broker error {code}: {}", description.as_deref().unwrap_or(""))]
+    Broker {
+        code: String,
+        description: Option<String>,
+        retry_after_secs: Option<u64>,
+    },
+    #[error("expected payload type {expected} ({}), got {got} ({})", payload_name(*expected), payload_name(*got))]
+    UnexpectedPayload { expected: u32, got: u32 },
+    #[error("response does not decode: {0}")]
+    Decode(#[from] prost::DecodeError),
+    #[error("no response within {0:?}")]
+    Timeout(Duration),
+    #[error("socket write not completed within {0:?}")]
+    WriteTimeout(Duration),
+    #[error("connection closed: {0}")]
+    Disconnected(String),
+    #[error("response is for account {got}, asked for {asked}")]
+    WrongAccount { asked: i64, got: i64 },
+    #[error("tick data: {0}")]
+    TickData(#[from] crate::tickdata::TickDataError),
+}
+
+impl ClientError {
+    /// True when the broker says the access token is expired or invalid.
+    pub fn is_token_rejected(&self) -> bool {
+        matches!(self, ClientError::Broker { code, .. }
+            if code == "OA_AUTH_TOKEN_EXPIRED" || code == "CH_ACCESS_TOKEN_INVALID")
+    }
+}
+
+type Pending = Arc<StdMutex<HashMap<String, oneshot::Sender<ProtoMessage>>>>;
+
+/// Normal request/reply correlation only; order intents and execution events
+/// have their own durable/broadcast paths. An outer timeout may drop a request
+/// before its response timer runs, so cleanup must follow the future's lifetime.
+struct RequestWaiter {
+    pending: Pending,
+    id: String,
+}
+
+impl Drop for RequestWaiter {
+    fn drop(&mut self) {
+        self.pending.lock().unwrap().remove(&self.id);
+    }
+}
+
+/// The broker ended one or more account sessions on a socket that stays open
+/// (`ProtoOAAccountsTokenInvalidatedEvent`, `ProtoOAAccountDisconnectEvent`,
+/// or `ProtoOAClientDisconnectEvent` for every account). A session for an
+/// affected account must re-authorise before it can be used again. A local
+/// interrupted frame write ends all accounts and requires a fresh connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionEnd {
+    /// Empty: every account on this connection.
+    pub account_ids: Vec<i64>,
+    pub reason: String,
+}
+
+impl SessionEnd {
+    pub fn affects(&self, account_id: i64) -> bool {
+        self.account_ids.is_empty() || self.account_ids.contains(&account_id)
+    }
+}
+
+/// An execution-related message as the reader received it: a
+/// `ProtoOAExecutionEvent`, a `ProtoOAOrderErrorEvent`, or an error response
+/// to a request nobody was waiting on (a trading request's refusal).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReceivedExecution {
+    pub received_at: DateTime<Utc>,
+    pub client_msg_id: Option<String>,
+    pub payload_type: u32,
+    pub payload: Vec<u8>,
+}
+
+/// A spot event and the moment the reader task decoded it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReceivedSpot {
+    pub received_at: DateTime<Utc>,
+    pub event: ProtoOaSpotEvent,
+}
+type Writer = Box<dyn AsyncWrite + Send + Unpin>;
+
+#[derive(Default)]
+struct EntryState {
+    generation: u64,
+    quotes: HashMap<(i64, i64), Quote>,
+    revisions: HashMap<i64, u64>,
+    conversion_paths: HashMap<(i64, i64, i64), Vec<crate::margin::ConversionLeg>>,
+    spot_subscriptions: HashSet<(i64, i64)>,
+    symbol_cache: HashMap<i64, (pb::ProtoOaSymbolsListRes, Instant)>,
+}
+
+impl EntryState {
+    fn validate(&self, guard: &EntryGuard) -> Result<serde_json::Value, GuardRefusal> {
+        if self.generation != guard.connection_generation {
+            return Err(self.refusal(
+                guard,
+                "ENTRY_CONNECTION_CHANGED",
+                "entry belongs to a different connection generation",
+                "after_writer_lock",
+            ));
+        }
+        let quote = self.quotes.get(&(guard.account_id, guard.symbol_id));
+        let revision = self.revisions.get(&guard.account_id).copied().unwrap_or(0);
+        let now = Utc::now();
+        let monotonic_now = Instant::now();
+        guard
+            .validate(quote, revision, now, monotonic_now)
+            .map_err(|mut refusal| {
+                refusal.evidence["connection_generation"] = serde_json::json!(self.generation);
+                refusal.evidence["stage"] = serde_json::json!("after_writer_lock");
+                refusal
+            })?;
+        let mut receipt = guard.snapshot(quote, revision, now, monotonic_now);
+        if let crate::entry_guard::Signal::Pullback { peer, .. }
+        | crate::entry_guard::Signal::PullbackBounded { peer, .. } = &guard.signal
+        {
+            let peer_quote = peer.and_then(|(id, _)| self.quotes.get(&(guard.account_id, id)));
+            receipt["peer"] = guard.validate_peer(peer_quote, now)?;
+        }
+        if let crate::entry_guard::Signal::PullbackBounded {
+            margin: Some(proof),
+            ..
+        } = &guard.signal
+        {
+            if proof.account_id != guard.account_id {
+                return Err(self.refusal(
+                    guard,
+                    "ENTRY_FX_ACCOUNT_MISMATCH",
+                    "conversion proof belongs to another account",
+                    "after_writer_lock",
+                ));
+            }
+            let value = crate::margin::validate_cached_fx(proof, now, |id| {
+                self.quotes.get(&(guard.account_id, id))
+            })
+            .map_err(|why| {
+                let mut refusal = self.refusal(
+                    guard,
+                    "ENTRY_FX_UNAVAILABLE",
+                    "foreign-exposure valuation is stale or violates margin reserve",
+                    "after_writer_lock",
+                );
+                refusal.evidence["fx_reason"] = serde_json::json!(why);
+                refusal
+            })?;
+            receipt["fx_margin_revalidation"] =
+                serde_json::json!({"projected_level_pct":value.0,"stressed_level_pct":value.1});
+        }
+        receipt["connection_generation"] = serde_json::json!(self.generation);
+        receipt["stage"] = serde_json::json!("after_writer_lock");
+        receipt["result"] = serde_json::json!("passed");
+        Ok(receipt)
+    }
+
+    fn refusal(
+        &self,
+        guard: &EntryGuard,
+        code: &'static str,
+        reason: &'static str,
+        stage: &'static str,
+    ) -> GuardRefusal {
+        let mut refusal = guard.refusal(
+            code,
+            reason,
+            self.quotes.get(&(guard.account_id, guard.symbol_id)),
+            self.revisions.get(&guard.account_id).copied().unwrap_or(0),
+            Utc::now(),
+            Instant::now(),
+        );
+        refusal.evidence["connection_generation"] = serde_json::json!(self.generation);
+        refusal.evidence["stage"] = serde_json::json!(stage);
+        refusal
+    }
+
+    fn invalidate(&mut self, accounts: &[i64]) {
+        self.quotes
+            .retain(|(id, _), _| !accounts.is_empty() && !accounts.contains(id));
+        self.conversion_paths
+            .retain(|(id, _, _), _| !accounts.is_empty() && !accounts.contains(id));
+        self.spot_subscriptions
+            .retain(|(id, _)| !accounts.is_empty() && !accounts.contains(id));
+        self.symbol_cache
+            .retain(|id, _| !accounts.is_empty() && !accounts.contains(id));
+        for (id, revision) in &mut self.revisions {
+            if accounts.is_empty() || accounts.contains(id) {
+                *revision = revision.saturating_add(1);
+            }
+        }
+    }
+}
+
+/// Every writer (requests, trading and heartbeat) shares the same deadline and
+/// interruption fence. A cancelled/failed partial frame makes this byte stream
+/// unusable; it is never safe to append another frame or retry an order on it.
+struct TransportWriter {
+    entry_state: Arc<StdMutex<EntryState>>,
+    stream: Mutex<Writer>,
+    closed: Arc<StdMutex<Option<String>>>,
+    pending: Pending,
+    spots: Arc<StdMutex<Option<broadcast::Sender<ReceivedSpot>>>>,
+    session_ends: Arc<StdMutex<Vec<SessionEnd>>>,
+    session_end_tx: broadcast::Sender<SessionEnd>,
+    tasks: StdMutex<Vec<AbortHandle>>,
+}
+
+impl TransportWriter {
+    fn interrupted(&self) {
+        let reason =
+            "socket frame write interrupted; reconnect and reconcile before further actions";
+        let first = {
+            let mut closed = self.closed.lock().unwrap();
+            if closed.is_some() {
+                false
+            } else {
+                *closed = Some(reason.into());
+                true
+            }
+        };
+        self.pending.lock().unwrap().clear();
+        self.spots.lock().unwrap().take();
+        for task in self.tasks.lock().unwrap().iter() {
+            task.abort();
+        }
+        if first {
+            let ended = SessionEnd {
+                account_ids: Vec::new(),
+                reason: reason.into(),
+            };
+            self.session_ends.lock().unwrap().push(ended.clone());
+            let _ = self.session_end_tx.send(ended);
+            tracing::warn!(reason, "cTrader connection invalidated");
+        }
+    }
+
+    async fn send(&self, msg: &ProtoMessage, budget: Duration) -> Result<(), ClientError> {
+        self.send_guarded(msg, budget, None).await.map(|_| ())
+    }
+
+    async fn send_guarded(
+        &self,
+        msg: &ProtoMessage,
+        budget: Duration,
+        guard: Option<&EntryGuard>,
+    ) -> Result<Option<serde_json::Value>, ClientError> {
+        let deadline = Instant::now() + budget;
+        // A cancelled waiter has written no bytes and must not invalidate the
+        // other operation holding the stream. Arm only after taking the lock.
+        let lock_deadline = guard.map_or(deadline, |g| deadline.min(g.expires));
+        let mut stream = tokio::time::timeout_at(lock_deadline, self.stream.lock())
+            .await
+            .map_err(|_| match guard {
+                Some(g) if Instant::now() >= g.expires => {
+                    ClientError::EntryRefused(self.entry_state.lock().unwrap().refusal(
+                        g,
+                        "ENTRY_EXPIRED",
+                        "entry dispatch deadline elapsed while waiting for writer",
+                        "writer_wait",
+                    ))
+                }
+                Some(g) => ClientError::EntryRefused(self.entry_state.lock().unwrap().refusal(
+                    g,
+                    "ENTRY_WRITE_WAIT_TIMEOUT",
+                    "writer wait budget elapsed before any entry bytes",
+                    "writer_wait",
+                )),
+                None => ClientError::WriteTimeout(budget),
+            })?;
+        if let Some(reason) = self.closed.lock().unwrap().clone() {
+            return Err(ClientError::Disconnected(reason));
+        }
+        // This check follows the writer-lock wait and precedes the first
+        // possible byte. A refusal here cannot invalidate the shared stream.
+        let validation = guard
+            .map(|guard| self.entry_state.lock().unwrap().validate(guard))
+            .transpose()?;
+        let mut attempt = WriteAttempt {
+            transport: self,
+            completed: false,
+        };
+        tokio::time::timeout_at(deadline, write_frame(&mut *stream, msg))
+            .await
+            .map_err(|_| ClientError::WriteTimeout(budget))??;
+        attempt.completed = true;
+        Ok(validation)
+    }
+}
+
+struct WriteAttempt<'a> {
+    transport: &'a TransportWriter,
+    completed: bool,
+}
+
+impl Drop for WriteAttempt<'_> {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.transport.interrupted();
+        }
+    }
+}
+
+/// A connection to one cTrader proxy (demo or live).
+pub struct Connection {
+    entry_state: Arc<StdMutex<EntryState>>,
+    writer: Arc<TransportWriter>,
+    pending: Pending,
+    next_id: AtomicU64,
+    /// The spot broadcast. Taken (set to `None`) when the connection closes, so
+    /// that every spot consumer's `recv` returns `Closed` instead of waiting
+    /// for events that can no longer arrive.
+    spots: Arc<StdMutex<Option<broadcast::Sender<ReceivedSpot>>>>,
+    notices: Arc<StdMutex<Vec<String>>>,
+    /// Execution events and order errors, for the order gate and the trader.
+    executions: broadcast::Sender<ReceivedExecution>,
+    /// Account sessions the broker ended, in order, and their broadcast.
+    session_ends: Arc<StdMutex<Vec<SessionEnd>>>,
+    session_end_tx: broadcast::Sender<SessionEnd>,
+    closed: Arc<StdMutex<Option<String>>>,
+    historical_gate: Mutex<Option<Instant>>,
+    request_timeout: Duration,
+    tasks: Vec<JoinHandle<()>>,
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        for t in &self.tasks {
+            t.abort();
+        }
+    }
+}
+
+/// One asset of an account, as `ProtoOAAsset` gives it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Asset {
+    pub asset_id: i64,
+    pub name: String,
+    pub display_name: Option<String>,
+    pub digits: Option<i32>,
+}
+
+/// The accounts an access token's grant covers, as
+/// `ProtoOAGetAccountListByAccessTokenRes` gives them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenGrant {
+    /// `SCOPE_VIEW` or `SCOPE_TRADE`, as the broker names it; `None` when not sent.
+    pub permission_scope: Option<String>,
+    pub accounts: Vec<GrantedAccount>,
+}
+
+/// One account in a token's grant.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GrantedAccount {
+    pub ctid: i64,
+    /// `None` when the broker did not say.
+    pub is_live: Option<bool>,
+    pub trader_login: Option<i64>,
+}
+
+impl TokenGrant {
+    pub fn account(&self, ctid: i64) -> Option<&GrantedAccount> {
+        self.accounts.iter().find(|a| a.ctid == ctid)
+    }
+}
+
+/// A refreshed OAuth token, as `ProtoOARefreshTokenRes` gives it.
+#[derive(Debug, Clone)]
+pub struct RefreshedToken {
+    pub access_token: Secret,
+    pub refresh_token: Secret,
+    pub token_type: String,
+    pub expires_in_secs: i64,
+}
+
+impl Connection {
+    /// Open a TLS connection to `host:port` (e.g. demo.ctraderapi.com:5035).
+    pub async fn connect_tls(host: &str, port: u16) -> Result<Connection, ClientError> {
+        let mut roots = rustls::RootCertStore::empty();
+        roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        let config = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .map_err(|e| ClientError::Connect(e.to_string()))?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+        let tcp = tokio::net::TcpStream::connect((host, port))
+            .await
+            .map_err(|e| ClientError::Connect(format!("{host}:{port}: {e}")))?;
+        let name = rustls::pki_types::ServerName::try_from(host.to_string())
+            .map_err(|e| ClientError::Connect(format!("{host}: {e}")))?;
+        let tls = connector
+            .connect(name, tcp)
+            .await
+            .map_err(|e| ClientError::Connect(format!("TLS {host}:{port}: {e}")))?;
+        Ok(Connection::from_stream(tls, Duration::from_secs(30)))
+    }
+
+    /// Wrap any byte stream (TLS in production, an in-memory pipe in tests).
+    pub fn from_stream<S>(stream: S, request_timeout: Duration) -> Connection
+    where
+        S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
+        let (mut reader, writer) = tokio::io::split(stream);
+        let stream: Writer = Box::new(writer);
+        let pending: Pending = Arc::default();
+        let (spots_tx, _) = broadcast::channel(4096);
+        let spots = Arc::new(StdMutex::new(Some(spots_tx.clone())));
+        let notices: Arc<StdMutex<Vec<String>>> = Arc::default();
+        let session_ends: Arc<StdMutex<Vec<SessionEnd>>> = Arc::default();
+        let (session_end_tx, _) = broadcast::channel(64);
+        let (executions_tx, _) = broadcast::channel(1024);
+        let closed: Arc<StdMutex<Option<String>>> = Arc::default();
+        static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+        let entry_state = Arc::new(StdMutex::new(EntryState {
+            generation: NEXT_GENERATION.fetch_add(1, Ordering::Relaxed),
+            ..EntryState::default()
+        }));
+        let writer = Arc::new(TransportWriter {
+            entry_state: entry_state.clone(),
+            stream: Mutex::new(stream),
+            closed: closed.clone(),
+            pending: pending.clone(),
+            spots: spots.clone(),
+            session_ends: session_ends.clone(),
+            session_end_tx: session_end_tx.clone(),
+            tasks: StdMutex::new(Vec::new()),
+        });
+
+        let read_task = {
+            let pending = pending.clone();
+            let spots_slot = spots.clone();
+            let notices = notices.clone();
+            let ends = (session_ends.clone(), session_end_tx.clone());
+            let executions = executions_tx.clone();
+            let closed = closed.clone();
+            let entry_state = entry_state.clone();
+            tokio::spawn(async move {
+                let reason = loop {
+                    match read_frame(&mut reader).await {
+                        Ok(msg) => route(
+                            msg,
+                            &pending,
+                            &spots_tx,
+                            &notices,
+                            &ends,
+                            &executions,
+                            &entry_state,
+                        ),
+                        Err(e) => break e.to_string(),
+                    }
+                };
+                tracing::warn!(%reason, "cTrader connection closed");
+                *closed.lock().unwrap() = Some(reason);
+                entry_state.lock().unwrap().invalidate(&[]);
+                // Dropping the senders wakes every waiting request with an error.
+                pending.lock().unwrap().clear();
+                // Drop every spot sender: consumers see `Closed` once drained.
+                spots_slot.lock().unwrap().take();
+                drop(spots_tx);
+            })
+        };
+        writer.tasks.lock().unwrap().push(read_task.abort_handle());
+
+        let mut conn = Connection {
+            entry_state,
+            writer,
+            pending,
+            next_id: AtomicU64::new(1),
+            spots,
+            notices,
+            executions: executions_tx,
+            session_ends,
+            session_end_tx,
+            closed,
+            historical_gate: Mutex::new(None),
+            request_timeout,
+            tasks: vec![read_task],
+        };
+
+        let heartbeat_task = {
+            let writer = conn.writer.clone();
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(HEARTBEAT_EVERY);
+                tick.tick().await;
+                loop {
+                    tick.tick().await;
+                    let hb = pb::ProtoHeartbeatEvent::default().encode_to_vec();
+                    if send_checked(
+                        &writer,
+                        Common::HeartbeatEvent as u32,
+                        hb,
+                        None,
+                        request_timeout,
+                    )
+                    .await
+                    .is_err()
+                    {
+                        break;
+                    }
+                }
+            })
+        };
+        conn.writer
+            .tasks
+            .lock()
+            .unwrap()
+            .push(heartbeat_task.abort_handle());
+        conn.tasks.push(heartbeat_task);
+        conn
+    }
+
+    /// The single write path. Refuses any payload type not on the allowlist.
+    async fn send_message(
+        &self,
+        payload_type: u32,
+        payload: Vec<u8>,
+        client_msg_id: Option<String>,
+    ) -> Result<(), ClientError> {
+        send_checked(
+            &self.writer,
+            payload_type,
+            payload,
+            client_msg_id,
+            self.request_timeout,
+        )
+        .await
+    }
+
+    /// The trading write path: only a payload type on `TRADING`, only from the
+    /// order gate (`crate::trading::send`). Its responses arrive on
+    /// [`Connection::executions`], never as a pending request's response.
+    pub fn entry_generation(&self) -> u64 {
+        self.entry_state.lock().unwrap().generation
+    }
+
+    pub fn entry_revision(&self, account_id: i64) -> u64 {
+        *self
+            .entry_state
+            .lock()
+            .unwrap()
+            .revisions
+            .entry(account_id)
+            .or_default()
+    }
+
+    /// Reader-owned quote cache; no network call and no reuse across reconnects.
+    pub fn quote_snapshot(&self, account: i64, symbol: i64) -> Option<Quote> {
+        self.entry_state
+            .lock()
+            .unwrap()
+            .quotes
+            .get(&(account, symbol))
+            .cloned()
+    }
+
+    pub fn conversion_status(&self, account: i64) -> serde_json::Value {
+        let state = self.entry_state.lock().unwrap();
+        let now = Utc::now();
+        let mut paths: Vec<_> = state.conversion_paths.iter().filter(|((id, _, _), _)| *id == account)
+            .map(|((_, from, to), path)| {
+                let rate = crate::margin::conversion_bounds(path, *from, *to, now, |id| state.quotes.get(&(account, id)));
+                serde_json::json!({"from_asset":from,"deposit_asset":to,"legs":path,"subscribed":path.iter().all(|leg|state.spot_subscriptions.contains(&(account,leg.symbol_id))),
+                    "state":if rate.is_ok(){"fresh"}else{"unavailable"},"bounds":rate.as_ref().ok(),"reason":rate.err(),"max_quote_age_ms":5000})
+            }).collect();
+        paths.sort_by_key(|p| (p["from_asset"].as_i64(), p["deposit_asset"].as_i64()));
+        serde_json::json!({"account_id":account,"generation":state.generation,"observed_at":now,"paths":paths})
+    }
+
+    pub fn validate_entry_guard(&self, guard: &EntryGuard) -> Result<(), GuardRefusal> {
+        self.entry_state.lock().unwrap().validate(guard).map(|_| ())
+    }
+
+    pub(crate) async fn send_trading_frame(
+        &self,
+        payload_type: u32,
+        payload: Vec<u8>,
+        client_msg_id: String,
+    ) -> Result<(), ClientError> {
+        self.send_guarded_trading_frame(payload_type, payload, client_msg_id, None)
+            .await
+            .map(|_| ())
+    }
+
+    pub(crate) async fn send_guarded_trading_frame(
+        &self,
+        payload_type: u32,
+        payload: Vec<u8>,
+        client_msg_id: String,
+        guard: Option<&EntryGuard>,
+    ) -> Result<Option<serde_json::Value>, ClientError> {
+        if let Some(reason) = self.closed.lock().unwrap().clone() {
+            return Err(ClientError::Disconnected(reason));
+        }
+        check_tradable(payload_type)?;
+        let msg = ProtoMessage {
+            payload_type,
+            payload: Some(payload),
+            client_msg_id: Some(client_msg_id),
+        };
+        self.writer
+            .send_guarded(&msg, self.request_timeout, guard)
+            .await
+    }
+
+    /// A receiver of execution events and order errors. Subscribe before
+    /// sending the order whose events you want.
+    pub fn executions(&self) -> broadcast::Receiver<ReceivedExecution> {
+        self.executions.subscribe()
+    }
+
+    /// A fresh trading message id, never reused on this connection.
+    pub(crate) fn next_trading_id(&self) -> String {
+        format!("t{}", self.next_id.fetch_add(1, Ordering::Relaxed))
+    }
+
+    /// Send a request and wait for its response. The write and response phases
+    /// each use the existing request budget; this is not an end-to-end SLA.
+    pub(crate) async fn request<R: Request>(&self, req: &R) -> Result<R::Response, ClientError> {
+        if let Some(reason) = self.closed.lock().unwrap().clone() {
+            return Err(ClientError::Disconnected(reason));
+        }
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
+        let (tx, rx) = oneshot::channel();
+        self.pending.lock().unwrap().insert(id.clone(), tx);
+        let _waiter = RequestWaiter {
+            pending: self.pending.clone(),
+            id: id.clone(),
+        };
+        self.send_message(R::PAYLOAD_TYPE, req.encode_to_vec(), Some(id))
+            .await?;
+        let msg = match tokio::time::timeout(self.request_timeout, rx).await {
+            Ok(Ok(msg)) => msg,
+            Ok(Err(_)) => {
+                let reason = self.closed.lock().unwrap().clone();
+                return Err(ClientError::Disconnected(
+                    reason.unwrap_or_else(|| "reader stopped".into()),
+                ));
+            }
+            Err(_) => {
+                return Err(ClientError::Timeout(self.request_timeout));
+            }
+        };
+        decode_response::<R::Response>(msg)
+    }
+
+    /// A receiver of spot events. Subscribe before asking for spots. On a
+    /// closed connection the receiver is already closed.
+    pub fn spot_events(&self) -> broadcast::Receiver<ReceivedSpot> {
+        match self.spots.lock().unwrap().as_ref() {
+            Some(tx) => tx.subscribe(),
+            None => broadcast::channel(1).1,
+        }
+    }
+
+    /// A receiver of account-session ends. Take it before authorising, then
+    /// also check [`Connection::session_ended`] for an end that came earlier.
+    pub fn session_ends(&self) -> broadcast::Receiver<SessionEnd> {
+        self.session_end_tx.subscribe()
+    }
+
+    /// The first recorded end affecting `account_id` on this connection, if any.
+    pub fn session_ended(&self, account_id: i64) -> Option<SessionEnd> {
+        self.session_ends
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|e| e.affects(account_id))
+            .cloned()
+    }
+
+    /// Why the connection closed, once it has.
+    pub fn closed_reason(&self) -> Option<String> {
+        self.closed.lock().unwrap().clone()
+    }
+
+    /// Disconnect and token-invalidated notices received so far.
+    pub fn notices(&self) -> Vec<String> {
+        self.notices.lock().unwrap().clone()
+    }
+
+    pub async fn application_auth(
+        &self,
+        client_id: &str,
+        client_secret: &Secret,
+    ) -> Result<(), ClientError> {
+        self.request(&pb::ProtoOaApplicationAuthReq {
+            payload_type: None,
+            client_id: client_id.to_string(),
+            client_secret: client_secret.expose().to_string(),
+        })
+        .await?;
+        Ok(())
+    }
+
+    /// Exchange a refresh token for a new access and refresh token. The old
+    /// refresh token stops working; the caller must store the new one.
+    pub async fn refresh_token(&self, refresh: &Secret) -> Result<RefreshedToken, ClientError> {
+        let res = self
+            .request(&pb::ProtoOaRefreshTokenReq {
+                payload_type: None,
+                refresh_token: refresh.expose().to_string(),
+            })
+            .await?;
+        Ok(RefreshedToken {
+            access_token: Secret::new(res.access_token),
+            refresh_token: Secret::new(res.refresh_token),
+            token_type: res.token_type,
+            expires_in_secs: res.expires_in,
+        })
+    }
+
+    /// Which accounts the access token's grant covers
+    /// (`ProtoOAGetAccountListByAccessTokenReq`). Read-only; needs only the
+    /// application to be authorised. A refresh renews a grant, it never adds
+    /// an account to it.
+    pub async fn account_list(&self, access_token: &Secret) -> Result<TokenGrant, ClientError> {
+        let res = self
+            .request(&pb::ProtoOaGetAccountListByAccessTokenReq {
+                payload_type: None,
+                access_token: access_token.expose().to_string(),
+            })
+            .await?;
+        Ok(TokenGrant {
+            permission_scope: res.permission_scope.map(|s| {
+                pb::ProtoOaClientPermissionScope::try_from(s)
+                    .map(|v| v.as_str_name().to_string())
+                    .unwrap_or_else(|_| format!("UNKNOWN({s})"))
+            }),
+            accounts: res
+                .ctid_trader_account
+                .iter()
+                .map(|a| GrantedAccount {
+                    ctid: a.ctid_trader_account_id as i64,
+                    is_live: a.is_live,
+                    trader_login: a.trader_login,
+                })
+                .collect(),
+        })
+    }
+
+    /// Authorise one account. Only a [`PermittedAccount`] — an account that
+    /// passed the allowlist — can be authorised.
+    pub async fn account_auth(
+        &self,
+        account: &PermittedAccount,
+        access_token: &Secret,
+    ) -> Result<AccountSession<'_>, ClientError> {
+        let res = self
+            .request(&pb::ProtoOaAccountAuthReq {
+                payload_type: None,
+                ctid_trader_account_id: account.id(),
+                access_token: access_token.expose().to_string(),
+            })
+            .await?;
+        if res.ctid_trader_account_id != account.id() {
+            return Err(ClientError::WrongAccount {
+                asked: account.id(),
+                got: res.ctid_trader_account_id,
+            });
+        }
+        Ok(AccountSession {
+            conn: self,
+            account: account.clone(),
+        })
+    }
+
+    async fn historical_pause(&self) {
+        let mut last = self.historical_gate.lock().await;
+        if let Some(t) = *last {
+            let since = t.elapsed();
+            if since < HISTORICAL_MIN_GAP {
+                tokio::time::sleep(HISTORICAL_MIN_GAP - since).await;
+            }
+        }
+        *last = Some(Instant::now());
+    }
+}
+
+async fn send_checked(
+    writer: &TransportWriter,
+    payload_type: u32,
+    payload: Vec<u8>,
+    client_msg_id: Option<String>,
+    budget: Duration,
+) -> Result<(), ClientError> {
+    // The allowlist gate. Nothing reaches the socket without passing it.
+    check_sendable(payload_type)?;
+    let msg = ProtoMessage {
+        payload_type,
+        payload: Some(payload),
+        client_msg_id,
+    };
+    writer.send(&msg, budget).await
+}
+
+#[allow(clippy::too_many_arguments)]
+fn route(
+    msg: ProtoMessage,
+    pending: &Pending,
+    spots: &broadcast::Sender<ReceivedSpot>,
+    notices: &StdMutex<Vec<String>>,
+    ends: &(
+        Arc<StdMutex<Vec<SessionEnd>>>,
+        broadcast::Sender<SessionEnd>,
+    ),
+    executions: &broadcast::Sender<ReceivedExecution>,
+    entry_state: &StdMutex<EntryState>,
+) {
+    let end = |account_ids: Vec<i64>, reason: String| {
+        entry_state.lock().unwrap().invalidate(&account_ids);
+        let e = SessionEnd {
+            account_ids,
+            reason,
+        };
+        ends.0.lock().unwrap().push(e.clone());
+        let _ = ends.1.send(e);
+    };
+    if let Some(id) = &msg.client_msg_id {
+        if let Some(tx) = pending.lock().unwrap().remove(id) {
+            let _ = tx.send(msg);
+            return;
+        }
+    }
+    let payload = msg.payload.as_deref().unwrap_or(&[]);
+    let pt = msg.payload_type as i32;
+    if pt == Oa::ProtoOaExecutionEvent as i32
+        || pt == Oa::ProtoOaTrailingSlChangedEvent as i32
+        || pt == Oa::ProtoOaTraderUpdateEvent as i32
+        || pt == Oa::ProtoOaMarginChangedEvent as i32
+        || pt == Oa::ProtoOaOrderErrorEvent as i32
+        || pt == Oa::ProtoOaErrorRes as i32
+        || pt == Common::ErrorRes as i32
+    {
+        let changed = if pt == Oa::ProtoOaExecutionEvent as i32 {
+            Some(pb::ProtoOaExecutionEvent::decode(payload).map(|e| e.ctid_trader_account_id))
+        } else if pt == Oa::ProtoOaTrailingSlChangedEvent as i32 {
+            Some(
+                pb::ProtoOaTrailingSlChangedEvent::decode(payload)
+                    .map(|e| e.ctid_trader_account_id),
+            )
+        } else if pt == Oa::ProtoOaTraderUpdateEvent as i32 {
+            Some(pb::ProtoOaTraderUpdatedEvent::decode(payload).map(|e| e.ctid_trader_account_id))
+        } else if pt == Oa::ProtoOaMarginChangedEvent as i32 {
+            Some(pb::ProtoOaMarginChangedEvent::decode(payload).map(|e| e.ctid_trader_account_id))
+        } else {
+            None
+        };
+        if let Some(account) = changed {
+            let mut state = entry_state.lock().unwrap();
+            match account {
+                Ok(account) => {
+                    let revision = state.revisions.entry(account).or_default();
+                    *revision = revision.saturating_add(1);
+                }
+                Err(_) => state.invalidate(&[]),
+            }
+        }
+        let _ = executions.send(ReceivedExecution {
+            received_at: Utc::now(),
+            client_msg_id: msg.client_msg_id.clone(),
+            payload_type: msg.payload_type,
+            payload: payload.to_vec(),
+        });
+    } else if pt == Oa::ProtoOaSymbolChangedEvent as i32 {
+        let mut state = entry_state.lock().unwrap();
+        match pb::ProtoOaSymbolChangedEvent::decode(payload) {
+            Ok(event) => {
+                let account = event.ctid_trader_account_id;
+                state
+                    .conversion_paths
+                    .retain(|(id, _, _), _| *id != account);
+                state.symbol_cache.remove(&account);
+                let revision = state.revisions.entry(account).or_default();
+                *revision = revision.saturating_add(1);
+            }
+            Err(_) => state.invalidate(&[]),
+        }
+    } else if pt == Oa::ProtoOaSpotEvent as i32 {
+        if let Ok(event) = ProtoOaSpotEvent::decode(payload) {
+            let received_at = Utc::now();
+            {
+                let mut state = entry_state.lock().unwrap();
+                let key = (event.ctid_trader_account_id, event.symbol_id);
+                // Only subscribed symbols should arrive. Bound unexpected input.
+                if state.quotes.len() < 4096 || state.quotes.contains_key(&key) {
+                    let quote = state.quotes.entry(key).or_default();
+                    if let Some(bid) = event.bid {
+                        quote.bid = Some((bid as f64 / 100_000.0, received_at));
+                    }
+                    if let Some(ask) = event.ask {
+                        quote.ask = Some((ask as f64 / 100_000.0, received_at));
+                    }
+                }
+            }
+            let _ = spots.send(ReceivedSpot { received_at, event });
+        }
+    } else if pt == Common::HeartbeatEvent as i32 {
+        // The proxy's keep-alive. Nothing to do.
+    } else if pt == Oa::ProtoOaAccountsTokenInvalidatedEvent as i32 {
+        let ev = pb::ProtoOaAccountsTokenInvalidatedEvent::decode(payload).unwrap_or_default();
+        let note = format!(
+            "accounts token invalidated for {:?}: {}",
+            ev.ctid_trader_account_ids,
+            ev.reason.unwrap_or_default()
+        );
+        tracing::warn!("{note}");
+        notices.lock().unwrap().push(note.clone());
+        // An event that names no account is taken to end every session on
+        // this connection (`SessionEnd` with an empty list).
+        end(ev.ctid_trader_account_ids, note);
+    } else if pt == Oa::ProtoOaClientDisconnectEvent as i32 {
+        let ev = pb::ProtoOaClientDisconnectEvent::decode(payload).unwrap_or_default();
+        let note = format!("client disconnected: {}", ev.reason.unwrap_or_default());
+        tracing::warn!("{note}");
+        notices.lock().unwrap().push(note.clone());
+        end(vec![], note);
+    } else if pt == Oa::ProtoOaAccountDisconnectEvent as i32 {
+        let ev = pb::ProtoOaAccountDisconnectEvent::decode(payload).unwrap_or_default();
+        let note = format!("account {} disconnected", ev.ctid_trader_account_id);
+        tracing::warn!("{note}");
+        notices.lock().unwrap().push(note.clone());
+        end(vec![ev.ctid_trader_account_id], note);
+    } else {
+        tracing::debug!(
+            payload_type = msg.payload_type,
+            name = payload_name(msg.payload_type),
+            "unsolicited message ignored"
+        );
+    }
+}
+
+fn decode_response<T: Response>(msg: ProtoMessage) -> Result<T, ClientError> {
+    let payload = msg.payload.as_deref().unwrap_or(&[]);
+    if msg.payload_type == T::PAYLOAD_TYPE {
+        return Ok(T::decode(payload)?);
+    }
+    if msg.payload_type == Oa::ProtoOaErrorRes as u32 {
+        let e = ProtoOaErrorRes::decode(payload)?;
+        return Err(ClientError::Broker {
+            code: e.error_code,
+            description: e.description,
+            retry_after_secs: e.retry_after,
+        });
+    }
+    if msg.payload_type == Common::ErrorRes as u32 {
+        let e = ProtoErrorRes::decode(payload)?;
+        return Err(ClientError::Broker {
+            code: e.error_code,
+            description: e.description,
+            retry_after_secs: None,
+        });
+    }
+    Err(ClientError::UnexpectedPayload {
+        expected: T::PAYLOAD_TYPE,
+        got: msg.payload_type,
+    })
+}
+
+/// An authorised account on a connection.
+pub struct AccountSession<'c> {
+    conn: &'c Connection,
+    account: PermittedAccount,
+}
+
+/// Spread samples for one symbol, in relative units (1/100000 of a price).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpreadSamples {
+    /// ask − bid at each quote update where both sides were known.
+    pub spreads: Vec<i64>,
+}
+
+impl SpreadSamples {
+    /// The median spread in price units, exact. `None` without samples.
+    pub fn median(&self) -> Option<Decimal> {
+        let mut v = self.spreads.clone();
+        if v.is_empty() {
+            return None;
+        }
+        v.sort_unstable();
+        let n = v.len();
+        Some(if n % 2 == 1 {
+            Decimal::new(v[n / 2], 5)
+        } else {
+            // (a + b) / 2 / 100000 = (a + b) × 5 / 10^6, exact.
+            Decimal::new((v[n / 2 - 1] + v[n / 2]) * 5, 6).normalize()
+        })
+    }
+}
+
+impl AccountSession<'_> {
+    pub fn account(&self) -> &PermittedAccount {
+        &self.account
+    }
+
+    /// The connection this session is authorised on.
+    pub fn connection(&self) -> &Connection {
+        self.conn
+    }
+
+    /// Open positions and pending orders (`ProtoOAReconcileReq`, read-only).
+    pub async fn reconcile(&self) -> Result<pb::ProtoOaReconcileRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaReconcileReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                return_protection_orders: None,
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
+    /// Two bounded read-only requests for one ambiguous lifecycle. The caller
+    /// runs this outside the management path with a five-second overall budget.
+    /// Truncation is incomplete evidence, never silently treated as exhaustive.
+    pub async fn authority_history(
+        &self,
+        position_id: i64,
+    ) -> Result<
+        (
+            pb::ProtoOaOrderListByPositionIdRes,
+            pb::ProtoOaDealListByPositionIdRes,
+        ),
+        ClientError,
+    > {
+        let orders = self
+            .historical(&pb::ProtoOaOrderListByPositionIdReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                position_id,
+                from_timestamp: None,
+                to_timestamp: None,
+            })
+            .await?;
+        self.check_account(orders.ctid_trader_account_id)?;
+        let deals = self
+            .historical(&pb::ProtoOaDealListByPositionIdReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                position_id,
+                from_timestamp: None,
+                to_timestamp: None,
+            })
+            .await?;
+        self.check_account(deals.ctid_trader_account_id)?;
+        if orders.has_more || deals.has_more || orders.order.len() > 32 || deals.deal.len() > 2048 {
+            return Err(ClientError::Broker {
+                code: "AUTHORITY_HISTORY_INCOMPLETE".into(),
+                description: Some("bounded position history is truncated".into()),
+                retry_after_secs: None,
+            });
+        }
+        Ok((orders, deals))
+    }
+
+    /// Whole-account book including broker-held protection, for admission.
+    pub async fn margin_book(&self) -> Result<pb::ProtoOaReconcileRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaReconcileReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                return_protection_orders: Some(true),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
+    /// The open positions' unrealized P&L in the deposit currency, as the
+    /// broker states it (`ProtoOAGetPositionUnrealizedPnLReq`, read-only).
+    pub async fn unrealized_pnl(
+        &self,
+    ) -> Result<pb::ProtoOaGetPositionUnrealizedPnLRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaGetPositionUnrealizedPnLReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
+    /// The broker ended this account's session on its connection (token
+    /// invalidated, account or client disconnected); it must re-authorise.
+    pub fn session_ended(&self) -> Option<SessionEnd> {
+        self.conn.session_ended(self.account.id())
+    }
+
+    /// Why the connection under this session closed, once it has.
+    pub fn closed_reason(&self) -> Option<String> {
+        self.conn.closed_reason()
+    }
+
+    fn check_account(&self, got: i64) -> Result<(), ClientError> {
+        if got == self.account.id() {
+            Ok(())
+        } else {
+            Err(ClientError::WrongAccount {
+                asked: self.account.id(),
+                got,
+            })
+        }
+    }
+
+    /// The account's assets (currencies and the like): id → name, as the
+    /// broker states them (`ProtoOAAssetListReq`, read-only).
+    pub async fn asset_list(&self) -> Result<Vec<Asset>, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaAssetListReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res
+            .asset
+            .into_iter()
+            .map(|a| Asset {
+                asset_id: a.asset_id,
+                name: a.name,
+                display_name: a.display_name,
+                digits: a.digits,
+            })
+            .collect())
+    }
+
+    pub async fn symbols_list(&self) -> Result<pb::ProtoOaSymbolsListRes, ClientError> {
+        let revision = self.conn.entry_revision(self.account.id());
+        let res = self
+            .conn
+            .request(&pb::ProtoOaSymbolsListReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                include_archived_symbols: Some(false),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        let mut state = self.conn.entry_state.lock().unwrap();
+        if state
+            .revisions
+            .get(&self.account.id())
+            .copied()
+            .unwrap_or(0)
+            == revision
+        {
+            state
+                .symbol_cache
+                .insert(self.account.id(), (res.clone(), Instant::now()));
+        }
+        Ok(res)
+    }
+
+    /// Metadata is connection/account scoped and invalidated by symbol events.
+    pub async fn cached_symbols_list(&self) -> Result<pb::ProtoOaSymbolsListRes, ClientError> {
+        let cached = self
+            .conn
+            .entry_state
+            .lock()
+            .unwrap()
+            .symbol_cache
+            .get(&self.account.id())
+            .filter(|(_, at)| at.elapsed() < Duration::from_secs(300))
+            .map(|(value, _)| value.clone());
+        match cached {
+            Some(value) => Ok(value),
+            None => self.symbols_list().await,
+        }
+    }
+
+    /// Request the broker's conversion identities, subscribe each missing leg,
+    /// and retain the account-specific path. This is a read-only warm-up API.
+    pub async fn exposure_conversion_path(
+        &self,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<crate::margin::ConversionLeg>, ClientError> {
+        if from == to && from > 0 {
+            return Ok(vec![]);
+        }
+        let account = self.account.id();
+        let cached = self
+            .conn
+            .entry_state
+            .lock()
+            .unwrap()
+            .conversion_paths
+            .get(&(account, from, to))
+            .cloned();
+        let path = match cached {
+            Some(path) => path,
+            None => {
+                let revision = self.conn.entry_revision(account);
+                let res = self
+                    .conn
+                    .request(&pb::ProtoOaSymbolsForConversionReq {
+                        payload_type: None,
+                        ctid_trader_account_id: account,
+                        first_asset_id: from,
+                        last_asset_id: to,
+                    })
+                    .await?;
+                self.check_account(res.ctid_trader_account_id)?;
+                let path =
+                    crate::margin::conversion_path(&res.symbol, from, to).map_err(|why| {
+                        ClientError::Broker {
+                            code: "FX_CONVERSION_IDENTITY_INVALID".into(),
+                            description: Some(why),
+                            retry_after_secs: None,
+                        }
+                    })?;
+                let mut state = self.conn.entry_state.lock().unwrap();
+                if state.revisions.get(&account).copied().unwrap_or(0) != revision {
+                    return Err(ClientError::Broker {
+                        code: "FX_CONVERSION_STATE_CHANGED".into(),
+                        description: Some(
+                            "account or symbol changed during conversion warm-up; retry".into(),
+                        ),
+                        retry_after_secs: None,
+                    });
+                }
+                state
+                    .conversion_paths
+                    .insert((account, from, to), path.clone());
+                path
+            }
+        };
+        let missing: Vec<i64> = {
+            let state = self.conn.entry_state.lock().unwrap();
+            path.iter()
+                .map(|l| l.symbol_id)
+                .filter(|id| !state.spot_subscriptions.contains(&(account, *id)))
+                .collect()
+        };
+        if !missing.is_empty() {
+            self.subscribe_spots(&missing).await?;
+        }
+        Ok(path)
+    }
+
+    pub async fn symbols_by_id(
+        &self,
+        symbol_ids: &[i64],
+    ) -> Result<pb::ProtoOaSymbolByIdRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaSymbolByIdReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                symbol_id: symbol_ids.to_vec(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
+    /// One D1 trendbar request for `[from, to]`. Returns the bars and `hasMore`.
+    /// Waits out a rate-limit refusal (`BLOCKED_PAYLOAD_TYPE` with `retryAfter`)
+    /// up to three times.
+    pub async fn daily_trendbars(
+        &self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<(Vec<ProtoOaTrendbar>, bool), ClientError> {
+        self.trendbars(symbol_id, ProtoOaTrendbarPeriod::D1, from, to)
+            .await
+    }
+
+    /// Bounded research read: one complete day at most. Refuse truncation.
+    /// Unlike legacy m30_bars this never accepts an unresolved hasMore page.
+    pub async fn research_m30_page(
+        &self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<ProtoOaTrendbar>, ClientError> {
+        if to < from || to - from > chrono::Duration::days(1) {
+            return Err(ClientError::Connect(
+                "research window exceeds one day".into(),
+            ));
+        }
+        let (bars, more) = self
+            .trendbars(symbol_id, ProtoOaTrendbarPeriod::M30, from, to)
+            .await?;
+        if more {
+            return Err(ClientError::Connect(
+                "research response truncated (hasMore); no result accepted".into(),
+            ));
+        }
+        Ok(bars)
+    }
+
+    /// The M30 trendbars of `[from, to]`, walked back in weekly windows (a
+    /// window that reports `hasMore` is split in half). Sorted by open time,
+    /// de-duplicated. Strategy 3's session opens and noise band.
+    pub async fn m30_bars(
+        &self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<ProtoOaTrendbar>, ClientError> {
+        let mut out: HashMap<u32, ProtoOaTrendbar> = HashMap::new();
+        let mut hi = to;
+        while hi > from {
+            let lo = (hi - chrono::Duration::days(7)).max(from);
+            for b in self.m30_window(symbol_id, lo, hi, 0).await? {
+                if let Some(m) = b.utc_timestamp_in_minutes {
+                    out.insert(m, b);
+                }
+            }
+            hi = lo - chrono::Duration::milliseconds(1);
+        }
+        let mut v: Vec<_> = out.into_values().collect();
+        v.sort_by_key(|b| b.utc_timestamp_in_minutes);
+        Ok(v)
+    }
+
+    fn m30_window<'a>(
+        &'a self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        depth: u32,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<ProtoOaTrendbar>, ClientError>> + Send + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let (bars, has_more) = self
+                .trendbars(symbol_id, ProtoOaTrendbarPeriod::M30, from, to)
+                .await?;
+            if !has_more || depth >= 8 || to - from <= chrono::Duration::hours(2) {
+                return Ok(bars);
+            }
+            let mid = from + (to - from) / 2;
+            let mut a = self.m30_window(symbol_id, from, mid, depth + 1).await?;
+            a.extend(
+                self.m30_window(
+                    symbol_id,
+                    mid + chrono::Duration::milliseconds(1),
+                    to,
+                    depth + 1,
+                )
+                .await?,
+            );
+            Ok(a)
+        })
+    }
+
+    /// One trendbar request of `period` for `[from, to]`.
+    async fn trendbars(
+        &self,
+        symbol_id: i64,
+        period: ProtoOaTrendbarPeriod,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<(Vec<ProtoOaTrendbar>, bool), ClientError> {
+        let req = pb::ProtoOaGetTrendbarsReq {
+            payload_type: None,
+            ctid_trader_account_id: self.account.id(),
+            from_timestamp: Some(from.timestamp_millis().max(0)),
+            to_timestamp: Some(to.timestamp_millis()),
+            period: period as i32,
+            symbol_id,
+            count: None,
+        };
+        let mut attempt = 0;
+        loop {
+            self.conn.historical_pause().await;
+            match self.conn.request(&req).await {
+                Ok(res) => {
+                    self.check_account(res.ctid_trader_account_id)?;
+                    if let Some(s) = res.symbol_id {
+                        if s != symbol_id {
+                            return Err(ClientError::Broker {
+                                code: "WRONG_SYMBOL".into(),
+                                description: Some(format!("asked {symbol_id}, got {s}")),
+                                retry_after_secs: None,
+                            });
+                        }
+                    }
+                    return Ok((res.trendbar, res.has_more.unwrap_or(false)));
+                }
+                Err(ClientError::Broker {
+                    code,
+                    retry_after_secs: Some(secs),
+                    ..
+                }) if code == "BLOCKED_PAYLOAD_TYPE" && attempt < 3 => {
+                    attempt += 1;
+                    tokio::time::sleep(Duration::from_secs(secs.min(60))).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// All daily bars the broker holds for a symbol, newest window first,
+    /// walking back one year at a time until [`EMPTY_WINDOWS_TO_STOP`] empty
+    /// windows in a row or 1970. A window that reports `hasMore` is split in
+    /// half until it does not. Bars are returned raw, de-duplicated by open time.
+    pub async fn daily_history(
+        &self,
+        symbol_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<ProtoOaTrendbar>, ClientError> {
+        let epoch = DateTime::<Utc>::UNIX_EPOCH;
+        let mut out: HashMap<u32, ProtoOaTrendbar> = HashMap::new();
+        let mut to = now;
+        let mut empty = 0;
+        while to > epoch {
+            let from = (to - chrono::Duration::days(D1_WINDOW_DAYS)).max(epoch);
+            let bars = self.window(symbol_id, from, to, 0).await?;
+            if bars.is_empty() {
+                empty += 1;
+                if empty >= EMPTY_WINDOWS_TO_STOP {
+                    break;
+                }
+            } else {
+                empty = 0;
+            }
+            for b in bars {
+                if let Some(m) = b.utc_timestamp_in_minutes {
+                    out.insert(m, b);
+                } else {
+                    // Kept under a key that cannot collide, so decoding refuses
+                    // and records it rather than this function dropping it.
+                    out.insert(u32::MAX - out.len() as u32, b);
+                }
+            }
+            to = from - chrono::Duration::milliseconds(1);
+        }
+        let mut v: Vec<_> = out.into_values().collect();
+        v.sort_by_key(|b| b.utc_timestamp_in_minutes);
+        Ok(v)
+    }
+
+    fn window<'a>(
+        &'a self,
+        symbol_id: i64,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        depth: u32,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<ProtoOaTrendbar>, ClientError>> + Send + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let (bars, has_more) = self.daily_trendbars(symbol_id, from, to).await?;
+            if !has_more || depth >= 12 || to - from <= chrono::Duration::days(2) {
+                return Ok(bars);
+            }
+            let mid = from + (to - from) / 2;
+            let mut a = self.window(symbol_id, from, mid, depth + 1).await?;
+            let b = self
+                .window(
+                    symbol_id,
+                    mid + chrono::Duration::milliseconds(1),
+                    to,
+                    depth + 1,
+                )
+                .await?;
+            a.extend(b);
+            Ok(a)
+        })
+    }
+
+    /// A historical-data request: spaced by [`HISTORICAL_MIN_GAP`], and a
+    /// rate-limit refusal (`BLOCKED_PAYLOAD_TYPE` with `retryAfter`) is waited
+    /// out up to three times.
+    async fn historical<R: Request>(&self, req: &R) -> Result<R::Response, ClientError> {
+        let mut attempt = 0;
+        loop {
+            self.conn.historical_pause().await;
+            match self.conn.request(req).await {
+                Err(ClientError::Broker {
+                    code,
+                    retry_after_secs: Some(secs),
+                    ..
+                }) if code == "BLOCKED_PAYLOAD_TYPE" && attempt < 3 => {
+                    attempt += 1;
+                    tokio::time::sleep(Duration::from_secs(secs.min(60))).await;
+                }
+                other => return other,
+            }
+        }
+    }
+
+    /// The account's trader record (balance, deposit asset, registration time).
+    pub async fn expected_margin(
+        &self,
+        symbol_id: i64,
+        volume: Vec<i64>,
+    ) -> Result<pb::ProtoOaExpectedMarginRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaExpectedMarginReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                symbol_id,
+                volume,
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res)
+    }
+
+    /// Read existing warnings only. This never changes a broker threshold.
+    pub async fn margin_calls(&self) -> Result<pb::ProtoOaMarginCallListRes, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaMarginCallListReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        // This protobuf has no account-ID field. Connection::request matches
+        // its unique clientMsgId to this account-scoped request.
+        Ok(res)
+    }
+
+    /// The account's trader record (balance, deposit asset, registration time).
+    pub async fn trader(&self) -> Result<pb::ProtoOaTrader, ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaTraderReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        Ok(res.trader)
+    }
+
+    /// Every bid or ask tick of `[from_ms, to_ms]` (at most one week), oldest
+    /// first. Follows `hasMore` page by page (see [`crate::tickdata::Pages`]).
+    pub async fn tick_history(
+        &self,
+        symbol_id: i64,
+        side: crate::tickdata::QuoteSide,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<crate::tickdata::TickFetch, ClientError> {
+        use crate::tickdata::{decode_ticks, Pages, TickDataError, MAX_WINDOW_MS};
+        if to_ms - from_ms > MAX_WINDOW_MS || to_ms < from_ms {
+            return Err(TickDataError::WindowTooLong { from_ms, to_ms }.into());
+        }
+        let mut pages = Pages::default();
+        loop {
+            let to = pages.next_to().unwrap_or(to_ms);
+            let res = self
+                .historical(&pb::ProtoOaGetTickDataReq {
+                    payload_type: None,
+                    ctid_trader_account_id: self.account.id(),
+                    symbol_id,
+                    r#type: side.proto(),
+                    from_timestamp: Some(from_ms),
+                    to_timestamp: Some(to),
+                })
+                .await?;
+            self.check_account(res.ctid_trader_account_id)?;
+            let (ticks, sign) = decode_ticks(&res.tick_data, from_ms, to)?;
+            let empty = ticks.is_empty();
+            pages.push(ticks, sign)?;
+            if !res.has_more || empty {
+                break;
+            }
+        }
+        Ok(pages.into_fetch())
+    }
+
+    /// One page of ticks only (for probing whether a window has any): the
+    /// decoded ticks of the first response and its `hasMore`.
+    pub async fn tick_page(
+        &self,
+        symbol_id: i64,
+        side: crate::tickdata::QuoteSide,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<(Vec<crate::tickdata::HistTick>, bool), ClientError> {
+        use crate::tickdata::{decode_ticks, TickDataError, MAX_WINDOW_MS};
+        if to_ms - from_ms > MAX_WINDOW_MS || to_ms < from_ms {
+            return Err(TickDataError::WindowTooLong { from_ms, to_ms }.into());
+        }
+        let res = self
+            .historical(&pb::ProtoOaGetTickDataReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                symbol_id,
+                r#type: side.proto(),
+                from_timestamp: Some(from_ms),
+                to_timestamp: Some(to_ms),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        let (ticks, _) = decode_ticks(&res.tick_data, from_ms, to_ms)?;
+        Ok((ticks, res.has_more))
+    }
+
+    /// Read balance operations in the inclusive broker window. The protocol
+    /// limits this request to one week; no trading authority is involved.
+    pub async fn cash_flow_history(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<pb::ProtoOaDepositWithdraw>, ClientError> {
+        if from_ms < 0
+            || to_ms < from_ms
+            || to_ms - from_ms > 604_800_000
+            || to_ms > 2_147_483_646_000
+        {
+            return Err(ClientError::Broker {
+                code: "INVALID_CASH_FLOW_WINDOW".into(),
+                description: Some(
+                    "cash-flow windows must be ordered, nonnegative and at most seven days".into(),
+                ),
+                retry_after_secs: None,
+            });
+        }
+        let res = self
+            .historical(&pb::ProtoOaCashFlowHistoryListReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                from_timestamp: from_ms,
+                to_timestamp: to_ms,
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        let mut rows = res.deposit_withdraw;
+        if rows
+            .iter()
+            .any(|r| r.change_balance_timestamp < from_ms || r.change_balance_timestamp > to_ms)
+        {
+            return Err(ClientError::Broker {
+                code: "CASH_FLOW_OUTSIDE_WINDOW".into(),
+                description: Some(
+                    "broker cash-flow response includes an operation outside the requested window"
+                        .into(),
+                ),
+                retry_after_secs: None,
+            });
+        }
+        rows.sort_by_key(|r| (r.change_balance_timestamp, r.balance_history_id));
+        // Conflicting duplicate operations are not evidence of complete totals.
+        let mut seen = std::collections::HashMap::new();
+        for row in &rows {
+            if let Some(previous) = seen.insert(row.balance_history_id, row) {
+                if previous != row {
+                    return Err(ClientError::Broker {
+                        code: "CONFLICTING_CASH_FLOW".into(),
+                        description: Some(
+                            "broker returned conflicting revisions of a balance operation".into(),
+                        ),
+                        retry_after_secs: None,
+                    });
+                }
+            }
+        }
+        rows.dedup_by_key(|r| r.balance_history_id);
+        Ok(rows)
+    }
+
+    /// Every deal of `[from_ms, to_ms]`. A window that reports `hasMore` is
+    /// split in half until it does not.
+    pub async fn deal_history(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<Vec<pb::ProtoOaDeal>, ClientError> {
+        let mut out = Vec::new();
+        let mut stack = vec![(from_ms, to_ms, 0u32)];
+        while let Some((from, to, depth)) = stack.pop() {
+            let res = self
+                .historical(&pb::ProtoOaDealListReq {
+                    payload_type: None,
+                    ctid_trader_account_id: self.account.id(),
+                    from_timestamp: Some(from),
+                    to_timestamp: Some(to),
+                    max_rows: None,
+                })
+                .await?;
+            self.check_account(res.ctid_trader_account_id)?;
+            if res.has_more && to - from > 1 && depth < 30 {
+                let mid = from + (to - from) / 2;
+                stack.push((mid + 1, to, depth + 1));
+                stack.push((from, mid, depth + 1));
+                continue;
+            }
+            if res.has_more {
+                return Err(ClientError::Broker {
+                    code: "DEALS_TRUNCATED".into(),
+                    description: Some(format!(
+                        "more deals in {from}..{to} than one response holds"
+                    )),
+                    retry_after_secs: None,
+                });
+            }
+            out.extend(res.deal);
+        }
+        out.sort_by_key(|d| (d.execution_timestamp, d.deal_id));
+        out.dedup_by_key(|d| d.deal_id);
+        Ok(out)
+    }
+
+    pub async fn subscribe_spots(&self, symbol_ids: &[i64]) -> Result<(), ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaSubscribeSpotsReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                symbol_id: symbol_ids.to_vec(),
+                subscribe_to_spot_timestamp: Some(true),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        self.conn
+            .entry_state
+            .lock()
+            .unwrap()
+            .spot_subscriptions
+            .extend(symbol_ids.iter().map(|id| (self.account.id(), *id)));
+        Ok(())
+    }
+
+    pub async fn unsubscribe_spots(&self, symbol_ids: &[i64]) -> Result<(), ClientError> {
+        let res = self
+            .conn
+            .request(&pb::ProtoOaUnsubscribeSpotsReq {
+                payload_type: None,
+                ctid_trader_account_id: self.account.id(),
+                symbol_id: symbol_ids.to_vec(),
+            })
+            .await?;
+        self.check_account(res.ctid_trader_account_id)?;
+        let mut state = self.conn.entry_state.lock().unwrap();
+        for id in symbol_ids {
+            state.spot_subscriptions.remove(&(self.account.id(), *id));
+            state.quotes.remove(&(self.account.id(), *id));
+        }
+        Ok(())
+    }
+
+    /// Subscribe to spots for all `symbol_ids` at once, record ask − bid at every
+    /// update for `window`, then unsubscribe. A spot event may carry only the
+    /// side that changed, so the last known bid and ask are carried forward;
+    /// no sample is taken until both sides are known.
+    pub async fn sample_spreads(
+        &self,
+        symbol_ids: &[i64],
+        window: Duration,
+    ) -> Result<HashMap<i64, SpreadSamples>, ClientError> {
+        let mut rx = self.conn.spot_events();
+        let mut ends = self.conn.session_ends();
+        self.subscribe_spots(symbol_ids).await?;
+        if let Some(e) = self.conn.session_ended(self.account.id()) {
+            return Err(ClientError::Disconnected(e.reason));
+        }
+        let mut last: HashMap<i64, (Option<u64>, Option<u64>)> = HashMap::new();
+        let mut out: HashMap<i64, SpreadSamples> = symbol_ids
+            .iter()
+            .map(|id| (*id, SpreadSamples::default()))
+            .collect();
+        let deadline = Instant::now() + window;
+        loop {
+            let next = tokio::select! {
+                r = rx.recv() => r,
+                e = ends.recv() => match e {
+                    Ok(e) if e.affects(self.account.id()) => {
+                        return Err(ClientError::Disconnected(e.reason));
+                    }
+                    _ => continue,
+                },
+                _ = tokio::time::sleep_until(deadline) => break,
+            };
+            let ev = match next {
+                Ok(r) => r.event,
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!(missed = n, "spot sampling lagged");
+                    continue;
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            };
+            if ev.ctid_trader_account_id != self.account.id() {
+                continue;
+            }
+            let Some(samples) = out.get_mut(&ev.symbol_id) else {
+                continue;
+            };
+            let side = last.entry(ev.symbol_id).or_default();
+            if ev.bid.is_some() {
+                side.0 = ev.bid;
+            }
+            if ev.ask.is_some() {
+                side.1 = ev.ask;
+            }
+            if let (Some(bid), Some(ask)) = *side {
+                if let (Ok(bid), Ok(ask)) = (i64::try_from(bid), i64::try_from(ask)) {
+                    samples.spreads.push(ask - bid);
+                }
+            }
+        }
+        // Unsubscribe even if the window ended on a closed connection; report
+        // the unsubscribe failure only if sampling itself succeeded.
+        self.unsubscribe_spots(symbol_ids).await?;
+        Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn median_odd_even_and_empty() {
+        let s = |v: Vec<i64>| SpreadSamples { spreads: v };
+        assert_eq!(s(vec![]).median(), None);
+        assert_eq!(s(vec![30, 10, 20]).median(), Some(Decimal::new(20, 5)));
+        // (10 + 15) / 2 = 12.5 relative = 0.000125
+        assert_eq!(s(vec![15, 10]).median(), Some(Decimal::new(125, 6)));
+    }
+
+    #[tokio::test]
+    async fn a_hand_built_trading_frame_is_refused_before_any_byte_is_written() {
+        let (a, mut b) = tokio::io::duplex(1024);
+        let conn = Connection::from_stream(a, Duration::from_secs(1));
+        let err = conn
+            .send_message(
+                Oa::ProtoOaNewOrderReq as u32,
+                vec![1, 2, 3],
+                Some("x".into()),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ClientError::NotSendable(_)), "{err}");
+        drop(conn);
+        // Nothing reached the other end.
+        let mut buf = Vec::new();
+        use tokio::io::AsyncReadExt;
+        let n = b.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(n, 0, "bytes written: {buf:?}");
+    }
+
+    #[tokio::test]
+    async fn cancelled_requests_release_waiters_without_stealing_late_replies_or_executions() {
+        let (client, mut server) = tokio::io::duplex(8192);
+        let conn = Connection::from_stream(client, Duration::from_secs(30));
+        let req = pb::ProtoOaApplicationAuthReq {
+            client_id: "test-client".into(),
+            client_secret: "test-secret".into(),
+            ..Default::default()
+        };
+        let mut executions = conn.executions();
+        let mut abandoned = Vec::new();
+        for _ in 0..16 {
+            let mut request = Box::pin(conn.request(&req));
+            let frame = tokio::select! {
+                result = &mut request => panic!("request completed without its reply: {result:?}"),
+                frame = read_frame(&mut server) => frame.unwrap(),
+            };
+            assert_eq!(conn.pending.lock().unwrap().len(), 1);
+            abandoned.push(frame.client_msg_id.unwrap());
+            drop(request);
+            assert!(
+                conn.pending.lock().unwrap().is_empty(),
+                "an outer timeout/cancellation must not retain an unanswered waiter"
+            );
+        }
+
+        let mut current = Box::pin(conn.request(&req));
+        let current_id = tokio::select! {
+            result = &mut current => panic!("request completed without its reply: {result:?}"),
+            frame = read_frame(&mut server) => frame.unwrap().client_msg_id.unwrap(),
+        };
+        assert!(!abandoned.contains(&current_id));
+        for id in abandoned {
+            write_frame(
+                &mut server,
+                &ProtoMessage {
+                    payload_type: Oa::ProtoOaApplicationAuthRes as u32,
+                    payload: Some(pb::ProtoOaApplicationAuthRes::default().encode_to_vec()),
+                    client_msg_id: Some(id),
+                },
+            )
+            .await
+            .unwrap();
+        }
+        let execution = ProtoMessage {
+            payload_type: Oa::ProtoOaExecutionEvent as u32,
+            payload: Some(pb::ProtoOaExecutionEvent::default().encode_to_vec()),
+            client_msg_id: Some("t-existing-order".into()),
+        };
+        write_frame(&mut server, &execution).await.unwrap();
+        let received = tokio::time::timeout(Duration::from_secs(1), executions.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(received.client_msg_id, execution.client_msg_id);
+        assert_eq!(received.payload_type, execution.payload_type);
+        assert_eq!(conn.pending.lock().unwrap().len(), 1);
+        assert!(conn.pending.lock().unwrap().contains_key(&current_id));
+
+        write_frame(
+            &mut server,
+            &ProtoMessage {
+                payload_type: Oa::ProtoOaApplicationAuthRes as u32,
+                payload: Some(pb::ProtoOaApplicationAuthRes::default().encode_to_vec()),
+                client_msg_id: Some(current_id),
+            },
+        )
+        .await
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), current)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(conn.pending.lock().unwrap().is_empty());
+        assert!(
+            executions.try_recv().is_err(),
+            "ordinary late replies are not executions"
+        );
+    }
+
+    fn auth_request() -> pb::ProtoOaApplicationAuthReq {
+        pb::ProtoOaApplicationAuthReq {
+            client_id: "test-client".into(),
+            client_secret: "test-secret".into(),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn blocked_write_times_out_and_wakes_requests_and_session_consumers() {
+        let (client, mut server) = tokio::io::duplex(64);
+        let conn = Connection::from_stream(client, Duration::from_millis(30));
+        let req = auth_request();
+        let mut waiting = Box::pin(conn.request(&req));
+        tokio::select! {
+            result = &mut waiting => panic!("request completed without reply: {result:?}"),
+            frame = read_frame(&mut server) => { frame.unwrap(); },
+        }
+        let mut ended = conn.session_ends();
+        let mut spots = conn.spot_events();
+        let blocked = pb::ProtoOaApplicationAuthReq {
+            client_secret: "x".repeat(256),
+            ..req.clone()
+        };
+        let result = tokio::time::timeout(Duration::from_secs(1), conn.request(&blocked))
+            .await
+            .expect("the socket write itself must be bounded");
+        assert!(matches!(result, Err(ClientError::WriteTimeout(_))));
+        assert!(conn.closed_reason().is_some());
+        assert!(conn.pending.lock().unwrap().is_empty());
+        // The first request's response timer also elapsed; its closed oneshot
+        // is ready and takes priority, so the transport reason is retained.
+        assert!(matches!(waiting.await, Err(ClientError::Disconnected(_))));
+        let event = ended.try_recv().unwrap();
+        assert!(event.affects(49236051));
+        assert!(event.reason.contains("reconcile"));
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), spots.recv())
+                .await
+                .unwrap(),
+            Err(broadcast::error::RecvError::Closed)
+        ));
+        assert!(matches!(
+            conn.request(&auth_request()).await,
+            Err(ClientError::Disconnected(_))
+        ));
+        assert!(matches!(
+            conn.send_trading_frame(Oa::ProtoOaNewOrderReq as u32, vec![], "t-retry".into())
+                .await,
+            Err(ClientError::Disconnected(_))
+        ));
+        assert!(ended.try_recv().is_err(), "invalidation must be idempotent");
+        assert_eq!(conn.session_ends.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn cancelled_partial_frame_fences_the_old_stream_and_fresh_connection_recovers() {
+        use tokio::io::AsyncReadExt;
+        let (client, mut server) = tokio::io::duplex(2);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), conn.request(&auth_request()))
+                .await
+                .is_err()
+        );
+        assert!(
+            conn.closed_reason().is_some(),
+            "a partial frame cannot be reused"
+        );
+        assert!(conn.pending.lock().unwrap().is_empty());
+        let mut prefix = [0; 2];
+        server.read_exact(&mut prefix).await.unwrap();
+        assert!(matches!(
+            conn.request(&auth_request()).await,
+            Err(ClientError::Disconnected(_))
+        ));
+        let mut extra = [0; 1];
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), server.read(&mut extra))
+                .await
+                .is_err(),
+            "no following frame may append to the abandoned prefix"
+        );
+
+        let (client, mut fresh_server) = tokio::io::duplex(1024);
+        let fresh = Connection::from_stream(client, Duration::from_secs(1));
+        let broker = async {
+            let request = read_frame(&mut fresh_server).await.unwrap();
+            write_frame(
+                &mut fresh_server,
+                &ProtoMessage {
+                    payload_type: Oa::ProtoOaApplicationAuthRes as u32,
+                    payload: Some(pb::ProtoOaApplicationAuthRes::default().encode_to_vec()),
+                    client_msg_id: request.client_msg_id,
+                },
+            )
+            .await
+            .unwrap();
+        };
+        let req = auth_request();
+        let (result, ()) = tokio::join!(fresh.request(&req), broker);
+        result.unwrap();
+        assert!(fresh.closed_reason().is_none());
+    }
+
+    #[tokio::test]
+    async fn cancelled_or_timed_out_lock_waiter_does_not_poison_active_frame() {
+        let (client, mut server) = tokio::io::duplex(2);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let msg = ProtoMessage {
+            payload_type: Common::HeartbeatEvent as u32,
+            payload: Some(pb::ProtoHeartbeatEvent::default().encode_to_vec()),
+            client_msg_id: None,
+        };
+        let mut active = Box::pin(conn.writer.send(&msg, Duration::from_secs(1)));
+        tokio::select! {
+            result = &mut active => panic!("two-byte pipe cannot hold a frame: {result:?}"),
+            () = tokio::time::sleep(Duration::from_millis(10)) => {},
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), conn.request(&auth_request()))
+                .await
+                .is_err()
+        );
+        assert!(conn.pending.lock().unwrap().is_empty());
+        assert!(matches!(
+            conn.writer.send(&msg, Duration::from_millis(20)).await,
+            Err(ClientError::WriteTimeout(_))
+        ));
+        assert!(
+            conn.closed_reason().is_none(),
+            "no bytes written by queued waiters"
+        );
+        assert!(conn.session_ends.lock().unwrap().is_empty());
+        let (sent, received) = tokio::join!(active, read_frame(&mut server));
+        sent.unwrap();
+        assert_eq!(received.unwrap(), msg);
+        // A subsequent frame is intact, after both queued cancellation paths.
+        let (sent, received) = tokio::join!(
+            conn.send_message(msg.payload_type, msg.payload.clone().unwrap(), None),
+            read_frame(&mut server)
+        );
+        sent.unwrap();
+        assert_eq!(received.unwrap(), msg);
+    }
+
+    #[tokio::test]
+    async fn trading_and_heartbeat_share_the_interrupted_write_fence() {
+        for trading in [false, true] {
+            let (client, _server) = tokio::io::duplex(2);
+            let conn = Connection::from_stream(client, Duration::from_millis(20));
+            let result = if trading {
+                conn.send_trading_frame(Oa::ProtoOaNewOrderReq as u32, vec![], "t-persisted".into())
+                    .await
+            } else {
+                send_checked(
+                    &conn.writer,
+                    Common::HeartbeatEvent as u32,
+                    pb::ProtoHeartbeatEvent::default().encode_to_vec(),
+                    None,
+                    conn.request_timeout,
+                )
+                .await
+            };
+            assert!(matches!(result, Err(ClientError::WriteTimeout(_))));
+            assert!(conn.closed_reason().is_some());
+            assert!(conn.session_ended(49236051).is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn cash_flow_reads_refuse_wrong_accounts_outside_windows_and_conflicting_revisions() {
+        use crate::frame::{read_frame, write_frame};
+        use jiaoyi_core::allowlist::Allowlist;
+        let account = Allowlist::parse(Some("49236051"))
+            .unwrap()
+            .permit(49236051)
+            .unwrap();
+        let row = pb::ProtoOaDepositWithdraw {
+            balance_history_id: 1,
+            operation_type: 0,
+            change_balance_timestamp: 150,
+            delta: 100,
+            money_digits: Some(2),
+            ..Default::default()
+        };
+        let mut revised = row.clone();
+        revised.delta = 200;
+        let mut outside = row.clone();
+        outside.change_balance_timestamp = 201;
+        for (response_account, rows, expected) in [
+            (123, vec![row.clone()], "wrong account"),
+            (49236051, vec![outside], "CASH_FLOW_OUTSIDE_WINDOW"),
+            (49236051, vec![row, revised], "CONFLICTING_CASH_FLOW"),
+        ] {
+            let (client, mut server) = tokio::io::duplex(8192);
+            let conn = Connection::from_stream(client, Duration::from_secs(2));
+            let server_task = tokio::spawn(async move {
+                let request = read_frame(&mut server).await.unwrap();
+                assert_eq!(
+                    request.payload_type,
+                    Oa::ProtoOaCashFlowHistoryListReq as u32
+                );
+                write_frame(
+                    &mut server,
+                    &pb::ProtoMessage {
+                        payload_type: Oa::ProtoOaCashFlowHistoryListRes as u32,
+                        client_msg_id: request.client_msg_id,
+                        payload: Some(
+                            pb::ProtoOaCashFlowHistoryListRes {
+                                payload_type: None,
+                                ctid_trader_account_id: response_account,
+                                deposit_withdraw: rows,
+                            }
+                            .encode_to_vec(),
+                        ),
+                    },
+                )
+                .await
+                .unwrap();
+            });
+            let session = AccountSession {
+                conn: &conn,
+                account: account.clone(),
+            };
+            let error = session.cash_flow_history(100, 200).await.unwrap_err();
+            if expected == "wrong account" {
+                assert!(matches!(error, ClientError::WrongAccount { .. }));
+            } else {
+                assert!(error.to_string().contains(expected), "{error}");
+            }
+            server_task.await.unwrap();
+        }
+    }
+
+    async fn guard_fixture(conn: &Connection, server: &mut tokio::io::DuplexStream) -> EntryGuard {
+        let mut quotes = conn.spot_events();
+        write_frame(
+            server,
+            &ProtoMessage {
+                payload_type: Oa::ProtoOaSpotEvent as u32,
+                client_msg_id: None,
+                payload: Some(
+                    pb::ProtoOaSpotEvent {
+                        ctid_trader_account_id: 7,
+                        symbol_id: 9,
+                        bid: Some(10_100_000),
+                        ask: Some(10_200_000),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                ),
+            },
+        )
+        .await
+        .unwrap();
+        quotes.recv().await.unwrap();
+        EntryGuard {
+            connection_generation: conn.entry_generation(),
+            account_id: 7,
+            symbol_id: 9,
+            side: crate::trading::Side::Buy,
+            signal: crate::entry_guard::Signal::Trend { level: 100.0 },
+            cost: None,
+            expires: Instant::now() + Duration::from_secs(1),
+            account_revision: conn.entry_revision(7),
+        }
+    }
+
+    #[tokio::test]
+    async fn entry_guard_runs_after_writer_lock_wait_and_preserves_stream_on_refusal() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let mut guard = guard_fixture(&conn, &mut server).await;
+        guard.expires = Instant::now() + Duration::from_millis(20);
+        let held = conn.writer.stream.lock().await;
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            conn.send_guarded_trading_frame(
+                Oa::ProtoOaNewOrderReq as u32,
+                vec![1],
+                "guard-expired".into(),
+                Some(&guard),
+            ),
+        )
+        .await
+        .expect("expiry must finish even while another operation retains the lock");
+        assert!(matches!(result, Err(ClientError::EntryRefused(e)) if e.code == "ENTRY_EXPIRED"));
+        drop(held);
+        assert!(
+            conn.closed_reason().is_none(),
+            "zero-byte refusal must not kill the stream"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), read_frame(&mut server))
+                .await
+                .is_err()
+        );
+        let good = guard_fixture(&conn, &mut server).await;
+        conn.send_guarded_trading_frame(
+            Oa::ProtoOaNewOrderReq as u32,
+            vec![1],
+            "guard-valid".into(),
+            Some(&good),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            read_frame(&mut server)
+                .await
+                .unwrap()
+                .client_msg_id
+                .as_deref(),
+            Some("guard-valid")
+        );
+    }
+
+    #[tokio::test]
+    async fn new_connection_cannot_reuse_old_guard_and_guarded_partial_write_stays_uncertain() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let old = Connection::from_stream(client, Duration::from_secs(1));
+        let guard = guard_fixture(&old, &mut server).await;
+        let (client, mut server) = tokio::io::duplex(2);
+        let fresh = Connection::from_stream(client, Duration::from_millis(30));
+        let new_guard = guard_fixture(&fresh, &mut server).await;
+        assert!(
+            matches!(fresh.send_guarded_trading_frame(Oa::ProtoOaNewOrderReq as u32,
+            vec![1], "old-generation".into(), Some(&guard)).await,
+            Err(ClientError::EntryRefused(e)) if e.code == "ENTRY_CONNECTION_CHANGED")
+        );
+        let result = fresh
+            .send_guarded_trading_frame(
+                Oa::ProtoOaNewOrderReq as u32,
+                vec![1; 256],
+                "partial".into(),
+                Some(&new_guard),
+            )
+            .await;
+        assert!(
+            matches!(result, Err(ClientError::WriteTimeout(_))),
+            "{result:?}"
+        );
+        assert!(fresh.closed_reason().is_some());
+    }
+
+    #[tokio::test]
+    async fn manual_protection_account_and_margin_events_invalidate_admission_and_are_observable() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let guard = guard_fixture(&conn, &mut server).await;
+        let mut events = conn.executions();
+        for (index, (payload_type, payload)) in [
+            (
+                Oa::ProtoOaTrailingSlChangedEvent as u32,
+                pb::ProtoOaTrailingSlChangedEvent {
+                    ctid_trader_account_id: 7,
+                    position_id: 8,
+                    order_id: 9,
+                    stop_price: 101.0,
+                    utc_last_update_timestamp: Utc::now().timestamp_millis(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            (
+                Oa::ProtoOaTraderUpdateEvent as u32,
+                pb::ProtoOaTraderUpdatedEvent {
+                    ctid_trader_account_id: 7,
+                    trader: pb::ProtoOaTrader::default(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            (
+                Oa::ProtoOaMarginChangedEvent as u32,
+                pb::ProtoOaMarginChangedEvent {
+                    ctid_trader_account_id: 7,
+                    position_id: 8,
+                    used_margin: 100,
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            write_frame(
+                &mut server,
+                &ProtoMessage {
+                    payload_type,
+                    payload: Some(payload),
+                    client_msg_id: None,
+                },
+            )
+            .await
+            .unwrap();
+            let event = events.recv().await.unwrap();
+            assert_eq!(event.payload_type, payload_type);
+            assert_eq!(conn.entry_revision(7), index as u64 + 1);
+            assert!(
+                crate::trading::decode_execution(7, &event).is_none(),
+                "account update is not a fill"
+            );
+            assert_eq!(
+                conn.validate_entry_guard(&guard).unwrap_err().code,
+                "ENTRY_ACCOUNT_CHANGED"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn entry_guard_observes_reader_quotes_arriving_while_writer_is_held() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let guard = guard_fixture(&conn, &mut server).await;
+        let held = conn.writer.stream.lock().await;
+        let mut sending = Box::pin(conn.send_guarded_trading_frame(
+            Oa::ProtoOaNewOrderReq as u32,
+            vec![1],
+            "changed-side".into(),
+            Some(&guard),
+        ));
+        tokio::select! {
+            result = &mut sending => panic!("writer is still held: {result:?}"),
+            _ = tokio::time::sleep(Duration::from_millis(5)) => {},
+        }
+        let mut quotes = conn.spot_events();
+        write_frame(
+            &mut server,
+            &ProtoMessage {
+                payload_type: Oa::ProtoOaSpotEvent as u32,
+                client_msg_id: None,
+                payload: Some(
+                    pb::ProtoOaSpotEvent {
+                        ctid_trader_account_id: 7,
+                        symbol_id: 9,
+                        bid: Some(9_800_000),
+                        ask: Some(9_900_000),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                ),
+            },
+        )
+        .await
+        .unwrap();
+        quotes.recv().await.unwrap();
+        drop(held);
+        let Err(ClientError::EntryRefused(refusal)) = sending.await else {
+            panic!("changed quote must refuse before writing");
+        };
+        assert_eq!(refusal.code, "ENTRY_SIGNAL_CHANGED");
+        assert_eq!(refusal.evidence["bid"]["price"], 98.0);
+        let _new_quote = guard_fixture(&conn, &mut server).await;
+        assert_eq!(
+            refusal.evidence["bid"]["price"], 98.0,
+            "receipt retains the exact refused snapshot, not the later good quote"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), read_frame(&mut server))
+                .await
+                .is_err()
+        );
+        assert!(conn.closed_reason().is_none());
+    }
+}

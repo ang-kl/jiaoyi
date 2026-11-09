@@ -1,0 +1,36 @@
+//! The jiaoyi service, phase 1: load each permitted account's own daily bars
+//! and costs from cTrader into PostgreSQL, record the live quote stream,
+//! and report on them.
+
+pub mod admission;
+pub mod authority;
+pub mod config;
+pub mod edge;
+pub mod fast_monitor;
+pub mod fills;
+pub mod history;
+pub mod http;
+pub mod limits;
+pub mod loader;
+pub mod operations;
+pub mod owner_assessments;
+pub mod quote_coverage;
+pub mod recorder;
+pub mod report;
+pub mod research;
+pub mod service;
+pub mod setup_assessment;
+pub mod shutdown;
+pub mod status_page;
+pub mod stock_preparation;
+pub mod stop_loss_review;
+pub mod strategy3;
+pub mod supervisor;
+pub mod telegram_report;
+pub mod trading;
+pub mod trading_report_data;
+pub mod trading_report_snapshot;
+pub mod trading_report_view;
+pub mod trail_receipts;
+
+pub mod broker_backtest;

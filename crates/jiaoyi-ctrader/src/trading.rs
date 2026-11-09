@@ -69,6 +69,10 @@ pub struct ManagementAuthority {
 
 impl ManagementAuthority {
     pub fn validate_current(&self, p: &pb::ProtoOaPosition) -> Result<(), String> {
+        // №18,403 LAW 1: historical fills never override current label ownership.
+        if self.entry_key.starts_with("s3:") && p.trade_data.label.as_deref() != Some("jiaoyi-s3") {
+            return Err("Strategy 3 label ownership changed: no amend or close".into());
+        }
         if p.position_status != pb::ProtoOaPositionStatus::PositionStatusOpen as i32 {
             return Err("authority incomplete: broker position is not open".into());
         }
@@ -513,8 +517,9 @@ pub fn entry_allowed(
     let external = on_symbol
         .iter()
         .filter(|l| {
-            !l.as_deref()
-                .is_some_and(|l| l == label || PROGRAM_LABELS.contains(&l))
+            !l.as_deref().is_some_and(|l| {
+                l == label || (label != "jiaoyi-s3" && PROGRAM_LABELS.contains(&l))
+            })
         })
         .count();
     let ours = on_symbol
@@ -840,6 +845,15 @@ async fn broker_entry_admission<L: Ledger>(
         .iter()
         .map(|p| (p.trade_data.symbol_id, p.trade_data.label.clone()))
         .collect();
+    // №18,403 LAW 2 includes pending external orders, not only positions.
+    if label == "jiaoyi-s3"
+        && rec.order.iter().any(|o| {
+            o.trade_data.symbol_id == symbol_id
+                && o.trade_data.label.as_deref() != Some("jiaoyi-s3")
+        })
+    {
+        return refuse("yield_to_human_position_or_order: external pending order on symbol");
+    }
     entry_allowed(trader.account_type, &positions, symbol_id, label)
         .map_err(|reason| Refused { reason })?;
     let margin = async {

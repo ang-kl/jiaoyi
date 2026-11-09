@@ -65,6 +65,27 @@ use crate::trading::{fresh_equity, relative_stop, risk_at_stop, PgLedger};
 pub const STRATEGY: &str = "Strategy 3: macro pullback";
 /// The label on every position Strategy 3 opens.
 pub const LABEL: &str = "jiaoyi-s3";
+/// №18,403: immutable owner reservations, independent of environment settings.
+pub const HUMAN_RESERVED_SYMBOLS: &[&str] = &["NatGas", "JPN225"];
+pub fn human_reserved(symbol: &str) -> bool {
+    HUMAN_RESERVED_SYMBOLS
+        .iter()
+        .any(|s| s.eq_ignore_ascii_case(symbol))
+}
+
+/// Reconcile contains active broker positions/orders only. Every other label,
+/// including S1, blank and absent labels, is external to S3.
+pub fn human_symbol_locks(
+    book: &jiaoyi_ctrader::messages::ProtoOaReconcileRes,
+) -> std::collections::HashSet<i64> {
+    book.position
+        .iter()
+        .map(|p| &p.trade_data)
+        .chain(book.order.iter().map(|o| &o.trade_data))
+        .filter(|d| d.label.as_deref() != Some(LABEL))
+        .map(|d| d.symbol_id)
+        .collect()
+}
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
@@ -914,9 +935,14 @@ impl Ledger for S3Ledger<'_> {
         account_id: i64,
         position_id: i64,
     ) -> Result<gate::ManagementAuthority, String> {
-        self.inner
+        let authority = self
+            .inner
             .management_authority(account_id, position_id)
-            .await
+            .await?;
+        if !authority.entry_key.starts_with("s3:") {
+            return Err("Strategy 3 cannot manage another strategy's opening".into());
+        }
+        Ok(authority)
     }
     async fn record_authority_absence(
         &self,
@@ -1219,6 +1245,8 @@ impl<'a> Decisions<'a> {
 /// time, so the tests drive it quote by quote.
 pub struct Trader<'a, 'c> {
     fast_cache: fast_entry::Cache,
+    human_locks: std::collections::HashSet<i64>,
+    human_book_revision: Option<u64>,
     pub pool: &'a PgPool,
     pub allowlist: &'a Allowlist,
     pub env: Environment,
@@ -1251,6 +1279,74 @@ pub struct Trader<'a, 'c> {
 }
 
 impl<'a, 'c> Trader<'a, 'c> {
+    fn human_entry_refusal(&self, symbol_id: i64) -> Option<&'static str> {
+        if self
+            .syms
+            .get(&symbol_id)
+            .is_none_or(|s| human_reserved(&s.name))
+        {
+            return Some("human_reserved_symbol");
+        }
+        if self.human_book_revision
+            != Some(self.session.connection().entry_revision(self.account_id()))
+        {
+            return Some("human_ownership_book_requires_refresh");
+        }
+        self.human_locks
+            .contains(&symbol_id)
+            .then_some("yield_to_human_position_or_order")
+    }
+
+    async fn apply_human_book(
+        &mut self,
+        res: &jiaoyi_ctrader::messages::ProtoOaReconcileRes,
+        book_revision: u64,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        self.human_locks = human_symbol_locks(res);
+        self.human_book_revision = (book_revision
+            == self.session.connection().entry_revision(self.account_id()))
+        .then_some(book_revision);
+        let blocked: Vec<_> = self
+            .syms
+            .values()
+            .filter(|sym| self.human_locks.contains(&sym.id) || human_reserved(&sym.name))
+            .map(|sym| (sym.id, sym.rule.and_then(|r| sessions::session_at(&r, now))))
+            .collect();
+        for (id, current_window) in blocked {
+            self.fast_cache.plans.remove(&id);
+            // A restart may have a durable arm not yet loaded into memory.
+            // Load only to tombstone it; the human gate prevents preparation.
+            if let Some(window) = current_window {
+                // prepare() returns immediately for these locked symbols;
+                // boxing breaks the static reconciliation/read-pump cycle.
+                Box::pin(self.restore_pullback(id, window, now)).await?;
+            }
+            let Some(arm) = self.syms[&id].pullback else {
+                continue;
+            };
+            self.save_pullback(
+                id,
+                arm.session,
+                now,
+                None,
+                "yield_to_human_position_or_order",
+                json!({"human_protection_law":true}),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Lightweight account-book refresh; do not repeat history/authority
+    /// recovery just because an entry revision changed. Regular reconciliation
+    /// still handles owned-position recovery on its existing schedule.
+    async fn refresh_human_book(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
+        let revision = self.session.connection().entry_revision(self.account_id());
+        let book = self.session.reconcile().await?;
+        self.apply_human_book(&book, revision, now).await
+    }
+
     /// Read the account's symbols, deposit currency and commission book.
     pub async fn new(
         pool: &'a PgPool,
@@ -1339,6 +1435,8 @@ impl<'a, 'c> Trader<'a, 'c> {
         }
         let mut t = Trader {
             fast_cache: Default::default(),
+            human_locks: Default::default(),
+            human_book_revision: None,
             pool,
             allowlist,
             env,
@@ -1558,7 +1656,9 @@ impl<'a, 'c> Trader<'a, 'c> {
     pub async fn reconcile(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
         self.refresh_resolved_symbols().await?;
         let account_id = self.account_id();
+        let book_revision = self.session.connection().entry_revision(account_id);
         let res = self.session.reconcile().await?;
+        self.apply_human_book(&res, book_revision, now).await?;
         let present: std::collections::HashSet<i64> =
             res.position.iter().map(|p| p.position_id).collect();
         let mut previous: std::collections::HashSet<i64> = self.own.keys().copied().collect();
@@ -1610,7 +1710,12 @@ impl<'a, 'c> Trader<'a, 'c> {
             if label.is_some_and(|l| gate::PROGRAM_LABELS.contains(&l)) {
                 self.program_positions += 1;
             }
-            if label != Some(LABEL) {
+            if label != Some(LABEL)
+                || self
+                    .syms
+                    .get(&p.trade_data.symbol_id)
+                    .is_some_and(|s| human_reserved(&s.name))
+            {
                 if previous.contains(&p.position_id) {
                     authority_pending.push(json!({"position_id":p.position_id,
                         "symbol_id":p.trade_data.symbol_id,
@@ -1921,6 +2026,9 @@ impl<'a, 'c> Trader<'a, 'c> {
         s: Session,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
+        if self.human_entry_refusal(symbol_id).is_some() {
+            return Ok(());
+        }
         // A carried crypto arm keeps its causal opening quote and band. A
         // peer's preparation request must not replace them with the next slot.
         if self
@@ -2146,6 +2254,13 @@ impl<'a, 'c> Trader<'a, 'c> {
         ask: Option<f64>,
         now: DateTime<Utc>,
     ) -> anyhow::Result<bool> {
+        if self
+            .syms
+            .get(&symbol_id)
+            .is_some_and(|s| human_reserved(&s.name))
+        {
+            return Ok(false);
+        }
         let positions: Vec<i64> = self
             .own
             .values()
@@ -2490,6 +2605,9 @@ impl<'a, 'c> Trader<'a, 'c> {
             .get(&o.symbol_id)
             .map(|s| s.name.clone())
             .unwrap_or_default();
+        if human_reserved(&name) {
+            return Ok(None);
+        }
         let key = match kind {
             "tp1" => format!("s3-tp1:{account_id}:{}:{attempt}", o.position_id),
             _ => format!("s3-end:{account_id}:{}:{attempt}", o.position_id),
@@ -2838,6 +2956,18 @@ impl<'a, 'c> Trader<'a, 'c> {
     }
 
     async fn entry(&mut self, symbol_id: i64, now: DateTime<Utc>) -> anyhow::Result<()> {
+        if let Some(reason) = self.human_entry_refusal(symbol_id) {
+            let name = self.syms[&symbol_id].name.clone();
+            self.skip(
+                symbol_id,
+                &name,
+                reason,
+                json!({"human_protection_law":true}),
+                now,
+            )
+            .await;
+            return Ok(());
+        }
         // The running actor compares queued event time with the wall clock;
         // direct deterministic callers supply their own clock through `now`.
         let checked_at = if self.protect_during_reads {
@@ -3060,6 +3190,11 @@ impl<'a, 'c> Trader<'a, 'c> {
                 return Ok(());
             }
         };
+        // Historical/cost reads can outlive a broker account change. Never
+        // arm from a book that became stale while those reads were awaited.
+        if self.human_entry_refusal(symbol_id).is_some() {
+            return Ok(());
+        }
         let (peer_move, _) = self.peer_evidence(&name, now);
         match ArmedPullback::arm_window(&name, s, b, bid, ask, now, *context, peer_move, cost.total)
         {
@@ -3108,6 +3243,9 @@ impl<'a, 'c> Trader<'a, 'c> {
         dispatch_deadline: tokio::time::Instant,
         dispatch_revision: u64,
     ) -> anyhow::Result<()> {
+        if self.human_entry_refusal(symbol_id).is_some() {
+            return Ok(());
+        }
         let s = armed.session;
         let side = if armed.long { Dir::Buy } else { Dir::Sell };
         let name = self.syms[&symbol_id].name.clone();
@@ -3965,6 +4103,9 @@ pub async fn run_session_with_event_offset(
                     specs_tx.send_replace(preopen::specs(pool, account_id, &t.syms, t.deposit.is_some()).await?);
                 },
                 _ = clock.tick() => {
+                    if t.human_book_revision != Some(conn.entry_revision(account_id)) {
+                        t.refresh_human_book(Utc::now()+offset).await?;
+                    }
                     crate::fast_monitor::observe(live, account_id, "session_exit", t.session_end(Utc::now()+offset)).await?;
                     warm_tx.send_replace(t.warm_requests(Utc::now()+offset));
                 },

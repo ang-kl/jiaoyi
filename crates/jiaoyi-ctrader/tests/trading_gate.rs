@@ -255,12 +255,10 @@ async fn hedged_refuses_a_second_position_of_ours_on_a_symbol() {
     refused_on(f, "one per symbol").await;
 }
 
-// Claude · № 17,020 25-Oct (ordered: owner's Strategy 3 v2 approval)
-/// Owner, 25-10-2026: on a HEDGED account Strategy 1 and Strategy 3 may each
-/// hold the same symbol; an external position still blocks; a second
-/// position of the same strategy does not go.
+/// №18,403 supersedes S1/S3 same-symbol coholding: every non-S3 label
+/// now reserves that symbol for the external owner on this account.
 #[tokio::test]
-async fn hedged_lets_strategy_1_and_strategy_3_hold_one_symbol() {
+async fn s3_yields_to_every_non_s3_label_including_strategy1() {
     let f = fake();
     f.positions
         .lock()
@@ -268,7 +266,7 @@ async fn hedged_lets_strategy_1_and_strategy_3_hold_one_symbol() {
         .push(position(9, ETH, Some("jiaoyi-s1")));
     let (conn, log) = f.spawn();
     let s = session_on(&conn).await;
-    send(
+    let result = send(
         &s,
         &allow(),
         &MemLedger::default(),
@@ -277,9 +275,9 @@ async fn hedged_lets_strategy_1_and_strategy_3_hold_one_symbol() {
         "s3",
         Duration::from_secs(2),
     )
-    .await
-    .unwrap();
-    assert_eq!(orders(&log), 1);
+    .await;
+    assert!(matches!(result, Err(SendError::Refused(_))));
+    assert_eq!(orders(&log), 0);
     // A second Strategy 3 position on the symbol is refused.
     let f = fake();
     f.positions
@@ -2056,4 +2054,117 @@ async fn background_preparation_never_holds_dispatch_lock_during_broker_wait() {
         "the concurrent local attempt invalidates the refreshed snapshot"
     );
     assert_eq!(orders(&log), 1);
+}
+
+#[tokio::test]
+async fn s3_current_label_overrides_historical_authority_for_close_and_amend() {
+    for label in [None, Some(""), Some("jiaoyi-s1"), Some("jiaoyi-s3:")] {
+        let f = fake();
+        let p = position(9, ETH, label);
+        let volume = p.trade_data.volume;
+        f.positions.lock().unwrap().push(p);
+        let (conn, log) = f.spawn();
+        let session = session_on(&conn).await;
+        let ledger = MemLedger::default();
+        ledger.prove(9, Side::Buy, volume);
+        ledger
+            .authorities
+            .lock()
+            .unwrap()
+            .get_mut(&9)
+            .unwrap()
+            .entry_key = "s3:owned-opening".into();
+        for cmd in [
+            Command::Close {
+                position_id: 9,
+                volume,
+            },
+            Command::AmendStop {
+                position_id: 9,
+                side: Side::Buy,
+                current_stop: None,
+                new_stop: 2700.0,
+            },
+        ] {
+            let result = send(
+                &session,
+                &allow(),
+                &ledger,
+                &on(),
+                cmd,
+                "s3-law1",
+                Duration::from_secs(2),
+            )
+            .await;
+            assert!(
+                matches!(&result,Err(SendError::Refused(e)) if e.reason.contains("label ownership")),
+                "{result:?}"
+            );
+        }
+        assert!(log.lock().unwrap().closes.is_empty());
+        assert!(log.lock().unwrap().amends.is_empty());
+        assert!(ledger.intents.lock().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn s3_pending_external_order_blocks_then_releases_without_cancellation() {
+    for label in [None, Some(""), Some("jiaoyi-s1")] {
+        let f = fake();
+        f.scripted_books
+            .lock()
+            .unwrap()
+            .push_back(pb::ProtoOaReconcileRes {
+                ctid_trader_account_id: ACCOUNT,
+                order: vec![pb::ProtoOaOrder {
+                    order_id: 7,
+                    trade_data: pb::ProtoOaTradeData {
+                        symbol_id: ETH,
+                        volume: 100,
+                        trade_side: 1,
+                        label: label.map(str::to_owned),
+                        ..Default::default()
+                    },
+                    order_type: 2,
+                    order_status: 1,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+        let (conn, log) = f.spawn();
+        let session = session_on(&conn).await;
+        let ledger = MemLedger::default();
+        let result = send(
+            &session,
+            &allow(),
+            &ledger,
+            &on(),
+            open_s3(Some(1_000_000)),
+            "blocked",
+            Duration::from_secs(2),
+        )
+        .await;
+        assert!(
+            matches!(&result, Err(SendError::Refused(r)) if r.reason.contains("yield_to_human")),
+            "{result:?}"
+        );
+        assert_eq!(orders(&log), 0);
+        assert!(ledger.intents.lock().unwrap().is_empty());
+        // The next reconcile snapshot has no pending order. No manual reset
+        // or bot cancellation is required to release the symbol.
+        let result = send(
+            &session,
+            &allow(),
+            &ledger,
+            &on(),
+            open_s3(Some(1_000_000)),
+            "released",
+            Duration::from_secs(2),
+        )
+        .await;
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(orders(&log), 1);
+        assert!(log.lock().unwrap().amends.is_empty());
+        assert!(log.lock().unwrap().closes.is_empty());
+    }
 }

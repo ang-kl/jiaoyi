@@ -1376,6 +1376,7 @@ async fn inside_quote_keeps_slot_available_and_qualified_arm_restores_after_rest
                 inner: restarted,
                 quote_sender: t.quote_sender.clone(),
             };
+            restarted.reconcile(Utc::now()).await.unwrap();
             restarted
                 .on_quote(
                     BTC,
@@ -1491,6 +1492,7 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 inner: restarted,
                 quote_sender: t.quote_sender.clone(),
             };
+            restarted.reconcile(Utc::now()).await.unwrap();
             assert_eq!(restarted.syms[&BTC].cost_skip_session, None);
             restarted
                 .on_quote(BTC, Some(60_455.0), Some(60_460.0), at(60))
@@ -1713,6 +1715,7 @@ async fn durable_cost_veto_keeps_one_entry_per_session_after_restart(pool: PgPoo
             inner: restarted,
             quote_sender: t.quote_sender.clone(),
         };
+        restarted.reconcile(Utc::now()).await.unwrap();
         assert!(restarted.own.is_empty());
         assert_eq!(restarted.syms[&BTC].entered_session, None);
         restarted
@@ -3095,6 +3098,7 @@ async fn account_funding_rejection_backs_off_other_symbols_then_retries(pool: Pg
             .await
             .unwrap();
         let other = second_prepared_crypto(&mut t);
+        t.reconcile(Utc::now()).await.unwrap();
         t.enter_pullback(
             other,
             Some(60_455.0),
@@ -3136,6 +3140,7 @@ async fn symbol_rejection_does_not_back_off_other_symbols(pool: PgPool) {
             .await
             .unwrap();
         let other = second_prepared_crypto(&mut t);
+        t.reconcile(Utc::now()).await.unwrap();
         t.enter_pullback(
             other,
             Some(60_455.0),
@@ -3165,6 +3170,7 @@ async fn funding_backoff_keeps_the_open_positions_tp1(pool: PgPool) {
     with_trader!(&pool, f, Environment::Demo, |t, log| {
         t.prepare(BTC, today(), at(30)).await.unwrap();
         let other = second_prepared_crypto(&mut t);
+        t.reconcile(Utc::now()).await.unwrap();
         t.enter_pullback(
             other,
             Some(60_455.0),
@@ -4187,6 +4193,11 @@ async fn crypto_four_hour_preopen_is_ready_then_finalises_causally(pool: PgPool)
         inner: restored,
         quote_sender,
     };
+    // Reconnect is simulated at the first four-hour opening. Restore using
+    // that clock, not the wall clock (which may already be in a later slot).
+    strategy3::preopen::restore(&pool, DEMO, &mut restored.syms, today().open)
+        .await
+        .unwrap();
     assert!(
         restored.syms[&BTC]
             .preopen
@@ -4194,6 +4205,7 @@ async fn crypto_four_hour_preopen_is_ready_then_finalises_causally(pool: PgPool)
             .is_some_and(|p| p.completed_at == prepared.completed_at),
         "reconnect reloads the durable pre-open receipt"
     );
+    restored.reconcile(Utc::now()).await.unwrap();
     restored
         .enter_pullback(BTC, Some(60_455.0), Some(60_460.0), at(30))
         .await
@@ -5126,5 +5138,112 @@ async fn reconcile_adopts_and_subscribes_late_core_resolution_without_replacing_
             1,
             "only the historical opening fixture; refresh sends no order"
         );
+    });
+}
+
+#[test]
+fn human_laws_are_exact_account_local_and_release_when_the_book_clears() {
+    use jiaoyi_ctrader::messages::{ProtoOaOrder, ProtoOaReconcileRes};
+    assert_eq!(strategy3::LABEL, "jiaoyi-s3");
+    assert!(strategy3::LABEL
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-'));
+    for name in ["NatGas", "JPN225", "natgas", "jpn225"] {
+        assert!(strategy3::human_reserved(name));
+    }
+    assert!(!strategy3::human_reserved("BTCUSD"));
+    let mut book = ProtoOaReconcileRes::default();
+    for (id, label) in [
+        (1, None),
+        (2, Some("")),
+        (3, Some("jiaoyi-s1")),
+        (4, Some("jiaoyi-s3")),
+        (5, Some("jiaoyi-s3:")),
+    ] {
+        book.position.push(ProtoOaPosition {
+            trade_data: ProtoOaTradeData {
+                symbol_id: id,
+                label: label.map(str::to_owned),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+    }
+    book.order.push(ProtoOaOrder {
+        trade_data: ProtoOaTradeData {
+            symbol_id: 6,
+            label: None,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    let locks = strategy3::human_symbol_locks(&book);
+    assert_eq!(locks.len(), 5);
+    assert!(!locks.contains(&4));
+    assert!(locks.contains(&6));
+    assert!(strategy3::human_symbol_locks(&ProtoOaReconcileRes::default()).is_empty());
+    book.position.clear();
+    book.order.clear();
+    assert!(strategy3::human_symbol_locks(&book).is_empty());
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn external_position_cancels_armed_setup_and_release_requires_a_new_impulse(pool: PgPool) {
+    loaded(&pool).await;
+    let f = fake((60700.0, 60705.0));
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.on_quote(BTC, Some(60700.0), Some(60705.0), at(60))
+            .await
+            .unwrap();
+        assert!(t.syms[&BTC].pullback.is_some());
+        let mut human = s3_position(9876, 1, 60705.0);
+        human.trade_data.label = None;
+        f.positions.lock().unwrap().push(human);
+        // Restart before observing the human: the durable old arm must also
+        // be cancelled, even though the new actor has not loaded it yet.
+        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+            .await
+            .unwrap();
+        t.reconcile(at(60) + Duration::seconds(1)).await.unwrap();
+        assert!(
+            t.syms[&BTC].pullback.is_none(),
+            "human ownership disarms the cached impulse"
+        );
+        let history_calls = log.lock().unwrap().trendbar_requests.len();
+        t.syms.get_mut(&BTC).unwrap().day = None;
+        t.on_quote(
+            BTC,
+            Some(60350.0),
+            Some(60355.0),
+            at(60) + Duration::seconds(2),
+        )
+        .await
+        .unwrap();
+        assert!(t.syms[&BTC].day.is_none(), "locked symbol is not prepared");
+        assert_eq!(log.lock().unwrap().trendbar_requests.len(), history_calls);
+        assert!(orders(&log).is_empty());
+        assert!(closes(&log).is_empty());
+        assert!(log.lock().unwrap().amends.is_empty());
+        f.positions.lock().unwrap().clear();
+        t.reconcile(at(90)).await.unwrap();
+        // Once the human has closed, an inside-band quote cannot resurrect the
+        // cancelled impulse. A later qualified mark can arm again.
+        t.on_quote(BTC, Some(60000.0), Some(60005.0), at(90))
+            .await
+            .unwrap();
+        assert!(t.syms[&BTC].pullback.is_none());
+        t.on_quote(
+            BTC,
+            Some(60700.0),
+            Some(60705.0),
+            at(90) + Duration::seconds(4),
+        )
+        .await
+        .unwrap();
+        assert!(
+            t.syms[&BTC].pullback.is_some(),
+            "human symbol lock releases automatically"
+        );
+        assert!(orders(&log).is_empty());
     });
 }
