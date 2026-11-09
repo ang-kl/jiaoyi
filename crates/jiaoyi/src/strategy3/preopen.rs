@@ -85,9 +85,7 @@ impl Prepared {
             && self.completed_at <= self.session.open - chrono::Duration::minutes(LEAD_MINUTES)
     }
     pub fn matches(&self, symbol_id: i64, session: Session) -> bool {
-        self.symbol_id == Some(symbol_id)
-            && self.session == session
-            && self.prereg_hash == prereg_hash()
+        self.symbol_id == Some(symbol_id) && self.session == session && compatible_preparation(self)
     }
 }
 
@@ -152,6 +150,43 @@ fn missing_marks(table: &SigmaTable, session: Session) -> usize {
         .count()
 }
 
+/// Only18407 shares the exact preparation calendar/statistics with18409.
+/// Keep its original source hash; this compatibility grants no setup authority.
+pub fn compatible_preparation_hashes() -> Vec<String> {
+    vec![
+        prereg_hash(),
+        Sha256::digest(include_bytes!(
+            "../../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18407.md"
+        ))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect(),
+    ]
+}
+
+fn compatible_preparation(p: &Prepared) -> bool {
+    if p.prereg_hash == prereg_hash() {
+        return true;
+    }
+    if !compatible_preparation_hashes().contains(&p.prereg_hash) {
+        return false;
+    }
+    p.source_cutoff_at <= p.completed_at
+        && p.macro_context.is_some_and(|c| {
+            c.latest_bar_end <= p.session.open
+                && c.latest_bar_end <= p.source_cutoff_at
+                && c.drift_5.is_finite()
+                && c.drift_20.is_finite()
+        })
+        && p.table.as_ref().is_some_and(|t| {
+            t.sessions_used.len() >= band::LOOKBACK
+                && t.sessions_used.iter().all(|d| *d < p.session.date)
+                && t.marks
+                    .values()
+                    .all(|m| m.as_ref().map_or(true, |v| v.is_finite() && *v > 0.0))
+        })
+}
+
 async fn stored(
     pool: &PgPool,
     account: i64,
@@ -160,12 +195,12 @@ async fn stored(
 ) -> anyhow::Result<Option<Prepared>> {
     let value:Option<Value>=jiaoyi_store::sqlx::query_scalar(
         "SELECT detail FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_preopen'
-         AND detail->>'prereg_hash'=$3 AND detail->'session'->>'open'=$4 ORDER BY id DESC LIMIT 1")
-        .bind(account).bind(symbol).bind(prereg_hash()).bind(session.open.to_rfc3339_opts(chrono::SecondsFormat::Secs,true))
+         AND detail->>'prereg_hash'=ANY($3) AND detail->'session'->>'open'=$4 ORDER BY id DESC LIMIT 1")
+        .bind(account).bind(symbol).bind(compatible_preparation_hashes()).bind(session.open.to_rfc3339_opts(chrono::SecondsFormat::Secs,true))
         .fetch_optional(pool).await?;
     Ok(value
         .and_then(|v| serde_json::from_value::<Prepared>(v).ok())
-        .filter(|p| p.session == session && p.symbol == symbol && p.prereg_hash == prereg_hash()))
+        .filter(|p| p.session == session && p.symbol == symbol && compatible_preparation(p)))
 }
 
 /// Hydrate already completed work before subscribing to entry quotes.
@@ -388,10 +423,10 @@ async fn stored_many(
          LEFT JOIN LATERAL (
            SELECT detail FROM trading_decisions
            WHERE account_id=$1 AND symbol=requested.symbol AND kind='s3_preopen'
-             AND detail->>'prereg_hash'=$4 AND detail->'session'->>'open'=requested.session_open
+             AND detail->>'prereg_hash'=ANY($4) AND detail->'session'->>'open'=requested.session_open
            ORDER BY id DESC LIMIT 1
          ) latest ON true ORDER BY requested.ordinal",
-    ).bind(account).bind(symbols).bind(opens).bind(prereg_hash()).fetch_all(pool).await?;
+    ).bind(account).bind(symbols).bind(opens).bind(compatible_preparation_hashes()).fetch_all(pool).await?;
     Ok(values
         .into_iter()
         .zip(requests)
@@ -399,7 +434,7 @@ async fn stored_many(
             value
                 .and_then(|v| serde_json::from_value::<Prepared>(v).ok())
                 .filter(|p| {
-                    p.session == *session && p.symbol == *symbol && p.prereg_hash == prereg_hash()
+                    p.session == *session && p.symbol == *symbol && compatible_preparation(p)
                 })
         })
         .collect())
@@ -518,6 +553,37 @@ mod tests {
             metadata_ready: true,
             source_error: false,
         }
+    }
+
+    #[test]
+    fn prior_registration_preparation_reuse_is_exact_and_causal() {
+        let mut p = complete();
+        p.prereg_hash = compatible_preparation_hashes()[1].clone();
+        p.table.as_mut().unwrap().sessions_used = (1..=20)
+            .map(|d| p.session.date - chrono::Duration::days(d))
+            .collect();
+        assert!(p.matches(22, p.session));
+        let mut bad = p.clone();
+        bad.prereg_hash = "unknown_or_older_policy".into();
+        assert!(!bad.matches(22, bad.session));
+        let mut bad = p.clone();
+        bad.macro_context.as_mut().unwrap().latest_bar_end =
+            bad.session.open + chrono::Duration::seconds(1);
+        assert!(!bad.matches(22, bad.session));
+        let mut bad = p.clone();
+        bad.table
+            .as_mut()
+            .unwrap()
+            .sessions_used
+            .push(bad.session.date);
+        assert!(!bad.matches(22, bad.session));
+        let mut bad = p.clone();
+        bad.table.as_mut().unwrap().marks.insert(30, Ok(f64::NAN));
+        assert!(!bad.matches(22, bad.session));
+        let mut bad = p.clone();
+        bad.source_cutoff_at = bad.completed_at + chrono::Duration::seconds(1);
+        assert!(!bad.matches(22, bad.session));
+        assert!(!p.matches(23, p.session));
     }
 
     #[test]

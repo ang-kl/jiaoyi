@@ -135,7 +135,7 @@ impl EntryGuard {
                 })),
                 Signal::PullbackConfirmed { admitted_entry, price_digits, proof, .. } => Some(serde_json::json!({
                     "price":admitted_entry,"digits":price_digits,"confirmed_turn":proof,
-                    "policy":"s3_macro_pullback_owner_18407_v1","peer_min_signed_bps":24.0
+                    "policy":"s3_macro_pullback_owner_18409_v1","peer_min_signed_bps":24.0
                 })),
                 _ => None,
             },

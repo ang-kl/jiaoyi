@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const MODEL: &str = "s3_macro_pullback_v1";
-pub const POLICY: &str = "s3_macro_pullback_owner_18407_v1";
+pub const POLICY: &str = "s3_macro_pullback_owner_18409_v1";
 /// Retained by the original bounded replay; its historical semantics do not change.
 pub const LEGACY_REPLAY_POLICY: &str = "s3_macro_pullback_owner_18380_v1";
 pub const BOUNCE_FRACTION: f64 = 0.10;
@@ -25,6 +25,7 @@ pub fn two_stage_policy(policy: &str) -> bool {
             | "s3_macro_pullback_owner_18380_v1"
             | "s3_macro_pullback_owner_18392_v1"
             | "s3_macro_pullback_owner_18407_v1"
+            | "s3_macro_pullback_owner_18409_v1"
     )
 }
 pub const CORE: [&str; 8] = [
@@ -1181,6 +1182,7 @@ mod tests {
         assert!(value.get("confirmation").is_none());
         assert_eq!(serde_json::from_value::<ArmedPullback>(value).unwrap(), a);
         assert!(two_stage_policy("s3_macro_pullback_owner_18392_v1"));
+        assert!(two_stage_policy("s3_macro_pullback_owner_18407_v1"));
         assert!(two_stage_policy(POLICY));
         assert_eq!(LEGACY_REPLAY_POLICY, "s3_macro_pullback_owner_18380_v1");
     }
@@ -1311,7 +1313,7 @@ mod tests {
             .is_ok());
         }
         assert_eq!(LEGACY_REPLAY_POLICY, "s3_macro_pullback_owner_18380_v1");
-        assert_eq!(POLICY, "s3_macro_pullback_owner_18407_v1");
+        assert_eq!(POLICY, "s3_macro_pullback_owner_18409_v1");
     }
 
     #[test]

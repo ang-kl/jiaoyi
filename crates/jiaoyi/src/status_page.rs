@@ -297,15 +297,30 @@ fn s1_trigger_table(accounts: &[Value]) -> String {
 /// noise band then, the bid and ask, and the nearer side's distance to its
 /// edge in half-widths (open × σ), negative once through it; or why there
 /// is none (outside the entry window, no band).
+fn entry_gate_cell(t: &Value) -> String {
+    if let Some(gates) = t["entry_gates"].as_array().filter(|g| !g.is_empty()) {
+        gates
+            .iter()
+            .map(|g| format!("<div>{}</div>", txt(&g["message"])))
+            .collect::<Vec<_>>()
+            .join("")
+    } else {
+        txt(t
+            .get("entry_gate")
+            .and_then(|g| g.get("message"))
+            .unwrap_or(&t["reason"]))
+    }
+}
+
 fn s3_trigger_table(a: &Value) -> String {
     let mut h = String::from(
-        r#"<div class="trigger-pager" data-trigger-pager><div class="scroll trigger-scroll" tabindex="0" role="region" aria-label="Distance to trigger"><table><thead><tr><th>Symbol</th><th class="num">Band lower</th><th class="num">Band upper</th><th class="num">σ</th><th class="num">Bid</th><th class="num">Ask</th><th>Nearer edge</th><th class="num">Distance (half-widths)</th><th>At</th></tr></thead><tbody>"#,
+        r#"<div class="trigger-pager" data-trigger-pager><div class="scroll trigger-scroll" tabindex="0" role="region" aria-label="Distance to trigger"><table><thead><tr><th>Symbol</th><th class="num">Band lower</th><th class="num">Band upper</th><th class="num">σ</th><th class="num">Bid</th><th class="num">Ask</th><th>Nearer edge</th><th class="num">Distance (half-widths)</th><th>Entry state / gate</th><th>At</th></tr></thead><tbody>"#,
     );
     let mut any = false;
     for (symbol, t) in a["trigger_distance"].as_object().into_iter().flatten() {
         any = true;
         h.push_str(&format!(
-            "<tr data-trigger-row><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"mono\">{}</td></tr>",
+            "<tr data-trigger-row><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"entry-gate\">{}</td><td class=\"mono\">{}</td></tr>",
             esc(symbol),
             num(&t["lower"], 5),
             num(&t["upper"], 5),
@@ -314,11 +329,12 @@ fn s3_trigger_table(a: &Value) -> String {
             txt(&t["ask"]),
             txt(&t["nearer_edge"]),
             distance_cell(&t["distance_half_widths"], &t["reason"]),
+            entry_gate_cell(t),
             txt(&t["at"]),
         ));
     }
     if !any {
-        h.push_str(r#"<tr><td colspan="9" class="empty">No quote processed yet.</td></tr>"#);
+        h.push_str(r#"<tr><td colspan="10" class="empty">No quote processed yet.</td></tr>"#);
     }
     h.push_str("</tbody></table></div></div>");
     h
