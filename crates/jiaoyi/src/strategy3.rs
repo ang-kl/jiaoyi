@@ -1343,7 +1343,9 @@ impl<'a, 'c> Trader<'a, 'c> {
     /// still handles owned-position recovery on its existing schedule.
     async fn refresh_human_book(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
         let revision = self.session.connection().entry_revision(self.account_id());
-        let book = self.session.reconcile().await?;
+        let session = self.session;
+        // Preserve registered exits while waiting for the fresh broker book.
+        let book = self.protect_while_reading(session.reconcile()).await??;
         self.apply_human_book(&book, revision, now).await
     }
 
