@@ -1,0 +1,54 @@
+{
+  "trace": "№18,393",
+  "run_id": "18393-20261109",
+  "execution_service": "jiaoyi-engineering",
+  "period_hours": 24,
+  "interval_hours": 2,
+  "periodic_checkpoint_offsets_hours": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14,
+    16,
+    18,
+    20,
+    22
+  ],
+  "separate_completion_snapshot_hour": 24,
+  "start_authority": "persistent runtime plan created at first enabled execution",
+  "accounts": [
+    43002148,
+    46130058,
+    47790949,
+    49236051
+  ],
+  "symbols": [
+    "SpotCrude",
+    "SpotBrent",
+    "US500",
+    "NAS100",
+    "XAUUSD",
+    "XAGUSD",
+    "BTCUSD",
+    "ETHUSD"
+  ],
+  "delivery": [
+    "authenticated owner endpoint",
+    "JSONL download"
+  ],
+  "telegram": false,
+  "model_calls": 0,
+  "new_broker_requests": 0,
+  "trading_service_change": false,
+  "once_collection_budget_seconds": 4.2,
+  "periodic_collection_budget_seconds": 12,
+  "sql_timeout_seconds": 3.5,
+  "unknown_measurements": "null with evidence coverage; never fabricated zeroes",
+  "actual_socket_dispatch_latency_available": false,
+  "financial_pass": false,
+  "frozen_at_sgt": "09-11-2026 11:15:17 SGT"
+}

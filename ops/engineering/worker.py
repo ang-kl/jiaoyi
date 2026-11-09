@@ -30,6 +30,7 @@ import review_memory
 import watches
 import incidents
 import releases
+from monitoring.runtime import Monitor
 REPO = "ang-kl/jiaoyi"
 SERVICE = "0f67b4a0-629d-42f1-97f1-8910887896af"
 ENVIRONMENT = "f3b64526-67e3-4ea6-98af-274043a8b657"
@@ -492,6 +493,8 @@ class Coordinator:
         self.config = config
         self.store = Store(config.root)
         self.shutdown = threading.Event()
+        self.monitor = (Monitor(config.env, self.store.private / "monitor-18393")
+                        if config.env.get("LIVE_MONITOR_ENABLED") == "1" else None)
         self.phase = "starting"
         self.pulse_at = time.monotonic()
         self.next_poll = 0
@@ -508,7 +511,10 @@ class Coordinator:
         self.releases = releases.Releases(self, REPO, SERVICE, ENVIRONMENT, PROTECTED)
         self.reporter = Reporter(self)
         self.incidents = incidents.IncidentManager(self)
-        source_names = sorted({path.name for path in HERE.glob("*.py")} | {"prompt.md", "result-schema.json"})
+        source_names = sorted({path.name for path in HERE.glob("*.py")}
+                              | {str(path.relative_to(HERE)) for pattern in ("*.py", "*.sql")
+                                 for path in (HERE / "monitoring").glob(pattern)}
+                              | {"prompt.md", "result-schema.json"})
         self.source_files = {name: hashlib.sha256((HERE / name).read_bytes()).hexdigest()
                              for name in source_names if (HERE / name).is_file()}
         bundle = hashlib.sha256()
@@ -734,6 +740,7 @@ class Coordinator:
         phase = "stopped" if self.stop() else reason or self.phase
         used = self.store.used()
         return {"service": "jiaoyi-engineering", "at": now(), "state": phase,
+                "live_monitor": self.monitor.status() if self.monitor is not None else {"enabled": False},
                 "heartbeat_age_seconds": round(time.monotonic() - self.pulse_at, 1),
                 "sessions_today_sgt": used, "daily_session_limit": self.config.limit,
                 "allowance": {"base": self.config.base_limit, "additional": self.config.extra_limit if self.config.extra_date == sgt_day() else 0,
@@ -1557,6 +1564,30 @@ class Coordinator:
             coordinator = self
             class Handler(BaseHTTPRequestHandler):
                 def do_GET(self):
+                    if self.path in ("/owner/live-monitor", "/owner/live-monitor.jsonl", "/owner/live-monitor/once"):
+                        try:
+                            response = (coordinator.monitor.owner_response(self.path, self.headers)
+                                        if coordinator.monitor is not None else None)
+                        except Exception:
+                            # Neither private evidence nor credential/error text
+                            # belongs in a public traceback or HTTP error body.
+                            response = (503, "text/plain; charset=utf-8", b"Monitor unavailable.")
+                        if response is None:
+                            response = (404, "text/plain; charset=utf-8", b"Monitor not enabled.")
+                        status, content_type, body = response
+                        self.send_response(status)
+                        self.send_header("Content-Type", content_type)
+                        self.send_header("Content-Length", str(len(body)))
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("Vary", "Authorization")
+                        self.send_header("Referrer-Policy", "no-referrer")
+                        self.send_header("X-Content-Type-Options", "nosniff")
+                        self.send_header("X-Robots-Tag", "noindex, nofollow")
+                        if status == 401:
+                            self.send_header("WWW-Authenticate", 'Basic realm="Jiaoyi owner", charset="UTF-8"')
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
                     if self.path not in ("/health", "/status"):
                         self.send_error(404)
                         return
@@ -1570,6 +1601,11 @@ class Coordinator:
                     pass
             server = ThreadingHTTPServer(("0.0.0.0", self.config.port), Handler)
             threading.Thread(target=server.serve_forever, daemon=True).start()
+            monitor_thread = None
+            if self.monitor is not None:
+                monitor_thread = threading.Thread(target=self.monitor.run, args=(self.shutdown,),
+                                                  name="live-monitor-18393", daemon=True)
+                monitor_thread.start()
             threading.Thread(target=self.reporter.run, daemon=True).start()
             activity_thread = threading.Thread(target=self.activity_loop, daemon=True)
             activity_thread.start()
@@ -1657,7 +1693,10 @@ class Coordinator:
                                 self.store.update(job["id"], "failed", result=detail)
                     self.shutdown.wait(5)
             finally:
+                self.shutdown.set()
                 self.activity_shutdown.set()
+                if monitor_thread is not None:
+                    monitor_thread.join(timeout=1)
                 activity_thread.join(timeout=1)
                 review_thread.join(timeout=1)
                 incident_thread.join(timeout=1)
