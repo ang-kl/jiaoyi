@@ -40,6 +40,87 @@ pub(super) struct Cache {
     pub errors: HashMap<i64, String>,
 }
 
+fn same_number(a: f64, b: f64) -> bool {
+    a.is_finite() && b.is_finite() && (a - b).abs() <= 1e-12 * a.abs().max(b.abs()).max(1.0)
+}
+
+/// A restored arm's stored arithmetic does not replace the original verified
+/// opening quote and causal preparation. Require both before publishing or
+/// consuming a prepared admission, including after a carried-window restart.
+fn validate_source(name: &str, day: &Day, arm: ArmedPullback) -> Result<(), &'static str> {
+    if day.session != arm.session {
+        return Err("prepared source has wrong original window");
+    }
+    let open = day
+        .open
+        .as_ref()
+        .map_err(|_| "prepared opening midpoint unavailable")?;
+    if *open <= 0.0 || !same_number(*open, arm.origin) {
+        return Err("prepared opening midpoint conflicts with restored arm");
+    }
+    let quote = day
+        .opening_quote
+        .as_ref()
+        .ok_or("prepared opening quote evidence missing")?;
+    let (Some(bid), Some(ask), Some(mid)) = (
+        quote["bid"].as_f64(),
+        quote["ask"].as_f64(),
+        quote["mid"].as_f64(),
+    ) else {
+        return Err("prepared opening quote prices missing");
+    };
+    if bid <= 0.0
+        || ask < bid
+        || !same_number(mid, bid + (ask - bid) / 2.)
+        || !same_number(mid, *open)
+        || quote["source"].as_str() != Some("recorded_ticks_native_open_6s")
+    {
+        return Err("prepared opening quote prices or source invalid");
+    }
+    let parse = |key: &str| {
+        quote[key]
+            .as_str()
+            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|at| at.with_timezone(&Utc))
+    };
+    let (Some(bid_at), Some(ask_at), Some(observed)) =
+        (parse("bid_at"), parse("ask_at"), parse("observed_at"))
+    else {
+        return Err("prepared opening quote timestamps missing");
+    };
+    let start = prod::opening_observation_start(name, arm.session);
+    let end = start + chrono::Duration::seconds(6);
+    if [bid_at, ask_at]
+        .iter()
+        .any(|at| *at < start || *at > end || *at > arm.armed_at)
+        || observed != bid_at.max(ask_at)
+    {
+        return Err("prepared opening quote is stale or outside original window");
+    }
+    let context = *day
+        .macro_context
+        .as_ref()
+        .map_err(|_| "prepared causal macro context unavailable")?;
+    if !mp::aligns(context, arm.long, arm.session.open)
+        || context.latest_bar_end != arm.macro_context.latest_bar_end
+        || !same_number(context.drift_5, arm.macro_context.drift_5)
+        || !same_number(context.drift_20, arm.macro_context.drift_20)
+    {
+        return Err("prepared macro context conflicts with restored arm or is noncausal");
+    }
+    Ok(())
+}
+
+pub(super) fn source_refusal(sym: &Sym) -> Option<String> {
+    let arm = sym.pullback?;
+    match sym.day.as_ref() {
+        Some(Ok(day)) => validate_source(&sym.name, day, arm)
+            .err()
+            .map(str::to_owned),
+        _ => Some("prepared original-window evidence unavailable".into()),
+    }
+}
+
 impl Trader<'_, '_> {
     pub(super) fn warm_requests(&self, now: DateTime<Utc>) -> Vec<Request> {
         let Ok(book) = self.commission.as_ref() else {
@@ -60,7 +141,7 @@ impl Trader<'_, '_> {
             let Some(Ok(day)) = sym.day.as_ref() else {
                 continue;
             };
-            if day.session != arm.session {
+            if validate_source(&sym.name, day, arm).is_err() {
                 continue;
             }
             let (Some(limits), Some(rate), Some((bid, ask))) =
@@ -110,6 +191,9 @@ impl Trader<'_, '_> {
     }
 
     pub(super) fn fast_plan(&self, id: i64, arm: ArmedPullback) -> Option<Prepared> {
+        let sym = self.syms.get(&id)?;
+        let day = sym.day.as_ref()?.as_ref().ok()?;
+        validate_source(&sym.name, day, arm).ok()?;
         let plan = self.fast_cache.plans.get(&id)?;
         if plan.request.arm.armed_at != arm.armed_at
             || plan.request.arm.session != arm.session
@@ -468,5 +552,85 @@ pub(super) async fn run(
             }
         }
         output.send_replace(cache.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn restored_source_requires_original_quote_and_causal_matching_macro() {
+        let open = DateTime::parse_from_rfc3339("2026-11-09T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let session = Session {
+            date: open.date_naive(),
+            open,
+            close: open + chrono::Duration::hours(4),
+            lunch: None,
+        };
+        let context = mp::Context {
+            drift_5: 0.0123456789012345,
+            drift_20: 0.0234567890123456,
+            latest_bar_end: open - chrono::Duration::hours(20),
+        };
+        let arm = ArmedPullback {
+            long: true,
+            origin: 100.,
+            extreme: 101.,
+            level: 100.5,
+            impulse_bps: 100.,
+            impulse_range: 1.,
+            armed_at: open + chrono::Duration::minutes(5),
+            session,
+            macro_context: context,
+        };
+        let quote = json!({"source":"recorded_ticks_native_open_6s","bid":99.99,"ask":100.01,"mid":100.,"bid_at":open,"ask_at":open,"observed_at":open});
+        let day = Day {
+            session,
+            open: Ok(100.),
+            opening_quote: Some(quote),
+            table: SigmaTable {
+                marks: Default::default(),
+                sessions_used: vec![],
+            },
+            spread: Ok((0.02, 1)),
+            prepared_at: open,
+            macro_context: Ok(context),
+        };
+        let mut restored: ArmedPullback =
+            serde_json::from_str(&serde_json::to_string(&arm).unwrap()).unwrap();
+        restored.macro_context.drift_5 += 1e-16;
+        assert!(
+            validate_source("BTCUSD", &day, restored).is_ok(),
+            "JSON rounding must preserve a valid restored receipt"
+        );
+        let mut bad = day.clone();
+        bad.open = Err("missing".into());
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day.clone();
+        bad.opening_quote = None;
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day.clone();
+        bad.session.open += chrono::Duration::hours(4);
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day.clone();
+        bad.open = Ok(101.);
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day.clone();
+        bad.opening_quote.as_mut().unwrap()["bid_at"] = json!(open - chrono::Duration::seconds(1));
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day.clone();
+        bad.macro_context = Err("missing".into());
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day.clone();
+        bad.macro_context.as_mut().unwrap().latest_bar_end = open + chrono::Duration::seconds(1);
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day.clone();
+        bad.macro_context.as_mut().unwrap().drift_20 = -0.01;
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
+        let mut bad = day;
+        bad.macro_context.as_mut().unwrap().drift_5 = 0.04;
+        assert!(validate_source("BTCUSD", &bad, arm).is_err());
     }
 }

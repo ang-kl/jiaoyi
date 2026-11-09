@@ -2112,6 +2112,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             distance["entry_preparation"] = json!({
                 "prepared_now":sym.pullback.is_some_and(|arm|self.fast_plan(symbol_id,arm).is_some()),
                 "last_refusal":self.fast_cache.errors.get(&symbol_id),
+                "source_refusal":fast_entry::source_refusal(sym),
                 "evidence_scope":"background admission; final writer checks remain mandatory"
             });
             crate::trading::beat(&self.live, self.account_id(), |l| {

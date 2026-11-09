@@ -1,6 +1,6 @@
 # Live-entry and multi-session repair — interim report
 
-№18,392 §§1–9 · 09-11-2026 09:29:46 SGT · by Codex (GPT-6; effort inherited, not independently exposed)
+№18,392 §§1–9 · 09-11-2026 09:40:30 SGT · by Codex (GPT-6; effort inherited, not independently exposed)
 
 Repository: https://github.com/ang-kl/jiaoyi · Branch: `fix/live-entry-multisession-18392`
 
@@ -24,7 +24,7 @@ The owner directive reproduces the earlier №18,384 diagnostic. The following i
 
 ## §3 · What is implemented
 
-Prepared admission moves account, margin, sizing and plan reads into a background worker while a setup is armed. A receipt binds the exact command and policy, account, connection generation, account revision, local admission epoch and expiry. Changed account evidence invalidates reuse. The actor still owns dispatch and exits.
+Prepared admission moves account, margin, sizing and plan reads into a background worker while a setup is armed. A receipt binds the exact command and policy, account, connection generation, account revision, local admission epoch and expiry. Changed account evidence invalidates reuse. Restored arms also require their verified original opening bid/ask midpoint and matching causal macro context; an arithmetic-only state snapshot cannot authorise a prepared entry. Missing source evidence is exposed as `source_refusal` without substituting a later quote. The actor still owns dispatch and exits.
 Durable exactly-once intent remains before the socket write. The writer rechecks the latest executable quote, costs, peer, account, expiry and FX evidence. A database durability failure still refuses an order. No synchronous broker round trip is intended on the prepared dispatch route; a production latency receipt is still required to establish its duration.
 FX repair values existing positions and pending entries in their own quote currencies. Broker conversion metadata supplies asset identities; every conversion leg must have finite, positive, uncrossed bid/ask quotes no more than five seconds old. Direct and inverse conversion use conservative sides, and liability reserves are recomputed again at the writer. A missing rate is not zero and a foreign rate is not silently one. Historical bars are not accepted as executable fresh FX.
 A separate read-only FX worker subscribes required conversion legs at startup and after account changes, with periodic recovery. It runs independently of entry/exit handlers. Account-specific paths and availability changes are recorded as s3_exposure_fx; /health exposes that recorded provenance and explicitly distinguishes it from a live quote.
@@ -43,7 +43,7 @@ The first half-hour uses the prepared first-half-hour sigma and the 48 bp impuls
 The counts below are separate suites, not a combined production certification. They are an interim snapshot; the main agent will update this report after the remaining checks and release verification.
 | Check | Measured result | Limit |
 |---|---|---|
-| Actual S3 actor + local PostgreSQL + synthetic broker | Passed; 9.186 ms touch-to-write; one intent, order record and broker order; zero admission/history broker requests between touch and write | A local fixture, not measured Railway latency |
+| Actual S3 actor + local PostgreSQL + synthetic broker | Passed; 7.324 ms touch-to-write; one intent, order record and broker order; zero admission/history broker requests between touch and write | A local fixture, not measured Railway latency |
 | Strategy 3 integration | 78 passed; 1 existing manual benchmark ignored | Covers new session fixtures and preserved historical position management |
 | Admission evidence review | 7 passed, including six bounded-policy variants | Missing evidence stays unknown |
 | FX | 3 arithmetic/freshness tests, 1 broker-path integration and 10 existing margin regressions passed | No real broker verification order |
