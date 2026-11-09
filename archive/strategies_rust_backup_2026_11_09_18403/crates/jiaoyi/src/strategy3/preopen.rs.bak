@@ -1,0 +1,859 @@
+//! Read-only session preparation: start T-20, deadline T-10. No trade actions.
+//! Source: owner chat №17,616 §1, 28-10-2026 SGT. The actual opening price,
+//! executable quote and current account risk remain entry-time observations.
+
+use super::*;
+use jiaoyi_core::strategy3::production_sessions;
+use serde::{Deserialize, Serialize};
+
+pub const START_MINUTES: i64 = 20;
+pub const LEAD_MINUTES: i64 = 10;
+const READ_TIMEOUT: Duration = Duration::from_secs(20);
+
+#[derive(Clone)]
+pub struct Spec {
+    pub symbol: String,
+    pub id: Option<i64>,
+    pub rule: Option<SessionRule>,
+    pub metadata_ready: bool,
+}
+
+pub async fn specs(
+    pool: &PgPool,
+    account: i64,
+    syms: &HashMap<i64, Sym>,
+    deposit: bool,
+) -> anyhow::Result<Vec<Spec>> {
+    let settings = jiaoyi_store::settings::snapshot(pool, Some(account)).await?;
+    let universe = data_universe(
+        settings
+            .universe("universe.symbols")
+            .map_err(anyhow::Error::msg)?,
+    );
+    Ok(universe
+        .into_iter()
+        .filter(|(symbol, _)| mp::peer(symbol).is_some())
+        .map(|(symbol, class)| {
+            let sym = syms.values().find(|s| s.name == symbol);
+            Spec {
+                rule: production_sessions::rule_for(&symbol, class),
+                id: sym.map(|s| s.id),
+                metadata_ready: deposit
+                    && sym.is_some_and(|s| {
+                        s.quote.is_some() && s.limits.is_some_and(|l| l.min > 0 && l.step > 0)
+                    }),
+                symbol,
+            }
+        })
+        .collect())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Prepared {
+    pub symbol: String,
+    pub symbol_id: Option<i64>,
+    pub session: Session,
+    pub prereg_hash: String,
+    pub source_cutoff_at: DateTime<Utc>,
+    pub completed_at: DateTime<Utc>,
+    pub table: Option<SigmaTable>,
+    #[serde(default)]
+    pub macro_context: Option<mp::Context>,
+    #[serde(default)]
+    pub macro_context_error: Option<String>,
+    pub spread_ready: bool,
+    pub commission_ready: bool,
+    pub metadata_ready: bool,
+    pub missing_marks: usize,
+    pub source_error: bool,
+}
+
+impl Prepared {
+    pub fn ready(&self) -> bool {
+        self.table
+            .as_ref()
+            .and_then(|t| t.marks.get(&30))
+            .is_some_and(|v| v.as_ref().is_ok_and(|x| x.is_finite() && *x > 0.0))
+            && self.macro_context.is_some()
+            && self.spread_ready
+            && self.commission_ready
+            && self.metadata_ready
+            && !self.source_error
+    }
+    pub fn on_time(&self) -> bool {
+        self.ready()
+            && self.completed_at <= self.session.open - chrono::Duration::minutes(LEAD_MINUTES)
+    }
+    pub fn matches(&self, symbol_id: i64, session: Session) -> bool {
+        self.symbol_id == Some(symbol_id)
+            && self.session == session
+            && self.prereg_hash == prereg_hash()
+    }
+}
+
+/// Warm current/next windows immediately, then retry only when useful.
+/// Production context uses the same slot on prior days, never future bars.
+fn should_attempt(
+    previous: Option<&Prepared>,
+    spec: &Spec,
+    session: Session,
+    now: DateTime<Utc>,
+) -> bool {
+    if now >= session.close {
+        return false;
+    }
+    let Some(p) = previous else {
+        return true;
+    };
+    if p.symbol_id != spec.id || p.metadata_ready != spec.metadata_ready {
+        return true;
+    }
+    if p.ready() {
+        return false;
+    }
+    if now < session.open - chrono::Duration::minutes(START_MINUTES)
+        && !p.source_error
+        && p.macro_context_error.as_deref() == Some("macro_incomplete_or_noncausal_session")
+    {
+        return false;
+    }
+    if now >= session.open && p.source_cutoff_at < session.open {
+        return true;
+    }
+    now - p.completed_at >= chrono::Duration::from_std(PREPARE_RETRY).unwrap()
+}
+
+/// Prefer the current session regardless of HashMap insertion/iteration order;
+/// otherwise keep the nearest upcoming receipt. Never replace today's context
+/// with another window's preparation.
+pub fn preferred<'a>(
+    all: impl Iterator<Item = &'a Prepared>,
+    id: i64,
+    now: DateTime<Utc>,
+) -> Option<&'a Prepared> {
+    all.filter(|p| p.symbol_id == Some(id) && p.session.close > now)
+        .min_by_key(|p| (p.session.open > now, p.session.open))
+}
+
+/// Count unavailable interpolation coefficients, including the first half hour
+/// and the endpoint of the last partial broker half hour. Each missing mark
+/// blocks its own interpolation range, without suppressing other ready marks.
+fn missing_marks(table: &SigmaTable, session: Session) -> usize {
+    let end = ((session.close - session.open).num_minutes() + 29) / 30 * 30;
+    (30..=end)
+        .step_by(30)
+        .filter(|m| {
+            table
+                .marks
+                .get(m)
+                .and_then(|v| v.as_ref().ok())
+                .is_none_or(|x| !x.is_finite() || *x <= 0.0)
+        })
+        .count()
+}
+
+async fn stored(
+    pool: &PgPool,
+    account: i64,
+    symbol: &str,
+    session: Session,
+) -> anyhow::Result<Option<Prepared>> {
+    let value:Option<Value>=jiaoyi_store::sqlx::query_scalar(
+        "SELECT detail FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_preopen'
+         AND detail->>'prereg_hash'=$3 AND detail->'session'->>'open'=$4 ORDER BY id DESC LIMIT 1")
+        .bind(account).bind(symbol).bind(prereg_hash()).bind(session.open.to_rfc3339_opts(chrono::SecondsFormat::Secs,true))
+        .fetch_optional(pool).await?;
+    Ok(value
+        .and_then(|v| serde_json::from_value::<Prepared>(v).ok())
+        .filter(|p| p.session == session && p.symbol == symbol && p.prereg_hash == prereg_hash()))
+}
+
+/// Hydrate already completed work before subscribing to entry quotes.
+pub async fn restore(
+    pool: &PgPool,
+    account: i64,
+    syms: &mut HashMap<i64, Sym>,
+    now: DateTime<Utc>,
+) -> anyhow::Result<()> {
+    for sym in syms.values_mut() {
+        let Some(rule) = sym.rule else { continue };
+        for session in sessions::session_at(&rule, now)
+            .into_iter()
+            .chain(sessions::next_session(&rule, now))
+        {
+            if let Some(saved) = stored(pool, account, &sym.name, session)
+                .await?
+                .filter(|p| {
+                    p.symbol_id == Some(sym.id)
+                        && p.completed_at <= now
+                        && p.source_cutoff_at <= p.completed_at
+                })
+            {
+                sym.preopen = Some(saved);
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One worker per existing account connection. The actor polls this future
+/// beside its quote/exit branches; there is no mutable trader in this task.
+pub async fn run(
+    pool: &PgPool,
+    connection: &AccountSession<'_>,
+    specs: Vec<Spec>,
+    tx: tokio::sync::watch::Sender<HashMap<String, Prepared>>,
+    stop: Shutdown,
+    offset: chrono::Duration,
+) -> anyhow::Result<()> {
+    let (_source, updates) = tokio::sync::watch::channel(specs);
+    run_with_updates(pool, connection, updates, tx, stop, offset).await
+}
+
+pub async fn run_with_updates(
+    pool: &PgPool,
+    connection: &AccountSession<'_>,
+    specs: tokio::sync::watch::Receiver<Vec<Spec>>,
+    tx: tokio::sync::watch::Sender<HashMap<String, Prepared>>,
+    mut stop: Shutdown,
+    offset: chrono::Duration,
+) -> anyhow::Result<()> {
+    loop {
+        if run_attempt(
+            pool,
+            connection,
+            specs.clone(),
+            tx.clone(),
+            stop.clone(),
+            offset,
+        )
+        .await
+        .is_ok()
+        {
+            return Ok(());
+        }
+        // Optional preparation failure never takes the trading actor down.
+        tracing::warn!(
+            account = connection.account().id(),
+            "pre-open source failure; preparation will retry"
+        );
+        tokio::select! {_=stop.wait()=>return Ok(()),_=tokio::time::sleep(Duration::from_secs(30))=>{}}
+    }
+}
+
+async fn run_attempt(
+    pool: &PgPool,
+    connection: &AccountSession<'_>,
+    specs: tokio::sync::watch::Receiver<Vec<Spec>>,
+    tx: tokio::sync::watch::Sender<HashMap<String, Prepared>>,
+    mut stop: Shutdown,
+    offset: chrono::Duration,
+) -> anyhow::Result<()> {
+    let account = connection.account().id();
+    let mut attempts: HashMap<String, Prepared> = HashMap::new();
+    let mut tick = tokio::time::interval(Duration::from_secs(30));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! { _=stop.wait()=>return Ok(()), _=tick.tick()=>{} }
+        let now = Utc::now() + offset;
+        let specs = specs.borrow().clone();
+        for spec in &specs {
+            let Some(rule) = spec.rule else { continue };
+            // Restore both the current and next session across reconnects.
+            let current = sessions::session_at(&rule, now);
+            let next = sessions::next_session(&rule, now);
+            for session in current.into_iter().chain(next) {
+                let key = format!("{}:{}", spec.symbol, session.open);
+                if !attempts.contains_key(&key) {
+                    if let Some(saved) =
+                        stored(pool, account, &spec.symbol, session)
+                            .await?
+                            .filter(|p| {
+                                p.symbol_id == spec.id
+                                    && p.completed_at <= Utc::now() + offset
+                                    && p.source_cutoff_at <= p.completed_at
+                            })
+                    {
+                        attempts.insert(key.clone(), saved.clone());
+                        tx.send_replace(attempts.clone());
+                    }
+                }
+                let now = Utc::now() + offset;
+                if !should_attempt(attempts.get(&key), spec, session, now) {
+                    continue;
+                }
+                let commission =
+                    match jiaoyi_store::research::commission_per_unit(pool, account).await {
+                        Ok(samples) => costs::commission_book(&samples).is_ok(),
+                        Err(_) => false,
+                    };
+                let cutoff = Utc::now() + offset;
+                let read = async {
+                    match spec.id {
+                        Some(id) => load_day(
+                            pool,
+                            connection,
+                            account,
+                            id,
+                            &spec.symbol,
+                            rule,
+                            session,
+                            cutoff,
+                            None,
+                        )
+                        .await
+                        .ok(),
+                        None => None,
+                    }
+                };
+                let day = tokio::select! {
+                    _=stop.wait()=>return Ok(()),
+                    result=tokio::time::timeout(READ_TIMEOUT,read)=>result.ok().flatten(),
+                };
+                let p = Prepared {
+                    symbol: spec.symbol.clone(),
+                    symbol_id: spec.id,
+                    session,
+                    prereg_hash: prereg_hash(),
+                    source_cutoff_at: cutoff,
+                    completed_at: Utc::now() + offset,
+                    missing_marks: day.as_ref().map_or(0, |d| missing_marks(&d.table, session)),
+                    spread_ready: day.as_ref().is_some_and(|d| {
+                        d.spread
+                            .as_ref()
+                            .is_ok_and(|(v, n)| v.is_finite() && *v >= 0.0 && *n > 0)
+                    }),
+                    commission_ready: commission,
+                    metadata_ready: spec.metadata_ready,
+                    source_error: day.is_none(),
+                    macro_context_error: day
+                        .as_ref()
+                        .and_then(|d| d.macro_context.as_ref().err().cloned()),
+                    macro_context: day
+                        .as_ref()
+                        .and_then(|d| d.macro_context.as_ref().ok().copied()),
+                    table: day.map(|d| d.table),
+                };
+                let reason = if p.ready() && p.missing_marks > 0 {
+                    "base preparation ready; unavailable later coefficients remain blocked"
+                } else if p.on_time() {
+                    "pre-open inputs prepared by T-10"
+                } else if p.ready() {
+                    "pre-open inputs prepared late"
+                } else {
+                    "pre-open inputs incomplete"
+                };
+                // Only bounded coefficients/checks, no raw bars or account money.
+                ts::record_decision(
+                    pool,
+                    account,
+                    Some(&spec.symbol),
+                    "s3_preopen",
+                    reason,
+                    &serde_json::to_value(&p)?,
+                    None,
+                )
+                .await?;
+                attempts.insert(key, p.clone());
+                tx.send_replace(attempts.clone());
+            }
+        }
+        attempts.retain(|_, p| p.session.close > Utc::now() + offset);
+    }
+}
+
+/// Read the same newest receipt as `stored` for each requested symbol/session,
+/// preserving request order while using one fresh database round trip.
+async fn stored_many(
+    pool: &PgPool,
+    account: i64,
+    requests: &[(String, Session)],
+) -> anyhow::Result<Vec<Option<Prepared>>> {
+    if requests.is_empty() {
+        return Ok(vec![]);
+    }
+    let symbols: Vec<_> = requests.iter().map(|(symbol, _)| symbol.as_str()).collect();
+    let opens: Vec<_> = requests
+        .iter()
+        .map(|(_, session)| {
+            session
+                .open
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        })
+        .collect();
+    let values: Vec<Option<Value>> = jiaoyi_store::sqlx::query_scalar(
+        "SELECT latest.detail
+         FROM unnest($2::text[], $3::text[]) WITH ORDINALITY AS requested(symbol, session_open, ordinal)
+         LEFT JOIN LATERAL (
+           SELECT detail FROM trading_decisions
+           WHERE account_id=$1 AND symbol=requested.symbol AND kind='s3_preopen'
+             AND detail->>'prereg_hash'=$4 AND detail->'session'->>'open'=requested.session_open
+           ORDER BY id DESC LIMIT 1
+         ) latest ON true ORDER BY requested.ordinal",
+    ).bind(account).bind(symbols).bind(opens).bind(prereg_hash()).fetch_all(pool).await?;
+    Ok(values
+        .into_iter()
+        .zip(requests)
+        .map(|(value, (symbol, session))| {
+            value
+                .and_then(|v| serde_json::from_value::<Prepared>(v).ok())
+                .filter(|p| {
+                    p.session == *session && p.symbol == *symbol && p.prereg_hash == prereg_hash()
+                })
+        })
+        .collect())
+}
+
+/// Compact evidence for every configured symbol, including unresolved ones.
+pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::Result<Value> {
+    let settings = jiaoyi_store::settings::snapshot(pool, Some(account)).await?;
+    let universe = data_universe(
+        settings
+            .universe("universe.symbols")
+            .map_err(anyhow::Error::msg)?,
+    );
+    let mut planned = Vec::new();
+    let mut requests = Vec::new();
+    for (symbol, class) in universe {
+        if mp::peer(&symbol).is_none() {
+            planned.push((symbol, None));
+            continue;
+        }
+        let Some(rule) = production_sessions::rule_for(&symbol, class) else {
+            planned.push((symbol, None));
+            continue;
+        };
+        for session in sessions::session_at(&rule, now)
+            .into_iter()
+            .chain(sessions::next_session(&rule, now))
+        {
+            requests.push((symbol.clone(), session));
+            planned.push((symbol.clone(), Some(session)));
+        }
+    }
+    let mut receipts = stored_many(pool, account, &requests).await?.into_iter();
+    let mut rows = Vec::new();
+    for (symbol, session) in planned {
+        let Some(session) = session else {
+            rows.push(json!({"symbol":symbol,"state":if mp::peer(&symbol).is_none(){"symbol_retired_from_s3_core"}else{"no_registered_session"}}));
+            continue;
+        };
+        let p = receipts
+            .next()
+            .flatten()
+            .filter(|p| p.completed_at <= now && p.source_cutoff_at <= p.completed_at);
+        let deadline = session.open - chrono::Duration::minutes(LEAD_MINUTES);
+        let state = match &p {
+            Some(p) if p.ready() && p.missing_marks > 0 => "prepared_partial_coefficients",
+            Some(p) if p.on_time() => "prepared_on_time",
+            Some(p) if p.ready() => "prepared_late",
+            Some(_) => "incomplete",
+            None if now > deadline => "deadline_missed",
+            None if now >= session.open - chrono::Duration::minutes(START_MINUTES) => {
+                "awaiting_preparation"
+            }
+            None => "scheduled",
+        };
+        rows.push(json!({"symbol":symbol,"session_open":session.open,"session_close":session.close,
+                "session_relation":if now>=session.open {"current"}else{"upcoming"},
+                "preparation_starts_at":session.open-chrono::Duration::minutes(START_MINUTES),"deadline_at":deadline,
+                "state":state,"completed_at":p.as_ref().map(|p|p.completed_at),
+                "deadline_met":p.as_ref().map(Prepared::on_time),
+                "history_ready":p.as_ref().map(|p|p.table.is_some() && p.missing_marks==0),
+                "base_preparation_ready":p.as_ref().map(Prepared::ready),
+                "all_window_coefficients_ready":p.as_ref().map(|p|p.table.is_some() && p.missing_marks==0),
+                "macro_context_ready":p.as_ref().map(|p|p.macro_context.is_some()),
+                "macro_context_error":p.as_ref().and_then(|p|p.macro_context_error.as_deref()),
+                "spread_ready":p.as_ref().map(|p|p.spread_ready),"commission_ready":p.as_ref().map(|p|p.commission_ready),
+                "metadata_ready":p.as_ref().map(|p|p.metadata_ready),"missing_marks":p.as_ref().and_then(|p|p.table.as_ref().map(|_|p.missing_marks)),
+                "source_cutoff_at":p.as_ref().map(|p|p.source_cutoff_at)}));
+    }
+    Ok(
+        json!({"start_minutes_before_open":START_MINUTES,"deadline_minutes_before_open":LEAD_MINUTES,
+        "clock":"owner18392 broker-profile Asia open;07:00UTC London;09:30NewYork DST; six UTC4h crypto windows",
+        "scope":"pre-open inputs; actual opening price, cost/R, Kelly, fresh equity/margin and ownership remain entry-time checks",
+        "symbols":rows}),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use std::collections::BTreeMap;
+
+    fn session() -> Session {
+        sessions::session_on(
+            &production_sessions::rule_for("BTCUSD", AssetClass::Crypto).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 28).unwrap(),
+        )
+        .unwrap()
+    }
+    fn complete() -> Prepared {
+        let session = session();
+        Prepared {
+            symbol: "BTCUSD".into(),
+            symbol_id: Some(22),
+            session,
+            prereg_hash: prereg_hash(),
+            source_cutoff_at: session.open - chrono::Duration::minutes(20),
+            completed_at: session.open - chrono::Duration::minutes(10),
+            table: Some(SigmaTable {
+                marks: (30..=1440)
+                    .step_by(30)
+                    .map(|m| (m, Ok(0.01)))
+                    .collect::<BTreeMap<_, _>>(),
+                sessions_used: vec![],
+            }),
+            macro_context: Some(mp::Context {
+                drift_5: 0.01,
+                drift_20: 0.02,
+                latest_bar_end: session.open - chrono::Duration::days(1),
+            }),
+            macro_context_error: None,
+            missing_marks: 0,
+            spread_ready: true,
+            commission_ready: true,
+            metadata_ready: true,
+            source_error: false,
+        }
+    }
+
+    #[test]
+    fn warm_current_and_next_immediately_without_repeated_future_reads() {
+        let p = complete();
+        let spec = Spec {
+            symbol: p.symbol.clone(),
+            id: p.symbol_id,
+            rule: Some(SessionRule::UtcDay),
+            metadata_ready: true,
+        };
+        let early = p.session.open - chrono::Duration::hours(12);
+        assert!(should_attempt(None, &spec, p.session, early));
+        assert!(should_attempt(
+            None,
+            &spec,
+            p.session,
+            p.session.open + chrono::Duration::hours(1)
+        ));
+        let mut incomplete = p.clone();
+        incomplete.macro_context = None;
+        incomplete.macro_context_error = Some("macro_incomplete_or_noncausal_session".into());
+        incomplete.completed_at = early;
+        incomplete.source_cutoff_at = early;
+        assert!(!should_attempt(
+            Some(&incomplete),
+            &spec,
+            p.session,
+            early + chrono::Duration::hours(1)
+        ));
+        assert!(should_attempt(
+            Some(&incomplete),
+            &spec,
+            p.session,
+            p.session.open
+        ));
+        let mut failed = incomplete.clone();
+        failed.source_error = true;
+        assert!(
+            should_attempt(
+                Some(&failed),
+                &spec,
+                p.session,
+                early + chrono::Duration::minutes(5)
+            ),
+            "transient warm-up errors retry before T-20 too"
+        );
+
+        let next = Prepared {
+            session: Session {
+                open: p.session.open + chrono::Duration::days(1),
+                close: p.session.close + chrono::Duration::days(1),
+                date: p.session.date + chrono::Duration::days(1),
+                ..p.session
+            },
+            ..p.clone()
+        };
+        assert_eq!(
+            preferred(
+                [&next, &p].into_iter(),
+                p.symbol_id.unwrap(),
+                p.session.open
+            )
+            .unwrap()
+            .session,
+            p.session
+        );
+        assert_eq!(
+            preferred(
+                [&p, &next].into_iter(),
+                p.symbol_id.unwrap(),
+                p.session.open
+            )
+            .unwrap()
+            .session,
+            p.session
+        );
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn health_batches_session_reads_and_preserves_latest_receipt_validation(pool: PgPool) {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        const ACCOUNT: i64 = 49236051;
+        let now = session().open + chrono::Duration::hours(2);
+        let names = ["BTCUSD", "ETHUSD", "SOLUSD", "ADAUSD", "DOGEUSD"];
+        let mut universe: Vec<Value> = names
+            .iter()
+            .map(|name| json!({"name":name,"class":"crypto"}))
+            .collect();
+        universe.push(json!({"name":"UNREGISTERED","class":"equity_index"}));
+        jiaoyi_store::upsert_account(&pool, ACCOUNT, Environment::Demo)
+            .await
+            .unwrap();
+        jiaoyi_store::sqlx::query(include_str!(
+            "../../tests/fixtures/preopen_health_universe.sql"
+        ))
+        .bind(ACCOUNT)
+        .bind(json!(universe))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut requests = Vec::new();
+        for name in names {
+            for session in [
+                session(),
+                sessions::next_session(
+                    &production_sessions::rule_for(name, AssetClass::Crypto).unwrap(),
+                    now,
+                )
+                .unwrap(),
+            ] {
+                requests.push((name.to_string(), session));
+            }
+        }
+        async fn record(pool: &PgPool, account: i64, symbol: &str, detail: Value) {
+            jiaoyi_store::trading::record_decision(
+                pool,
+                account,
+                Some(symbol),
+                "s3_preopen",
+                "test",
+                &detail,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+        // BTC's newest matching receipt is malformed: an older valid receipt must not win.
+        record(&pool, ACCOUNT, "BTCUSD", json!(complete())).await;
+        record(
+            &pool,
+            ACCOUNT,
+            "BTCUSD",
+            json!({"session":session(),"prereg_hash":prereg_hash()}),
+        )
+        .await;
+        let mut p = complete();
+        p.symbol = "ETHUSD".into();
+        record(&pool, ACCOUNT, "ETHUSD", json!(p)).await;
+        // Later other-hash and other-account receipts do not replace ETH's valid one.
+        let mut other = p.clone();
+        other.prereg_hash = "foreign".into();
+        record(&pool, ACCOUNT, "ETHUSD", json!(other)).await;
+        jiaoyi_store::upsert_account(&pool, 43002148, Environment::Live)
+            .await
+            .unwrap();
+        record(
+            &pool,
+            43002148,
+            "ETHUSD",
+            json!({"session":session(),"prereg_hash":prereg_hash()}),
+        )
+        .await;
+        p.symbol = "SOLUSD".into();
+        p.completed_at = now + chrono::Duration::seconds(1);
+        record(&pool, ACCOUNT, "SOLUSD", json!(p)).await;
+        p.symbol = "ADAUSD".into();
+        p.completed_at = now - chrono::Duration::seconds(1);
+        p.source_cutoff_at = p.completed_at + chrono::Duration::seconds(1);
+        record(&pool, ACCOUNT, "ADAUSD", json!(p)).await;
+        p = complete();
+        p.symbol = "DOGEUSD".into();
+        p.session.close += chrono::Duration::seconds(1);
+        record(&pool, ACCOUNT, "DOGEUSD", json!(p)).await;
+        let mut expected = Vec::new();
+        for (symbol, session) in &requests {
+            expected.push(
+                stored(&pool, ACCOUNT, symbol, *session)
+                    .await
+                    .unwrap()
+                    .map(|p| json!(p)),
+            );
+        }
+        assert!(expected[0].is_none());
+        assert!(expected[2].is_some());
+        assert!(expected[4].is_some());
+        assert!(expected[6].is_some());
+        assert!(expected[8].is_none());
+        let batched = stored_many(&pool, ACCOUNT, &requests)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|p| p.map(|p| json!(p)))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            batched, expected,
+            "batch matches standalone latest-receipt reads"
+        );
+        let acquisitions = Arc::new(AtomicUsize::new(0));
+        let count = acquisitions.clone();
+        let measured = jiaoyi_store::sqlx::postgres::PgPoolOptions::new()
+            .min_connections(1)
+            .max_connections(1)
+            .idle_timeout(None)
+            .max_lifetime(None)
+            .before_acquire(move |_, _| {
+                count.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async { Ok(true) })
+            })
+            .connect_with((*pool.connect_options()).clone())
+            .await
+            .unwrap();
+        drop(measured.acquire().await.unwrap());
+        acquisitions.store(0, Ordering::SeqCst);
+        let report = health(&measured, ACCOUNT, now).await.unwrap();
+        assert_eq!(
+            acquisitions.load(Ordering::SeqCst),
+            2,
+            "one settings snapshot and one session batch regardless of universe size"
+        );
+        let rows = report["symbols"].as_array().unwrap();
+        assert_eq!(rows[0]["symbol"], "BTCUSD");
+        assert_eq!(rows[0]["state"], "deadline_missed");
+        assert_eq!(rows[2]["symbol"], "ETHUSD");
+        assert_eq!(rows[2]["state"], "prepared_on_time");
+        for name in ["SOLUSD", "ADAUSD", "DOGEUSD", "UNREGISTERED"] {
+            assert_eq!(
+                rows.iter().find(|r| r["symbol"] == name).unwrap()["state"],
+                "symbol_retired_from_s3_core"
+            );
+        }
+        for name in mp::CORE {
+            assert!(rows.iter().any(|r| r["symbol"] == name));
+        }
+        measured.close().await;
+    }
+    #[test]
+    fn unavailable_dst_tail_does_not_invent_coefficients_or_block_earlier_marks() {
+        let mut p = complete();
+        p.table.as_mut().unwrap().marks.remove(&240);
+        p.missing_marks = missing_marks(p.table.as_ref().unwrap(), p.session);
+        assert_eq!(p.missing_marks, 1);
+        assert!(p.ready(), "first-half-hour inputs remain usable");
+        assert!(production_sessions::band_at(
+            p.table.as_ref().unwrap(),
+            &p.session,
+            100.,
+            p.session.open + chrono::Duration::minutes(15)
+        )
+        .is_ok());
+        assert!(production_sessions::band_at(
+            p.table.as_ref().unwrap(),
+            &p.session,
+            100.,
+            p.session.open + chrono::Duration::minutes(225)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn completion_after_deadline_is_late_even_when_the_read_started_early() {
+        let mut p = complete();
+        assert!(p.on_time());
+        p.completed_at += chrono::Duration::milliseconds(1);
+        assert!(p.ready());
+        assert!(!p.on_time());
+        p.metadata_ready = false;
+        assert!(!p.ready());
+    }
+    #[test]
+    fn absent_eligible_coefficients_are_not_certified_by_an_empty_table() {
+        let mut p = complete();
+        assert_eq!(missing_marks(p.table.as_ref().unwrap(), p.session), 0);
+        p.table.as_mut().unwrap().marks.remove(&30);
+        assert_eq!(missing_marks(p.table.as_ref().unwrap(), p.session), 1);
+        p.table.as_mut().unwrap().marks.clear();
+        assert_eq!(missing_marks(p.table.as_ref().unwrap(), p.session), 8);
+    }
+    #[test]
+    fn deadlines_follow_registered_exchange_dst_and_crypto_utc_rollover() {
+        for (symbol, class, date, open) in [
+            (
+                "US500",
+                AssetClass::EquityIndex,
+                (2026, 10, 28),
+                "2026-10-28T13:30:00Z",
+            ),
+            (
+                "US500",
+                AssetClass::EquityIndex,
+                (2026, 11, 3),
+                "2026-11-03T14:30:00Z",
+            ),
+            (
+                "GER40",
+                AssetClass::EquityIndex,
+                (2026, 10, 28),
+                "2026-10-28T08:00:00Z",
+            ),
+            (
+                "AUS200",
+                AssetClass::EquityIndex,
+                (2026, 10, 28),
+                "2026-10-27T23:00:00Z",
+            ),
+            (
+                "JPN225",
+                AssetClass::EquityIndex,
+                (2026, 10, 28),
+                "2026-10-28T00:00:00Z",
+            ),
+            (
+                "XAUUSD",
+                AssetClass::Metal,
+                (2026, 10, 28),
+                "2026-10-28T07:00:00Z",
+            ),
+            (
+                "SpotCrude",
+                AssetClass::Energy,
+                (2026, 10, 28),
+                "2026-10-28T07:00:00Z",
+            ),
+            (
+                "BTCUSD",
+                AssetClass::Crypto,
+                (2026, 10, 28),
+                "2026-10-28T00:00:00Z",
+            ),
+        ] {
+            let rule = sessions::rule_for(symbol, class).unwrap();
+            let date = NaiveDate::from_ymd_opt(date.0, date.1, date.2).unwrap();
+            let s = sessions::session_on(&rule, date).unwrap();
+            let expected: DateTime<Utc> = open.parse().unwrap();
+            assert_eq!(s.open, expected);
+            assert_eq!(
+                s.open - chrono::Duration::minutes(LEAD_MINUTES),
+                expected - chrono::Duration::seconds(600)
+            );
+            assert_eq!(
+                sessions::next_session(&rule, s.open - chrono::Duration::minutes(START_MINUTES)),
+                Some(s)
+            );
+        }
+    }
+}

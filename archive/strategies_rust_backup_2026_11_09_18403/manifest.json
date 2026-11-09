@@ -1,0 +1,722 @@
+{
+  "trace": "\u211618,403",
+  "base_commit": "1d279e8980d1c31b6ebebd496a644bea7f755510",
+  "created_at_utc": "2026-11-09T07:19:38.083073+00:00",
+  "scope": "All crates src Rust files, including strategy and shared writer dependencies; tests/examples excluded",
+  "files": [
+    {
+      "original_path": "crates/jiaoyi/src/admission.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/admission.rs.bak",
+      "byte_size": 2874,
+      "sha256": "9d72416657e7f723fdc215fc9623c55f3fed21049b8b997cafd8e95d78df91aa"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/authority.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/authority.rs.bak",
+      "byte_size": 38308,
+      "sha256": "2c4872593b27736278b5069c99a5be1fb5bd8fcf4ecc939d8597465da32ff330"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/broker_backtest.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/broker_backtest.rs.bak",
+      "byte_size": 23269,
+      "sha256": "4baa5f9d157b149e8f2d9d9d20a7b38d382c882805f1adf83e0c4859ecb2adc7"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/config.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/config.rs.bak",
+      "byte_size": 4888,
+      "sha256": "58af98aec0c8bf97052bcc8cbbd436d990c10aa4a3db83698ba29b9d81aad189"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/costs.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/costs.rs.bak",
+      "byte_size": 25303,
+      "sha256": "ab869a86c6257078827c0d3b1b7acc5cf46b5c36669459f96fd004442bf1ecaa"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/data.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/data.rs.bak",
+      "byte_size": 5348,
+      "sha256": "3eec46c0f24c50f3e3ccd7476418f2b6611ea7286230d5e005da80e635ab6468"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/h1job.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/h1job.rs.bak",
+      "byte_size": 32875,
+      "sha256": "01275838c8bd690464a15f8e08b95eae2b7be8aae2202bd1ed2f0dc48c952522"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/mod.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/mod.rs.bak",
+      "byte_size": 1852,
+      "sha256": "168c677e96f30839e7f59e564a4a3cdb12b34c1c5cdf6f644810005e10c7ee8f"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/prereg.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/prereg.rs.bak",
+      "byte_size": 1579,
+      "sha256": "6903fc61ece36f45ca7ae93159ce8562460c8d66536bf3d499521068fad14f67"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/recheck.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/recheck.rs.bak",
+      "byte_size": 13889,
+      "sha256": "951a866d2248ec655171962ed43175f201ce80c03b57fafe109bf92f3c623c40"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/routes.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/routes.rs.bak",
+      "byte_size": 5258,
+      "sha256": "722c50e038a78c71ab6a144f7669aea226ca80604513763f1ef671dc092a00a5"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/runner.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/runner.rs.bak",
+      "byte_size": 20931,
+      "sha256": "7c2e801be4e5ae3bcea03c37cf54a942368284606bf4ef43b8c7e27ba55ec5c0"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/edge/sampler.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/edge/sampler.rs.bak",
+      "byte_size": 16391,
+      "sha256": "0188ea1b76fd97b0e8b184c3ed9bbfe4a6f6b4df516f68c235158fbab3096f2d"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/fast_monitor.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/fast_monitor.rs.bak",
+      "byte_size": 18954,
+      "sha256": "3f26a03ca930a78d9c5b09aa73cfd088ae64c8634b0f11efc6cc9c9cf152ed5b"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/fills.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/fills.rs.bak",
+      "byte_size": 5086,
+      "sha256": "925ffc7c0245e156231810503f7a2403124c2b871a9cfa4168959de02b6c1ae9"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/history.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/history.rs.bak",
+      "byte_size": 40281,
+      "sha256": "72760ce83232f23150982570f491311354241bc0c5da27cb7c59da3246a41ef2"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/http.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/http.rs.bak",
+      "byte_size": 38010,
+      "sha256": "3ef6ddfec8067e17946b187216b9ca8f8a192b927c9e814d90d052118d6a8e20"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/lib.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/lib.rs.bak",
+      "byte_size": 825,
+      "sha256": "f2e8d6e2db6b85ffdb23b3733aa45c462c5096e9b7910c49af097951d7811a8a"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/limits.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/limits.rs.bak",
+      "byte_size": 11665,
+      "sha256": "602c746d2f4c748815cdbad2f51756729d5bbb4f699b14cab2e2430ac68eb9c0"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/loader.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/loader.rs.bak",
+      "byte_size": 37719,
+      "sha256": "6d0d4ce95c2ed71e2d89ac7899d2679d260590cb359db327adfc6a41e0893b56"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/main.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/main.rs.bak",
+      "byte_size": 5094,
+      "sha256": "1f10a081aca744a62a88165c760ef44e76a870f70c2d6e4c10018a7be8c62710"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/operations.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/operations.rs.bak",
+      "byte_size": 6340,
+      "sha256": "d16a4719546195517f95a010f97472709dac91f24a81d17b760e6202b76ecf89"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/owner_assessments.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/owner_assessments.rs.bak",
+      "byte_size": 25718,
+      "sha256": "21ec2e1d8b1d805055ebfa1dd63af0b3768a89c362e52e76decd3e5f2fe3e425"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/quote_coverage.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/quote_coverage.rs.bak",
+      "byte_size": 17062,
+      "sha256": "2f0680e2394c44cea1c00d9a807ad43ce2ebb78c7e7b9dbf0f9c6d4235168505"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/recorder.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/recorder.rs.bak",
+      "byte_size": 21756,
+      "sha256": "b74e727da6c946f2d0241baa51103eca50679ab5c399a19e7fdc2dc140de8c52"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/report.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/report.rs.bak",
+      "byte_size": 17107,
+      "sha256": "2c24fd898d7cb4637df2de5b3e420ec72103e5e378162035f2167cb0809d24a1"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/research.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/research.rs.bak",
+      "byte_size": 25752,
+      "sha256": "b9e7414624d0888d809f11d7d6aa106694f78f63283c82371c1c6607b8d7d35a"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/service.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/service.rs.bak",
+      "byte_size": 9147,
+      "sha256": "bcca294cfc5d1d6e0830bf4778e0372d36a34e2f11df6c84d9789c74f5c263d8"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/setup_assessment/display.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/setup_assessment/display.rs.bak",
+      "byte_size": 22180,
+      "sha256": "c06ab9a89c47350e6ead0288d86b8594eb592c2601f74dd595ba7075827478fd"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/setup_assessment/evaluate.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/setup_assessment/evaluate.rs.bak",
+      "byte_size": 52014,
+      "sha256": "9cbe1c35c859dd4621695a9ed252538a6691ff82762b31a8ea18dc1fa321d463"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/setup_assessment/health.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/setup_assessment/health.rs.bak",
+      "byte_size": 7827,
+      "sha256": "dac96429dc8aec9f209eb48cb8d55114e662aac548ce41b4b77d7d583d380973"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/setup_assessment/permissions.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/setup_assessment/permissions.rs.bak",
+      "byte_size": 6940,
+      "sha256": "29874353231796b0f7bcf830f7e1bf440b6c8033140a895359bc89ce511eca4a"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/setup_assessment.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/setup_assessment.rs.bak",
+      "byte_size": 64598,
+      "sha256": "69c0dd42a18d1c5ca7b784ec9b587e28a4b1286054354794febe0df95ba271e1"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/shutdown.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/shutdown.rs.bak",
+      "byte_size": 3588,
+      "sha256": "17a95ae0ab48bca09bbcc2e4d221aa0f3fcea0372aef6a63cf89da08f9c7b088"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/status_page.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/status_page.rs.bak",
+      "byte_size": 57143,
+      "sha256": "c2834d46882ce37f2a00d9baf46c3311edc30bdd60fcec18f1dc306d8a8567b3"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/stock_preparation.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/stock_preparation.rs.bak",
+      "byte_size": 14941,
+      "sha256": "57246a0bb840820166b814fdf41164f07695be73ebd7dc11fb938bc9fcfb8503"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/stop_loss_review/admission_tests.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/stop_loss_review/admission_tests.rs.bak",
+      "byte_size": 29500,
+      "sha256": "f9d3fb69b27394989b65008804fa418c9957fc245ea362344618dbd10b6731d5"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/stop_loss_review/session.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/stop_loss_review/session.rs.bak",
+      "byte_size": 6645,
+      "sha256": "02381d0821566a7f73f001e9a36fcdb4870dc2ae9c1049ab5818ed81874e2f19"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/stop_loss_review.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/stop_loss_review.rs.bak",
+      "byte_size": 61501,
+      "sha256": "d6ec95999565d897a063e9fa79fe77c48ba40a05ba9ed38bcacb625d610bfee3"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/strategy3/exposure_fx.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/strategy3/exposure_fx.rs.bak",
+      "byte_size": 3031,
+      "sha256": "ed90613d8b910ed0ed3093dbb9ad8fd66079a08a5798e52110de4a4f2c50fda8"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/strategy3/fast_entry.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/strategy3/fast_entry.rs.bak",
+      "byte_size": 24072,
+      "sha256": "2822a16e4d4f17e5d94604e3ad20e7f86403ab81f6cdab32f8283c135e6f5f54"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/strategy3/preopen.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/strategy3/preopen.rs.bak",
+      "byte_size": 31990,
+      "sha256": "45161a4337f34a365336ecea4dc273be34fba6962f039e557b760123db2da4bf"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/strategy3.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/strategy3.rs.bak",
+      "byte_size": 188056,
+      "sha256": "c6cc2259e1a44e27b4c72c41870569694521af645b3688016168b3d014b0eabe"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/supervisor.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/supervisor.rs.bak",
+      "byte_size": 22764,
+      "sha256": "12660d5e53175fc88a2aaba1f4668042e74c94c9418c2e0da51e5b064e8ef4b6"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/telegram_report.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/telegram_report.rs.bak",
+      "byte_size": 31172,
+      "sha256": "c4ae51016bfe9b7e730c324c68d790806f5b21a0d5f7e1b2ccdd248a2c65f1a5"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/trading.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/trading.rs.bak",
+      "byte_size": 108435,
+      "sha256": "fc5652724e156be8bbd0aa0f7223c385e387c88ce365961d9c9045a2903c6636"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/trading_report_data.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/trading_report_data.rs.bak",
+      "byte_size": 37681,
+      "sha256": "71209624905136f1a899efa1e1b1929565bbcf5c88424487102057b06066c83e"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/trading_report_snapshot.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/trading_report_snapshot.rs.bak",
+      "byte_size": 71304,
+      "sha256": "37184624a4e6082727cd7db6873b7d17353e49ef1140fa641272dc5234672179"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/trading_report_view.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/trading_report_view.rs.bak",
+      "byte_size": 42061,
+      "sha256": "c9bee667a9001d8abaa773dd77636615eb13cabb6828586772358576a74ae047"
+    },
+    {
+      "original_path": "crates/jiaoyi/src/trail_receipts.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi/src/trail_receipts.rs.bak",
+      "byte_size": 12607,
+      "sha256": "1715d6f1e536c3928d7d729fc8bc3eb1cfeac9f4c7dec9449fbf6b7cdca5bd3d"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/allowlist.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/allowlist.rs.bak",
+      "byte_size": 28120,
+      "sha256": "55e15a243eed6e7e5a54910b9a045efdf68db4f027ea4e452fb99d6d52d882ab"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/bars.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/bars.rs.bak",
+      "byte_size": 15107,
+      "sha256": "04d557f42d6be505ae9250613c5ba74deb85196ddb654347eb5c4b2c0f127ff3"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/indicators.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/indicators.rs.bak",
+      "byte_size": 3108,
+      "sha256": "5794fd02370648908c2f2cdcafd42ac4c6d44725e4007ff7f8a054bf932dd71c"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/lib.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/lib.rs.bak",
+      "byte_size": 1132,
+      "sha256": "7e923644eef995d916c8f04f11ad1fb89c770994874d82fd2c952e63b9d3eb1f"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/bootstrap.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/bootstrap.rs.bak",
+      "byte_size": 4262,
+      "sha256": "1c526298c72b6df509e47af786799631890945750f4c983d124d9bf2f00babdb"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/class_prediction.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/class_prediction.rs.bak",
+      "byte_size": 18761,
+      "sha256": "1bcbc5272d3df7af73c07b008c4654bb21732550e903163610189b4f6e042292"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/control.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/control.rs.bak",
+      "byte_size": 6689,
+      "sha256": "5560c81937f06db0a479b7851355c25a8dd03fdf7d4bbe019e7403fe44cad097"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/dsr.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/dsr.rs.bak",
+      "byte_size": 2753,
+      "sha256": "3bdad8b496f65c9df9cf48c328f2875bc6d25af9bf77307efb926c9c70ac3d7a"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/exit_replay.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/exit_replay.rs.bak",
+      "byte_size": 34519,
+      "sha256": "b744e6095e9da1c0736689a098ef62c88c18a2da6a5150f7d2bbd99436f5096d"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/fx_diagnostic.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/fx_diagnostic.rs.bak",
+      "byte_size": 9259,
+      "sha256": "87f706c6b2d90e7d6c54f268654cebbae5396aae784beaf07731f6e8131a0dd4"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/h1.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/h1.rs.bak",
+      "byte_size": 14120,
+      "sha256": "abe27fe1377b94d47d6b2e7e14a895c8df847bd3b199301377a0a46723aa052a"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/manifest_pullback.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/manifest_pullback.rs.bak",
+      "byte_size": 13883,
+      "sha256": "1612e60cadd7792e77a6dea7ac814a4c12cf12c941c1c40c7b8c8abe0c97eeaa"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/mod.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/mod.rs.bak",
+      "byte_size": 1290,
+      "sha256": "ebaff36d003c7f5a770af4e783d84e71e02674cea3361b81a189ed8a9369f34d"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/money.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/money.rs.bak",
+      "byte_size": 4695,
+      "sha256": "f847f5ab3189e944107d7d213c2fecb69fa3774ed1722497c123e22e4a33209d"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/native_target_sizing.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/native_target_sizing.rs.bak",
+      "byte_size": 5529,
+      "sha256": "1d9cb3323ac10afe8ce86f251a61d89c77689a225da2507380cfe5be173bfb62"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/normal.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/normal.rs.bak",
+      "byte_size": 2633,
+      "sha256": "ce4e411ebc75b73b653bee4fbfb7323b82044098a0d229fe4c6134f6f55e8e19"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/offline_repaired.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/offline_repaired.rs.bak",
+      "byte_size": 13880,
+      "sha256": "2b011a657ca86a04a055f6de6ba031eb8cf6e522063970ee501120388a442145"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/opening_range.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/opening_range.rs.bak",
+      "byte_size": 20400,
+      "sha256": "64efea2226476dc50943c98249f3800cd3f90e97c4338458af91f9679ca7bddc"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/option_ab.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/option_ab.rs.bak",
+      "byte_size": 14170,
+      "sha256": "a1e9eed78ace10dcea323f9ad0dde6d05b7fab4978822ecf5b02871ca1bdc8a4"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/peer_evaluation.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/peer_evaluation.rs.bak",
+      "byte_size": 1933,
+      "sha256": "24a3f8413761b5cda4522f809fc1b0daccc27cbaa9f338857bc2dcbca86c86a8"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/production_s3.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/production_s3.rs.bak",
+      "byte_size": 2285,
+      "sha256": "0fa0aaa4c40f6115197148001089b81d74eb1d3e3e9209c55cdd6cee670600f0"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/rebuild.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/rebuild.rs.bak",
+      "byte_size": 611,
+      "sha256": "e3eed492af959f603da487ba881cd74dba263357391c1611c17828c244759520"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/rebuild_continuity.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/rebuild_continuity.rs.bak",
+      "byte_size": 7640,
+      "sha256": "ed2e5b31049117cff836fc9974d299d0d4891587335253f1850c32add3314f41"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/repaired_exit.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/repaired_exit.rs.bak",
+      "byte_size": 7063,
+      "sha256": "a4e1c957c5bd5602a9b2c5e9222cd1af2507311051f7862612a68c28ee6807f3"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/rng.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/rng.rs.bak",
+      "byte_size": 1959,
+      "sha256": "8053a2b14f4fc44d68e5c5b925e708a87f00caaf337b76237c178104753280a8"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/s3_signal.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/s3_signal.rs.bak",
+      "byte_size": 15417,
+      "sha256": "f8dfefea150ad908e655023804ae840dbb9fb83701a7ecc9af45dcb47cec4fd7"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/s3_ticks.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/s3_ticks.rs.bak",
+      "byte_size": 40672,
+      "sha256": "acbacf60d3b3632c6976cc77582e26a0fcdb0474d0300a5cef6a777dced247c5"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/seasonal.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/seasonal.rs.bak",
+      "byte_size": 22923,
+      "sha256": "2d64c66389b09575e4081e3e1d5f8dc801955f5078ae51c164bbe9f82413cd54"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/stats.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/stats.rs.bak",
+      "byte_size": 4762,
+      "sha256": "d5bde40b0242b1386731ede2b950c0f6908e4f8dd48f3c057ccc345183cf598a"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/three_year.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/three_year.rs.bak",
+      "byte_size": 22800,
+      "sha256": "d132684f7728e251be85c553a10b61ba6b8857ca57a3c1123334904715c46307"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/tiered_pullback.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/tiered_pullback.rs.bak",
+      "byte_size": 8024,
+      "sha256": "4598a9ce556d7c93a19bec8ecea0d7cebda3c35fe90e84a3c72bfba1fad0b033"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/research/verdict.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/research/verdict.rs.bak",
+      "byte_size": 6621,
+      "sha256": "471bd6eb385f79ca02759a4ef9d969d05fe4881beaa6ac12f5a21cacb85f6345"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/schedule.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/schedule.rs.bak",
+      "byte_size": 5882,
+      "sha256": "9d0f95d751f1c64f155b00e4fa8e0e5951170f0838a129935f9eb8106ae5e7de"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/seal.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/seal.rs.bak",
+      "byte_size": 2256,
+      "sha256": "18acd427ceaac3a13e7bfa259de0104c2fc7302ae9878d1634bb6005d34fdc8b"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/secret.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/secret.rs.bak",
+      "byte_size": 1869,
+      "sha256": "c9996ff6576eb39a01522236d711b7e44689862eea6318915c8ddaa5e7a88bc8"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/settings.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/settings.rs.bak",
+      "byte_size": 6228,
+      "sha256": "36be14bc025dc828296ecca4d820f4abfde97e1b205d3be6c28e54d765864ffc"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/strategy3/band.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/strategy3/band.rs.bak",
+      "byte_size": 18169,
+      "sha256": "483998e9e3a4206e1249b92d2804111c253f1a60db8f7902f00dc7a11a00f70c"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/strategy3/kelly.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/strategy3/kelly.rs.bak",
+      "byte_size": 4182,
+      "sha256": "786a799a6bdca2861e2dcb16ba4ad931f55a516c47bf9aec821fdb8109f10c40"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/strategy3/macro_pullback.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/strategy3/macro_pullback.rs.bak",
+      "byte_size": 40687,
+      "sha256": "ec8cb3018cb6d8a1f2636a70f67a5d5326e78256e2f8e1264bd1ce0a192d6976"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/strategy3/mod.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/strategy3/mod.rs.bak",
+      "byte_size": 3036,
+      "sha256": "8cf08123dd4b41b9fd11d62cb986fdf18aeb9121e18a9a1b44d7778b7f06c465"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/strategy3/production_sessions.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/strategy3/production_sessions.rs.bak",
+      "byte_size": 14999,
+      "sha256": "770aeb2f64825452ee5f7a7307a9baadded521eea4648a43db796ae504ebfe7d"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/strategy3/sessions.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/strategy3/sessions.rs.bak",
+      "byte_size": 14373,
+      "sha256": "35baf7180e256d3d1b2b32ed6bb2b681415f53cbc98f2ab0bbb1870723bead58"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/strategy3/targets.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/strategy3/targets.rs.bak",
+      "byte_size": 14407,
+      "sha256": "e373c96e321c9349522408249c4a545572756eb8431c10185e4948208d680c44"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/universe.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/universe.rs.bak",
+      "byte_size": 10292,
+      "sha256": "1cfbb1a4fe2743581400cbf597a3fba75cfb6577f030527fad3ad4387255f4bd"
+    },
+    {
+      "original_path": "crates/jiaoyi-core/src/verdict.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-core/src/verdict.rs.bak",
+      "byte_size": 9022,
+      "sha256": "efb379cd9c42d59a7611fa20e9eac09fdfaf5b72fc8d89e00d2019aac89c7873"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/client.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/client.rs.bak",
+      "byte_size": 93680,
+      "sha256": "0d771f1dc336e661ba148df31e2a43426f4784fb1d2634b5a95e60b2534ce1c9"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/entry_guard.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/entry_guard.rs.bak",
+      "byte_size": 29807,
+      "sha256": "6ba290344006575dfe3ffe0a07a1f5f64e7d1cb01f73822e6b001c816bbd9da1"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/frame.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/frame.rs.bak",
+      "byte_size": 4578,
+      "sha256": "c307024cdd691a2d88861ac824f852ffd9365f9afefef9bdd2308383faf80540"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/lib.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/lib.rs.bak",
+      "byte_size": 3928,
+      "sha256": "cdb62a374b6e9bb0ec5bcae7af2506524fa26d2ec46420e36662dafb058e2cc5"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/margin/fx.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/margin/fx.rs.bak",
+      "byte_size": 11624,
+      "sha256": "2dfa312b93bca37a9aa26fec80f0612a577f639be77a51290f7df2af0d079447"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/margin.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/margin.rs.bak",
+      "byte_size": 19143,
+      "sha256": "228f64161df56cf3fe2ea3fcb80345a6800d9e2feff3fb45e092c078422ce9f2"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/market_hours.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/market_hours.rs.bak",
+      "byte_size": 11316,
+      "sha256": "7a1fbcf0987d754e51b399a40cca9d013de7a048883618e52d5eef6724cb14c0"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/payload.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/payload.rs.bak",
+      "byte_size": 14069,
+      "sha256": "517f9c544c7a9bc170f623ceae9f033e6a5b601c3dd892d4184bcb243886b6c7"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/testkit.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/testkit.rs.bak",
+      "byte_size": 78312,
+      "sha256": "38e4dc4b38b90d10579645e41d1dbb84afb20bcac5cbe7025828516650b58077"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/tickdata.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/tickdata.rs.bak",
+      "byte_size": 12663,
+      "sha256": "39b407bfdc8cb5324d08902c5f581e094aee4a32bcaeb1a98ca570302f26f424"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/trading.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/trading.rs.bak",
+      "byte_size": 50530,
+      "sha256": "424e713b83d6d4852281dc9737d40eb208a9747f0849b621d2cda05c995dd06c"
+    },
+    {
+      "original_path": "crates/jiaoyi-ctrader/src/trendbar.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-ctrader/src/trendbar.rs.bak",
+      "byte_size": 10647,
+      "sha256": "92f62429ccd3be3ff4f51184499375c0f30a2e7181732b0bd674c1578da64047"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/authority.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/authority.rs.bak",
+      "byte_size": 5031,
+      "sha256": "e74433b0c66b58e9fcd8caeceec13ba8ba52b6e847118a6be17e63b81753778d"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/goals.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/goals.rs.bak",
+      "byte_size": 16342,
+      "sha256": "ade199f628b0ba3133b10b3200b8df38ab4e56fa68bc6d2de90a786171d84e00"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/history.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/history.rs.bak",
+      "byte_size": 22321,
+      "sha256": "9eff7813a8cfeb0716b1cd51953436f4bfa70a6a5f58baeac8bfa758d0a31635"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/lib.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/lib.rs.bak",
+      "byte_size": 34668,
+      "sha256": "dad6a59fbd284d7e18b3f3e5501c065a77db7021cfd1fcc6a58b584b833752e8"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/outcomes.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/outcomes.rs.bak",
+      "byte_size": 17499,
+      "sha256": "6c52dd04315c0a17331a3b6765b601f0a7f9d6289901eaf935558ea6e6afcce3"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/research.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/research.rs.bak",
+      "byte_size": 20665,
+      "sha256": "79fd3df19779d9b2e79439e21219efb500b6245ed5bf30a587c8a79a1b544935"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/settings.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/settings.rs.bak",
+      "byte_size": 6361,
+      "sha256": "ce23231c8d6dc66aceaa990c3f3c9b27f7088f7dcb8ed7f6c5d35a544fb0ec49"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/strategy3/prepared_entry.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/strategy3/prepared_entry.rs.bak",
+      "byte_size": 3234,
+      "sha256": "44c9d83a8b1d8803babce6b4aef4f68d5747f0448761ba1b0b0d4d53af85b261"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/strategy3.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/strategy3.rs.bak",
+      "byte_size": 23003,
+      "sha256": "9f7aae13c10ff29015fe6c3ad5d5838b314d549f2dd243e1ae0ed46227b48bac"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/ticks.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/ticks.rs.bak",
+      "byte_size": 5423,
+      "sha256": "dcc8a14c0160bad5b9832e43659657a0a92c7922f6cdf1ec9f37d60b1894ff6f"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/trading/entry_cost.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/trading/entry_cost.rs.bak",
+      "byte_size": 5862,
+      "sha256": "1ef123c70337bd0ba396fa7171ed77be57a63d74872e39e9ec11c5a01b72ceec"
+    },
+    {
+      "original_path": "crates/jiaoyi-store/src/trading.rs",
+      "backup_path": "archive/strategies_rust_backup_2026_11_09_18403/crates/jiaoyi-store/src/trading.rs.bak",
+      "byte_size": 44859,
+      "sha256": "2ff7a3fffc2cb7a1dc3a8a46d8c96ddf1658a6f481fe595c53347ea6a7112e82"
+    }
+  ]
+}

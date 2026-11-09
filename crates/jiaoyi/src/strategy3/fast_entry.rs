@@ -137,6 +137,9 @@ impl Trader<'_, '_> {
         };
         let mut requests = vec![];
         for sym in self.syms.values() {
+            if self.human_entry_refusal(sym.id).is_some() {
+                continue;
+            }
             let Some(arm) = sym.pullback else { continue };
             let Some(Ok(day)) = sym.day.as_ref() else {
                 continue;
@@ -227,6 +230,9 @@ impl Trader<'_, '_> {
         deadline: tokio::time::Instant,
         plan: Prepared,
     ) -> anyhow::Result<()> {
+        if self.human_entry_refusal(id).is_some() {
+            return Ok(());
+        }
         let started = tokio::time::Instant::now();
         let name = plan.request.name.clone();
         let sym = self.syms[&id].clone();

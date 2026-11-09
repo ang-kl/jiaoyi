@@ -127,3 +127,8 @@ initially unknown schedules do not start a polling loop. Fresh complete books
 can remove broker-confirmed closed positions. No ownership, risk, entry/exit,
 worker permission or financial-goal change is authorised by this UI repair.
 By <Codex (GPT-6), effort: not exposed>.
+
+
+## Owner amendment — №18,403 human-trade protection
+
+[§CURRENT.18403] 09-11-2026: the owner's Three Laws supersede earlier S1/S3 same-symbol coholding permission for S3. S3 management requires both historical S3 opening authority and current exact label `jiaoyi-s3`. Every other label, including S1, blank or absent labels, on an active position or pending order locks that account/symbol against S3 entry preparation, arming and dispatch. Ownership refresh cancels cached/durable arms; the lock releases when the external book clears. NatGas and JPN225 are permanently reserved from S3 entry and management. These compiled guards have no environment opt-out; existing account/risk/margin/owner-pause guards still apply. Market-data observation does not grant order authority. See [implementation and backup evidence](../doc/THREE_LAW_HUMAN_PROTECTION-18403-2026-11-09.md). By <Codex (GPT-6), effort: not exposed>.

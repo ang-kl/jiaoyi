@@ -1,0 +1,43 @@
+{
+  "trace": "№18,403",
+  "paragraphs": "§§1–6",
+  "prepared_at_sgt": "09-11-2026 15:34:47 SGT",
+  "by": "Codex (GPT-6), effort: not exposed",
+  "scope": "Compiled S3 human protection; production deployment verification follows green CI",
+  "backup": {
+    "manifest": "archive/strategies_rust_backup_2026_11_09_18403/manifest.json",
+    "manifest_sha256": "90d9a35686f169ffb2af4a85f898f9385353b45ba8f7b4db675263c079c66867",
+    "base_commit": "1d279e8980d1c31b6ebebd496a644bea7f755510",
+    "files": 119,
+    "bytes": 2421318,
+    "all_match_base_git_blobs": true,
+    "all_backup_hashes_verified": true
+  },
+  "laws": {
+    "label_exact": "jiaoyi-s3",
+    "non_s3_positions_and_pending_orders_lock_account_symbol": true,
+    "human_reserved_symbols": [
+      "NatGas",
+      "JPN225"
+    ],
+    "environment_toggle_required": false,
+    "historical_ownership_does_not_override_changed_label": true,
+    "historical_opening_evidence_still_required": true
+  },
+  "financial_goal": {
+    "net_win_rate": 0.73,
+    "latest_closed_positions_per_strategy_account": 20,
+    "required_wins": 15,
+    "risk_reward": "1:1.38",
+    "financial_pass_claimed": false
+  },
+  "release": {
+    "status": "awaiting_exact_head_CI_and_deployment_verification",
+    "checkpoints": [
+      "check, docker and engineering succeed on PR head",
+      "merge exact verified head",
+      "one successful trading deployment at merged SHA",
+      "two fresh four-account health reads and London opening-reference count"
+    ]
+  }
+}
