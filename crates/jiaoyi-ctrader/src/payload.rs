@@ -252,7 +252,7 @@ mod tests {
     assert_not_impl_any!(pb::ProtoOaMarginCallUpdateReq: Request);
 
     /// The read requests, and nothing else.
-    const EXPECTED_SENDABLE: [i32; 21] = [
+    const EXPECTED_SENDABLE: [i32; 22] = [
         Oa::ProtoOaOrderListByPositionIdReq as i32,
         Oa::ProtoOaDealListByPositionIdReq as i32,
         Oa::ProtoOaExpectedMarginReq as i32,
@@ -263,6 +263,7 @@ mod tests {
         Oa::ProtoOaRefreshTokenReq as i32,
         Oa::ProtoOaSymbolsListReq as i32,
         Oa::ProtoOaSymbolByIdReq as i32,
+        Oa::ProtoOaSymbolsForConversionReq as i32,
         Oa::ProtoOaGetTrendbarsReq as i32,
         Oa::ProtoOaSubscribeSpotsReq as i32,
         Oa::ProtoOaUnsubscribeSpotsReq as i32,
