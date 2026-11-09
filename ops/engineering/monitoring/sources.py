@@ -158,7 +158,11 @@ def _sql(env, deadline, since, observed_at):
     status = value.get("status", "ok")
     if status not in ("ok", "available", "complete", "partial"):
         # SQL returns fixed reason codes; unknown text is never propagated.
-        return value, {"status": "unavailable", "error_code": "sql_unavailable"}
+        reason = value.get("reason")
+        safe_reasons = {"evidence_output_limit", "readonly_query_failed", "readonly_query_timeout",
+                        "readonly_evidence_invalid", "readonly_psql_unavailable",
+                        "readonly_query_deadline_elapsed", "invalid_monitor_window"}
+        return value, {"status": "unavailable", "error_code": reason if reason in safe_reasons else "sql_unavailable"}
     return value, {"status": "ok", "error_code": None}
 
 
