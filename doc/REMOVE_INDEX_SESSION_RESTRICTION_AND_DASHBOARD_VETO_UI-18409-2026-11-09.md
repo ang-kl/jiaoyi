@@ -70,3 +70,11 @@ The invariant remains73% net wins over the latest20trades, separately for each s
 ## §8. Reading order for another AI
 
 Read this report, `docs/production_update_18409_verification.json`, the18409 registration, and the PR's final release-verification comment. Inspect `production_sessions.rs`, `strategy3/diagnostics.rs`, `strategy3/preopen.rs`, and the focused restart/UI tests. Preserve Repairs1,2,3,5 and all three human laws. Do not treat the historical18407 counterfactual as evidence for18409's broader sessions.
+
+## §9. First deployment verified; preparation-refusal visibility follow-up
+
+PR #211 merged at19:25:54SGT. Railway deployment `fa3ee98d-662a-4b71-80c6-f7bebee714be` succeeded on commit `3cbc61d50021892784807c22078507757715a6ca`. At19:28SGT all four accounts were connected and unpaused under18409. All32original opening midpoints, quote timestamps and macro contexts matched the pre-release snapshot; all32current native sessions were enabled. Each account's exit-check counter subsequently advanced by13. The actual dashboard rendered80gate cells and explicit macro/peer vetoes.
+
+The live read revealed another material display omission: SpotCrude and SpotBrent were armed, but their prepared admission was refused by the unchanged margin buffer (approximately209–210%projected margin versus the250%floor). The health payload already held that refusal; the gate column did not. The follow-up displays unavailable admission, original-source refusal or the latest margin/risk refusal alongside the armed setup. A current valid plan suppresses an old refusal. A pending plan with no refusal is labelled preparing, with no invented reason. No strategy, risk, order or session code changes in this follow-up.
+
+A focused regression covers refusal visibility, source-error priority and stale-refusal clearance. The browser fixture additionally exercises the margin message. Final follow-up CI/deployment evidence is appended to its PR release-verification comment.

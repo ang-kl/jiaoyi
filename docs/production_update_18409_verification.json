@@ -1254,8 +1254,40 @@
     "ignored": 1,
     "complete": true
   },
-  "release_status": "awaiting_required_ci_merge_and_runtime_verification",
+  "release_status": "first_rollout_verified; admission-refusal visibility follow-up awaits CI and deployment",
   "runtime_receipt_location": "PR release-verification comment; inspect actual deployed source SHA, not merely CI status",
   "financial_pass": false,
-  "manual_verification_orders": 0
+  "manual_verification_orders": 0,
+  "first_release_verification": {
+    "pr": 211,
+    "merge_commit": "3cbc61d50021892784807c22078507757715a6ca",
+    "railway_deployment": "fa3ee98d-662a-4b71-80c6-f7bebee714be",
+    "status": "SUCCESS",
+    "verified_at_utc": "2026-11-09T11:28:23Z",
+    "accounts_connected_unpaused": 4,
+    "opening_references_preserved": 32,
+    "current_native_sessions_enabled": 32,
+    "exit_checks_advanced_each_account": 13,
+    "dashboard_gate_cells": 80,
+    "macro_and_peer_vetoes_rendered": true
+  },
+  "follow_up_reason": "Live oil setup admission refused by existing250%margin floor; expose existing prepared-admission refusal in gate column without altering execution or risk.",
+  "follow_up_browser": {
+    "passed": 12,
+    "checks": [
+      "Vetoed: 5d/20d macro",
+      "Vetoed: peer ETHUSD",
+      "Blocked: pair reservation",
+      "Armed: waiting",
+      "Invalidated: retraced",
+      "Blocked: prepared admission unavailable",
+      "numeric distance coexists with veto",
+      "first20 rows visible",
+      "remaining5 rows visible after paging",
+      "reason is escaped, no script execution",
+      "mobile table scrolls without document overflow",
+      "no JavaScript errors"
+    ],
+    "scope": "Actual Rust-rendered synthetic fixture in Chromium; no trading or production access"
+  }
 }
