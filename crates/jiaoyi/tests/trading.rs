@@ -896,6 +896,16 @@ async fn a_conversion_quote_arriving_later_lets_the_signal_through(pool: PgPool)
     )
     .await;
     let mut f = fake_on(&[JP225], 2_000);
+    // Margin uses the broker's asset-ID conversion chain, not merely the
+    // stored display name or an arriving quote. The real USDJPY contract
+    // connects deposit USD (1) to the index's quote currency JPY (3).
+    f.light_symbols
+        .push(jiaoyi_ctrader::messages::ProtoOaLightSymbol {
+            symbol_id: USDJPY,
+            base_asset_id: Some(1),
+            quote_asset_id: Some(3),
+            ..Default::default()
+        });
     f.fill_quotes = HashMap::from([(JP225, (3608.0, 3611.0))]);
     // The JPY index triggers before any USDJPY quote (Codex P2 on #14),
     // then USDJPY quotes, then the index triggers again.
@@ -913,6 +923,9 @@ async fn a_conversion_quote_arriving_later_lets_the_signal_through(pool: PgPool)
     );
     let orders = log.lock().unwrap().orders.clone();
     assert_eq!(orders.len(), 1, "{d:?}");
+    assert!(log.lock().unwrap().payload_types.contains(
+        &(jiaoyi_ctrader::messages::ProtoOaPayloadType::ProtoOaSymbolsForConversionReq as u32)
+    ));
     assert_eq!(orders[0].symbol_id, JP225);
     // 0.6% of $1,002.44 = $6.0146; one cent risks 0.01 × 120 / 150.01 = $0.0080 → 751.
     assert_eq!(orders[0].volume, 751);

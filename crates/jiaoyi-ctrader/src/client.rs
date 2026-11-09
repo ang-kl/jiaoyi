@@ -13,7 +13,7 @@
 //! (the order gate). Execution events, order errors and unmatched error
 //! responses go to the execution broadcast.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
@@ -145,6 +145,9 @@ struct EntryState {
     generation: u64,
     quotes: HashMap<(i64, i64), Quote>,
     revisions: HashMap<i64, u64>,
+    conversion_paths: HashMap<(i64, i64, i64), Vec<crate::margin::ConversionLeg>>,
+    spot_subscriptions: HashSet<(i64, i64)>,
+    symbol_cache: HashMap<i64, (pb::ProtoOaSymbolsListRes, Instant)>,
 }
 
 impl EntryState {
@@ -169,9 +172,40 @@ impl EntryState {
                 refusal
             })?;
         let mut receipt = guard.snapshot(quote, revision, now, monotonic_now);
-        if let crate::entry_guard::Signal::Pullback { peer, .. } = &guard.signal {
+        if let crate::entry_guard::Signal::Pullback { peer, .. }
+        | crate::entry_guard::Signal::PullbackBounded { peer, .. } = &guard.signal
+        {
             let peer_quote = peer.and_then(|(id, _)| self.quotes.get(&(guard.account_id, id)));
             receipt["peer"] = guard.validate_peer(peer_quote, now)?;
+        }
+        if let crate::entry_guard::Signal::PullbackBounded {
+            margin: Some(proof),
+            ..
+        } = &guard.signal
+        {
+            if proof.account_id != guard.account_id {
+                return Err(self.refusal(
+                    guard,
+                    "ENTRY_FX_ACCOUNT_MISMATCH",
+                    "conversion proof belongs to another account",
+                    "after_writer_lock",
+                ));
+            }
+            let value = crate::margin::validate_cached_fx(proof, now, |id| {
+                self.quotes.get(&(guard.account_id, id))
+            })
+            .map_err(|why| {
+                let mut refusal = self.refusal(
+                    guard,
+                    "ENTRY_FX_UNAVAILABLE",
+                    "foreign-exposure valuation is stale or violates margin reserve",
+                    "after_writer_lock",
+                );
+                refusal.evidence["fx_reason"] = serde_json::json!(why);
+                refusal
+            })?;
+            receipt["fx_margin_revalidation"] =
+                serde_json::json!({"projected_level_pct":value.0,"stressed_level_pct":value.1});
         }
         receipt["connection_generation"] = serde_json::json!(self.generation);
         receipt["stage"] = serde_json::json!("after_writer_lock");
@@ -202,6 +236,12 @@ impl EntryState {
     fn invalidate(&mut self, accounts: &[i64]) {
         self.quotes
             .retain(|(id, _), _| !accounts.is_empty() && !accounts.contains(id));
+        self.conversion_paths
+            .retain(|(id, _, _), _| !accounts.is_empty() && !accounts.contains(id));
+        self.spot_subscriptions
+            .retain(|(id, _)| !accounts.is_empty() && !accounts.contains(id));
+        self.symbol_cache
+            .retain(|id, _| !accounts.is_empty() && !accounts.contains(id));
         for (id, revision) in &mut self.revisions {
             if accounts.is_empty() || accounts.contains(id) {
                 *revision = revision.saturating_add(1);
@@ -564,6 +604,29 @@ impl Connection {
             .or_default()
     }
 
+    /// Reader-owned quote cache; no network call and no reuse across reconnects.
+    pub fn quote_snapshot(&self, account: i64, symbol: i64) -> Option<Quote> {
+        self.entry_state
+            .lock()
+            .unwrap()
+            .quotes
+            .get(&(account, symbol))
+            .cloned()
+    }
+
+    pub fn conversion_status(&self, account: i64) -> serde_json::Value {
+        let state = self.entry_state.lock().unwrap();
+        let now = Utc::now();
+        let mut paths: Vec<_> = state.conversion_paths.iter().filter(|((id, _, _), _)| *id == account)
+            .map(|((_, from, to), path)| {
+                let rate = crate::margin::conversion_bounds(path, *from, *to, now, |id| state.quotes.get(&(account, id)));
+                serde_json::json!({"from_asset":from,"deposit_asset":to,"legs":path,"subscribed":path.iter().all(|leg|state.spot_subscriptions.contains(&(account,leg.symbol_id))),
+                    "state":if rate.is_ok(){"fresh"}else{"unavailable"},"bounds":rate.as_ref().ok(),"reason":rate.err(),"max_quote_age_ms":5000})
+            }).collect();
+        paths.sort_by_key(|p| (p["from_asset"].as_i64(), p["deposit_asset"].as_i64()));
+        serde_json::json!({"account_id":account,"generation":state.generation,"observed_at":now,"paths":paths})
+    }
+
     pub fn validate_entry_guard(&self, guard: &EntryGuard) -> Result<(), GuardRefusal> {
         self.entry_state.lock().unwrap().validate(guard).map(|_| ())
     }
@@ -859,6 +922,20 @@ fn route(
             payload_type: msg.payload_type,
             payload: payload.to_vec(),
         });
+    } else if pt == Oa::ProtoOaSymbolChangedEvent as i32 {
+        let mut state = entry_state.lock().unwrap();
+        match pb::ProtoOaSymbolChangedEvent::decode(payload) {
+            Ok(event) => {
+                let account = event.ctid_trader_account_id;
+                state
+                    .conversion_paths
+                    .retain(|(id, _, _), _| *id != account);
+                state.symbol_cache.remove(&account);
+                let revision = state.revisions.entry(account).or_default();
+                *revision = revision.saturating_add(1);
+            }
+            Err(_) => state.invalidate(&[]),
+        }
     } else if pt == Oa::ProtoOaSpotEvent as i32 {
         if let Ok(event) = ProtoOaSpotEvent::decode(payload) {
             let received_at = Utc::now();
@@ -1114,6 +1191,7 @@ impl AccountSession<'_> {
     }
 
     pub async fn symbols_list(&self) -> Result<pb::ProtoOaSymbolsListRes, ClientError> {
+        let revision = self.conn.entry_revision(self.account.id());
         let res = self
             .conn
             .request(&pb::ProtoOaSymbolsListReq {
@@ -1123,7 +1201,106 @@ impl AccountSession<'_> {
             })
             .await?;
         self.check_account(res.ctid_trader_account_id)?;
+        let mut state = self.conn.entry_state.lock().unwrap();
+        if state
+            .revisions
+            .get(&self.account.id())
+            .copied()
+            .unwrap_or(0)
+            == revision
+        {
+            state
+                .symbol_cache
+                .insert(self.account.id(), (res.clone(), Instant::now()));
+        }
         Ok(res)
+    }
+
+    /// Metadata is connection/account scoped and invalidated by symbol events.
+    pub async fn cached_symbols_list(&self) -> Result<pb::ProtoOaSymbolsListRes, ClientError> {
+        let cached = self
+            .conn
+            .entry_state
+            .lock()
+            .unwrap()
+            .symbol_cache
+            .get(&self.account.id())
+            .filter(|(_, at)| at.elapsed() < Duration::from_secs(300))
+            .map(|(value, _)| value.clone());
+        match cached {
+            Some(value) => Ok(value),
+            None => self.symbols_list().await,
+        }
+    }
+
+    /// Request the broker's conversion identities, subscribe each missing leg,
+    /// and retain the account-specific path. This is a read-only warm-up API.
+    pub async fn exposure_conversion_path(
+        &self,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<crate::margin::ConversionLeg>, ClientError> {
+        if from == to && from > 0 {
+            return Ok(vec![]);
+        }
+        let account = self.account.id();
+        let cached = self
+            .conn
+            .entry_state
+            .lock()
+            .unwrap()
+            .conversion_paths
+            .get(&(account, from, to))
+            .cloned();
+        let path = match cached {
+            Some(path) => path,
+            None => {
+                let revision = self.conn.entry_revision(account);
+                let res = self
+                    .conn
+                    .request(&pb::ProtoOaSymbolsForConversionReq {
+                        payload_type: None,
+                        ctid_trader_account_id: account,
+                        first_asset_id: from,
+                        last_asset_id: to,
+                    })
+                    .await?;
+                self.check_account(res.ctid_trader_account_id)?;
+                let path =
+                    crate::margin::conversion_path(&res.symbol, from, to).map_err(|why| {
+                        ClientError::Broker {
+                            code: "FX_CONVERSION_IDENTITY_INVALID".into(),
+                            description: Some(why),
+                            retry_after_secs: None,
+                        }
+                    })?;
+                let mut state = self.conn.entry_state.lock().unwrap();
+                if state.revisions.get(&account).copied().unwrap_or(0) != revision {
+                    return Err(ClientError::Broker {
+                        code: "FX_CONVERSION_STATE_CHANGED".into(),
+                        description: Some(
+                            "account or symbol changed during conversion warm-up; retry".into(),
+                        ),
+                        retry_after_secs: None,
+                    });
+                }
+                state
+                    .conversion_paths
+                    .insert((account, from, to), path.clone());
+                path
+            }
+        };
+        let missing: Vec<i64> = {
+            let state = self.conn.entry_state.lock().unwrap();
+            path.iter()
+                .map(|l| l.symbol_id)
+                .filter(|id| !state.spot_subscriptions.contains(&(account, *id)))
+                .collect()
+        };
+        if !missing.is_empty() {
+            self.subscribe_spots(&missing).await?;
+        }
+        Ok(path)
     }
 
     pub async fn symbols_by_id(
@@ -1602,7 +1779,14 @@ impl AccountSession<'_> {
                 subscribe_to_spot_timestamp: Some(true),
             })
             .await?;
-        self.check_account(res.ctid_trader_account_id)
+        self.check_account(res.ctid_trader_account_id)?;
+        self.conn
+            .entry_state
+            .lock()
+            .unwrap()
+            .spot_subscriptions
+            .extend(symbol_ids.iter().map(|id| (self.account.id(), *id)));
+        Ok(())
     }
 
     pub async fn unsubscribe_spots(&self, symbol_ids: &[i64]) -> Result<(), ClientError> {
@@ -1614,7 +1798,13 @@ impl AccountSession<'_> {
                 symbol_id: symbol_ids.to_vec(),
             })
             .await?;
-        self.check_account(res.ctid_trader_account_id)
+        self.check_account(res.ctid_trader_account_id)?;
+        let mut state = self.conn.entry_state.lock().unwrap();
+        for id in symbol_ids {
+            state.spot_subscriptions.remove(&(self.account.id(), *id));
+            state.quotes.remove(&(self.account.id(), *id));
+        }
+        Ok(())
     }
 
     /// Subscribe to spots for all `symbol_ids` at once, record ask − bid at every

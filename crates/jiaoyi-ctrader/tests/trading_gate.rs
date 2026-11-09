@@ -1813,3 +1813,247 @@ async fn successful_entry_guard_receipt_failure_after_write_is_uncertain_and_not
         "uncertain attempt cannot emit a duplicate frame"
     );
 }
+
+fn prepared_fake() -> FakeBroker {
+    FakeBroker {
+        quotes: HashMap::from([(ETH, vec![(Some(300_000_000), Some(300_100_000))])]),
+        symbols: vec![pb::ProtoOaSymbol {
+            symbol_id: ETH,
+            digits: 2,
+            pip_position: 2,
+            min_volume: Some(1),
+            step_volume: Some(1),
+            max_volume: Some(100_000),
+            trading_mode: Some(0),
+            enable_short_selling: Some(true),
+            schedule_time_zone: Some("UTC".into()),
+            schedule: vec![pb::ProtoOaInterval {
+                start_second: 0,
+                end_second: 604800,
+            }],
+            ..Default::default()
+        }],
+        ..fake()
+    }
+}
+fn prepared_guard(
+    conn: &Connection,
+    p: &jiaoyi_ctrader::trading::PreparedEntry,
+) -> jiaoyi_ctrader::entry_guard::EntryGuard {
+    use jiaoyi_ctrader::entry_guard::{EntryGuard, Signal};
+    EntryGuard {
+        connection_generation: p.generation(),
+        account_revision: p.revision(),
+        account_id: ACCOUNT,
+        symbol_id: ETH,
+        side: Side::Buy,
+        signal: Signal::PullbackBounded {
+            origin: 2990.,
+            level: 3010.,
+            impulse_range: 40.,
+            admitted_entry: 3014.5,
+            price_digits: 2,
+            peer: None,
+            trigger_quote: conn.quote_snapshot(ACCOUNT, ETH).unwrap(),
+            margin: p.receipt.fx_guard.clone(),
+            calendar: p.calendar.clone(),
+        },
+        cost: None,
+        expires: p.expires(),
+    }
+}
+
+#[tokio::test]
+async fn prepared_dispatch_uses_no_broker_reads_and_preserves_intent_before_send() {
+    let (conn, log) = prepared_fake().spawn();
+    let session = session_on(&conn).await;
+    let mut quotes = conn.spot_events();
+    session.subscribe_spots(&[ETH]).await.unwrap();
+    quotes.recv().await.unwrap();
+    let ledger = MemLedger::default();
+    let command = open(1, 28_457_000);
+    let policy = on();
+    let prepared = jiaoyi_ctrader::trading::prepare_entry(
+        &session,
+        &allow(),
+        &ledger,
+        &policy,
+        &command,
+        false,
+    )
+    .await
+    .unwrap();
+    let mut altered = prepared_guard(&conn, &prepared);
+    if let jiaoyi_ctrader::entry_guard::Signal::PullbackBounded {
+        margin: Some(proof),
+        ..
+    } = &mut altered.signal
+    {
+        proof.candidate_max_risk = Some(policy.max_risk + 1.);
+    }
+    let invalid = jiaoyi_ctrader::trading::send_prepared_entry(
+        &session,
+        &allow(),
+        &ledger,
+        &policy,
+        command.clone(),
+        "prepared-altered-proof",
+        Duration::from_secs(1),
+        &altered,
+        &prepared,
+    )
+    .await;
+    assert!(
+        matches!(invalid,Err(SendError::Refused(e)) if e.reason.contains("bound FX/risk/calendar proof"))
+    );
+    assert!(ledger.intents.lock().unwrap().is_empty());
+    assert_eq!(orders(&log), 0);
+    let before = log.lock().unwrap().payload_types.len();
+    let guard = prepared_guard(&conn, &prepared);
+    let started = std::time::Instant::now();
+    let sent = jiaoyi_ctrader::trading::send_prepared_entry(
+        &session,
+        &allow(),
+        &ledger,
+        &policy,
+        command,
+        "prepared-fast",
+        Duration::from_secs(1),
+        &guard,
+        &prepared,
+    )
+    .await
+    .unwrap();
+    let elapsed = started.elapsed();
+    assert!(matches!(sent.outcome, Outcome::Filled { .. }));
+    assert_eq!(ledger.intents.lock().unwrap().len(), 1);
+    let payloads = log.lock().unwrap().payload_types[before..].to_vec();
+    assert_eq!(
+        payloads,
+        vec![pb::ProtoOaPayloadType::ProtoOaNewOrderReq as u32],
+        "no trader/book/margin/symbol reads allowed after touch"
+    );
+    eprintln!(
+        "prepared fixture dispatch and response: {}us",
+        elapsed.as_micros()
+    );
+    assert!(
+        elapsed < Duration::from_millis(250),
+        "bounded in-memory fixture exceeded250ms: {elapsed:?}"
+    );
+}
+
+#[tokio::test]
+async fn prepared_expiry_after_durable_intent_invalidates_other_connection_epoch() {
+    let fake = prepared_fake();
+    let (conn, log) = fake.clone().spawn();
+    let (other, _) = fake.spawn();
+    let session = session_on(&conn).await;
+    let second = session_on(&other).await;
+    let mut quotes = conn.spot_events();
+    session.subscribe_spots(&[ETH]).await.unwrap();
+    quotes.recv().await.unwrap();
+    let ledger = MemLedger {
+        intent_delay: Duration::from_millis(80),
+        ..Default::default()
+    };
+    let command = open(1, 28_457_000);
+    let policy = on();
+    let mut prepared = jiaoyi_ctrader::trading::prepare_entry(
+        &session,
+        &allow(),
+        &ledger,
+        &policy,
+        &command,
+        false,
+    )
+    .await
+    .unwrap();
+    let untouched = jiaoyi_ctrader::trading::prepare_entry(
+        &second,
+        &allow(),
+        &ledger,
+        &policy,
+        &command,
+        false,
+    )
+    .await
+    .unwrap();
+    // Make the original source expire while the real durable write is pending.
+    prepared.restrict_source_start(tokio::time::Instant::now() - Duration::from_millis(4960));
+    let guard = prepared_guard(&conn, &prepared);
+    let result = jiaoyi_ctrader::trading::send_prepared_entry(
+        &session,
+        &allow(),
+        &ledger,
+        &policy,
+        command.clone(),
+        "prepared-expired",
+        Duration::from_secs(1),
+        &guard,
+        &prepared,
+    )
+    .await;
+    assert!(matches!(result,Err(SendError::Refused(e)) if e.reason.contains("ENTRY_EXPIRED")));
+    assert_eq!(orders(&log), 0);
+    assert_eq!(ledger.intents.lock().unwrap().len(), 1);
+    assert_eq!(conn.entry_revision(ACCOUNT), untouched.revision());
+    assert!(
+        untouched
+            .validate(&second, &ledger.admission_namespace(), &command, &policy)
+            .unwrap_err()
+            .reason
+            .contains("account changed"),
+        "a local attempted send must invalidate a different connection before broker events"
+    );
+}
+
+#[tokio::test]
+async fn background_preparation_never_holds_dispatch_lock_during_broker_wait() {
+    let fake = prepared_fake();
+    let delays = fake.trader_reply_delays.clone();
+    let (conn, log) = fake.spawn();
+    let session = session_on(&conn).await;
+    let mut quotes = conn.spot_events();
+    session.subscribe_spots(&[ETH]).await.unwrap();
+    quotes.recv().await.unwrap();
+    let ledger = MemLedger::default();
+    let command = open(1, 28_457_000);
+    let policy = on();
+    let allowed = allow();
+    let prepared = jiaoyi_ctrader::trading::prepare_entry(
+        &session, &allowed, &ledger, &policy, &command, false,
+    )
+    .await
+    .unwrap();
+    delays.lock().unwrap().push_back(Duration::from_millis(150));
+    let refresh = jiaoyi_ctrader::trading::prepare_entry(
+        &session, &allowed, &ledger, &policy, &command, false,
+    );
+    let dispatch = async {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let guard = prepared_guard(&conn, &prepared);
+        jiaoyi_ctrader::trading::send_prepared_entry(
+            &session,
+            &allowed,
+            &ledger,
+            &policy,
+            command.clone(),
+            "prepared-refresh-race",
+            Duration::from_secs(1),
+            &guard,
+            &prepared,
+        )
+        .await
+    };
+    let (refresh, sent) = tokio::join!(refresh, dispatch);
+    assert!(
+        sent.is_ok(),
+        "background refresh must not refuse the existing fresh plan: {sent:?}"
+    );
+    assert!(
+        refresh.is_err(),
+        "the concurrent local attempt invalidates the refreshed snapshot"
+    );
+    assert_eq!(orders(&log), 1);
+}

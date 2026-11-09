@@ -25,6 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let rule = AssetClass::parse(&item.class)
             .and_then(|class| sessions::rule_for(&item.symbol, class));
         let profile = rule.as_ref().map(|rule| match rule {
+            sessions::SessionRule::Production(_) => unreachable!("legacy inventory never selects production windows"),
             sessions::SessionRule::Exchange { exchange, tz, open, close, lunch } => json!({
                 "kind":"exchange_strategy", "exchange":exchange, "iana_timezone":tz.name(),
                 "open":open.to_string(), "close":close.to_string(), "lunch":lunch,

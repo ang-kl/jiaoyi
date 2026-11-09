@@ -3,6 +3,7 @@
 //! executable quote and current account risk remain entry-time observations.
 
 use super::*;
+use jiaoyi_core::strategy3::production_sessions;
 use serde::{Deserialize, Serialize};
 
 pub const START_MINUTES: i64 = 20;
@@ -35,7 +36,7 @@ pub async fn specs(
         .map(|(symbol, class)| {
             let sym = syms.values().find(|s| s.name == symbol);
             Spec {
-                rule: sessions::rule_for(&symbol, class),
+                rule: production_sessions::rule_for(&symbol, class),
                 id: sym.map(|s| s.id),
                 metadata_ready: deposit
                     && sym.is_some_and(|s| {
@@ -69,9 +70,11 @@ pub struct Prepared {
 
 impl Prepared {
     pub fn ready(&self) -> bool {
-        self.table.is_some()
+        self.table
+            .as_ref()
+            .and_then(|t| t.marks.get(&30))
+            .is_some_and(|v| v.as_ref().is_ok_and(|x| x.is_finite() && *x > 0.0))
             && self.macro_context.is_some()
-            && self.missing_marks == 0
             && self.spread_ready
             && self.commission_ready
             && self.metadata_ready
@@ -88,8 +91,8 @@ impl Prepared {
     }
 }
 
-/// Warm current/next sessions immediately, then retry only when useful. The
-/// next crypto session cannot have complete causal history until today's close.
+/// Warm current/next windows immediately, then retry only when useful.
+/// Production context uses the same slot on prior days, never future bars.
 fn should_attempt(
     previous: Option<&Prepared>,
     spec: &Spec,
@@ -122,7 +125,7 @@ fn should_attempt(
 
 /// Prefer the current session regardless of HashMap insertion/iteration order;
 /// otherwise keep the nearest upcoming receipt. Never replace today's context
-/// with tomorrow's still-incomplete crypto preparation.
+/// with another window's preparation.
 pub fn preferred<'a>(
     all: impl Iterator<Item = &'a Prepared>,
     id: i64,
@@ -132,14 +135,13 @@ pub fn preferred<'a>(
         .min_by_key(|p| (p.session.open > now, p.session.open))
 }
 
-/// Entry marks only; lunch and the last 30 minutes remain excluded by the
-/// registered rule. Missing data is retained, never replaced by a target.
+/// Count unavailable interpolation coefficients, including the first half hour
+/// and the endpoint of the last partial broker half hour. Each missing mark
+/// blocks its own interpolation range, without suppressing other ready marks.
 fn missing_marks(table: &SigmaTable, session: Session) -> usize {
-    (30..(session.close - session.open).num_minutes())
+    let end = ((session.close - session.open).num_minutes() + 29) / 30 * 30;
+    (30..=end)
         .step_by(30)
-        .filter(|m| {
-            band::entry_window(&session, session.open + chrono::Duration::minutes(*m)).is_ok()
-        })
         .filter(|m| {
             table
                 .marks
@@ -289,11 +291,19 @@ async fn run_attempt(
                 let cutoff = Utc::now() + offset;
                 let read = async {
                     match spec.id {
-                        Some(id) => {
-                            load_day(pool, connection, account, id, rule, session, cutoff, None)
-                                .await
-                                .ok()
-                        }
+                        Some(id) => load_day(
+                            pool,
+                            connection,
+                            account,
+                            id,
+                            &spec.symbol,
+                            rule,
+                            session,
+                            cutoff,
+                            None,
+                        )
+                        .await
+                        .ok(),
                         None => None,
                     }
                 };
@@ -325,7 +335,9 @@ async fn run_attempt(
                         .and_then(|d| d.macro_context.as_ref().ok().copied()),
                     table: day.map(|d| d.table),
                 };
-                let reason = if p.on_time() {
+                let reason = if p.ready() && p.missing_marks > 0 {
+                    "base preparation ready; unavailable later coefficients remain blocked"
+                } else if p.on_time() {
                     "pre-open inputs prepared by T-10"
                 } else if p.ready() {
                     "pre-open inputs prepared late"
@@ -408,7 +420,7 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
             planned.push((symbol, None));
             continue;
         }
-        let Some(rule) = sessions::rule_for(&symbol, class) else {
+        let Some(rule) = production_sessions::rule_for(&symbol, class) else {
             planned.push((symbol, None));
             continue;
         };
@@ -433,6 +445,7 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
             .filter(|p| p.completed_at <= now && p.source_cutoff_at <= p.completed_at);
         let deadline = session.open - chrono::Duration::minutes(LEAD_MINUTES);
         let state = match &p {
+            Some(p) if p.ready() && p.missing_marks > 0 => "prepared_partial_coefficients",
             Some(p) if p.on_time() => "prepared_on_time",
             Some(p) if p.ready() => "prepared_late",
             Some(_) => "incomplete",
@@ -448,6 +461,8 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
                 "state":state,"completed_at":p.as_ref().map(|p|p.completed_at),
                 "deadline_met":p.as_ref().map(Prepared::on_time),
                 "history_ready":p.as_ref().map(|p|p.table.is_some() && p.missing_marks==0),
+                "base_preparation_ready":p.as_ref().map(Prepared::ready),
+                "all_window_coefficients_ready":p.as_ref().map(|p|p.table.is_some() && p.missing_marks==0),
                 "macro_context_ready":p.as_ref().map(|p|p.macro_context.is_some()),
                 "macro_context_error":p.as_ref().and_then(|p|p.macro_context_error.as_deref()),
                 "spread_ready":p.as_ref().map(|p|p.spread_ready),"commission_ready":p.as_ref().map(|p|p.commission_ready),
@@ -456,7 +471,7 @@ pub async fn health(pool: &PgPool, account: i64, now: DateTime<Utc>) -> anyhow::
     }
     Ok(
         json!({"start_minutes_before_open":START_MINUTES,"deadline_minutes_before_open":LEAD_MINUTES,
-        "clock":"registered exchange timezone with DST; UTC session for crypto and FX/metals/energy",
+        "clock":"owner18392 broker-profile Asia open;07:00UTC London;09:30NewYork DST; six UTC4h crypto windows",
         "scope":"pre-open inputs; actual opening price, cost/R, Kelly, fresh equity/margin and ownership remain entry-time checks",
         "symbols":rows}),
     )
@@ -470,7 +485,7 @@ mod tests {
 
     fn session() -> Session {
         sessions::session_on(
-            &sessions::rule_for("BTCUSD", AssetClass::Crypto).unwrap(),
+            &production_sessions::rule_for("BTCUSD", AssetClass::Crypto).unwrap(),
             NaiveDate::from_ymd_opt(2026, 10, 28).unwrap(),
         )
         .unwrap()
@@ -589,7 +604,7 @@ mod tests {
             Arc,
         };
         const ACCOUNT: i64 = 49236051;
-        let now = session().open + chrono::Duration::hours(12);
+        let now = session().open + chrono::Duration::hours(2);
         let names = ["BTCUSD", "ETHUSD", "SOLUSD", "ADAUSD", "DOGEUSD"];
         let mut universe: Vec<Value> = names
             .iter()
@@ -611,8 +626,11 @@ mod tests {
         for name in names {
             for session in [
                 session(),
-                sessions::next_session(&sessions::rule_for(name, AssetClass::Crypto).unwrap(), now)
-                    .unwrap(),
+                sessions::next_session(
+                    &production_sessions::rule_for(name, AssetClass::Crypto).unwrap(),
+                    now,
+                )
+                .unwrap(),
             ] {
                 requests.push((name.to_string(), session));
             }
@@ -730,6 +748,29 @@ mod tests {
         measured.close().await;
     }
     #[test]
+    fn unavailable_dst_tail_does_not_invent_coefficients_or_block_earlier_marks() {
+        let mut p = complete();
+        p.table.as_mut().unwrap().marks.remove(&240);
+        p.missing_marks = missing_marks(p.table.as_ref().unwrap(), p.session);
+        assert_eq!(p.missing_marks, 1);
+        assert!(p.ready(), "first-half-hour inputs remain usable");
+        assert!(production_sessions::band_at(
+            p.table.as_ref().unwrap(),
+            &p.session,
+            100.,
+            p.session.open + chrono::Duration::minutes(15)
+        )
+        .is_ok());
+        assert!(production_sessions::band_at(
+            p.table.as_ref().unwrap(),
+            &p.session,
+            100.,
+            p.session.open + chrono::Duration::minutes(225)
+        )
+        .is_err());
+    }
+
+    #[test]
     fn completion_after_deadline_is_late_even_when_the_read_started_early() {
         let mut p = complete();
         assert!(p.on_time());
@@ -746,7 +787,7 @@ mod tests {
         p.table.as_mut().unwrap().marks.remove(&30);
         assert_eq!(missing_marks(p.table.as_ref().unwrap(), p.session), 1);
         p.table.as_mut().unwrap().marks.clear();
-        assert_eq!(missing_marks(p.table.as_ref().unwrap(), p.session), 46);
+        assert_eq!(missing_marks(p.table.as_ref().unwrap(), p.session), 8);
     }
     #[test]
     fn deadlines_follow_registered_exchange_dst_and_crypto_utc_rollover() {

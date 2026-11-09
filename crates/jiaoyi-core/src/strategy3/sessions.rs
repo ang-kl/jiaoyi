@@ -25,6 +25,8 @@ use crate::universe::AssetClass;
 /// How a symbol's sessions are laid out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRule {
+    /// Owner revision 18392 only. Legacy/research `rule_for` never returns it.
+    Production(super::production_sessions::Market),
     /// An exchange cash session in its own time zone, weekdays only.
     Exchange {
         exchange: &'static str,
@@ -48,6 +50,7 @@ impl SessionRule {
     /// The rule's name on routes and records.
     pub fn describe(&self) -> String {
         match self {
+            SessionRule::Production(market) => market.describe().into(),
             SessionRule::Exchange {
                 exchange,
                 tz,
@@ -143,6 +146,9 @@ fn local(tz: Tz, date: NaiveDate, time: NaiveTime) -> Option<DateTime<Utc>> {
 /// The session of `rule` on the trading date `date`, or `None` (a weekend).
 pub fn session_on(rule: &SessionRule, date: NaiveDate) -> Option<Session> {
     match *rule {
+        SessionRule::Production(market) => super::production_sessions::windows_on(market, date)
+            .into_iter()
+            .next(),
         SessionRule::Exchange {
             tz,
             open,
@@ -183,6 +189,9 @@ pub fn session_on(rule: &SessionRule, date: NaiveDate) -> Option<Session> {
 
 /// The session that is open at `at` (open ≤ at < close; lunch included), if any.
 pub fn session_at(rule: &SessionRule, at: DateTime<Utc>) -> Option<Session> {
+    if let SessionRule::Production(market) = rule {
+        return super::production_sessions::session_at(*market, at);
+    }
     // A session's local date is within a day of the UTC date (Sydney is
     // ahead, New York behind).
     let d = at.date_naive();
@@ -194,6 +203,9 @@ pub fn session_at(rule: &SessionRule, at: DateTime<Utc>) -> Option<Session> {
 
 /// The first session that opens after `at`.
 pub fn next_session(rule: &SessionRule, at: DateTime<Utc>) -> Option<Session> {
+    if let SessionRule::Production(market) = rule {
+        return super::production_sessions::next_session(*market, at);
+    }
     let d = at.date_naive() - Duration::days(1);
     (0..10)
         .filter_map(|i| session_on(rule, d + Duration::days(i)))
@@ -202,6 +214,9 @@ pub fn next_session(rule: &SessionRule, at: DateTime<Utc>) -> Option<Session> {
 
 /// The `n` sessions that closed at or before `before`, newest first.
 pub fn sessions_before(rule: &SessionRule, before: DateTime<Utc>, n: usize) -> Vec<Session> {
+    if let SessionRule::Production(market) = rule {
+        return super::production_sessions::same_slot_before(*market, before, n);
+    }
     let mut out = Vec::new();
     let mut d = before.date_naive() + Duration::days(1);
     // At most n weekdays plus their weekends, and a margin.

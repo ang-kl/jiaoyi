@@ -6,6 +6,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::{PgPool, Row};
 
+mod prepared_entry;
+pub use prepared_entry::prepared_intent_and_order;
+
 /// An order as decided, written with its intent before the frame.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct OrderRow {
@@ -282,6 +285,59 @@ pub async fn cost_skipped_in_session(
     .bind(prereg_hash)
     .fetch_one(pool)
     .await
+}
+
+/// Production revision 18392 scopes admission to the exact UTC window, not
+/// the calendar date shared by six crypto windows. Historical queries above
+/// remain unchanged for old registrations.
+pub async fn opens_in_window(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+    window_open: DateTime<Utc>,
+    prereg_hash: &str,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM strategy3_orders o
+         WHERE account_id=$1 AND symbol_id=$2 AND detail->'session'->>'open'=$3
+           AND prereg_hash=$4 AND kind='open'
+           AND NOT EXISTS (SELECT 1 FROM trading_events e WHERE e.account_id=o.account_id
+             AND e.entry_key=o.entry_key AND e.kind='REFUSED_BEFORE_SEND'
+             AND NOT EXISTS (SELECT 1 FROM trading_events other WHERE other.account_id=o.account_id
+                 AND other.entry_key=o.entry_key AND other.kind <> 'REFUSED_BEFORE_SEND'))",
+    )
+    .bind(account_id)
+    .bind(symbol_id)
+    .bind(window_open.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+    .bind(prereg_hash)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn attempts_in_window(
+    pool: &PgPool,
+    account_id: i64,
+    symbol_id: i64,
+    window_open: DateTime<Utc>,
+    prereg_hash: &str,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT count(*) FROM strategy3_orders WHERE account_id=$1 AND symbol_id=$2 AND detail->'session'->>'open'=$3 AND prereg_hash=$4 AND kind='open'")
+        .bind(account_id).bind(symbol_id)
+        .bind(window_open.to_rfc3339_opts(chrono::SecondsFormat::Secs,true))
+        .bind(prereg_hash).fetch_one(pool).await
+}
+
+pub async fn cost_skipped_in_window(
+    pool: &PgPool,
+    account_id: i64,
+    symbol: &str,
+    window_open: DateTime<Utc>,
+    prereg_hash: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_skip' AND detail->'session'->>'open'=$3 AND detail->>'prereg_hash'=$4 AND detail->>'label'='jiaoyi-s3' AND detail->>'skip_code'='cost_ge_r')")
+        .bind(account_id).bind(symbol)
+        .bind(window_open.to_rfc3339_opts(chrono::SecondsFormat::Secs,true))
+        .bind(prereg_hash).fetch_one(pool).await
 }
 
 /// How many recorded quotes the median spread reads, at most.

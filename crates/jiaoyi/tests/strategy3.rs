@@ -49,8 +49,16 @@ fn permitted() -> PermittedAccount {
     allowlist().permit(DEMO).unwrap()
 }
 
-/// Today's BTCUSD session (the UTC day).
+/// Today's first production BTCUSD four-hour window.
 fn today() -> Session {
+    jiaoyi_core::strategy3::production_sessions::windows_on(
+        jiaoyi_core::strategy3::production_sessions::Market::Crypto,
+        Utc::now().date_naive(),
+    )[0]
+}
+
+/// Recorded pre-18392 positions retain their original full-day exit calendar.
+fn legacy_today() -> Session {
     session_on(
         &rule_for("BTCUSD", AssetClass::Crypto).unwrap(),
         Utc::now().date_naive(),
@@ -410,10 +418,12 @@ impl WireTrader<'_, '_> {
     ) -> anyhow::Result<()> {
         use jiaoyi_core::strategy3::{band, cost_reserve, targets::Dir};
         use jiaoyi_ctrader::trading::{self as gate, Command, Policy, Side};
-        self.prepare(symbol, today(), now).await?;
+        let legacy = legacy_today();
+        self.syms.get_mut(&symbol).unwrap().rule = rule_for("BTCUSD", AssetClass::Crypto);
+        self.prepare(symbol, legacy, now).await?;
         let sym = self.syms[&symbol].clone();
         let day = sym.day.as_ref().unwrap().as_ref().unwrap();
-        let band = band::band_at(&day.table, &today(), open, now).unwrap();
+        let band = band::band_at(&day.table, &legacy, open, now).unwrap();
         let long = (bid.unwrap() + ask.unwrap()) / 2.0 > open;
         let side = if long { Side::Buy } else { Side::Sell };
         let price = if long { ask.unwrap() } else { bid.unwrap() };
@@ -454,7 +464,7 @@ impl WireTrader<'_, '_> {
                 bid,
                 ask,
                 volume: Some(sized.volume),
-                detail: json!({"entry":entry,"order":order,"volume_limits":limits,"session":today(),"session_date":today().date,"historical_fixture":true}),
+                detail: json!({"entry":entry,"order":order,"volume_limits":limits,"session":legacy,"session_date":legacy.date,"historical_fixture":true}),
             },
             recorded_at: Mutex::new(None),
         };
@@ -1329,7 +1339,7 @@ async fn exit_timer_rejects_stale_or_future_quotes_and_does_not_repeat_tp1(pool:
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: PgPool) {
+async fn inside_quote_keeps_slot_available_and_qualified_arm_restores_after_restart(pool: PgPool) {
     loaded(&pool).await;
     with_trader!(
         &pool,
@@ -1339,6 +1349,10 @@ async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: 
             t.on_quote(BTC, Some(60000.0), Some(60005.0), at(60))
                 .await
                 .unwrap();
+            assert!(
+                t.syms[&BTC].pullback.is_none(),
+                "inside quote does not arm or consume the slot"
+            );
             t.on_quote(
                 BTC,
                 Some(60700.0),
@@ -1349,8 +1363,11 @@ async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: 
             .unwrap();
             assert!(
                 orders(&log).is_empty(),
-                "the inside decision must consume this mark"
+                "a qualifying impulse arms but does not enter at its peak"
             );
+            let armed = t.syms[&BTC]
+                .pullback
+                .expect("later qualifying impulse uses the same slot");
             let restarted =
                 strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
                     .await
@@ -1370,7 +1387,43 @@ async fn review_an_inside_mark_is_consumed_and_not_replayed_after_restart(pool: 
                 .unwrap();
             assert!(
                 orders(&log).is_empty(),
-                "restart must not reconsider the consumed mark"
+                "restart preserves the same arm and still waits for its pullback"
+            );
+            let restored = restarted.syms[&BTC].pullback.unwrap();
+            assert_eq!(
+                (restored.session, restored.armed_at, restored.long),
+                (armed.session, armed.armed_at, armed.long)
+            );
+            assert_eq!(
+                (
+                    restored.origin,
+                    restored.extreme,
+                    restored.level,
+                    restored.impulse_range
+                ),
+                (
+                    armed.origin,
+                    armed.extreme,
+                    armed.level,
+                    armed.impulse_range
+                )
+            );
+            for (observed, expected) in [
+                (restored.impulse_bps, armed.impulse_bps),
+                (restored.macro_context.drift_5, armed.macro_context.drift_5),
+                (
+                    restored.macro_context.drift_20,
+                    armed.macro_context.drift_20,
+                ),
+            ] {
+                assert!(
+                    (observed - expected).abs() <= 1e-12 * expected.abs().max(1.0),
+                    "JSON/Postgres float roundtrip may move only rounding residue"
+                );
+            }
+            assert_eq!(
+                restored.macro_context.latest_bar_end,
+                armed.macro_context.latest_bar_end
             );
         }
     );
@@ -1417,7 +1470,7 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 .await
                 .unwrap();
             assert!(orders(&log).is_empty());
-            assert_eq!(t.syms[&BTC].cost_skip_session, Some(today().date));
+            assert_eq!(t.syms[&BTC].cost_skip_session, Some(today().open));
             assert!(matches!(&t.syms[&BTC].day, Some(Ok(_))));
             assert_blocker(&t.syms[&BTC], at(30));
             let detail: serde_json::Value = sqlx::query_scalar(
@@ -1447,12 +1500,19 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 orders(&log).is_empty(),
                 "a tighter quote cannot reopen the session"
             );
-            assert_eq!(restarted.syms[&BTC].cost_skip_session, Some(today().date));
+            assert_eq!(restarted.syms[&BTC].cost_skip_session, Some(today().open));
             assert!(restarted.syms[&BTC].day.is_none());
             let x = assert_blocker(&restarted.syms[&BTC], at(60));
             let live = restarted.live.lock().unwrap().clone();
             let h = strategy3::health(&pool, &live).await.unwrap();
-            assert_eq!(h[0]["trigger_distance"]["BTCUSD"], x);
+            let mut projected = h[0]["trigger_distance"]["BTCUSD"].clone();
+            let preparation = projected
+                .as_object_mut()
+                .unwrap()
+                .remove("entry_preparation")
+                .unwrap();
+            assert_eq!(preparation["prepared_now"], false);
+            assert_eq!(projected, x);
 
             // The durable blocker does not invent quote data or financial readiness.
             let mut without_quotes = restarted.syms[&BTC].clone();
@@ -1472,12 +1532,7 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 strategy3::trigger_distance(&restarted.syms[&BTC], at(60) + Duration::days(1));
             assert_eq!(next["reason"], "today's session is not prepared yet");
             assert!(next["reason_code"].is_null());
-            let outside = strategy3::trigger_distance(&restarted.syms[&BTC], at(29));
-            assert!(outside["reason"]
-                .as_str()
-                .unwrap()
-                .contains("first 30 minutes"));
-            assert!(outside["reason_code"].is_null());
+            assert_blocker(&restarted.syms[&BTC], at(29));
             let mut other = restarted.syms[&BTC].clone();
             other.name = "ETHUSD".into();
             other.cost_skip_session = None;
@@ -1485,12 +1540,15 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
             assert_eq!(unprepared["reason"], "today's session is not prepared yet");
             assert!(unprepared["reason_code"].is_null());
             let marks: i64 = sqlx::query_scalar(
-                "SELECT count(*) FROM trading_decisions WHERE kind='s3_mark_decision'",
+                "SELECT count(*) FROM trading_decisions WHERE kind='s3_skip' AND detail->>'skip_code'='cost_ge_r'",
             )
             .fetch_one(&pool)
             .await
             .unwrap();
-            assert_eq!(marks, 1, "the later mark must not be reconsidered");
+            assert_eq!(
+                marks, 1,
+                "the durable veto is written once; later quotes do not re-evaluate it"
+            );
         }
     );
     assert!(pause_writes(&pool).await.is_empty());
@@ -1662,7 +1720,7 @@ async fn durable_cost_veto_keeps_one_entry_per_session_after_restart(pool: PgPoo
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1);
-        assert_eq!(restarted.syms[&BTC].entered_session, Some(today().date));
+        assert_eq!(restarted.syms[&BTC].entered_session, Some(today().open));
         assert_eq!(
             store::strategy3::opens_in_session(&pool, DEMO, BTC, today().date)
                 .await
@@ -1867,7 +1925,7 @@ async fn a_short_impulse_waits_for_the_fresh_midpoint_retest(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn no_entry_before_30_minutes_or_in_the_last_30(pool: PgPool) {
+async fn production_crypto_first_and_last_half_hour_still_require_a_fresh_retest(pool: PgPool) {
     loaded(&pool).await;
     with_trader!(
         &pool,
@@ -1877,9 +1935,15 @@ async fn no_entry_before_30_minutes_or_in_the_last_30(pool: PgPool) {
             t.on_quote(BTC, Some(70_000.0), Some(70_005.0), at(29))
                 .await
                 .unwrap();
-            t.on_quote(BTC, Some(70_000.0), Some(70_005.0), at(24 * 60 - 30))
+            let armed = t.syms[&BTC].pullback.expect("first half-hour can arm");
+            t.on_quote(BTC, Some(70_000.0), Some(70_005.0), at(239))
                 .await
                 .unwrap();
+            assert_eq!(
+                t.syms[&BTC].pullback,
+                Some(armed),
+                "last half-hour keeps the valid arm"
+            );
             assert!(orders(&log).is_empty());
         }
     );
@@ -1957,8 +2021,8 @@ async fn insufficient_complete_macro_sessions_refuse_an_entry(pool: PgPool) {
     });
     let d = decisions(&pool).await;
     assert!(
-        d.iter()
-            .any(|(k, r)| k == "s3_pullback_state" && r == "macro_preparation_unavailable"),
+        d.iter().any(|(k, r)| k == "s3_pullback_assessment"
+            && r.starts_with("macro_preparation_unavailable")),
         "{d:?}"
     );
 }
@@ -2750,7 +2814,7 @@ async fn a_stopped_strategy_3_loop_reads_stalled_after_twice_its_reconcile_inter
     // At the session's open: inside the band, no entry.
     let f = FakeBroker {
         quote_sequence: vec![(
-            0,
+            500,
             BTC,
             (
                 Some((OPEN * 100_000.0) as u64),
@@ -2760,7 +2824,9 @@ async fn a_stopped_strategy_3_loop_reads_stalled_after_twice_its_reconcile_inter
         ..fake((60_455.0, 60_462.0))
     };
     let live = trading::LivenessMap::default();
-    run_s3(&pool, &f, 2, &live).await;
+    // Allow bounded cold M30 preparation and the background account reads to
+    // complete before checking actor processing (the observer alone is not enough).
+    run_s3(&pool, &f, 8, &live).await;
     let l = live.lock().unwrap().get(&DEMO).cloned().expect("a beat");
     assert!(l.last_quote_at.is_some(), "{l:?}");
     let loops = live.lock().unwrap().clone();
@@ -3004,6 +3070,13 @@ fn second_prepared_crypto(t: &mut strategy3::Trader<'_, '_>) -> i64 {
     let mut other = t.syms[&BTC].clone();
     other.id = id;
     other.name = "ETHUSD".into();
+    other.rule =
+        jiaoyi_core::strategy3::production_sessions::rule_for("ETHUSD", AssetClass::Crypto);
+    if let Some(Ok(day)) = other.day.as_mut() {
+        // This synthetic second-symbol fixture shares the first-slot statistics
+        // but must not inherit a historical position's 24-hour calendar.
+        day.session = today();
+    }
     other.last_try = None;
     other.last_decision_mark = None;
     t.syms.insert(id, other);
@@ -3395,11 +3468,14 @@ async fn the_distance_to_the_trigger_is_shown_inside_outside_and_out_of_the_wind
                 t.syms[&BTC].pullback.is_none(),
                 "origin crossing invalidates the arm"
             );
-            for (minute, reason) in [(29, "first 30 minutes"), (1410, "last 30 minutes")] {
-                let x = strategy3::trigger_distance(&t.syms[&BTC], at(minute));
-                assert!(x["distance_half_widths"].is_null());
-                assert!(x["reason"].as_str().unwrap().contains(reason));
-            }
+            let first_half_hour = strategy3::trigger_distance(&t.syms[&BTC], at(29));
+            assert!(
+                first_half_hour["distance_half_widths"].is_number(),
+                "production has no first-30m blackout"
+            );
+            let next_window = strategy3::trigger_distance(&t.syms[&BTC], at(240));
+            assert!(next_window["distance_half_widths"].is_null());
+            assert_eq!(next_window["reason"], "today's session is not prepared yet");
             let live = t.live.lock().unwrap().clone();
             let h = strategy3::health(&pool, &live).await.unwrap();
             assert_eq!(
@@ -4011,7 +4087,7 @@ async fn history_defers_incompletely_persisted_local_volume(pool: PgPool) {
 
 /// The owner's deadline is before the open, even with no incoming quotes.
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn crypto_preopen_reports_partial_inputs_then_finalises_causally(pool: PgPool) {
+async fn crypto_four_hour_preopen_is_ready_then_finalises_causally(pool: PgPool) {
     loaded(&pool).await;
     let mut f = fake((60_455.0, 60_462.0));
     let mut full = Vec::new();
@@ -4084,8 +4160,8 @@ async fn crypto_preopen_reports_partial_inputs_then_finalises_causally(pool: PgP
     .await
     .unwrap();
     let prepared: strategy3::preopen::Prepared = serde_json::from_value(row).unwrap();
-    assert!(!prepared.ready() && !prepared.on_time());
-    assert!(prepared.table.is_some() && prepared.macro_context.is_none());
+    assert!(prepared.ready() && prepared.on_time());
+    assert!(prepared.table.is_some() && prepared.macro_context.is_some());
     assert_eq!(prepared.session, today());
     assert!(prepared.completed_at < today().open - Duration::minutes(10));
     let health = strategy3::preopen::health(&pool, DEMO, before_open + Duration::seconds(10))
@@ -4095,7 +4171,7 @@ async fn crypto_preopen_reports_partial_inputs_then_finalises_causally(pool: PgP
         .as_array()
         .unwrap()
         .iter()
-        .any(|s| s["symbol"] == "BTCUSD" && s["state"] == "incomplete"));
+        .any(|s| s["symbol"] == "BTCUSD" && s["state"] == "prepared_on_time"));
     {
         let l = log.lock().unwrap();
         assert!(l.orders.is_empty() && l.amends.is_empty() && l.closes.is_empty());
@@ -4127,12 +4203,12 @@ async fn crypto_preopen_reports_partial_inputs_then_finalises_causally(pool: PgP
         let finalisation = &wire.trendbar_requests[requests..];
         assert_eq!(
             finalisation.len(),
-            7,
-            "one45-day interval collection, split into bounded requests"
+            1,
+            "only the current opening bar is needed; prior same-slot context is complete"
         );
         assert_eq!(
             finalisation.iter().map(|r| r.1).min(),
-            Some((today().open - Duration::days(45)).timestamp_millis())
+            Some(today().open.timestamp_millis())
         );
         assert!(finalisation
             .iter()

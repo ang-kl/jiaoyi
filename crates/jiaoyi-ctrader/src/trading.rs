@@ -737,6 +737,286 @@ fn frame(
     }
 }
 
+/// A fresh, command-bound background admission. It grants no send authority by
+/// itself: the final account lock, epoch, broker revision and quote guard remain.
+#[derive(Debug, Clone)]
+pub struct PreparedEntry {
+    command: Command,
+    policy: Policy,
+    account_id: i64,
+    namespace: String,
+    epoch: u64,
+    generation: u64,
+    revision: u64,
+    captured_at: tokio::time::Instant,
+    pub receipt: crate::margin::Receipt,
+    pub calendar: crate::market_hours::ContractCalendar,
+}
+
+pub const PREPARED_ENTRY_MAX_AGE: Duration = Duration::from_secs(5);
+static ENTRY_EPOCHS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<(String, i64), u64>>,
+> = std::sync::OnceLock::new();
+fn entry_epoch(namespace: &str, account: i64, advance: bool) -> u64 {
+    let mut all = ENTRY_EPOCHS.get_or_init(Default::default).lock().unwrap();
+    let value = all.entry((namespace.to_owned(), account)).or_default();
+    if advance {
+        *value = value.wrapping_add(1);
+    }
+    *value
+}
+impl PreparedEntry {
+    /// Include earlier equity/settings/quote reads in the same maximum age.
+    /// This can only shorten the receipt's authority, never extend it.
+    pub fn restrict_source_start(&mut self, at: tokio::time::Instant) {
+        self.captured_at = self.captured_at.min(at);
+    }
+    pub fn expires(&self) -> tokio::time::Instant {
+        self.captured_at + PREPARED_ENTRY_MAX_AGE
+    }
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+    pub fn validate(
+        &self,
+        session: &AccountSession<'_>,
+        namespace: &str,
+        command: &Command,
+        policy: &Policy,
+    ) -> Result<(), Refused> {
+        if self.command != *command
+            || self.policy != *policy
+            || self.account_id != session.account().id()
+            || self.namespace != namespace
+        {
+            return refuse("prepared admission identity/command/policy changed");
+        }
+        if tokio::time::Instant::now() >= self.expires() {
+            return refuse("prepared admission expired; background refresh required");
+        }
+        if session.connection().entry_generation() != self.generation
+            || session.connection().entry_revision(self.account_id) != self.revision
+            || entry_epoch(namespace, self.account_id, false) != self.epoch
+        {
+            return refuse("prepared admission account changed; background refresh required");
+        }
+        Ok(())
+    }
+}
+
+async fn broker_entry_admission<L: Ledger>(
+    session: &AccountSession<'_>,
+    ledger: &L,
+    cmd: &Command,
+    persist_receipt: bool,
+) -> Result<
+    (
+        crate::margin::Receipt,
+        pb::ProtoOaTrader,
+        pb::ProtoOaReconcileRes,
+    ),
+    Refused,
+> {
+    let account_id = session.account().id();
+    let Command::Open {
+        symbol_id, label, ..
+    } = cmd
+    else {
+        return refuse("prepared admission requires opening command");
+    };
+    let symbol_id = *symbol_id;
+    let (trader, rec) = tokio::join!(session.trader(), session.margin_book());
+    let trader = trader.map_err(|e| Refused {
+        reason: format!("the account type is unreadable ({e}): no entry"),
+    })?;
+    let rec = rec.map_err(|e| Refused {
+        reason: format!("the open positions are unreadable ({e}): no entry"),
+    })?;
+    let positions: Vec<(i64, Option<String>)> = rec
+        .position
+        .iter()
+        .map(|p| (p.trade_data.symbol_id, p.trade_data.label.clone()))
+        .collect();
+    entry_allowed(trader.account_type, &positions, symbol_id, label)
+        .map_err(|reason| Refused { reason })?;
+    let margin = async {
+        if ledger.margin_has_unresolved_open(account_id).await? {
+            return Err("unresolved entry prevents a reliable margin reservation".into());
+        }
+        let floor = ledger.margin_floor_pct(account_id).await?;
+        crate::margin::check(session, &trader, &rec, cmd, floor).await
+    };
+    let result = tokio::time::timeout(Duration::from_secs(5), margin)
+        .await
+        .unwrap_or_else(|_| Err("margin read timed out; no entry".into()));
+    let receipt = result
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|e| crate::margin::Receipt::unavailable(e.clone()));
+    if persist_receipt {
+        ledger
+            .record_margin(account_id, symbol_id, &receipt)
+            .await
+            .map_err(|reason| Refused {
+                reason: format!("margin receipt could not be recorded: {reason}"),
+            })?;
+    }
+    let receipt = result.map_err(|reason| Refused {
+        reason: format!("margin buffer: {reason}"),
+    })?;
+    Ok((receipt, trader, rec))
+}
+
+/// Read-only work performed before a pullback touch, never an order or durable
+/// reservation. The complete account snapshot must remain current through send.
+pub async fn prepare_entry<L: Ledger>(
+    session: &AccountSession<'_>,
+    allowlist: &Allowlist,
+    ledger: &L,
+    policy: &Policy,
+    command: &Command,
+    live_minimum: bool,
+) -> Result<PreparedEntry, Refused> {
+    let captured_at = tokio::time::Instant::now();
+    let account_id = session.account().id();
+    let namespace = ledger.admission_namespace();
+    let generation = session.connection().entry_generation();
+    let revision = session.connection().entry_revision(account_id);
+    check(account_id, allowlist, ledger, policy, command).await?;
+    let epoch = entry_epoch(&namespace, account_id, false);
+    let Command::Open {
+        symbol_id, side, ..
+    } = command
+    else {
+        return refuse("prepared admission requires opening command");
+    };
+    let symbol_ids = [*symbol_id];
+    let (admission, symbols) = tokio::join!(
+        // Unused warm receipts stay in memory. The chosen S3 proof is stored
+        // atomically with its intent/order; do not write one row per refresh.
+        broker_entry_admission(session, ledger, command, false),
+        session.symbols_by_id(&symbol_ids)
+    );
+    let (mut receipt, _, book) = admission?;
+    let symbols = symbols.map_err(|e| Refused {
+        reason: format!("broker calendar unavailable: {e}"),
+    })?;
+    let mut matching = symbols.symbol.iter().filter(|s| s.symbol_id == *symbol_id);
+    let symbol = matching.next().ok_or_else(|| Refused {
+        reason: "broker calendar symbol missing".into(),
+    })?;
+    if matching.next().is_some() {
+        return refuse("broker calendar symbol ambiguous");
+    }
+    let calendar =
+        crate::market_hours::ContractCalendar::from_symbol(symbol).map_err(|e| Refused {
+            reason: format!("broker calendar invalid: {e:?}"),
+        })?;
+    calendar.validate(Utc::now(), *side).map_err(|e| Refused {
+        reason: format!("broker market closed: {e:?}"),
+    })?;
+    if let Some(proof) = receipt.fx_guard.as_mut() {
+        proof.candidate_max_risk = Some(policy.max_risk);
+    }
+    if live_minimum
+        && (book.position.iter().any(|p| {
+            p.trade_data
+                .label
+                .as_deref()
+                .is_some_and(|l| PROGRAM_LABELS.contains(&l))
+        }) || book.order.iter().any(|p| {
+            p.trade_data
+                .label
+                .as_deref()
+                .is_some_and(|l| PROGRAM_LABELS.contains(&l))
+        }))
+    {
+        return refuse(
+            "live: one minimum trade at a time, account-wide; existing program exposure",
+        );
+    }
+    let out = PreparedEntry {
+        command: command.clone(),
+        policy: policy.clone(),
+        account_id,
+        namespace,
+        generation,
+        revision,
+        epoch,
+        captured_at,
+        receipt,
+        calendar,
+    };
+    // A read-only refresh must never monopolise the actual dispatch lock.
+    // Concurrent sends invalidate the epoch; hold the lock only while checking
+    // that the collected snapshot still describes the current account.
+    let _lock = crate::margin::try_lock(out.namespace.clone(), account_id)
+        .map_err(|reason| Refused { reason })?;
+    out.validate(session, &out.namespace, command, policy)?;
+    Ok(out)
+}
+
+/// Consume a background admission; only the durable exactly-once intent remains
+/// on the hot path. Quote/cost/FX checks execute again in the actual socket writer.
+#[allow(clippy::too_many_arguments)]
+pub async fn send_prepared_entry<L: Ledger>(
+    session: &AccountSession<'_>,
+    allowlist: &Allowlist,
+    ledger: &L,
+    policy: &Policy,
+    cmd: Command,
+    entry_key: &str,
+    wait: Duration,
+    guard: &EntryGuard,
+    prepared: &PreparedEntry,
+) -> Result<Sent, SendError> {
+    match &guard.signal {
+        crate::entry_guard::Signal::PullbackBounded {
+            margin: Some(proof),
+            calendar,
+            ..
+        } if Some(proof) == prepared.receipt.fx_guard.as_ref()
+            && calendar == &prepared.calendar => {}
+        _ => {
+            return Err(Refused {
+                reason: "prepared dispatch requires its bound FX/risk/calendar proof".into(),
+            }
+            .into())
+        }
+    }
+    if !matches!(&cmd,Command::Open{symbol_id,side,..} if guard.account_id==session.account().id() && guard.symbol_id==*symbol_id && guard.side==*side)
+    {
+        return Err(Refused {
+            reason: "entry guard does not match prepared command".into(),
+        }
+        .into());
+    }
+    if guard.expires > prepared.expires()
+        || guard.account_revision != prepared.revision
+        || guard.connection_generation != prepared.generation
+    {
+        return Err(Refused {
+            reason: "guard does not preserve prepared admission expiry/identity".into(),
+        }
+        .into());
+    }
+    send_inner(
+        session,
+        allowlist,
+        ledger,
+        policy,
+        cmd,
+        entry_key,
+        wait,
+        Some(guard),
+        Some(prepared),
+    )
+    .await
+}
+
 /// Run the checks, persist the intent, write the frame and collect the
 /// answer. See the module notes for the order.
 pub async fn send<L: Ledger>(
@@ -749,7 +1029,7 @@ pub async fn send<L: Ledger>(
     wait: Duration,
 ) -> Result<Sent, SendError> {
     send_inner(
-        session, allowlist, ledger, policy, cmd, entry_key, wait, None,
+        session, allowlist, ledger, policy, cmd, entry_key, wait, None, None,
     )
     .await
 }
@@ -788,6 +1068,7 @@ pub async fn send_entry<L: Ledger>(
         entry_key,
         wait,
         Some(guard),
+        None,
     )
     .await
 }
@@ -802,6 +1083,7 @@ async fn send_inner<L: Ledger>(
     entry_key: &str,
     wait: Duration,
     guard: Option<&EntryGuard>,
+    prepared: Option<&PreparedEntry>,
 ) -> Result<Sent, SendError> {
     let account_id = session.account().id();
     let (risk, stop_price) = check(account_id, allowlist, ledger, policy, &cmd).await?;
@@ -815,47 +1097,15 @@ async fn send_inner<L: Ledger>(
     };
     let mut take_profit = None;
     match &cmd {
-        Command::Open {
-            symbol_id, label, ..
-        } => {
-            // Read fresh from the broker, every time: the account type and
-            // the open positions on this symbol.
-            let trader = session.trader().await.map_err(|e| Refused {
-                reason: format!("the account type is unreadable ({e}): no entry"),
-            })?;
-            let rec = session.margin_book().await.map_err(|e| Refused {
-                reason: format!("the open positions are unreadable ({e}): no entry"),
-            })?;
-            let positions: Vec<(i64, Option<String>)> = rec
-                .position
-                .iter()
-                .map(|p| (p.trade_data.symbol_id, p.trade_data.label.clone()))
-                .collect();
-            entry_allowed(trader.account_type, &positions, *symbol_id, label)
-                .map_err(|reason| Refused { reason })?;
-            let margin = async {
-                if ledger.margin_has_unresolved_open(account_id).await? {
-                    return Err("unresolved entry prevents a reliable margin reservation".into());
-                }
-                let floor = ledger.margin_floor_pct(account_id).await?;
-                crate::margin::check(session, &trader, &rec, &cmd, floor).await
-            };
-            let result = tokio::time::timeout(Duration::from_secs(5), margin)
-                .await
-                .unwrap_or_else(|_| Err("margin read timed out; no entry".into()));
-            let receipt = result
-                .as_ref()
-                .cloned()
-                .unwrap_or_else(|e| crate::margin::Receipt::unavailable(e.clone()));
-            ledger
-                .record_margin(account_id, *symbol_id, &receipt)
-                .await
-                .map_err(|reason| Refused {
-                    reason: format!("margin receipt could not be recorded: {reason}"),
-                })?;
-            result.map_err(|reason| Refused {
-                reason: format!("margin buffer: {reason}"),
-            })?;
+        Command::Open { .. } => {
+            if let Some(prepared) = prepared {
+                prepared.validate(session, &ledger.admission_namespace(), &cmd, policy)?;
+            } else {
+                broker_entry_admission(session, ledger, &cmd, true).await?;
+            }
+            // Every attempted send invalidates all older prepared snapshots,
+            // across S1/S3 connections, including uncertain socket outcomes.
+            entry_epoch(&ledger.admission_namespace(), account_id, true);
         }
         Command::AmendStop {
             position_id,

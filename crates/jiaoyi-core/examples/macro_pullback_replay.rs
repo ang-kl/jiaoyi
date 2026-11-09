@@ -116,10 +116,10 @@ fn run(r: Request) -> Result<Value, String> {
         cost,
     ) {
         Ok(armed) => Ok(
-            json!({"policy":mp::POLICY,"new_broker_requests":0,"receipt_provenance_verified":false,"validation_opened":false,"armed":armed,"result":mp::replay_armed(armed,r.digits,r.costs,&r.quotes)?}),
+            json!({"policy":mp::LEGACY_REPLAY_POLICY,"new_broker_requests":0,"receipt_provenance_verified":false,"validation_opened":false,"armed":armed,"result":mp::replay_armed(armed,r.digits,r.costs,&r.quotes)?}),
         ),
         Err(reason) => Ok(
-            json!({"policy":mp::POLICY,"new_broker_requests":0,"receipt_provenance_verified":false,"validation_opened":false,"status":reason,"financial_pass":false}),
+            json!({"policy":mp::LEGACY_REPLAY_POLICY,"new_broker_requests":0,"receipt_provenance_verified":false,"validation_opened":false,"status":reason,"financial_pass":false}),
         ),
     }
 }

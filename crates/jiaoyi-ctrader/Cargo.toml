@@ -10,6 +10,7 @@ publish.workspace = true
 jiaoyi-core.workspace = true
 bytes.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
