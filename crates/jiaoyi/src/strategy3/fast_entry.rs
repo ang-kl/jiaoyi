@@ -137,7 +137,15 @@ impl Trader<'_, '_> {
         };
         let mut requests = vec![];
         for sym in self.syms.values() {
-            if self.human_entry_refusal(sym.id).is_some() {
+            if self.human_entry_refusal(sym.id).is_some()
+                || self.pair_entry_refusal(sym.id).is_some()
+                || sym
+                    .rule
+                    .and_then(|rule| sessions::session_at(&rule, now))
+                    .is_none_or(|window| {
+                        prod::symbol_entry_window(&sym.name, &window, now).is_err()
+                    })
+            {
                 continue;
             }
             let Some(arm) = sym.pullback else { continue };
@@ -200,6 +208,9 @@ impl Trader<'_, '_> {
         let plan = self.fast_cache.plans.get(&id)?;
         if plan.request.arm.armed_at != arm.armed_at
             || plan.request.arm.session != arm.session
+            || !same_number(plan.request.arm.extreme, arm.extreme)
+            || !same_number(plan.request.arm.impulse_range, arm.impulse_range)
+            || !same_number(plan.request.arm.level, arm.level)
             || plan
                 .admission
                 .validate(
@@ -236,11 +247,25 @@ impl Trader<'_, '_> {
         let started = tokio::time::Instant::now();
         let name = plan.request.name.clone();
         let sym = self.syms[&id].clone();
-        let _admission = if plan.rules.live {
-            Some(crate::admission::lock(self.account_id()).await)
-        } else {
-            None
-        };
+        let _admission = crate::admission::lock(self.account_id()).await;
+        if self.pair_entry_refusal(id).is_some() {
+            self.skip(
+                id,
+                &name,
+                "pair_risk_reservation_active",
+                json!({"armed":arm}),
+                now,
+            )
+            .await;
+            return Ok(());
+        }
+        if sym
+            .rule
+            .and_then(|rule| sessions::session_at(&rule, now))
+            .is_none_or(|window| prod::symbol_entry_window(&name, &window, now).is_err())
+        {
+            return Ok(());
+        }
         let held = self.open_risk().map_err(anyhow::Error::msg)?;
         if let Err(reason) =
             within_budget(held, plan.sized.risk, plan.equity, plan.rules.open_risk_pct)
@@ -250,9 +275,8 @@ impl Trader<'_, '_> {
             return Ok(());
         }
         let (_, peer) = self.peer_evidence(&name, now);
-        let trigger_quote = jiaoyi_ctrader::entry_guard::Quote {
-            bid: sym.bid_at.map(|at| (bid, at)),
-            ask: sym.ask_at.map(|at| (ask, at)),
+        let Some(proof) = self.writer_turn_proof(arm, bid, ask, now) else {
+            return Ok(());
         };
         let guard = jiaoyi_ctrader::entry_guard::EntryGuard {
             connection_generation: plan.admission.generation(),
@@ -260,16 +284,16 @@ impl Trader<'_, '_> {
             account_id: self.account_id(),
             symbol_id: id,
             side: dir_side(plan.entry.side),
-            signal: jiaoyi_ctrader::entry_guard::Signal::PullbackBounded {
+            signal: jiaoyi_ctrader::entry_guard::Signal::PullbackConfirmed {
                 origin: arm.origin,
                 level: arm.level,
                 impulse_range: arm.impulse_range,
                 admitted_entry: plan.entry.entry_price,
                 price_digits: plan.request.limits.digits,
                 peer,
-                trigger_quote: trigger_quote.clone(),
+                proof,
                 margin: plan.admission.receipt.fx_guard.clone(),
-                calendar: plan.admission.calendar.clone(),
+                calendar: Some(plan.admission.calendar.clone()),
             },
             cost: Some(jiaoyi_ctrader::entry_guard::Cost {
                 prepared_spread: plan.request.spread,
@@ -590,6 +614,7 @@ mod tests {
             armed_at: open + chrono::Duration::minutes(5),
             session,
             macro_context: context,
+            confirmation: Default::default(),
         };
         let quote = json!({"source":"recorded_ticks_native_open_6s","bid":99.99,"ask":100.01,"mid":100.,"bid_at":open,"ask_at":open,"observed_at":open});
         let day = Day {

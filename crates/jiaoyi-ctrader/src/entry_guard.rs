@@ -47,6 +47,19 @@ pub enum Signal {
         margin: Option<crate::margin::CachedGuard>,
         calendar: crate::market_hours::ContractCalendar,
     },
+    /// Owner №18,407: causal zone touch followed by a confirmed turn.
+    /// Historical bounded-touch guards retain their original semantics.
+    PullbackConfirmed {
+        origin: f64,
+        level: f64,
+        impulse_range: f64,
+        admitted_entry: f64,
+        price_digits: i32,
+        peer: Option<(i64, f64)>,
+        proof: jiaoyi_core::strategy3::macro_pullback::TurnProof,
+        margin: Option<crate::margin::CachedGuard>,
+        calendar: Option<crate::market_hours::ContractCalendar>,
+    },
 }
 
 /// Prepared spread/commission and the registered slippage formula. A live
@@ -109,6 +122,7 @@ impl EntryGuard {
             "max_quote_age_ms": MAX_QUOTE_AGE.as_millis(),
             "broker_calendar_symbol_id": match &self.signal {
                 Signal::PullbackBounded { calendar, .. } => Some(calendar.symbol_id),
+                Signal::PullbackConfirmed { calendar, .. } => calendar.as_ref().map(|c|c.symbol_id),
                 _ => None,
             },
             "pullback_admitted_price": match &self.signal {
@@ -118,6 +132,10 @@ impl EntryGuard {
                     "origin":origin,"level":level,"impulse_range":impulse_range,
                     "bounce_fraction":jiaoyi_core::strategy3::macro_pullback::BOUNCE_FRACTION,
                     "trigger_bid":side(trigger_quote.bid),"trigger_ask":side(trigger_quote.ask)
+                })),
+                Signal::PullbackConfirmed { admitted_entry, price_digits, proof, .. } => Some(serde_json::json!({
+                    "price":admitted_entry,"digits":price_digits,"confirmed_turn":proof,
+                    "policy":"s3_macro_pullback_owner_18407_v1","peer_min_signed_bps":24.0
                 })),
                 _ => None,
             },
@@ -158,7 +176,21 @@ impl EntryGuard {
                 "account execution changed during admission",
             ));
         }
-        if let Signal::PullbackBounded { calendar, .. } = &self.signal {
+        let calendar = match &self.signal {
+            Signal::PullbackBounded { calendar, .. } => Some(calendar),
+            Signal::PullbackConfirmed {
+                calendar: Some(calendar),
+                ..
+            } => Some(calendar),
+            Signal::PullbackConfirmed { calendar: None, .. } => {
+                return Err(fail(
+                    "ENTRY_BROKER_CALENDAR_UNKNOWN",
+                    "confirmed entry requires broker calendar evidence",
+                ))
+            }
+            _ => None,
+        };
+        if let Some(calendar) = calendar {
             if calendar.symbol_id != self.symbol_id {
                 return Err(fail(
                     "ENTRY_BROKER_CALENDAR_MISMATCH",
@@ -232,6 +264,37 @@ impl EntryGuard {
                 ));
             }
         }
+        if let Signal::PullbackConfirmed {
+            origin,
+            level,
+            impulse_range,
+            proof,
+            ..
+        } = &self.signal
+        {
+            let range = (proof.extreme - proof.origin).abs();
+            let same = |a: f64, b: f64| {
+                a.is_finite()
+                    && b.is_finite()
+                    && (a - b).abs() <= 1e-10 * a.abs().max(b.abs()).max(1.0)
+            };
+            if proof.long != (self.side == Side::Buy)
+                || !same(*origin, proof.origin)
+                || !same(*level, proof.origin + 0.5 * (proof.extreme - proof.origin))
+                || !same(*impulse_range, range)
+                || proof.confirmed_at > now
+                || now
+                    .signed_duration_since(proof.confirmed_at)
+                    .num_milliseconds()
+                    > 5_000
+                || !jiaoyi_core::strategy3::macro_pullback::confirmed_retest(proof, bid, ask, now)
+            {
+                return Err(fail(
+                    "ENTRY_TURN_UNVERIFIED",
+                    "fresh causal touch-then-turn proof or final retracement zone is invalid",
+                ));
+            }
+        }
         let side = match &self.signal {
             Signal::Trend { level } if level.is_finite() && *level > 0.0 => match self.side {
                 Side::Buy => (ask >= *level).then_some(Side::Buy),
@@ -268,6 +331,10 @@ impl EntryGuard {
                 ask,
             )
             .then_some(self.side),
+            Signal::PullbackConfirmed { proof, .. } => {
+                jiaoyi_core::strategy3::macro_pullback::confirmed_retest(proof, bid, ask, now)
+                    .then_some(self.side)
+            }
         };
         if side != Some(self.side) {
             return Err(fail(
@@ -300,6 +367,11 @@ impl EntryGuard {
             admitted_entry,
             price_digits,
             ..
+        }
+        | Signal::PullbackConfirmed {
+            admitted_entry,
+            price_digits,
+            ..
         } = &self.signal
         {
             let executable = if self.side == Side::Buy { ask } else { bid };
@@ -329,7 +401,9 @@ impl EntryGuard {
             let cost = cost_reserve(
                 if matches!(
                     self.signal,
-                    Signal::Pullback { .. } | Signal::PullbackBounded { .. }
+                    Signal::Pullback { .. }
+                        | Signal::PullbackBounded { .. }
+                        | Signal::PullbackConfirmed { .. }
                 ) {
                     c.prepared_spread.max(ask - bid)
                 } else {
@@ -353,20 +427,42 @@ impl EntryGuard {
         Ok(())
     }
 
-    /// Fresh peer observations may veto; unavailable/stale peers remain explicitly
-    /// optional under the owner's production revision, never synthetic returns.
+    /// Legacy peers remain optional. The18407 policy requires a fresh peer
+    /// holding at least24 signed basis points from its recorded session origin.
     pub(crate) fn validate_peer(
         &self,
         peer: Option<&Quote>,
         now: DateTime<Utc>,
     ) -> Result<serde_json::Value, GuardRefusal> {
+        let mandatory = matches!(self.signal, Signal::PullbackConfirmed { .. });
+        let refusal = |code, reason, evidence| GuardRefusal {
+            code,
+            reason,
+            evidence,
+        };
         let peer_ref = match &self.signal {
-            Signal::Pullback { peer, .. } | Signal::PullbackBounded { peer, .. } => peer,
+            Signal::Pullback { peer, .. }
+            | Signal::PullbackBounded { peer, .. }
+            | Signal::PullbackConfirmed { peer, .. } => peer,
             _ => return Ok(serde_json::json!({"status":"not_available"})),
         };
         let Some((id, origin)) = peer_ref else {
+            if mandatory {
+                return Err(refusal(
+                    "ENTRY_PEER_HOLD_UNVERIFIED",
+                    "confirmed pullback requires a peer reference",
+                    serde_json::json!({"status":"not_available"}),
+                ));
+            }
             return Ok(serde_json::json!({"status":"not_available"}));
         };
+        if mandatory && *id == self.symbol_id {
+            return Err(refusal(
+                "ENTRY_PEER_HOLD_UNVERIFIED",
+                "peer cannot be the entry symbol",
+                serde_json::json!({"symbol_id":id}),
+            ));
+        }
         let fresh = |q: Option<(f64, DateTime<Utc>)>| {
             q.filter(|(p, t)| {
                 p.is_finite()
@@ -382,6 +478,13 @@ impl EntryGuard {
             peer.and_then(|q| fresh(q.bid)),
             peer.and_then(|q| fresh(q.ask)),
         ) else {
+            if mandatory {
+                return Err(refusal(
+                    "ENTRY_PEER_HOLD_UNVERIFIED",
+                    "confirmed pullback requires fresh two-sided peer quotes",
+                    serde_json::json!({"status":"unavailable_or_stale","symbol_id":id}),
+                ));
+            }
             return Ok(serde_json::json!({"status":"unavailable_or_stale","symbol_id":id}));
         };
         let sign = if self.side == Side::Buy { 1.0 } else { -1.0 };
@@ -397,7 +500,35 @@ impl EntryGuard {
                 evidence: detail,
             });
         }
+        let signed_bps = ((bid + (ask - bid) / 2.0) / origin - 1.0) * sign * 10_000.0;
+        if mandatory && (!signed_bps.is_finite() || signed_bps + 1e-8 < 24.0) {
+            return Err(refusal(
+                "ENTRY_PEER_HOLD_BELOW_24BPS",
+                "peer no longer holds 24 basis points in the impulse direction",
+                serde_json::json!({"peer":detail,"signed_bps":signed_bps,"minimum_bps":24.0}),
+            ));
+        }
         Ok(detail)
+    }
+
+    /// Applied under the account admission lock against the broker book that
+    /// produced this generation/revision/epoch-bound preparation snapshot.
+    pub(crate) fn validate_pair_occupancy(
+        &self,
+        occupied_symbols: &[i64],
+    ) -> Result<(), &'static str> {
+        if let Signal::PullbackConfirmed { peer, .. } = &self.signal {
+            let Some((peer_id, _)) = peer else {
+                return Err("pair_risk_reservation_unknown");
+            };
+            if *peer_id == self.symbol_id {
+                return Err("pair_risk_reservation_unknown");
+            }
+            if occupied_symbols.contains(peer_id) {
+                return Err("pair_risk_reservation_active");
+            }
+        }
+        Ok(())
     }
 }
 
@@ -798,6 +929,130 @@ mod tests {
         );
         g.cost.as_mut().unwrap().original_r = 1.0;
         assert!(g.validate(Some(&allowed), 0, now, Instant::now()).is_ok());
+    }
+
+    fn confirmed_guard(side: Side, now: DateTime<Utc>) -> EntryGuard {
+        let sign = if side == Side::Buy { 1.0 } else { -1.0 };
+        let mut g = guard();
+        g.side = side;
+        let confirmed_mid = 100.0 + sign * 5.3;
+        g.signal = Signal::PullbackConfirmed {
+            origin: 100.0,
+            level: 100.0 + sign * 5.0,
+            impulse_range: 10.0,
+            admitted_entry: 100.0 + sign * 6.01,
+            price_digits: 2,
+            peer: Some((22, 200.0)),
+            proof: jiaoyi_core::strategy3::macro_pullback::TurnProof {
+                origin: 100.0,
+                extreme: 100.0 + sign * 10.0,
+                long: side == Side::Buy,
+                touched_at: now - chrono::Duration::seconds(2),
+                turn_extreme: 100.0 + sign * 4.5,
+                turn_extreme_at: now - chrono::Duration::seconds(1),
+                confirmed_at: now,
+                confirmed_bid: confirmed_mid - 0.01,
+                confirmed_ask: confirmed_mid + 0.01,
+            },
+            margin: None,
+            calendar: Some(calendar()),
+        };
+        g
+    }
+
+    #[test]
+    fn confirmed_writer_allows_turn_below_half_retracement_but_rejects_deep_or_stale_proof() {
+        let now = Utc::now();
+        for side in [Side::Buy, Side::Sell] {
+            let sign = if side == Side::Buy { 1.0 } else { -1.0 };
+            let q = |fraction: f64| {
+                let mid = 100.0 + sign * 10.0 * (1.0 - fraction);
+                Quote {
+                    bid: Some((mid - 0.01, now)),
+                    ask: Some((mid + 0.01, now)),
+                }
+            };
+            let mut g = confirmed_guard(side, now);
+            assert!(g.validate(Some(&q(0.47)), 0, now, Instant::now()).is_ok());
+            for fraction in [0.619, 0.39, 0.55] {
+                assert_eq!(
+                    g.validate(Some(&q(fraction)), 0, now, Instant::now())
+                        .unwrap_err()
+                        .code,
+                    "ENTRY_TURN_UNVERIFIED"
+                );
+            }
+            assert_eq!(
+                g.validate(Some(&q(0.47)), 1, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_ACCOUNT_CHANGED"
+            );
+            if let Signal::PullbackConfirmed { proof, .. } = &mut g.signal {
+                proof.turn_extreme_at = proof.confirmed_at;
+            }
+            assert_eq!(
+                g.validate(Some(&q(0.47)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_TURN_UNVERIFIED"
+            );
+            g = confirmed_guard(side, now - chrono::Duration::milliseconds(5001));
+            assert_eq!(
+                g.validate(Some(&q(0.47)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_TURN_UNVERIFIED"
+            );
+            g = confirmed_guard(side, now);
+            if let Signal::PullbackConfirmed { impulse_range, .. } = &mut g.signal {
+                *impulse_range = 20.0;
+            }
+            assert_eq!(
+                g.validate(Some(&q(0.47)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_TURN_UNVERIFIED"
+            );
+        }
+    }
+
+    #[test]
+    fn confirmed_peer_requires_fresh_twenty_four_bp_hold_and_sibling_book_empty() {
+        let now = Utc::now();
+        for side in [Side::Buy, Side::Sell] {
+            let sign = if side == Side::Buy { 1.0 } else { -1.0 };
+            let g = confirmed_guard(side, now);
+            let peer = |bps: f64, at| {
+                let mid = 200.0 * (1.0 + sign * bps / 10000.0);
+                Quote {
+                    bid: Some((mid - 0.01, at)),
+                    ask: Some((mid + 0.01, at)),
+                }
+            };
+            assert!(g.validate_peer(Some(&peer(24.0, now)), now).is_ok());
+            assert_eq!(
+                g.validate_peer(Some(&peer(23.99, now)), now)
+                    .unwrap_err()
+                    .code,
+                "ENTRY_PEER_HOLD_BELOW_24BPS"
+            );
+            assert_eq!(
+                g.validate_peer(Some(&peer(24.0, now - chrono::Duration::seconds(7))), now)
+                    .unwrap_err()
+                    .code,
+                "ENTRY_PEER_HOLD_UNVERIFIED"
+            );
+            assert_eq!(
+                g.validate_peer(None, now).unwrap_err().code,
+                "ENTRY_PEER_HOLD_UNVERIFIED"
+            );
+            assert!(g.validate_pair_occupancy(&[999]).is_ok());
+            assert_eq!(
+                g.validate_pair_occupancy(&[22]),
+                Err("pair_risk_reservation_active")
+            );
+        }
     }
 
     #[test]

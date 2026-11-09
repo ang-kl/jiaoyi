@@ -1,0 +1,2839 @@
+{
+  "trace": "№18,407",
+  "policy": "s3_macro_pullback_owner_18407_v1",
+  "source_kind": "production recorded quotes; zero new broker collection requests",
+  "scope": "Conditional replay of the original 15 recorded arms; no new arms after disarm, no full-day or independent backtest claim.",
+  "cutoff_utc": "2026-11-09T09:30:00Z",
+  "new_broker_requests": 0,
+  "assumptions": [
+    "Original arm, causal macro context and peer opening reference are taken from actual audit receipts.",
+    "Running-extreme/touch-turn, deep invalidation, session eligibility and brackets use shared native production helpers.",
+    "All symbols of each account share one chronological quote timeline; cross-symbol same-time ties order by numeric symbol ID, never by outcome. One distinct-price BTC peer timestamp on 47790949 is replayed in both possible within-symbol orders; all full outputs must agree or the run refuses.",
+    "Pair occupancy disarms the sibling original arm; closure releases occupancy but this original-arm study does not generate another arm.",
+    "Prepared geometry is available from the immediately preceding fresh quote; extensions invalidate previous geometry; five-second preparation age is enforced. Actual background I/O readiness is not reconstructed.",
+    "Hypothetical entries/stops fill at observed executable bid/ask; targets fill at their limits; BE becomes effective on the next quote. No actual counterfactual broker fills or transport latency are claimed.",
+    "Net sensitivity subtracts recorded round-trip commission and 3.74 bp per-side slippage reserve from executable-quote cash P&L; spread is already in bid/ask and is not charged twice.",
+    "Sizing is recomputed at 0.6% using each original actual-world admission equity as a proxy, not a counterfactual equity trajectory. Broker volume limits are the captured per-account original limits.",
+    "S3 3% open-risk cap and pair exclusion are simulated for the supplied cohort; other historical account/manual books, margin admission and pending broker acknowledgements are not reconstructed.",
+    "No post-capture exit is invented. Open hypothetical trades are censored and total counterfactual net P&L is null until resolved.",
+    "This day's data motivated the repairs; improved retrospective results cannot qualify an independent trading edge."
+  ],
+  "request_sha256": [
+    {
+      "account": 46130058,
+      "pair_enforced": true,
+      "sha256": "61350b1b5a34b89a476f04d872943b0bb36f98e9f61261b960ed6fb0fdd5fdbf",
+      "unique_quotes": 205590,
+      "reverse_same_timestamp_order_checked_identical": true
+    },
+    {
+      "account": 46130058,
+      "pair_enforced": false,
+      "sha256": "ef0763133ac57a5b8dc39324928d0957e9ebd45e22fe81a257914772b1d6719b",
+      "unique_quotes": 205590,
+      "reverse_same_timestamp_order_checked_identical": true
+    },
+    {
+      "account": 47790949,
+      "pair_enforced": true,
+      "sha256": "aaf33e37ad371e6dc5a5b210deb9b2518b40f772472c4d8dc7627377d78c8d80",
+      "unique_quotes": 205609,
+      "reverse_same_timestamp_order_checked_identical": true
+    },
+    {
+      "account": 47790949,
+      "pair_enforced": false,
+      "sha256": "52a44e61c8662f3760e14516640d9ff9515aa00dbcc2fb1045b830be5a40d977",
+      "unique_quotes": 205609,
+      "reverse_same_timestamp_order_checked_identical": true
+    },
+    {
+      "account": 49236051,
+      "pair_enforced": true,
+      "sha256": "0158dff6b4d7cc3ce967ce5c55199dfd86339a9985d67050ce82e362aba75ef8",
+      "unique_quotes": 205536,
+      "reverse_same_timestamp_order_checked_identical": true
+    },
+    {
+      "account": 49236051,
+      "pair_enforced": false,
+      "sha256": "505f2afd0942c5d26d5ae9f13e407028026865e4b2b44f7f85bb8db0e1f3b04a",
+      "unique_quotes": 205536,
+      "reverse_same_timestamp_order_checked_identical": true
+    }
+  ],
+  "source_receipts": [
+    {
+      "rows": 54261,
+      "sha256": "5c21eb0a575ef8878760c40317914a1886c2cc258c3edeba2a7ceca889454db2",
+      "account_id": 46130058,
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "window_start": "2026-11-09T04:00:00Z",
+      "through_exclusive": "2026-11-09T08:00:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 282,
+      "sha256": "300847cff83a314acd1352d74db4f83433cf9c6159ae17991fa6a8af8ea9f80f",
+      "account_id": 46130058,
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "window_start": "2026-11-09T08:00:00Z",
+      "through_exclusive": "2026-11-09T08:01:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 66941,
+      "sha256": "fe90b19e0d49a7dd97dca8e0b2d3d07b1ca733e209bad6c25c9a34f7315e189e",
+      "account_id": 46130058,
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "window_start": "2026-11-09T04:00:00Z",
+      "through_exclusive": "2026-11-09T08:00:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 310,
+      "sha256": "23fcfa4f8b59f340316aa641ea406603b95b1a5dc118f0f5c822d4c6f83572e5",
+      "account_id": 46130058,
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "window_start": "2026-11-09T08:00:00Z",
+      "through_exclusive": "2026-11-09T08:01:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 12798,
+      "sha256": "9a03ab2ff960f8cb1fb1aee32028fb16aa687fa6e502780912db7ab3aa3b754e",
+      "account_id": 46130058,
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 10615,
+      "sha256": "8c4d555a6da872ed2bf001c4bafe9badbb0df8d0fc4442a9b75fc99ad3bb673b",
+      "account_id": 46130058,
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 23127,
+      "sha256": "67bb2aaa2083ab76de65707c38b704c43807b92d714e9605a9da64693ca29420",
+      "account_id": 46130058,
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 37316,
+      "sha256": "8ee67bd5261e3aba6862d303a153db694d8f0d9f072753d703338c881daaa13b",
+      "account_id": 46130058,
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 54272,
+      "sha256": "c06b3bb56380d74a155a9320e955569399ce629ebfb61ba19b227837597f84b9",
+      "account_id": 47790949,
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "window_start": "2026-11-09T04:00:00Z",
+      "through_exclusive": "2026-11-09T08:00:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 282,
+      "sha256": "e2f881e898968dfb89244ec8fdbf4c92493dc6717340e97fefd69e4b38521339",
+      "account_id": 47790949,
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "window_start": "2026-11-09T08:00:00Z",
+      "through_exclusive": "2026-11-09T08:01:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 66957,
+      "sha256": "ed27dfd91e0565b8994698653eb884d6748424c6d8cdada92fd2d3913b87526e",
+      "account_id": 47790949,
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "window_start": "2026-11-09T04:00:00Z",
+      "through_exclusive": "2026-11-09T08:00:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 311,
+      "sha256": "a072cbc22e319e8de70bf79deb99b24baa681409dd0deab657e1b16a5f64516d",
+      "account_id": 47790949,
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "window_start": "2026-11-09T08:00:00Z",
+      "through_exclusive": "2026-11-09T08:01:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 12792,
+      "sha256": "5415db0f3901d61ac56033251a5c2423484df4cc7855f95939e028e6d99a51aa",
+      "account_id": 47790949,
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 10610,
+      "sha256": "c2ecd0501d369eabf6533704d896b5f7cea51050a632752239f0794641d87864",
+      "account_id": 47790949,
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 23127,
+      "sha256": "60268c9009e8393ab3cbf4af6c135522cacc9955f4999ccb4c43136898f05b30",
+      "account_id": 47790949,
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 37316,
+      "sha256": "554d8ccd4340bcf1a0a9e110d2bc214c33466fad6b4b18a6ba65afda7e6411ed",
+      "account_id": 47790949,
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 54241,
+      "sha256": "53f25105681a4999099a7b884b3f1d63a99703d529bd4a9c8e96df3a25e15127",
+      "account_id": 49236051,
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "window_start": "2026-11-09T04:00:00Z",
+      "through_exclusive": "2026-11-09T08:00:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 282,
+      "sha256": "2c014a4aca19e84ad5c4190bee00e62f3f0f1ecf397ce8f77bbb4a2fcd43e543",
+      "account_id": 49236051,
+      "symbol": "ETHUSD",
+      "symbol_id": 10029,
+      "window_start": "2026-11-09T08:00:00Z",
+      "through_exclusive": "2026-11-09T08:01:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 66914,
+      "sha256": "9eee4b1cc2af4c0b9be28ad16bca1ef31b1987be1692a5f4fc43371a5290fca4",
+      "account_id": 49236051,
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "window_start": "2026-11-09T04:00:00Z",
+      "through_exclusive": "2026-11-09T08:00:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 310,
+      "sha256": "ea6fa717fe980f995ff9dcf22af6091ba97eb740469236a219e9930ed2bc9ac2",
+      "account_id": 49236051,
+      "symbol": "BTCUSD",
+      "symbol_id": 10028,
+      "window_start": "2026-11-09T08:00:00Z",
+      "through_exclusive": "2026-11-09T08:01:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 12792,
+      "sha256": "ad41fc24a1b97944a10787d198b11c19be4182070bbdc458c4176fe8fa3f3ee3",
+      "account_id": 49236051,
+      "symbol": "SpotCrude",
+      "symbol_id": 10054,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 10610,
+      "sha256": "9f3bf0c5e7179a3124b0828230c4370d712aa012b3a2256f692fed46d3caf840",
+      "account_id": 49236051,
+      "symbol": "SpotBrent",
+      "symbol_id": 10053,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 23127,
+      "sha256": "d516dac491afd518e2263c388fbf3f762ba196991afd47d5e6d4e4be7c75f15f",
+      "account_id": 49236051,
+      "symbol": "US500",
+      "symbol_id": 10013,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    },
+    {
+      "rows": 37317,
+      "sha256": "4e38f3e381c667d6c61b5f91b3355c4b67afab3d128e91269a7b38147b69329c",
+      "account_id": 49236051,
+      "symbol": "NAS100",
+      "symbol_id": 10014,
+      "window_start": "2026-11-09T07:00:00Z",
+      "through_exclusive": "2026-11-09T09:30:00Z",
+      "source": "production_recorded_ticks_read_only_sql",
+      "new_broker_requests": 0
+    }
+  ],
+  "implementation_sha256": {
+    "ops/research/forensic18407_counterfactual.py": "88f15393ff207b72dceeaf08d6445c3cfbba3388d5e0f347d5bd6437e71d4ecf",
+    "crates/jiaoyi-core/examples/forensic18407_replay.rs": "9985444c672c57799e5f0356957a6df93f05e811b367bb9ec5f0d929e8c28956",
+    "crates/jiaoyi-core/src/strategy3/macro_pullback.rs": "9ab6cf586976363c3ffaa76a3235e3c08472096de1bcd2ab1caef839bc8433e6",
+    "crates/jiaoyi-core/src/strategy3/production_sessions.rs": "6c35cc3c25599242cec2eef73438eb36f3014ac113fad09b027c2e2e079e4986",
+    "crates/jiaoyi-core/src/strategy3/targets.rs": "e373c96e321c9349522408249c4a545572756eb8431c10185e4948208d680c44",
+    "crates/jiaoyi-core/src/strategy3/mod.rs": "8cf08123dd4b41b9fd11d62cb986fdf18aeb9121e18a9a1b44d7778b7f06c465",
+    "Cargo.lock": "025a81017952f0bda10f7989938e758685e738b2a1e367b13df4944dfbfb98bf"
+  },
+  "audit_source_sha256": {
+    "evidence-refresh.json": "c978f3b6721b2908144544de8102bd21fc93f6365c790249d9d5efd88f0b4f7d",
+    "trade-ledger.json": "2c6a656ec27cf4f911932b0755050c05ce37a74c3609898452b0d97300a1b79a"
+  },
+  "observed_actual_positions": [
+    {
+      "account_id": 46130058,
+      "symbol": "ETHUSD",
+      "position_id": 260303252,
+      "observed_volume_cents": 1260,
+      "actual_entry_fill": 2132.21,
+      "actual_exit_fill": 2116.3,
+      "actual_net_pnl": 200.47
+    },
+    {
+      "account_id": 47790949,
+      "symbol": "ETHUSD",
+      "position_id": 260303253,
+      "observed_volume_cents": 1300,
+      "actual_entry_fill": 2132.09,
+      "actual_exit_fill": 2116.31,
+      "actual_net_pnl": 205.14
+    },
+    {
+      "account_id": 49236051,
+      "symbol": "ETHUSD",
+      "position_id": 260303251,
+      "observed_volume_cents": 42,
+      "actual_entry_fill": 2132.3,
+      "actual_exit_fill": 2116.21,
+      "actual_net_pnl": 6.76
+    },
+    {
+      "account_id": 49236051,
+      "symbol": "SpotCrude",
+      "position_id": 260368215,
+      "observed_volume_cents": 1200,
+      "actual_entry_fill": 90.095,
+      "actual_exit_fill": 90.498,
+      "actual_net_pnl": -4.84
+    },
+    {
+      "account_id": 47790949,
+      "symbol": "SpotCrude",
+      "position_id": 260368223,
+      "observed_volume_cents": 39900,
+      "actual_entry_fill": 90.095,
+      "actual_exit_fill": 90.474,
+      "actual_net_pnl": -151.22
+    },
+    {
+      "account_id": 46130058,
+      "symbol": "SpotCrude",
+      "position_id": 260368257,
+      "observed_volume_cents": 39100,
+      "actual_entry_fill": 90.103,
+      "actual_exit_fill": 90.498,
+      "actual_net_pnl": -154.45
+    },
+    {
+      "account_id": 49236051,
+      "symbol": "SpotBrent",
+      "position_id": 260368312,
+      "observed_volume_cents": 1000,
+      "actual_entry_fill": 99.58,
+      "actual_exit_fill": 100.076,
+      "actual_net_pnl": -4.96
+    },
+    {
+      "account_id": 46130058,
+      "symbol": "SpotBrent",
+      "position_id": 260368313,
+      "observed_volume_cents": 29700,
+      "actual_entry_fill": 99.59,
+      "actual_exit_fill": 100.076,
+      "actual_net_pnl": -144.34
+    },
+    {
+      "account_id": 47790949,
+      "symbol": "SpotBrent",
+      "position_id": 260368311,
+      "observed_volume_cents": 30400,
+      "actual_entry_fill": 99.58,
+      "actual_exit_fill": 100.076,
+      "actual_net_pnl": -150.78
+    },
+    {
+      "account_id": 49236051,
+      "symbol": "US500",
+      "position_id": 260383619,
+      "observed_volume_cents": 10,
+      "actual_entry_fill": 7380.4,
+      "actual_exit_fill": 7408.1,
+      "actual_net_pnl": -2.77
+    },
+    {
+      "account_id": 47790949,
+      "symbol": "US500",
+      "position_id": 260383621,
+      "observed_volume_cents": 530,
+      "actual_entry_fill": 7380.4,
+      "actual_exit_fill": 7408.1,
+      "actual_net_pnl": -146.81
+    },
+    {
+      "account_id": 46130058,
+      "symbol": "US500",
+      "position_id": 260383624,
+      "observed_volume_cents": 520,
+      "actual_entry_fill": 7380.2,
+      "actual_exit_fill": 7408.1,
+      "actual_net_pnl": -145.08
+    },
+    {
+      "account_id": 47790949,
+      "symbol": "NAS100",
+      "position_id": 260389633,
+      "observed_volume_cents": 140,
+      "actual_entry_fill": 26880,
+      "actual_exit_fill": 26982,
+      "actual_net_pnl": -142.8
+    },
+    {
+      "account_id": 49236051,
+      "symbol": "NAS100",
+      "position_id": 260389632,
+      "observed_volume_cents": 10,
+      "actual_entry_fill": 26880,
+      "actual_exit_fill": 26982,
+      "actual_net_pnl": -10.2
+    },
+    {
+      "account_id": 46130058,
+      "symbol": "NAS100",
+      "position_id": 260389631,
+      "observed_volume_cents": 140,
+      "actual_entry_fill": 26880,
+      "actual_exit_fill": 26982,
+      "actual_net_pnl": -142.8
+    }
+  ],
+  "native_binary_sha256": "fa751a5e2190c3767dc374c1010a69cd292c08cbe479aef2cdb75adba08f88e1",
+  "accounts": [
+    {
+      "account_id": 46130058,
+      "counterfactual_net_pnl": 9.211632840798188,
+      "financial_pass": false,
+      "modeled_closed_gross_cash": 52.21859999999819,
+      "modeled_closed_net_cash_3_74bp": 9.211632840798188,
+      "old_net_pnl": -386.20000000000005,
+      "pair_enforced": true,
+      "policy": "s3_macro_pullback_owner_18407_v1",
+      "through": "2026-11-09T09:30:00Z",
+      "trials": [
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T05:30:26.367855Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.367855Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.24,
+                "turn_extreme_at": "2026-11-09T05:30:26.367855Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:26.757719Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.757719Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.3,
+                "turn_extreme_at": "2026-11-09T05:30:26.757719Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.076725Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.076725Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.5,
+                "turn_extreme_at": "2026-11-09T05:30:33.076725Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.645745Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.645745Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.645745Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:36.770167Z",
+              "confirmation": {
+                "confirmed_ask": 2133.03,
+                "confirmed_at": "2026-11-09T05:30:36.770167Z",
+                "confirmed_bid": 2131.03,
+                "extreme": 2127.39,
+                "long": false,
+                "origin": 2138.72,
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.645745Z"
+              },
+              "equity_proxy": 23937.59,
+              "exit_deadline": "2026-11-09T08:00:00Z",
+              "fill": 2131.03,
+              "kind": "entry",
+              "peer_hold_bps": 37.03072772185845,
+              "prepared_at": "2026-11-09T05:30:36.609586Z",
+              "risk": 11.4,
+              "stop": 2142.4300000000003,
+              "target": 2115.2900000000004,
+              "volume_cents": 1259
+            },
+            {
+              "at": "2026-11-09T06:19:29.965945Z",
+              "kind": "breakeven_effective_next_quote",
+              "stop": 2131.03
+            },
+            {
+              "at": "2026-11-09T06:32:35.104772Z",
+              "exit_cost_reserve_cash": 19.994477131200004,
+              "gross_cash": 198.16659999999726,
+              "kind": "target_1_38r",
+              "modeled_net_cash_3_74bp_each_side": 178.17212286879726,
+              "price": 2115.2900000000004
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T05:29:09.425236309Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T05:30:36.770167Z",
+              "touched_at": "2026-11-09T05:30:26.367855Z",
+              "turn_extreme": 2133.53,
+              "turn_extreme_at": "2026-11-09T05:30:33.645745Z"
+            },
+            "extreme": 2127.39,
+            "impulse_bps": 52.975611580758255,
+            "impulse_range": 11.329999999999927,
+            "level": 2133.055,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.07235623059480911,
+              "drift_5": -0.003544425544799612,
+              "latest_bar_end": "2026-11-08T08:00:00Z"
+            },
+            "origin": 2138.72,
+            "session": {
+              "close": "2026-11-09T08:00:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T04:00:00Z"
+            }
+          },
+          "gross_cash": 198.16659999999726,
+          "net_cash_3_74bp": 178.17212286879726,
+          "skipped_stale_quote_states": 0,
+          "status": "target_1_38r",
+          "symbol": "ETHUSD"
+        },
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:16.264559Z",
+              "extreme": 89.821,
+              "kind": "running_extreme_extended",
+              "level": 90.0735
+            },
+            {
+              "at": "2026-11-09T07:32:37.173445Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:32:37.173445Z",
+                "touched_at": "2026-11-09T07:32:37.173445Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.173445Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:32:43.363310Z",
+              "confirmation": {
+                "confirmed_ask": 90.045,
+                "confirmed_at": "2026-11-09T07:32:43.363310Z",
+                "confirmed_bid": 90.007,
+                "extreme": 89.821,
+                "long": false,
+                "origin": 90.326,
+                "touched_at": "2026-11-09T07:32:37.173445Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.173445Z"
+              },
+              "equity_proxy": 24345.06,
+              "exit_deadline": "2026-11-09T14:30:00Z",
+              "fill": 90.007,
+              "kind": "entry",
+              "peer_hold_bps": 46.55120632695908,
+              "prepared_at": "2026-11-09T07:32:42.928396Z",
+              "risk": 0.428,
+              "stop": 90.435,
+              "target": 89.41600000000001,
+              "volume_cents": 34100
+            },
+            {
+              "at": "2026-11-09T07:58:13.189053Z",
+              "exit_cost_reserve_cash": 23.012490028000002,
+              "gross_cash": -145.94799999999907,
+              "kind": "initial_stop_loss",
+              "modeled_net_cash_3_74bp_each_side": -168.96049002799907,
+              "price": 90.435
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:16.032943649Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:32:43.363310Z",
+              "touched_at": "2026-11-09T07:32:37.173445Z",
+              "turn_extreme": 90.076,
+              "turn_extreme_at": "2026-11-09T07:32:37.173445Z"
+            },
+            "extreme": 89.821,
+            "impulse_bps": 55.90859774594198,
+            "impulse_range": 0.5049999999999955,
+            "level": 90.0735,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.01452015427663933,
+              "drift_5": -0.1007167292695672,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 90.326,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": -145.94799999999907,
+          "net_cash_3_74bp": -168.96049002799907,
+          "skipped_stale_quote_states": 1,
+          "status": "initial_stop_loss",
+          "symbol": "SpotCrude"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:15.823144Z",
+              "extreme": 99.18,
+              "kind": "running_extreme_extended",
+              "level": 99.535
+            },
+            {
+              "at": "2026-11-09T07:32:16.024027Z",
+              "extreme": 99.148,
+              "kind": "running_extreme_extended",
+              "level": 99.519
+            },
+            {
+              "action": "arm_disarmed",
+              "at": "2026-11-09T07:32:43.363314Z",
+              "kind": "pair_risk_reservation_active"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:15.625688931Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:32:42.655416Z",
+              "touched_at": null,
+              "turn_extreme": null,
+              "turn_extreme_at": null
+            },
+            "extreme": 99.148,
+            "impulse_bps": 74.2817098808694,
+            "impulse_range": 0.7420000000000044,
+            "level": 99.519,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.051279419175423224,
+              "drift_5": -0.10970312636833346,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 99.89,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "pair_risk_reservation_active",
+          "symbol": "SpotBrent"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:46:24.197717734Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:46:24.197717734Z",
+            "extreme": 7363.0,
+            "impulse_bps": 48.11721136431265,
+            "impulse_range": 35.600000000000364,
+            "level": 7380.8,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.05903912954638324,
+              "drift_5": -0.032867362341668205,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 7398.6,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "US500"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:36:12.720800034Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:36:12.720800034Z",
+            "extreme": 26815.15,
+            "impulse_bps": 48.98477204453903,
+            "impulse_range": 132.0,
+            "level": 26881.15,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.1263631195410615,
+              "drift_5": -0.05549075619687516,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 26947.15,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "NAS100"
+        }
+      ],
+      "unresolved": false
+    },
+    {
+      "account_id": 47790949,
+      "counterfactual_net_pnl": 11.0500196679981,
+      "financial_pass": false,
+      "modeled_closed_gross_cash": 55.247999999998115,
+      "modeled_closed_net_cash_3_74bp": 11.0500196679981,
+      "old_net_pnl": -386.47,
+      "pair_enforced": true,
+      "policy": "s3_macro_pullback_owner_18407_v1",
+      "through": "2026-11-09T09:30:00Z",
+      "trials": [
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T05:30:26.375067Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.375067Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.24,
+                "turn_extreme_at": "2026-11-09T05:30:26.375067Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:26.745372Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.745372Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.3,
+                "turn_extreme_at": "2026-11-09T05:30:26.745372Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.047150Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.047150Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.5,
+                "turn_extreme_at": "2026-11-09T05:30:33.047150Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.622824Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.622824Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.622824Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:36.748419Z",
+              "confirmation": {
+                "confirmed_ask": 2133.03,
+                "confirmed_at": "2026-11-09T05:30:36.748419Z",
+                "confirmed_bid": 2131.03,
+                "extreme": 2127.39,
+                "long": false,
+                "origin": 2138.72,
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.622824Z"
+              },
+              "equity_proxy": 24705.97,
+              "exit_deadline": "2026-11-09T08:00:00Z",
+              "fill": 2131.03,
+              "kind": "entry",
+              "peer_hold_bps": 37.03072772185845,
+              "prepared_at": "2026-11-09T05:30:36.543436Z",
+              "risk": 11.4,
+              "stop": 2142.4300000000003,
+              "target": 2115.2900000000004,
+              "volume_cents": 1300
+            },
+            {
+              "at": "2026-11-09T06:19:29.929271Z",
+              "kind": "breakeven_effective_next_quote",
+              "stop": 2131.03
+            },
+            {
+              "at": "2026-11-09T06:32:35.106023Z",
+              "exit_cost_reserve_cash": 20.645607840000004,
+              "gross_cash": 204.61999999999716,
+              "kind": "target_1_38r",
+              "modeled_net_cash_3_74bp_each_side": 183.97439215999717,
+              "price": 2115.2900000000004
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T05:29:09.423968038Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T05:30:36.748419Z",
+              "touched_at": "2026-11-09T05:30:26.375067Z",
+              "turn_extreme": 2133.53,
+              "turn_extreme_at": "2026-11-09T05:30:33.622824Z"
+            },
+            "extreme": 2127.39,
+            "impulse_bps": 52.975611580758255,
+            "impulse_range": 11.329999999999927,
+            "level": 2133.055,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.07235623059480911,
+              "drift_5": -0.003544425544799612,
+              "latest_bar_end": "2026-11-08T08:00:00Z"
+            },
+            "origin": 2138.72,
+            "session": {
+              "close": "2026-11-09T08:00:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T04:00:00Z"
+            }
+          },
+          "gross_cash": 204.61999999999716,
+          "net_cash_3_74bp": 183.97439215999717,
+          "skipped_stale_quote_states": 0,
+          "status": "target_1_38r",
+          "symbol": "ETHUSD"
+        },
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:16.256329Z",
+              "extreme": 89.821,
+              "kind": "running_extreme_extended",
+              "level": 90.0735
+            },
+            {
+              "at": "2026-11-09T07:32:37.195082Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:32:37.195082Z",
+                "touched_at": "2026-11-09T07:32:37.195082Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.195082Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:32:43.368230Z",
+              "confirmation": {
+                "confirmed_ask": 90.045,
+                "confirmed_at": "2026-11-09T07:32:43.368230Z",
+                "confirmed_bid": 90.007,
+                "extreme": 89.821,
+                "long": false,
+                "origin": 90.326,
+                "touched_at": "2026-11-09T07:32:37.195082Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.195082Z"
+              },
+              "equity_proxy": 24918.61,
+              "exit_deadline": "2026-11-09T14:30:00Z",
+              "fill": 90.007,
+              "kind": "entry",
+              "peer_hold_bps": 46.55120632695908,
+              "prepared_at": "2026-11-09T07:32:42.928343Z",
+              "risk": 0.428,
+              "stop": 90.435,
+              "target": 89.41600000000001,
+              "volume_cents": 34900
+            },
+            {
+              "at": "2026-11-09T07:58:13.185180Z",
+              "exit_cost_reserve_cash": 23.552372492000003,
+              "gross_cash": -149.37199999999905,
+              "kind": "initial_stop_loss",
+              "modeled_net_cash_3_74bp_each_side": -172.92437249199907,
+              "price": 90.435
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:16.037859490Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:32:43.368230Z",
+              "touched_at": "2026-11-09T07:32:37.195082Z",
+              "turn_extreme": 90.076,
+              "turn_extreme_at": "2026-11-09T07:32:37.195082Z"
+            },
+            "extreme": 89.821,
+            "impulse_bps": 55.90859774594198,
+            "impulse_range": 0.5049999999999955,
+            "level": 90.0735,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.01452015427663933,
+              "drift_5": -0.1007167292695672,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 90.326,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": -149.37199999999905,
+          "net_cash_3_74bp": -172.92437249199907,
+          "skipped_stale_quote_states": 1,
+          "status": "initial_stop_loss",
+          "symbol": "SpotCrude"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:15.827253Z",
+              "extreme": 99.18,
+              "kind": "running_extreme_extended",
+              "level": 99.535
+            },
+            {
+              "at": "2026-11-09T07:32:16.055224Z",
+              "extreme": 99.148,
+              "kind": "running_extreme_extended",
+              "level": 99.519
+            },
+            {
+              "action": "arm_disarmed",
+              "at": "2026-11-09T07:32:43.368231Z",
+              "kind": "pair_risk_reservation_active"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:15.623828754Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:32:42.648216Z",
+              "touched_at": null,
+              "turn_extreme": null,
+              "turn_extreme_at": null
+            },
+            "extreme": 99.148,
+            "impulse_bps": 74.2817098808694,
+            "impulse_range": 0.7420000000000044,
+            "level": 99.519,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.051279419175423224,
+              "drift_5": -0.10970312636833346,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 99.89,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "pair_risk_reservation_active",
+          "symbol": "SpotBrent"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:46:24.198334372Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:46:24.198334372Z",
+            "extreme": 7363.0,
+            "impulse_bps": 48.11721136431265,
+            "impulse_range": 35.600000000000364,
+            "level": 7380.8,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.05903912954638324,
+              "drift_5": -0.032867362341668205,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 7398.6,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "US500"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:36:12.714422119Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:36:12.714422119Z",
+            "extreme": 26815.15,
+            "impulse_bps": 48.98477204453903,
+            "impulse_range": 132.0,
+            "level": 26881.15,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.1263631195410615,
+              "drift_5": -0.05549075619687516,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 26947.15,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "NAS100"
+        }
+      ],
+      "unresolved": false
+    },
+    {
+      "account_id": 49236051,
+      "counterfactual_net_pnl": 0.2378745983998929,
+      "financial_pass": false,
+      "modeled_closed_gross_cash": 1.7147999999998937,
+      "modeled_closed_net_cash_3_74bp": 0.2378745983998929,
+      "old_net_pnl": -16.009999999999998,
+      "pair_enforced": true,
+      "policy": "s3_macro_pullback_owner_18407_v1",
+      "through": "2026-11-09T09:30:00Z",
+      "trials": [
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T05:30:26.366877Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.366877Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.24,
+                "turn_extreme_at": "2026-11-09T05:30:26.366877Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:26.754517Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.754517Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.3,
+                "turn_extreme_at": "2026-11-09T05:30:26.754517Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.074410Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.074410Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.5,
+                "turn_extreme_at": "2026-11-09T05:30:33.074410Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.641628Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.641628Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.641628Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:36.763159Z",
+              "confirmation": {
+                "confirmed_ask": 2133.03,
+                "confirmed_at": "2026-11-09T05:30:36.763159Z",
+                "confirmed_bid": 2131.03,
+                "extreme": 2127.39,
+                "long": false,
+                "origin": 2138.72,
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.641628Z"
+              },
+              "equity_proxy": 813.25,
+              "exit_deadline": "2026-11-09T08:00:00Z",
+              "fill": 2131.03,
+              "kind": "entry",
+              "peer_hold_bps": 37.03072772185845,
+              "prepared_at": "2026-11-09T05:30:36.602775Z",
+              "risk": 11.4,
+              "stop": 2142.4300000000003,
+              "target": 2115.2900000000004,
+              "volume_cents": 42
+            },
+            {
+              "at": "2026-11-09T06:19:29.990346Z",
+              "kind": "breakeven_effective_next_quote",
+              "stop": 2131.03
+            },
+            {
+              "at": "2026-11-09T06:32:35.105088Z",
+              "exit_cost_reserve_cash": 0.6670119456000001,
+              "gross_cash": 6.610799999999909,
+              "kind": "target_1_38r",
+              "modeled_net_cash_3_74bp_each_side": 5.943788054399908,
+              "price": 2115.2900000000004
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T05:29:09.423032701Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T05:30:36.763159Z",
+              "touched_at": "2026-11-09T05:30:26.366877Z",
+              "turn_extreme": 2133.53,
+              "turn_extreme_at": "2026-11-09T05:30:33.641628Z"
+            },
+            "extreme": 2127.39,
+            "impulse_bps": 52.975611580758255,
+            "impulse_range": 11.329999999999927,
+            "level": 2133.055,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.07235623059480911,
+              "drift_5": -0.003544425544799612,
+              "latest_bar_end": "2026-11-08T08:00:00Z"
+            },
+            "origin": 2138.72,
+            "session": {
+              "close": "2026-11-09T08:00:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T04:00:00Z"
+            }
+          },
+          "gross_cash": 6.610799999999909,
+          "net_cash_3_74bp": 5.943788054399908,
+          "skipped_stale_quote_states": 0,
+          "status": "target_1_38r",
+          "symbol": "ETHUSD"
+        },
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:18.221106Z",
+              "extreme": 89.827,
+              "kind": "running_extreme_extended",
+              "level": 90.0765
+            },
+            {
+              "at": "2026-11-09T07:32:54.233588Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:32:54.233588Z",
+                "touched_at": "2026-11-09T07:32:54.233588Z",
+                "turn_extreme": 90.08099999999999,
+                "turn_extreme_at": "2026-11-09T07:32:54.233588Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:01.608661Z",
+              "confirmation": {
+                "confirmed_ask": 90.055,
+                "confirmed_at": "2026-11-09T07:33:01.608661Z",
+                "confirmed_bid": 90.027,
+                "extreme": 89.827,
+                "long": false,
+                "origin": 90.326,
+                "touched_at": "2026-11-09T07:32:54.233588Z",
+                "turn_extreme": 90.08099999999999,
+                "turn_extreme_at": "2026-11-09T07:32:54.233588Z"
+              },
+              "equity_proxy": 820.01,
+              "exit_deadline": "2026-11-09T14:30:00Z",
+              "fill": 90.027,
+              "kind": "entry",
+              "peer_hold_bps": 48.75362899189217,
+              "prepared_at": "2026-11-09T07:33:01.448645Z",
+              "risk": 0.407,
+              "stop": 90.434,
+              "target": 89.465,
+              "volume_cents": 1200
+            },
+            {
+              "at": "2026-11-09T07:58:13.185213Z",
+              "exit_cost_reserve_cash": 0.809913456,
+              "gross_cash": -4.896000000000015,
+              "kind": "initial_stop_loss",
+              "modeled_net_cash_3_74bp_each_side": -5.705913456000015,
+              "price": 90.435
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:16.624206029Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:33:01.608661Z",
+              "touched_at": "2026-11-09T07:32:54.233588Z",
+              "turn_extreme": 90.08099999999999,
+              "turn_extreme_at": "2026-11-09T07:32:54.233588Z"
+            },
+            "extreme": 89.827,
+            "impulse_bps": 55.24433717866342,
+            "impulse_range": 0.4989999999999952,
+            "level": 90.0765,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.01452015427663933,
+              "drift_5": -0.1007167292695672,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 90.326,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": -4.896000000000015,
+          "net_cash_3_74bp": -5.705913456000015,
+          "skipped_stale_quote_states": 1,
+          "status": "initial_stop_loss",
+          "symbol": "SpotCrude"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:15.817633Z",
+              "extreme": 99.18,
+              "kind": "running_extreme_extended",
+              "level": 99.535
+            },
+            {
+              "at": "2026-11-09T07:32:16.059568Z",
+              "extreme": 99.148,
+              "kind": "running_extreme_extended",
+              "level": 99.519
+            },
+            {
+              "action": "arm_disarmed",
+              "at": "2026-11-09T07:33:02.263336Z",
+              "kind": "pair_risk_reservation_active"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:15.611237938Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:33:01.608660Z",
+              "touched_at": null,
+              "turn_extreme": null,
+              "turn_extreme_at": null
+            },
+            "extreme": 99.148,
+            "impulse_bps": 74.2817098808694,
+            "impulse_range": 0.7420000000000044,
+            "level": 99.519,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.051279419175423224,
+              "drift_5": -0.10970312636833346,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 99.89,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "pair_risk_reservation_active",
+          "symbol": "SpotBrent"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:46:22.372756960Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:46:22.372756960Z",
+            "extreme": 7362.8,
+            "impulse_bps": 48.38753277647147,
+            "impulse_range": 35.80000000000018,
+            "level": 7380.700000000001,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.05903912954638324,
+              "drift_5": -0.032867362341668205,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 7398.6,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "US500"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:36:12.713701069Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:36:12.713701069Z",
+            "extreme": 26815.15,
+            "impulse_bps": 48.98477204453903,
+            "impulse_range": 132.0,
+            "level": 26881.15,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.1263631195410615,
+              "drift_5": -0.05549075619687516,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 26947.15,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "NAS100"
+        }
+      ],
+      "unresolved": false
+    }
+  ],
+  "diagnostic_without_pair_guard": [
+    {
+      "account_id": 46130058,
+      "counterfactual_net_pnl": 9.211632840798188,
+      "financial_pass": false,
+      "modeled_closed_gross_cash": 52.21859999999819,
+      "modeled_closed_net_cash_3_74bp": 9.211632840798188,
+      "old_net_pnl": -386.20000000000005,
+      "pair_enforced": false,
+      "policy": "s3_macro_pullback_owner_18407_v1",
+      "through": "2026-11-09T09:30:00Z",
+      "trials": [
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T05:30:26.367855Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.367855Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.24,
+                "turn_extreme_at": "2026-11-09T05:30:26.367855Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:26.757719Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.757719Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.3,
+                "turn_extreme_at": "2026-11-09T05:30:26.757719Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.076725Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.076725Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.5,
+                "turn_extreme_at": "2026-11-09T05:30:33.076725Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.645745Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.645745Z",
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.645745Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:36.770167Z",
+              "confirmation": {
+                "confirmed_ask": 2133.03,
+                "confirmed_at": "2026-11-09T05:30:36.770167Z",
+                "confirmed_bid": 2131.03,
+                "extreme": 2127.39,
+                "long": false,
+                "origin": 2138.72,
+                "touched_at": "2026-11-09T05:30:26.367855Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.645745Z"
+              },
+              "equity_proxy": 23937.59,
+              "exit_deadline": "2026-11-09T08:00:00Z",
+              "fill": 2131.03,
+              "kind": "entry",
+              "peer_hold_bps": 37.03072772185845,
+              "prepared_at": "2026-11-09T05:30:36.609586Z",
+              "risk": 11.4,
+              "stop": 2142.4300000000003,
+              "target": 2115.2900000000004,
+              "volume_cents": 1259
+            },
+            {
+              "at": "2026-11-09T06:19:29.965945Z",
+              "kind": "breakeven_effective_next_quote",
+              "stop": 2131.03
+            },
+            {
+              "at": "2026-11-09T06:32:35.104772Z",
+              "exit_cost_reserve_cash": 19.994477131200004,
+              "gross_cash": 198.16659999999726,
+              "kind": "target_1_38r",
+              "modeled_net_cash_3_74bp_each_side": 178.17212286879726,
+              "price": 2115.2900000000004
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T05:29:09.425236309Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T05:30:36.770167Z",
+              "touched_at": "2026-11-09T05:30:26.367855Z",
+              "turn_extreme": 2133.53,
+              "turn_extreme_at": "2026-11-09T05:30:33.645745Z"
+            },
+            "extreme": 2127.39,
+            "impulse_bps": 52.975611580758255,
+            "impulse_range": 11.329999999999927,
+            "level": 2133.055,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.07235623059480911,
+              "drift_5": -0.003544425544799612,
+              "latest_bar_end": "2026-11-08T08:00:00Z"
+            },
+            "origin": 2138.72,
+            "session": {
+              "close": "2026-11-09T08:00:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T04:00:00Z"
+            }
+          },
+          "gross_cash": 198.16659999999726,
+          "net_cash_3_74bp": 178.17212286879726,
+          "skipped_stale_quote_states": 0,
+          "status": "target_1_38r",
+          "symbol": "ETHUSD"
+        },
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:16.264559Z",
+              "extreme": 89.821,
+              "kind": "running_extreme_extended",
+              "level": 90.0735
+            },
+            {
+              "at": "2026-11-09T07:32:37.173445Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:32:37.173445Z",
+                "touched_at": "2026-11-09T07:32:37.173445Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.173445Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:32:43.363310Z",
+              "confirmation": {
+                "confirmed_ask": 90.045,
+                "confirmed_at": "2026-11-09T07:32:43.363310Z",
+                "confirmed_bid": 90.007,
+                "extreme": 89.821,
+                "long": false,
+                "origin": 90.326,
+                "touched_at": "2026-11-09T07:32:37.173445Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.173445Z"
+              },
+              "equity_proxy": 24345.06,
+              "exit_deadline": "2026-11-09T14:30:00Z",
+              "fill": 90.007,
+              "kind": "entry",
+              "peer_hold_bps": 46.55120632695908,
+              "prepared_at": "2026-11-09T07:32:42.928396Z",
+              "risk": 0.428,
+              "stop": 90.435,
+              "target": 89.41600000000001,
+              "volume_cents": 34100
+            },
+            {
+              "at": "2026-11-09T07:58:13.189053Z",
+              "exit_cost_reserve_cash": 23.012490028000002,
+              "gross_cash": -145.94799999999907,
+              "kind": "initial_stop_loss",
+              "modeled_net_cash_3_74bp_each_side": -168.96049002799907,
+              "price": 90.435
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:16.032943649Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:32:43.363310Z",
+              "touched_at": "2026-11-09T07:32:37.173445Z",
+              "turn_extreme": 90.076,
+              "turn_extreme_at": "2026-11-09T07:32:37.173445Z"
+            },
+            "extreme": 89.821,
+            "impulse_bps": 55.90859774594198,
+            "impulse_range": 0.5049999999999955,
+            "level": 90.0735,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.01452015427663933,
+              "drift_5": -0.1007167292695672,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 90.326,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": -145.94799999999907,
+          "net_cash_3_74bp": -168.96049002799907,
+          "skipped_stale_quote_states": 1,
+          "status": "initial_stop_loss",
+          "symbol": "SpotCrude"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:15.823144Z",
+              "extreme": 99.18,
+              "kind": "running_extreme_extended",
+              "level": 99.535
+            },
+            {
+              "at": "2026-11-09T07:32:16.024027Z",
+              "extreme": 99.148,
+              "kind": "running_extreme_extended",
+              "level": 99.519
+            },
+            {
+              "at": "2026-11-09T07:33:19.921958Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:19.921958Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.519,
+                "turn_extreme_at": "2026-11-09T07:33:19.921958Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:22.072391Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:22.072391Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.524,
+                "turn_extreme_at": "2026-11-09T07:33:22.072391Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:22.420713Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:22.420713Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.529,
+                "turn_extreme_at": "2026-11-09T07:33:22.420713Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:23.424572Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:23.424572Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.53399999999999,
+                "turn_extreme_at": "2026-11-09T07:33:23.424572Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:26.392433Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:26.392433Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.5495,
+                "turn_extreme_at": "2026-11-09T07:33:26.392433Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:28.991545Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:28.991545Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.56899999999999,
+                "turn_extreme_at": "2026-11-09T07:33:28.991545Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:30.259362Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:30.259362Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.57400000000001,
+                "turn_extreme_at": "2026-11-09T07:33:30.259362Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:31.645203Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:31.645203Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.57900000000001,
+                "turn_extreme_at": "2026-11-09T07:33:31.645203Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:31.840529Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:31.840529Z",
+                "touched_at": "2026-11-09T07:33:19.921958Z",
+                "turn_extreme": 99.604,
+                "turn_extreme_at": "2026-11-09T07:33:31.840529Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:32.447961Z",
+              "extreme": 99.148,
+              "kind": "invalidated_deep_retracement_gt_61_8pct",
+              "mid": 99.60900000000001
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:15.625688931Z",
+            "confirmation": {
+              "invalidated": true,
+              "last_quote_at": "2026-11-09T07:33:32.447961Z",
+              "touched_at": "2026-11-09T07:33:19.921958Z",
+              "turn_extreme": 99.604,
+              "turn_extreme_at": "2026-11-09T07:33:31.840529Z"
+            },
+            "extreme": 99.148,
+            "impulse_bps": 74.2817098808694,
+            "impulse_range": 0.7420000000000044,
+            "level": 99.519,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.051279419175423224,
+              "drift_5": -0.10970312636833346,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 99.89,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "invalidated_deep_retracement_gt_61_8pct",
+          "symbol": "SpotBrent"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:46:24.197717734Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:46:24.197717734Z",
+            "extreme": 7363.0,
+            "impulse_bps": 48.11721136431265,
+            "impulse_range": 35.600000000000364,
+            "level": 7380.8,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.05903912954638324,
+              "drift_5": -0.032867362341668205,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 7398.6,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "US500"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:36:12.720800034Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:36:12.720800034Z",
+            "extreme": 26815.15,
+            "impulse_bps": 48.98477204453903,
+            "impulse_range": 132.0,
+            "level": 26881.15,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.1263631195410615,
+              "drift_5": -0.05549075619687516,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 26947.15,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "NAS100"
+        }
+      ],
+      "unresolved": false
+    },
+    {
+      "account_id": 47790949,
+      "counterfactual_net_pnl": 11.0500196679981,
+      "financial_pass": false,
+      "modeled_closed_gross_cash": 55.247999999998115,
+      "modeled_closed_net_cash_3_74bp": 11.0500196679981,
+      "old_net_pnl": -386.47,
+      "pair_enforced": false,
+      "policy": "s3_macro_pullback_owner_18407_v1",
+      "through": "2026-11-09T09:30:00Z",
+      "trials": [
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T05:30:26.375067Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.375067Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.24,
+                "turn_extreme_at": "2026-11-09T05:30:26.375067Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:26.745372Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.745372Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.3,
+                "turn_extreme_at": "2026-11-09T05:30:26.745372Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.047150Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.047150Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.5,
+                "turn_extreme_at": "2026-11-09T05:30:33.047150Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.622824Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.622824Z",
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.622824Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:36.748419Z",
+              "confirmation": {
+                "confirmed_ask": 2133.03,
+                "confirmed_at": "2026-11-09T05:30:36.748419Z",
+                "confirmed_bid": 2131.03,
+                "extreme": 2127.39,
+                "long": false,
+                "origin": 2138.72,
+                "touched_at": "2026-11-09T05:30:26.375067Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.622824Z"
+              },
+              "equity_proxy": 24705.97,
+              "exit_deadline": "2026-11-09T08:00:00Z",
+              "fill": 2131.03,
+              "kind": "entry",
+              "peer_hold_bps": 37.03072772185845,
+              "prepared_at": "2026-11-09T05:30:36.543436Z",
+              "risk": 11.4,
+              "stop": 2142.4300000000003,
+              "target": 2115.2900000000004,
+              "volume_cents": 1300
+            },
+            {
+              "at": "2026-11-09T06:19:29.929271Z",
+              "kind": "breakeven_effective_next_quote",
+              "stop": 2131.03
+            },
+            {
+              "at": "2026-11-09T06:32:35.106023Z",
+              "exit_cost_reserve_cash": 20.645607840000004,
+              "gross_cash": 204.61999999999716,
+              "kind": "target_1_38r",
+              "modeled_net_cash_3_74bp_each_side": 183.97439215999717,
+              "price": 2115.2900000000004
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T05:29:09.423968038Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T05:30:36.748419Z",
+              "touched_at": "2026-11-09T05:30:26.375067Z",
+              "turn_extreme": 2133.53,
+              "turn_extreme_at": "2026-11-09T05:30:33.622824Z"
+            },
+            "extreme": 2127.39,
+            "impulse_bps": 52.975611580758255,
+            "impulse_range": 11.329999999999927,
+            "level": 2133.055,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.07235623059480911,
+              "drift_5": -0.003544425544799612,
+              "latest_bar_end": "2026-11-08T08:00:00Z"
+            },
+            "origin": 2138.72,
+            "session": {
+              "close": "2026-11-09T08:00:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T04:00:00Z"
+            }
+          },
+          "gross_cash": 204.61999999999716,
+          "net_cash_3_74bp": 183.97439215999717,
+          "skipped_stale_quote_states": 0,
+          "status": "target_1_38r",
+          "symbol": "ETHUSD"
+        },
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:16.256329Z",
+              "extreme": 89.821,
+              "kind": "running_extreme_extended",
+              "level": 90.0735
+            },
+            {
+              "at": "2026-11-09T07:32:37.195082Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:32:37.195082Z",
+                "touched_at": "2026-11-09T07:32:37.195082Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.195082Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:32:43.368230Z",
+              "confirmation": {
+                "confirmed_ask": 90.045,
+                "confirmed_at": "2026-11-09T07:32:43.368230Z",
+                "confirmed_bid": 90.007,
+                "extreme": 89.821,
+                "long": false,
+                "origin": 90.326,
+                "touched_at": "2026-11-09T07:32:37.195082Z",
+                "turn_extreme": 90.076,
+                "turn_extreme_at": "2026-11-09T07:32:37.195082Z"
+              },
+              "equity_proxy": 24918.61,
+              "exit_deadline": "2026-11-09T14:30:00Z",
+              "fill": 90.007,
+              "kind": "entry",
+              "peer_hold_bps": 46.55120632695908,
+              "prepared_at": "2026-11-09T07:32:42.928343Z",
+              "risk": 0.428,
+              "stop": 90.435,
+              "target": 89.41600000000001,
+              "volume_cents": 34900
+            },
+            {
+              "at": "2026-11-09T07:58:13.185180Z",
+              "exit_cost_reserve_cash": 23.552372492000003,
+              "gross_cash": -149.37199999999905,
+              "kind": "initial_stop_loss",
+              "modeled_net_cash_3_74bp_each_side": -172.92437249199907,
+              "price": 90.435
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:16.037859490Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:32:43.368230Z",
+              "touched_at": "2026-11-09T07:32:37.195082Z",
+              "turn_extreme": 90.076,
+              "turn_extreme_at": "2026-11-09T07:32:37.195082Z"
+            },
+            "extreme": 89.821,
+            "impulse_bps": 55.90859774594198,
+            "impulse_range": 0.5049999999999955,
+            "level": 90.0735,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.01452015427663933,
+              "drift_5": -0.1007167292695672,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 90.326,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": -149.37199999999905,
+          "net_cash_3_74bp": -172.92437249199907,
+          "skipped_stale_quote_states": 1,
+          "status": "initial_stop_loss",
+          "symbol": "SpotCrude"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:15.827253Z",
+              "extreme": 99.18,
+              "kind": "running_extreme_extended",
+              "level": 99.535
+            },
+            {
+              "at": "2026-11-09T07:32:16.055224Z",
+              "extreme": 99.148,
+              "kind": "running_extreme_extended",
+              "level": 99.519
+            },
+            {
+              "at": "2026-11-09T07:33:19.935323Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:19.935323Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.519,
+                "turn_extreme_at": "2026-11-09T07:33:19.935323Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:22.003759Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:22.003759Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.524,
+                "turn_extreme_at": "2026-11-09T07:33:22.003759Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:22.425083Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:22.425083Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.529,
+                "turn_extreme_at": "2026-11-09T07:33:22.425083Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:23.413723Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:23.413723Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.53399999999999,
+                "turn_extreme_at": "2026-11-09T07:33:23.413723Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:26.368029Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:26.368029Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.5495,
+                "turn_extreme_at": "2026-11-09T07:33:26.368029Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:29.030648Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:29.030648Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.56899999999999,
+                "turn_extreme_at": "2026-11-09T07:33:29.030648Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:30.252099Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:30.252099Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.57400000000001,
+                "turn_extreme_at": "2026-11-09T07:33:30.252099Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:31.626392Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:31.626392Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.57900000000001,
+                "turn_extreme_at": "2026-11-09T07:33:31.626392Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:31.837205Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:31.837205Z",
+                "touched_at": "2026-11-09T07:33:19.935323Z",
+                "turn_extreme": 99.604,
+                "turn_extreme_at": "2026-11-09T07:33:31.837205Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:32.431548Z",
+              "extreme": 99.148,
+              "kind": "invalidated_deep_retracement_gt_61_8pct",
+              "mid": 99.60900000000001
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:15.623828754Z",
+            "confirmation": {
+              "invalidated": true,
+              "last_quote_at": "2026-11-09T07:33:32.431548Z",
+              "touched_at": "2026-11-09T07:33:19.935323Z",
+              "turn_extreme": 99.604,
+              "turn_extreme_at": "2026-11-09T07:33:31.837205Z"
+            },
+            "extreme": 99.148,
+            "impulse_bps": 74.2817098808694,
+            "impulse_range": 0.7420000000000044,
+            "level": 99.519,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.051279419175423224,
+              "drift_5": -0.10970312636833346,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 99.89,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "invalidated_deep_retracement_gt_61_8pct",
+          "symbol": "SpotBrent"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:46:24.198334372Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:46:24.198334372Z",
+            "extreme": 7363.0,
+            "impulse_bps": 48.11721136431265,
+            "impulse_range": 35.600000000000364,
+            "level": 7380.8,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.05903912954638324,
+              "drift_5": -0.032867362341668205,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 7398.6,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "US500"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:36:12.714422119Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:36:12.714422119Z",
+            "extreme": 26815.15,
+            "impulse_bps": 48.98477204453903,
+            "impulse_range": 132.0,
+            "level": 26881.15,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.1263631195410615,
+              "drift_5": -0.05549075619687516,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 26947.15,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "NAS100"
+        }
+      ],
+      "unresolved": false
+    },
+    {
+      "account_id": 49236051,
+      "counterfactual_net_pnl": 0.2378745983998929,
+      "financial_pass": false,
+      "modeled_closed_gross_cash": 1.7147999999998937,
+      "modeled_closed_net_cash_3_74bp": 0.2378745983998929,
+      "old_net_pnl": -16.009999999999998,
+      "pair_enforced": false,
+      "policy": "s3_macro_pullback_owner_18407_v1",
+      "through": "2026-11-09T09:30:00Z",
+      "trials": [
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T05:30:26.366877Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.366877Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.24,
+                "turn_extreme_at": "2026-11-09T05:30:26.366877Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:26.754517Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:26.754517Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.3,
+                "turn_extreme_at": "2026-11-09T05:30:26.754517Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.074410Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.074410Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.5,
+                "turn_extreme_at": "2026-11-09T05:30:33.074410Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:33.641628Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T05:30:33.641628Z",
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.641628Z"
+              }
+            },
+            {
+              "at": "2026-11-09T05:30:36.763159Z",
+              "confirmation": {
+                "confirmed_ask": 2133.03,
+                "confirmed_at": "2026-11-09T05:30:36.763159Z",
+                "confirmed_bid": 2131.03,
+                "extreme": 2127.39,
+                "long": false,
+                "origin": 2138.72,
+                "touched_at": "2026-11-09T05:30:26.366877Z",
+                "turn_extreme": 2133.53,
+                "turn_extreme_at": "2026-11-09T05:30:33.641628Z"
+              },
+              "equity_proxy": 813.25,
+              "exit_deadline": "2026-11-09T08:00:00Z",
+              "fill": 2131.03,
+              "kind": "entry",
+              "peer_hold_bps": 37.03072772185845,
+              "prepared_at": "2026-11-09T05:30:36.602775Z",
+              "risk": 11.4,
+              "stop": 2142.4300000000003,
+              "target": 2115.2900000000004,
+              "volume_cents": 42
+            },
+            {
+              "at": "2026-11-09T06:19:29.990346Z",
+              "kind": "breakeven_effective_next_quote",
+              "stop": 2131.03
+            },
+            {
+              "at": "2026-11-09T06:32:35.105088Z",
+              "exit_cost_reserve_cash": 0.6670119456000001,
+              "gross_cash": 6.610799999999909,
+              "kind": "target_1_38r",
+              "modeled_net_cash_3_74bp_each_side": 5.943788054399908,
+              "price": 2115.2900000000004
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T05:29:09.423032701Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T05:30:36.763159Z",
+              "touched_at": "2026-11-09T05:30:26.366877Z",
+              "turn_extreme": 2133.53,
+              "turn_extreme_at": "2026-11-09T05:30:33.641628Z"
+            },
+            "extreme": 2127.39,
+            "impulse_bps": 52.975611580758255,
+            "impulse_range": 11.329999999999927,
+            "level": 2133.055,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.07235623059480911,
+              "drift_5": -0.003544425544799612,
+              "latest_bar_end": "2026-11-08T08:00:00Z"
+            },
+            "origin": 2138.72,
+            "session": {
+              "close": "2026-11-09T08:00:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T04:00:00Z"
+            }
+          },
+          "gross_cash": 6.610799999999909,
+          "net_cash_3_74bp": 5.943788054399908,
+          "skipped_stale_quote_states": 0,
+          "status": "target_1_38r",
+          "symbol": "ETHUSD"
+        },
+        {
+          "entered": true,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:18.221106Z",
+              "extreme": 89.827,
+              "kind": "running_extreme_extended",
+              "level": 90.0765
+            },
+            {
+              "at": "2026-11-09T07:32:54.233588Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:32:54.233588Z",
+                "touched_at": "2026-11-09T07:32:54.233588Z",
+                "turn_extreme": 90.08099999999999,
+                "turn_extreme_at": "2026-11-09T07:32:54.233588Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:01.608661Z",
+              "confirmation": {
+                "confirmed_ask": 90.055,
+                "confirmed_at": "2026-11-09T07:33:01.608661Z",
+                "confirmed_bid": 90.027,
+                "extreme": 89.827,
+                "long": false,
+                "origin": 90.326,
+                "touched_at": "2026-11-09T07:32:54.233588Z",
+                "turn_extreme": 90.08099999999999,
+                "turn_extreme_at": "2026-11-09T07:32:54.233588Z"
+              },
+              "equity_proxy": 820.01,
+              "exit_deadline": "2026-11-09T14:30:00Z",
+              "fill": 90.027,
+              "kind": "entry",
+              "peer_hold_bps": 48.75362899189217,
+              "prepared_at": "2026-11-09T07:33:01.448645Z",
+              "risk": 0.407,
+              "stop": 90.434,
+              "target": 89.465,
+              "volume_cents": 1200
+            },
+            {
+              "at": "2026-11-09T07:58:13.185213Z",
+              "exit_cost_reserve_cash": 0.809913456,
+              "gross_cash": -4.896000000000015,
+              "kind": "initial_stop_loss",
+              "modeled_net_cash_3_74bp_each_side": -5.705913456000015,
+              "price": 90.435
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:16.624206029Z",
+            "confirmation": {
+              "invalidated": false,
+              "last_quote_at": "2026-11-09T07:33:01.608661Z",
+              "touched_at": "2026-11-09T07:32:54.233588Z",
+              "turn_extreme": 90.08099999999999,
+              "turn_extreme_at": "2026-11-09T07:32:54.233588Z"
+            },
+            "extreme": 89.827,
+            "impulse_bps": 55.24433717866342,
+            "impulse_range": 0.4989999999999952,
+            "level": 90.0765,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.01452015427663933,
+              "drift_5": -0.1007167292695672,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 90.326,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": -4.896000000000015,
+          "net_cash_3_74bp": -5.705913456000015,
+          "skipped_stale_quote_states": 1,
+          "status": "initial_stop_loss",
+          "symbol": "SpotCrude"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:32:15.817633Z",
+              "extreme": 99.18,
+              "kind": "running_extreme_extended",
+              "level": 99.535
+            },
+            {
+              "at": "2026-11-09T07:32:16.059568Z",
+              "extreme": 99.148,
+              "kind": "running_extreme_extended",
+              "level": 99.519
+            },
+            {
+              "at": "2026-11-09T07:33:19.917934Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:19.917934Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.519,
+                "turn_extreme_at": "2026-11-09T07:33:19.917934Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:22.057077Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:22.057077Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.524,
+                "turn_extreme_at": "2026-11-09T07:33:22.057077Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:22.412883Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:22.412883Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.529,
+                "turn_extreme_at": "2026-11-09T07:33:22.412883Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:23.413943Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:23.413943Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.53399999999999,
+                "turn_extreme_at": "2026-11-09T07:33:23.413943Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:26.349263Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:26.349263Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.5495,
+                "turn_extreme_at": "2026-11-09T07:33:26.349263Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:29.067265Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:29.067265Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.56899999999999,
+                "turn_extreme_at": "2026-11-09T07:33:29.067265Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:30.255619Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:30.255619Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.57400000000001,
+                "turn_extreme_at": "2026-11-09T07:33:30.255619Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:31.642636Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:31.642636Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.57900000000001,
+                "turn_extreme_at": "2026-11-09T07:33:31.642636Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:31.838553Z",
+              "kind": "zone_touch_or_deeper_touch",
+              "state": {
+                "invalidated": false,
+                "last_quote_at": "2026-11-09T07:33:31.838553Z",
+                "touched_at": "2026-11-09T07:33:19.917934Z",
+                "turn_extreme": 99.604,
+                "turn_extreme_at": "2026-11-09T07:33:31.838553Z"
+              }
+            },
+            {
+              "at": "2026-11-09T07:33:32.442004Z",
+              "extreme": 99.148,
+              "kind": "invalidated_deep_retracement_gt_61_8pct",
+              "mid": 99.60900000000001
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:32:15.611237938Z",
+            "confirmation": {
+              "invalidated": true,
+              "last_quote_at": "2026-11-09T07:33:32.442004Z",
+              "touched_at": "2026-11-09T07:33:19.917934Z",
+              "turn_extreme": 99.604,
+              "turn_extreme_at": "2026-11-09T07:33:31.838553Z"
+            },
+            "extreme": 99.148,
+            "impulse_bps": 74.2817098808694,
+            "impulse_range": 0.7420000000000044,
+            "level": 99.519,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.051279419175423224,
+              "drift_5": -0.10970312636833346,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 99.89,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "invalidated_deep_retracement_gt_61_8pct",
+          "symbol": "SpotBrent"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:46:22.372756960Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:46:22.372756960Z",
+            "extreme": 7362.8,
+            "impulse_bps": 48.38753277647147,
+            "impulse_range": 35.80000000000018,
+            "level": 7380.700000000001,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.05903912954638324,
+              "drift_5": -0.032867362341668205,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 7398.6,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "US500"
+        },
+        {
+          "entered": false,
+          "events": [
+            {
+              "at": "2026-11-09T07:36:12.713701069Z",
+              "kind": "entry_window_refused",
+              "reason": "outside_authorized_entry_session_18407"
+            }
+          ],
+          "final_arm": {
+            "armed_at": "2026-11-09T07:36:12.713701069Z",
+            "extreme": 26815.15,
+            "impulse_bps": 48.98477204453903,
+            "impulse_range": 132.0,
+            "level": 26881.15,
+            "long": false,
+            "macro_context": {
+              "drift_20": -0.1263631195410615,
+              "drift_5": -0.05549075619687516,
+              "latest_bar_end": "2026-11-06T14:30:00Z"
+            },
+            "origin": 26947.15,
+            "session": {
+              "close": "2026-11-09T14:30:00Z",
+              "date": "2026-11-09",
+              "lunch": null,
+              "open": "2026-11-09T07:00:00Z"
+            }
+          },
+          "gross_cash": null,
+          "net_cash_3_74bp": null,
+          "skipped_stale_quote_states": 0,
+          "status": "outside_authorized_entry_session_18407",
+          "symbol": "NAS100"
+        }
+      ],
+      "unresolved": false
+    }
+  ],
+  "financial_pass": false
+}

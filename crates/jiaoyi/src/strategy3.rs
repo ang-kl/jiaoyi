@@ -34,7 +34,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::strategy3::band::{self, Band, SigmaTable, M30};
-use jiaoyi_core::strategy3::macro_pullback::{self as mp, ArmedPullback, Touch};
+use jiaoyi_core::strategy3::macro_pullback::{self as mp, ArmedPullback};
 use jiaoyi_core::strategy3::production_sessions as prod;
 use jiaoyi_core::strategy3::sessions::{self, Session, SessionRule};
 use jiaoyi_core::strategy3::targets::{self, Dir, Plan};
@@ -89,10 +89,10 @@ pub fn human_symbol_locks(
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-11-09-strategy3-macro-pullback-18392.md";
+pub const PREREG_FILE: &str = "docs/preregistration-2026-11-09-strategy3-macro-pullback-18407.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18392.md");
+    include_str!("../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18407.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -187,9 +187,13 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
     {
         let mid = sym.bid.zip(sym.ask).map(|(b, a)| (b + a) / 2.0);
         return json!({"at":now,"production_policy":mp::POLICY,"state":"armed_pullback","open":a.origin,
-            "pullback_entry_ref":a.level,"bid":sym.bid,"ask":sym.ask,"mid":mid,
-            "distance_half_widths":mid.map(|m|if a.long {(m-a.level)/a.impulse_range}else{(a.level-m)/a.impulse_range}),
-            "reason":"waiting for 50% pullback"});
+        "pullback_entry_ref":a.level,"bid":sym.bid,"ask":sym.ask,"mid":mid,
+        "distance_half_widths":mid.map(|m|if a.long {(m-a.level)/a.impulse_range}else{(a.level-m)/a.impulse_range}),
+        "reason":if a.confirmation.touched_at.is_some() {
+            "pullback touched; waiting for a rejection turn of at least 8% of the impulse"
+        } else {
+            "waiting for a 50%–61.8% pullback touch"
+        }});
     }
     let none = |why: &str| json!({"at": now, "bid": sym.bid, "ask": sym.ask, "distance_half_widths": null, "reason": why});
     let Some(rule) = sym.rule else {
@@ -198,7 +202,7 @@ pub fn trigger_distance(sym: &Sym, now: DateTime<Utc>) -> Value {
     let Some(s) = sessions::session_at(&rule, now) else {
         return none("outside the symbol's session");
     };
-    if let Err(why) = prod::entry_window(&s, now) {
+    if let Err(why) = prod::symbol_entry_window(&sym.name, &s, now) {
         return none(&why);
     }
     // Restoring the durable veto returns before preparation. Its active
@@ -562,15 +566,15 @@ pub fn size(
         volume = volume.min(max - max % limits.step);
     }
     if volume < limits.min {
-        // Owner №18,392: a positive demo sizing result may use the smallest
-        // legal volume, but never exceeds the existing minimum-risk ceiling.
+        // Owner №18,407: the broker minimum may never exceed the normal
+        // demo trade-risk budget; the former 10% floor allowance is removed.
         let minimum = limits
             .min
             .checked_add(limits.step - 1)
             .map(|v| v / limits.step * limits.step)
             .ok_or("minimum volume overflow")?;
         let risk = gate::risk_of(minimum, relative_stop, quote_to_deposit);
-        let ceiling = equity * r.min_volume_max_risk_pct / 100.0;
+        let ceiling = allowed;
         if !raw.is_finite()
             || raw <= 0.0
             || limits.max.is_some_and(|max| minimum > max)
@@ -578,7 +582,7 @@ pub fn size(
             || ceiling <= 0.0
             || risk > ceiling
         {
-            return Err(format!("demo: broker minimum {minimum} exceeds the existing {}% minimum-volume risk ceiling, or sizing is invalid",r.min_volume_max_risk_pct));
+            return Err("min_volume_exceeds_trade_risk_budget".into());
         }
         return Ok(Sized {
             volume: minimum,
@@ -696,7 +700,10 @@ fn recorded_session_close(
     symbol: &str,
     class: AssetClass,
 ) -> Option<DateTime<Utc>> {
-    if detail["production_policy"].as_str() == Some("s3_macro_pullback_owner_18392_v1") {
+    if matches!(
+        detail["production_policy"].as_str(),
+        Some("s3_macro_pullback_owner_18392_v1") | Some(mp::POLICY)
+    ) {
         // An armed retracement may cross a four-hour boundary. `session`
         // describes its original preparation, not the later execution window.
         let close: DateTime<Utc> = detail["exit_deadline"].as_str()?.parse().ok()?;
@@ -1246,6 +1253,7 @@ impl<'a> Decisions<'a> {
 pub struct Trader<'a, 'c> {
     fast_cache: fast_entry::Cache,
     human_locks: std::collections::HashSet<i64>,
+    pair_occupied_symbols: std::collections::HashSet<i64>,
     human_book_revision: Option<u64>,
     pub pool: &'a PgPool,
     pub allowlist: &'a Allowlist,
@@ -1297,6 +1305,20 @@ impl<'a, 'c> Trader<'a, 'c> {
             .then_some("yield_to_human_position_or_order")
     }
 
+    fn pair_entry_refusal(&self, symbol_id: i64) -> Option<&'static str> {
+        let symbol = self.syms.get(&symbol_id)?;
+        let peer = mp::peer(&symbol.name)?;
+        let sibling = self.syms.values().find(|s| s.name == peer)?;
+        if self.pair_occupied_symbols.contains(&sibling.id)
+            || self.own.values().any(|p| p.symbol_id == sibling.id)
+            || self.pending.iter().any(|p| p.symbol_id == sibling.id)
+        {
+            Some("pair_risk_reservation_active")
+        } else {
+            None
+        }
+    }
+
     async fn apply_human_book(
         &mut self,
         res: &jiaoyi_ctrader::messages::ProtoOaReconcileRes,
@@ -1304,6 +1326,12 @@ impl<'a, 'c> Trader<'a, 'c> {
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         self.human_locks = human_symbol_locks(res);
+        self.pair_occupied_symbols = res
+            .position
+            .iter()
+            .map(|p| p.trade_data.symbol_id)
+            .chain(res.order.iter().map(|o| o.trade_data.symbol_id))
+            .collect();
         self.human_book_revision = (book_revision
             == self.session.connection().entry_revision(self.account_id()))
         .then_some(book_revision);
@@ -1438,6 +1466,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         let mut t = Trader {
             fast_cache: Default::default(),
             human_locks: Default::default(),
+            pair_occupied_symbols: Default::default(),
             human_book_revision: None,
             pool,
             allowlist,
@@ -1477,6 +1506,29 @@ impl<'a, 'c> Trader<'a, 'c> {
 
     fn account_id(&self) -> i64 {
         self.session.account().id()
+    }
+
+    /// Explicit synthetic event-clock configuration for deterministic wire tests.
+    /// Production run_session always leaves this offset at zero.
+    #[doc(hidden)]
+    pub fn set_event_offset_for_test(&mut self, offset: chrono::Duration) {
+        self.event_offset = offset;
+    }
+
+    fn writer_turn_proof(
+        &self,
+        arm: ArmedPullback,
+        bid: f64,
+        ask: f64,
+        at: DateTime<Utc>,
+    ) -> Option<mp::TurnProof> {
+        let mut proof = arm.confirmation_proof(bid, ask, at)?;
+        // The broker writer uses reception wall time. Translate only the
+        // explicit test clock, preserving all causal gaps and freshness ages.
+        proof.touched_at -= self.event_offset;
+        proof.turn_extreme_at -= self.event_offset;
+        proof.confirmed_at -= self.event_offset;
+        Some(proof)
     }
 
     /// Await non-execution data while the same mutable trader continues
@@ -1850,12 +1902,12 @@ impl<'a, 'c> Trader<'a, 'c> {
         self.own.retain(|id, _| seen.contains(id));
         let broker_positions: Vec<i64> = res.position.iter().map(|p| p.position_id).collect();
         self.recover_history_exits(&broker_positions).await?;
-        // An unresolved open still pending at the broker, or younger than one
-        // reconcile interval, stays pending (its risk held, its symbol
-        // blocked); an older one with nothing at the broker is released
-        // (RECONCILED_ABSENT), never resent.
+        // A missing snapshot is not proof an uncertain opening request cannot
+        // still fill. Keep its durable symbol/risk reservation across restarts
+        // until an explicit terminal event or full fill resolves the intent.
+        // This also holds its peer pair; known rejected/not-sent intents are
+        // excluded by open_intents_unresolved before this reconciliation.
         let r = rules(self.pool, account_id, self.env).await?;
-        let grace = chrono::Duration::seconds(r.reconcile_secs as i64);
         self.pending.clear();
         for u in unresolved {
             // What of it is filled: the broker's position when it is held,
@@ -1880,34 +1932,12 @@ impl<'a, 'c> Trader<'a, 'c> {
                 .await?;
                 continue;
             }
-            let at_broker = res.order.iter().any(|o| {
-                o.trade_data.label.as_deref() == Some(LABEL)
-                    && Some(o.trade_data.symbol_id) == u.symbol_id
-            }) || res.position.iter().any(|p| {
-                p.trade_data.label.as_deref() == Some(LABEL)
-                    && Some(p.trade_data.symbol_id) == u.symbol_id
-                    && !seen.contains(&p.position_id)
+            self.pending.push(Pending {
+                risk: crate::trading::outstanding_risk(u.risk, u.volume, filled).unwrap_or(0.0),
+                entry_key: u.entry_key,
+                symbol_id: u.symbol_id.unwrap_or_default(),
+                at: u.created_at,
             });
-            if at_broker || now - u.created_at < grace {
-                self.pending.push(Pending {
-                    risk: crate::trading::outstanding_risk(u.risk, u.volume, filled).unwrap_or(0.0),
-                    entry_key: u.entry_key,
-                    symbol_id: u.symbol_id.unwrap_or_default(),
-                    at: u.created_at,
-                });
-                continue;
-            }
-            ts::record_event(
-                self.pool,
-                &crate::trading::reconciled_row(
-                    account_id,
-                    &u.entry_key,
-                    "RECONCILED_ABSENT",
-                    None,
-                    "an unresolved Strategy 3 open neither filled nor pending at the broker after its grace: released, never resent",
-                ),
-            )
-            .await?;
         }
         self.d.version = Some(r.version);
         let authority_reasons = authority_pending
@@ -2877,7 +2907,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                             .and_then(|r| sessions::session_at(&r, a.armed_at))
                             == Some(a.session)
                         && prod::decision_mark(&a.session, a.armed_at).is_some()
-                        && prod::entry_window(&a.session, a.armed_at).is_ok()
+                        && prod::symbol_entry_window(&self.syms[&id].name, &a.session, a.armed_at)
+                            .is_ok()
                         && a.armed_at <= now
                         && a.origin.is_finite()
                         && a.origin > 0.0
@@ -2888,7 +2919,10 @@ impl<'a, 'c> Trader<'a, 'c> {
                         && (a.extreme > a.origin) == a.long
                         && same_price_math(a.impulse_bps, a.impulse_range / a.origin * 10000.0)
                         && a.impulse_bps >= mp::IMPULSE_FLOOR_BPS
-                        && mp::aligns(a.macro_context, a.long, a.session.open),
+                        && mp::aligns(a.macro_context, a.long, a.session.open)
+                        && a.confirmation_state_valid()
+                        && a.confirmation.last_quote_at.is_none_or(|at| at <= now)
+                        && !a.confirmation.invalidated,
                     "stored pullback state failed identity/math checks"
                 );
                 (now < prod::arm_expiry(&self.syms[&id].name, &a.session, a.armed_at)).then_some(a)
@@ -3005,8 +3039,35 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
             return Ok(());
         };
+        if let Err(reason) = prod::symbol_entry_window(&name, &s, now) {
+            self.d
+                .note(
+                    Some(&name),
+                    "skip",
+                    &reason,
+                    json!({"production_policy":mp::POLICY}),
+                )
+                .await;
+            return Ok(());
+        }
         self.restore_pullback(symbol_id, s, now).await?;
-        if let Some(a) = self.syms[&symbol_id].pullback {
+        if let Some(reason) = self.pair_entry_refusal(symbol_id) {
+            self.fast_cache.plans.remove(&symbol_id);
+            if let Some(a) = self.syms[&symbol_id].pullback {
+                self.save_pullback(symbol_id, a.session, now, None, reason, json!({"armed":a}))
+                    .await?;
+            }
+            self.d
+                .note(
+                    Some(&name),
+                    "skip",
+                    reason,
+                    json!({"production_policy":mp::POLICY}),
+                )
+                .await;
+            return Ok(());
+        }
+        if let Some(mut a) = self.syms[&symbol_id].pullback {
             let expiry = prod::arm_expiry(&name, &a.session, a.armed_at);
             if now >= expiry {
                 self.save_pullback(
@@ -3023,24 +3084,49 @@ impl<'a, 'c> Trader<'a, 'c> {
             let Some((bid, ask)) = fresh_s3_quote(&self.syms[&symbol_id], checked_at) else {
                 return Ok(());
             };
-            match a.touch_window(expiry, bid, ask, now) {
-                Touch::Waiting => {}
-                Touch::Expired | Touch::Invalidated => {
+            let update = a.advance_confirmed(expiry, bid, ask, now);
+            self.syms.get_mut(&symbol_id).unwrap().pullback = Some(a);
+            match update {
+                mp::ConfirmationUpdate::Waiting => {}
+                mp::ConfirmationUpdate::Extended | mp::ConfirmationUpdate::Touched => {
+                    if update == mp::ConfirmationUpdate::Extended {
+                        self.fast_cache.plans.remove(&symbol_id);
+                    }
+                    self.save_pullback(
+                        symbol_id,
+                        a.session,
+                        now,
+                        Some(a),
+                        if update == mp::ConfirmationUpdate::Extended {
+                            "running_impulse_extended"
+                        } else {
+                            "pullback_zone_touched"
+                        },
+                        json!({"armed":a}),
+                    )
+                    .await?;
+                }
+                mp::ConfirmationUpdate::Expired
+                | mp::ConfirmationUpdate::InvalidatedDeep
+                | mp::ConfirmationUpdate::InvalidState => {
+                    self.fast_cache.plans.remove(&symbol_id);
                     self.save_pullback(
                         symbol_id,
                         a.session,
                         now,
                         None,
-                        if a.touch_window(expiry, bid, ask, now) == Touch::Expired {
-                            "pullback_not_reached_expired"
-                        } else {
-                            "pullback_origin_invalidated"
+                        match update {
+                            mp::ConfirmationUpdate::Expired => "pullback_not_reached_expired",
+                            mp::ConfirmationUpdate::InvalidatedDeep => {
+                                "invalidated_deep_retracement_gt_61_8pct"
+                            }
+                            _ => "invalid_confirmation_state",
                         },
                         json!({"armed":a}),
                     )
-                    .await?
+                    .await?;
                 }
-                Touch::Trigger => {
+                mp::ConfirmationUpdate::Trigger => {
                     let prepared = if self.protect_during_reads {
                         match self.fast_plan(symbol_id, a) {
                             Some(p) => Some(p),
@@ -3055,7 +3141,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     };
                     let budget = ((now + chrono::Duration::seconds(5))
                         .min(expiry)
-                        .min(s.close)
+                        .min(prod::entry_deadline(&name, &s))
                         - checked_at)
                         .to_std()
                         .unwrap_or_default()
@@ -3251,6 +3337,14 @@ impl<'a, 'c> Trader<'a, 'c> {
             return Ok(());
         }
         let s = armed.session;
+        let current = self.syms[&symbol_id]
+            .rule
+            .and_then(|rule| sessions::session_at(&rule, now));
+        if current.is_none_or(|window| {
+            prod::symbol_entry_window(&self.syms[&symbol_id].name, &window, now).is_err()
+        }) {
+            return Ok(());
+        }
         let side = if armed.long { Dir::Buy } else { Dir::Sell };
         let name = self.syms[&symbol_id].name.clone();
         if mp::peer(&name).is_none() || now >= prod::arm_expiry(&name, &s, armed.armed_at) {
@@ -3283,24 +3377,22 @@ impl<'a, 'c> Trader<'a, 'c> {
         let Some(limits) = sym.limits else {
             return Ok(());
         };
-        let entry_price = if armed.long { ask } else { bid };
-        let (cost, spread, commission_rt, rate) =
-            match self.entry_cost(&sym, day, entry_price).await {
-                Ok(v) => v,
-                Err(e) => {
-                    self.skip(symbol_id, &name, &e, json!({"armed":armed}), now)
-                        .await;
-                    return Ok(());
-                }
-            };
-        let geometry = mp::geometry(
-            armed.long,
-            entry_price,
-            armed.origin,
-            cost.total,
-            limits.digits,
-        )
-        .map_err(anyhow::Error::msg)?;
+        let entry_price = mp::dispatch_entry_bound(&armed, ask - bid, limits.digits)
+            .map_err(anyhow::Error::msg)?;
+        let (cost, spread, commission_rt, rate) = match self
+            .entry_cost(&sym, day, entry_price.max(armed.origin))
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                self.skip(symbol_id, &name, &e, json!({"armed":armed}), now)
+                    .await;
+                return Ok(());
+            }
+        };
+        let geometry = mp::dispatch_geometry(&armed, spread, cost.total, limits.digits)
+            .map_err(anyhow::Error::msg)?
+            .geometry;
         let rel = relative_stop(geometry.risk, limits.digits);
         let r_price = armed.impulse_range;
         let mut detail = json!({"production_policy":mp::POLICY,"model":mp::MODEL,"armed":armed,
@@ -3341,16 +3433,17 @@ impl<'a, 'c> Trader<'a, 'c> {
         // Claude · № 17,020 25-Oct (Codex P1 on #15): a live entry is one
         // broker minimum, admitted account-wide (both strategies' loops) from
         // fresh broker state; the account's lock is held through the send.
-        let _admission = if r.live {
-            let g = crate::admission::lock(self.account_id()).await;
+        let _admission = crate::admission::lock(self.account_id()).await;
+        if let Some(reason) = self.pair_entry_refusal(symbol_id) {
+            self.skip(symbol_id, &name, reason, detail, now).await;
+            return Ok(());
+        }
+        if r.live {
             if let Err(why) = crate::admission::live_minimum(self.pool, self.session).await {
                 self.skip(symbol_id, &name, &why, detail, now).await;
                 return Ok(());
             }
-            Some(g)
-        } else {
-            None
-        };
+        }
         let equity = match fresh_equity(self.session).await {
             Ok(x) => x,
             Err(why) => {
@@ -3442,12 +3535,18 @@ impl<'a, 'c> Trader<'a, 'c> {
             account_id: self.account_id(),
             symbol_id,
             side: dir_side(side),
-            signal: jiaoyi_ctrader::entry_guard::Signal::Pullback {
+            signal: jiaoyi_ctrader::entry_guard::Signal::PullbackConfirmed {
                 origin: armed.origin,
                 level: armed.level,
-                planned_entry: entry_price,
+                impulse_range: armed.impulse_range,
+                admitted_entry: entry_price,
                 price_digits: limits.digits,
                 peer: peer_check,
+                proof: self
+                    .writer_turn_proof(armed, bid, ask, now)
+                    .ok_or_else(|| anyhow::anyhow!("missing confirmed pullback proof"))?,
+                margin: None,
+                calendar: None,
             },
             cost: Some(jiaoyi_ctrader::entry_guard::Cost {
                 prepared_spread: spread,
@@ -4604,7 +4703,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18392.md"
+            "/../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18407.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)
@@ -4632,16 +4731,13 @@ mod tests {
         let s = size(&rules_demo(), 10_000.0, 20_000_000, 1.0, &BTC, 0).unwrap();
         assert_eq!((s.volume, s.mode), (30, "risk_pct"));
         assert!((s.risk - 60.0).abs() < 1e-9);
-        // Owner18392 permits the demo floor under existing hard risk caps.
-        let minimum = size(&rules_demo(), 100.0, 20_000_000, 1.0, &BTC, 0).unwrap();
-        assert_eq!(
-            (minimum.volume, minimum.mode),
-            (1, "demo_broker_minimum_capped")
-        );
-        assert!(within_budget(0.0, minimum.risk, 100.0, 3.0).is_ok());
-        assert!(within_budget(2.0, minimum.risk, 100.0, 3.0).is_err());
+        // Owner18407: a broker minimum cannot exceed the normal demo budget.
+        let e = size(&rules_demo(), 100.0, 20_000_000, 1.0, &BTC, 0).unwrap_err();
+        assert_eq!(e, "min_volume_exceeds_trade_risk_budget");
         let e = size(&rules_demo(), 15.0, 20_000_000, 1.0, &BTC, 0).unwrap_err();
-        assert!(e.contains("minimum-volume risk ceiling"), "{e}");
+        assert_eq!(e, "min_volume_exceeds_trade_risk_budget");
+        let s = size(&rules_demo(), 100.0, 6_000_000, 1.0, &BTC, 0).unwrap();
+        assert!((s.risk - 0.6).abs() < 1e-10);
         let live = Rules {
             live: true,
             ..rules_demo()

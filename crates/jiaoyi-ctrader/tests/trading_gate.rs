@@ -2168,3 +2168,115 @@ async fn s3_pending_external_order_blocks_then_releases_without_cancellation() {
         assert!(log.lock().unwrap().closes.is_empty());
     }
 }
+
+#[tokio::test]
+async fn confirmed_prepared_pair_checks_exact_broker_book_before_consuming_intent() {
+    use jiaoyi_ctrader::entry_guard::{EntryGuard, Signal};
+    for label in [None, Some("jiaoyi-s3")] {
+        let mut f = prepared_fake();
+        f.quotes
+            .insert(5, vec![(Some(20_050_000), Some(20_070_000))]);
+        f.positions.lock().unwrap().push(position(777, 5, label));
+        let book = f.positions.clone();
+        let (conn, log) = f.spawn();
+        let session = session_on(&conn).await;
+        let mut quotes = conn.spot_events();
+        session.subscribe_spots(&[ETH, 5]).await.unwrap();
+        quotes.recv().await.unwrap();
+        quotes.recv().await.unwrap();
+        let ledger = MemLedger::default();
+        let command = open_s3(Some(1_000_000));
+        let policy = on();
+        let make_guard = |p: &jiaoyi_ctrader::trading::PreparedEntry| {
+            let now = chrono::Utc::now();
+            EntryGuard {
+                connection_generation: p.generation(),
+                account_revision: p.revision(),
+                account_id: ACCOUNT,
+                symbol_id: ETH,
+                side: Side::Buy,
+                signal: Signal::PullbackConfirmed {
+                    origin: 2990.,
+                    level: 3000.,
+                    impulse_range: 20.,
+                    admitted_entry: 3002.5,
+                    price_digits: 2,
+                    peer: Some((5, 200.)),
+                    proof: jiaoyi_core::strategy3::macro_pullback::TurnProof {
+                        origin: 2990.,
+                        extreme: 3010.,
+                        long: true,
+                        touched_at: now - chrono::Duration::seconds(2),
+                        turn_extreme: 2998.8,
+                        turn_extreme_at: now - chrono::Duration::seconds(1),
+                        confirmed_at: now,
+                        confirmed_bid: 3000.,
+                        confirmed_ask: 3001.,
+                    },
+                    margin: p.receipt.fx_guard.clone(),
+                    calendar: Some(p.calendar.clone()),
+                },
+                cost: None,
+                expires: p.expires(),
+            }
+        };
+        let prepared = jiaoyi_ctrader::trading::prepare_entry(
+            &session,
+            &allow(),
+            &ledger,
+            &policy,
+            &command,
+            false,
+        )
+        .await
+        .unwrap();
+        let guard = make_guard(&prepared);
+        let result = jiaoyi_ctrader::trading::send_prepared_entry(
+            &session,
+            &allow(),
+            &ledger,
+            &policy,
+            command.clone(),
+            "pair-held",
+            Duration::from_secs(1),
+            &guard,
+            &prepared,
+        )
+        .await;
+        assert!(
+            matches!(&result,Err(SendError::Refused(r)) if r.reason=="pair_risk_reservation_active"),
+            "{result:?}"
+        );
+        assert!(ledger.intents.lock().unwrap().is_empty());
+        assert_eq!(orders(&log), 0);
+        book.lock().unwrap().clear();
+        // Refreshing the broker admission, not mutating an actor's local view,
+        // is what grants authority after the sibling has gone away.
+        let released = jiaoyi_ctrader::trading::prepare_entry(
+            &session,
+            &allow(),
+            &ledger,
+            &policy,
+            &command,
+            false,
+        )
+        .await
+        .unwrap();
+        let guard = make_guard(&released);
+        let sent = jiaoyi_ctrader::trading::send_prepared_entry(
+            &session,
+            &allow(),
+            &ledger,
+            &policy,
+            command,
+            "pair-released",
+            Duration::from_secs(1),
+            &guard,
+            &released,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(sent.outcome, Outcome::Filled { .. }));
+        assert_eq!(orders(&log), 1);
+    }
+}

@@ -173,12 +173,17 @@ impl EntryState {
             })?;
         let mut receipt = guard.snapshot(quote, revision, now, monotonic_now);
         if let crate::entry_guard::Signal::Pullback { peer, .. }
-        | crate::entry_guard::Signal::PullbackBounded { peer, .. } = &guard.signal
+        | crate::entry_guard::Signal::PullbackBounded { peer, .. }
+        | crate::entry_guard::Signal::PullbackConfirmed { peer, .. } = &guard.signal
         {
             let peer_quote = peer.and_then(|(id, _)| self.quotes.get(&(guard.account_id, id)));
             receipt["peer"] = guard.validate_peer(peer_quote, now)?;
         }
         if let crate::entry_guard::Signal::PullbackBounded {
+            margin: Some(proof),
+            ..
+        }
+        | crate::entry_guard::Signal::PullbackConfirmed {
             margin: Some(proof),
             ..
         } = &guard.signal
