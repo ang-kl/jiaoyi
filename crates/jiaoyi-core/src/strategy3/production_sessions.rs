@@ -27,9 +27,8 @@ pub enum Market {
 impl Market {
     pub fn describe(self) -> &'static str {
         match self {
-            Self::Crypto => "owner18407: six UTC four-hour entry windows; broker maintenance remains excluded",
-            Self::Index => "owner18407: new entries only09:30–16:00NewYork; historical windows retained for exits",
-            _ => "owner18407: new entries07:00UTC London and09:30NewYork; historical windows retained for exits",
+            Self::Crypto => "owner18409: six UTC four-hour entry windows; broker maintenance remains excluded",
+            _ => "owner18409: native Asian, London07:00UTC and NewYork09:30 entry windows; broker calendar remains mandatory",
         }
     }
 }
@@ -187,7 +186,7 @@ pub fn entry_window(s: &Session, at: DateTime<Utc>) -> Result<(), String> {
 
 /// New index entries end at the cash close; recorded position exits retain
 /// their original registry deadline.
-pub fn entry_deadline(symbol: &str, session: &Session) -> DateTime<Utc> {
+pub fn entry_deadline_18407(symbol: &str, session: &Session) -> DateTime<Utc> {
     if matches!(symbol, "US500" | "NAS100") {
         session.close.min(ny(session.date, 16, 0))
     } else {
@@ -197,7 +196,7 @@ pub fn entry_deadline(symbol: &str, session: &Session) -> DateTime<Utc> {
 
 /// Owner №18,407: entry eligibility is narrower than the broker/session
 /// registry. Keep historical windows for existing-position exits and preparation.
-pub fn symbol_entry_window(
+pub fn symbol_entry_window_18407(
     symbol: &str,
     session: &Session,
     at: DateTime<Utc>,
@@ -211,10 +210,37 @@ pub fn symbol_entry_window(
         "BTCUSD" | "ETHUSD" => true,
         _ => false,
     };
-    if allowed && at < entry_deadline(symbol, session) {
+    if allowed && at < entry_deadline_18407(symbol, session) {
         Ok(())
     } else {
         Err("outside_authorized_entry_session_18407".into())
+    }
+}
+
+/// Owner №18,409 restores all registered native windows. This does not
+/// authorise broker maintenance, holidays, or an invented session boundary.
+pub fn entry_deadline(_symbol: &str, session: &Session) -> DateTime<Utc> {
+    session.close
+}
+
+pub fn symbol_entry_window(
+    symbol: &str,
+    session: &Session,
+    at: DateTime<Utc>,
+) -> Result<(), String> {
+    entry_window(session, at)?;
+    let market = match symbol {
+        "BTCUSD" | "ETHUSD" => Market::Crypto,
+        "US500" | "NAS100" => Market::Index,
+        "SpotCrude" => Market::Crude,
+        "SpotBrent" => Market::Brent,
+        "XAUUSD" | "XAGUSD" => Market::Metal,
+        _ => return Err("symbol_outside_s3_core".into()),
+    };
+    if windows_on(market, session.date).contains(session) && broker_weekly_open(symbol, at) {
+        Ok(())
+    } else {
+        Err("outside_native_broker_session_18409".into())
     }
 }
 
@@ -386,6 +412,45 @@ mod tests {
         s.parse().unwrap()
     }
     #[test]
+    fn owner18409_enables_all_native_core_windows_without_repair4_or_maintenance_bypass() {
+        for date in [
+            NaiveDate::from_ymd_opt(2026, 7, 6).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 11, 9).unwrap(),
+        ] {
+            for (symbol, market) in [
+                ("US500", Market::Index),
+                ("NAS100", Market::Index),
+                ("SpotCrude", Market::Crude),
+                ("SpotBrent", Market::Brent),
+                ("XAUUSD", Market::Metal),
+                ("XAGUSD", Market::Metal),
+            ] {
+                for s in windows_on(market, date) {
+                    let start = opening_observation_start(symbol, s);
+                    assert!(
+                        symbol_entry_window(symbol, &s, start).is_ok(),
+                        "{symbol} {s:?}"
+                    );
+                    assert!(
+                        symbol_entry_window(symbol, &s, s.close - Duration::seconds(1)).is_ok()
+                    );
+                    assert!(symbol_entry_window(symbol, &s, s.close).is_err());
+                    assert_eq!(entry_deadline(symbol, &s), s.close);
+                    let forged = Session {
+                        open: s.open + Duration::minutes(1),
+                        ..s
+                    };
+                    assert!(symbol_entry_window(symbol, &forged, forged.open).is_err());
+                }
+            }
+        }
+        let at = at("2026-11-09T22:00:00Z");
+        let s = session_at(Market::Crypto, at).unwrap();
+        assert!(symbol_entry_window("BTCUSD", &s, at).is_err());
+        assert!(symbol_entry_window("NatGas", &s, at).is_err());
+    }
+
+    #[test]
     fn crypto_has_no_utc_reset_blackout_and_keeps_six_distinct_windows() {
         let before = at("2026-11-08T23:59:59Z");
         let after = at("2026-11-09T00:00:00Z");
@@ -478,32 +543,32 @@ mod tests {
                     _ => Market::Metal,
                 };
                 let windows = windows_on(market, date);
-                assert!(symbol_entry_window(symbol, &windows[0], windows[0].open).is_err());
+                assert!(symbol_entry_window_18407(symbol, &windows[0], windows[0].open).is_err());
                 assert_eq!(
-                    symbol_entry_window(symbol, &windows[1], windows[1].open).is_ok(),
+                    symbol_entry_window_18407(symbol, &windows[1], windows[1].open).is_ok(),
                     !matches!(symbol, "US500" | "NAS100")
                 );
-                assert!(symbol_entry_window(symbol, &windows[2], windows[2].open).is_ok());
+                assert!(symbol_entry_window_18407(symbol, &windows[2], windows[2].open).is_ok());
                 assert_eq!(windows[2].open.with_timezone(&New_York).hour(), 9);
                 assert_eq!(windows[2].open.with_timezone(&New_York).minute(), 30);
                 if matches!(symbol, "US500" | "NAS100") {
                     let cash_close = ny(date, 16, 0);
-                    assert!(symbol_entry_window(
+                    assert!(symbol_entry_window_18407(
                         symbol,
                         &windows[2],
                         cash_close - Duration::milliseconds(1)
                     )
                     .is_ok());
-                    assert!(symbol_entry_window(symbol, &windows[2], cash_close).is_err());
+                    assert!(symbol_entry_window_18407(symbol, &windows[2], cash_close).is_err());
                     assert!(
                         windows[2].close > cash_close,
                         "historical exit deadline remains intact"
                     );
-                    assert_eq!(entry_deadline(symbol, &windows[2]), cash_close);
+                    assert_eq!(entry_deadline_18407(symbol, &windows[2]), cash_close);
                 }
             }
             for window in windows_on(Market::Crypto, date) {
-                assert!(symbol_entry_window("BTCUSD", &window, window.open).is_ok());
+                assert!(symbol_entry_window_18407("BTCUSD", &window, window.open).is_ok());
             }
         }
     }

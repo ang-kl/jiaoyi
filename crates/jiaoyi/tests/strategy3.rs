@@ -1438,6 +1438,31 @@ async fn inside_quote_keeps_slot_available_and_qualified_arm_restores_after_rest
             let armed = t.syms[&BTC]
                 .pullback
                 .expect("later qualifying impulse uses the same slot");
+            let stamp = at(60) + Duration::seconds(4);
+            let status = t.trigger_status(BTC, stamp);
+            assert!(status["entry_gates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|g| g["code"] == "armed_pullback"));
+            assert!(status["entry_gates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|g| g["code"] == "peer_hold_below_24bps_or_opposing"));
+            t.confirmation_peer(BTC, stamp).await.unwrap();
+            let status = t.trigger_status(BTC, stamp);
+            assert!(!status["entry_gates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|g| g["code"] == "peer_hold_below_24bps_or_opposing"));
+            let stale = t.trigger_status(BTC, stamp + Duration::seconds(7));
+            assert!(stale["entry_gates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|g| g["code"] == "peer_hold_below_24bps_or_opposing"));
             let restarted =
                 strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
                     .await
@@ -1584,7 +1609,17 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 .remove("entry_preparation")
                 .unwrap();
             assert_eq!(preparation["prepared_now"], false);
-            assert_eq!(projected, x);
+            for field in [
+                "at",
+                "bid",
+                "ask",
+                "distance_half_widths",
+                "reason_code",
+                "session_date",
+            ] {
+                assert_eq!(projected[field], x[field]);
+            }
+            assert_eq!(projected["entry_gate"]["code"], "session_cost_veto");
 
             // The durable blocker does not invent quote data or financial readiness.
             let mut without_quotes = restarted.syms[&BTC].clone();
@@ -5019,6 +5054,14 @@ async fn counter_trend_macro_context_vetoes_the_impulse_before_an_order(pool: Pg
             .await
             .iter()
             .any(|(_, r)| r.contains("vetoed_by_5d_20d_macro_trend")));
+        let visible = t.trigger_status(BTC, at(30) + Duration::milliseconds(2));
+        assert!(visible["entry_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["code"] == "vetoed_by_5d_20d_macro_trend"));
+        assert!(visible["macro_drift_5_pct"].as_f64().unwrap() < 0.0);
+        assert!(visible["macro_drift_20_pct"].as_f64().unwrap() < 0.0);
     });
 }
 
@@ -5478,6 +5521,12 @@ async fn peer_position_cancels_durable_arm_and_release_requires_a_new_impulse(po
             .await
             .iter()
             .any(|(_, why)| why.contains("pair_risk_reservation_active")));
+        let visible = t.trigger_status(BTC, at(60) + Duration::seconds(2));
+        assert!(visible["entry_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["code"] == "pair_risk_reservation_active"));
         assert!(orders(&log).is_empty());
         assert!(closes(&log).is_empty());
         assert!(log.lock().unwrap().amends.is_empty());
@@ -5552,6 +5601,30 @@ async fn running_extension_survives_restart_and_deep_retracement_disarms(pool: P
             .await
             .iter()
             .any(|(_, why)| why.contains("invalidated_deep_retracement_gt_61_8pct")));
+        let visible = t.trigger_status(BTC, at(30) + Duration::seconds(4));
+        assert!(visible["entry_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["state"] == "invalidated"));
+        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+            .await
+            .unwrap();
+        t.reconcile(at(30) + Duration::seconds(5)).await.unwrap();
+        t.on_quote(
+            BTC,
+            Some(60_453.5),
+            Some(60_458.5),
+            at(30) + Duration::seconds(5),
+        )
+        .await
+        .unwrap();
+        let visible = t.trigger_status(BTC, at(30) + Duration::seconds(5));
+        assert!(visible["entry_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["state"] == "invalidated"));
         assert!(orders(&log).is_empty());
     });
 }
@@ -5656,5 +5729,216 @@ async fn demo_broker_minimum_cannot_override_the_normal_trade_budget(pool: PgPoo
         .await
         .unwrap();
         assert_eq!(sent, 0);
+    });
+}
+
+/// Restarts after the18407→18409 registration change retain source provenance,
+/// causal preparation and the original opening midpoint for all eight symbols.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPool) {
+    use jiaoyi_core::strategy3::{band, macro_pullback as mp, production_sessions as prod};
+    loaded(&pool).await;
+    let london = london_fixture();
+    let crypto = prod::session_at(prod::Market::Crypto, london.open + Duration::hours(2)).unwrap();
+    let now = london.open + Duration::hours(2);
+    let mut fixture = fake((OPEN, OPEN + 5.0));
+    let mut specs = Vec::new();
+    let run = store::start_run(&pool, DEMO).await.unwrap();
+    for (n, symbol) in mp::CORE.into_iter().enumerate() {
+        let id = 100 + n as i64;
+        let class = match symbol {
+            "BTCUSD" | "ETHUSD" => AssetClass::Crypto,
+            "US500" | "NAS100" => AssetClass::EquityIndex,
+            "XAUUSD" | "XAGUSD" => AssetClass::Metal,
+            _ => AssetClass::Energy,
+        };
+        let s = if class == AssetClass::Crypto {
+            crypto
+        } else {
+            london
+        };
+        let metadata = ProtoOaSymbol {
+            symbol_id: id,
+            digits: 2,
+            pip_position: 2,
+            min_volume: Some(1),
+            step_volume: Some(1),
+            ..Default::default()
+        };
+        store::upsert_symbol(
+            &pool,
+            &loader::symbol_row(DEMO, symbol, class, Some(true), &metadata, Utc::now()),
+        )
+        .await
+        .unwrap();
+        store::record_resolution(
+            &pool,
+            run,
+            DEMO,
+            symbol,
+            class,
+            &Resolution::Resolved { symbol_id: id },
+        )
+        .await
+        .unwrap();
+        let rule = prod::rule_for(symbol, class).unwrap();
+        let jiaoyi_core::strategy3::sessions::SessionRule::Production(market) = rule else {
+            panic!("core market")
+        };
+        let mut bars = Vec::new();
+        for prior in prod::same_slot_before(market, s.open, 25) {
+            for m in (0..(prior.close - prior.open).num_minutes()).step_by(30) {
+                bars.push(band::M30 {
+                    open_time: prior.open + Duration::minutes(m),
+                    open: OPEN,
+                    close: OPEN + 60.0,
+                });
+            }
+        }
+        let context = prod::context(&rule, s, &bars, s.open).unwrap();
+        let table = prod::sigma_table(&rule, &s, &bars);
+        let prepared = strategy3::preopen::Prepared {
+            symbol: symbol.into(),
+            symbol_id: Some(id),
+            session: s,
+            prereg_hash: strategy3::preopen::compatible_preparation_hashes()[1].clone(),
+            source_cutoff_at: s.open - Duration::minutes(20),
+            completed_at: s.open - Duration::minutes(19),
+            table: Some(table.clone()),
+            macro_context: Some(context),
+            macro_context_error: None,
+            spread_ready: true,
+            commission_ready: true,
+            metadata_ready: true,
+            missing_marks: 0,
+            source_error: false,
+        };
+        store::trading::record_decision(
+            &pool,
+            DEMO,
+            Some(symbol),
+            "s3_preopen",
+            "verified previous registration",
+            &serde_json::to_value(&prepared).unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
+        store::ticks::insert(
+            &pool,
+            &[store::ticks::TickRow {
+                account_id: DEMO,
+                session_id: format!("18409-{symbol}"),
+                seq: 0,
+                broker_symbol_id: id,
+                received_at: s.open,
+                broker_timestamp: Some(s.open.timestamp_millis()),
+                bid_e5: Some(e5(OPEN - 2.5)),
+                ask_e5: Some(e5(OPEN + 2.5)),
+            }],
+        )
+        .await
+        .unwrap();
+        fixture.m30_bars.insert(
+            id,
+            vec![m30_bar(
+                s.open,
+                e5(OPEN - 100.0),
+                e5(OPEN + 100.0),
+                e5(OPEN - 100.0),
+                e5(OPEN + 10.0),
+                100,
+            )],
+        );
+        specs.push((id, symbol, class, s, table, context));
+    }
+    settings::change(
+        &pool,
+        "universe.symbols",
+        Some(DEMO),
+        Some(json!(specs
+            .iter()
+            .map(|(_, name, class, _, _, _)| json!({"name":name,"class":class.as_str()}))
+            .collect::<Vec<_>>())),
+        "owner18409 test",
+        "native-session restart",
+    )
+    .await
+    .unwrap();
+    store::finish_run(
+        &pool,
+        run,
+        "ok",
+        &store::RunSummary {
+            assets: Some(json!([{"asset_id":1,"name":"USD"}])),
+            listed_symbols: Some(json!(specs
+                .iter()
+                .map(|(id, _, _, _, _, _)| json!({"id":id,"quote_asset_id":1}))
+                .collect::<Vec<_>>())),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    with_trader!(&pool, fixture, Environment::Demo, |t, log| {
+        for restart in 0..2 {
+            if restart == 1 {
+                t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+                    .await
+                    .unwrap();
+                t.reconcile(now).await.unwrap();
+            }
+            strategy3::preopen::restore(&pool, DEMO, &mut t.syms, now)
+                .await
+                .unwrap();
+            for (id, symbol, _, s, table, context) in &specs {
+                let prep = t.syms[id]
+                    .preopen
+                    .as_ref()
+                    .expect("previous registration restored");
+                assert_eq!(
+                    prep.prereg_hash,
+                    strategy3::preopen::compatible_preparation_hashes()[1]
+                );
+                assert!(prep.matches(*id, *s));
+                t.prepare(*id, *s, now).await.unwrap();
+                let d = t.syms[id].day.as_ref().unwrap().as_ref().unwrap();
+                assert_eq!(
+                    d.open,
+                    Ok(OPEN),
+                    "{symbol}: original tick midpoint, not M30/restart quote"
+                );
+                assert_eq!(
+                    d.opening_quote.as_ref().unwrap()["observed_at"],
+                    json!(s.open)
+                );
+                assert_eq!(d.table.sessions_used, table.sessions_used);
+                assert_eq!(d.table.marks.len(), table.marks.len());
+                for (m, want) in &table.marks {
+                    match (&d.table.marks[m], want) {
+                        (Ok(got), Ok(want)) => assert!((got - want).abs() <= f64::EPSILON),
+                        (got, want) => assert_eq!(got, want),
+                    }
+                }
+                let got = d.macro_context.as_ref().unwrap();
+                assert_eq!(got.latest_bar_end, context.latest_bar_end);
+                assert!((got.drift_5 - context.drift_5).abs() <= f64::EPSILON);
+                assert!((got.drift_20 - context.drift_20).abs() <= f64::EPSILON);
+                let visible = t.trigger_status(*id, now);
+                assert_eq!(visible["entry_session_enabled"], true);
+                assert_eq!(visible["opening_reference"]["mid"], OPEN);
+            }
+        }
+        let wire = log.lock().unwrap();
+        assert!(wire.orders.is_empty() && wire.closes.is_empty() && wire.amends.is_empty());
+        for (id, from, _) in &wire.trendbar_requests {
+            let (_, _, _, s, _, _) = specs.iter().find(|(sid, _, _, _, _, _)| sid == id).unwrap();
+            assert_eq!(
+                *from,
+                s.open.timestamp_millis(),
+                "no repeated historical M30 collection"
+            );
+        }
+        assert_eq!(wire.trendbar_requests.len(), 16);
     });
 }

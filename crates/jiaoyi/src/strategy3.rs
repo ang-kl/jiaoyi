@@ -35,6 +35,7 @@ use chrono::{DateTime, Utc};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::strategy3::band::{self, Band, SigmaTable, M30};
 use jiaoyi_core::strategy3::macro_pullback::{self as mp, ArmedPullback};
+mod diagnostics;
 use jiaoyi_core::strategy3::production_sessions as prod;
 use jiaoyi_core::strategy3::sessions::{self, Session, SessionRule};
 use jiaoyi_core::strategy3::targets::{self, Dir, Plan};
@@ -89,10 +90,10 @@ pub fn human_symbol_locks(
 /// The pre-registration, relative to the repository root.
 /// v4 (28-10-2026): Kelly skip in front of size(). The 27 Oct file is the
 /// record of the mark decision and the cost gate.
-pub const PREREG_FILE: &str = "docs/preregistration-2026-11-09-strategy3-macro-pullback-18407.md";
+pub const PREREG_FILE: &str = "docs/preregistration-2026-11-09-strategy3-macro-pullback-18409.md";
 /// Its text, compiled in.
 pub const PREREG_TEXT: &str =
-    include_str!("../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18407.md");
+    include_str!("../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18409.md");
 /// A trigger that was skipped or refused is taken again on that symbol only
 /// after this long (self-derived: the gate reads the broker twice per try).
 pub const ENTRY_RETRY: Duration = Duration::from_secs(60);
@@ -702,7 +703,8 @@ fn recorded_session_close(
 ) -> Option<DateTime<Utc>> {
     if matches!(
         detail["production_policy"].as_str(),
-        Some("s3_macro_pullback_owner_18392_v1") | Some(mp::POLICY)
+        Some("s3_macro_pullback_owner_18392_v1" | "s3_macro_pullback_owner_18407_v1")
+            | Some(mp::POLICY)
     ) {
         // An armed retracement may cross a four-hour boundary. `session`
         // describes its original preparation, not the later execution window.
@@ -1117,6 +1119,8 @@ pub struct Sym {
     pub cost_skip_session: Option<DateTime<Utc>>,
     pub pullback: Option<ArmedPullback>,
     pub pullback_loaded_session: Option<DateTime<Utc>>,
+    /// Latest actual assessment; never mistaken for a fresh execution grant.
+    pub last_assessment: Option<(Session, DateTime<Utc>, String)>,
     pub admission_restored_window: Option<DateTime<Utc>>,
     pub last_impulse_check: Option<DateTime<Utc>>,
 }
@@ -1458,6 +1462,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     cost_skip_session: None,
                     pullback: None,
                     pullback_loaded_session: None,
+                    last_assessment: None,
                     admission_restored_window: None,
                     last_impulse_check: None,
                 },
@@ -2248,13 +2253,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         // the distance to the trigger, after the quote is acted on (so a
         // session this quote prepared is shown).
         if let Some(sym) = self.syms.get(&symbol_id) {
-            let (mut distance, name) = (trigger_distance(sym, now), sym.name.clone());
-            distance["entry_preparation"] = json!({
-                "prepared_now":sym.pullback.is_some_and(|arm|self.fast_plan(symbol_id,arm).is_some()),
-                "last_refusal":self.fast_cache.errors.get(&symbol_id),
-                "source_refusal":fast_entry::source_refusal(sym),
-                "evidence_scope":"background admission; final writer checks remain mandatory"
-            });
+            let (distance, name) = (self.trigger_status(symbol_id, now), sym.name.clone());
             crate::trading::beat(&self.live, self.account_id(), |l| {
                 l.triggers.insert(name, distance);
             });
@@ -2831,6 +2830,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         reason: &str,
         detail: Value,
     ) -> anyhow::Result<()> {
+        self.syms.get_mut(&id).unwrap().last_assessment = Some((s, now, reason.into()));
         let sym = &self.syms[&id];
         if arm.is_none() && sym.pullback.is_none() && reason != "pullback_trigger_consumed" {
             let name = sym.name.clone();
@@ -2889,7 +2889,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         }
         // Latest state includes consumption/expiry tombstones. Looking up
         // only the current slot would lose a valid cross-boundary crypto arm.
-        let raw:Option<Value>=sqlx::query_scalar("SELECT detail FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_pullback_state' AND detail->>'prereg_hash'=$3 ORDER BY id DESC LIMIT 1")
+        let raw:Option<Value>=sqlx::query_scalar("SELECT detail || jsonb_build_object('assessment_reason',reason) FROM trading_decisions WHERE account_id=$1 AND symbol=$2 AND kind='s3_pullback_state' AND detail->>'prereg_hash'=$3 ORDER BY id DESC LIMIT 1")
             .bind(self.account_id()).bind(&self.syms[&id].name).bind(&self.hash).fetch_optional(self.pool).await?;
         let arm = match raw.as_ref().map(|v| &v["state"]).filter(|v| !v.is_null()) {
             Some(v) => {
@@ -2932,6 +2932,17 @@ impl<'a, 'c> Trader<'a, 'c> {
         let sym = self.syms.get_mut(&id).unwrap();
         sym.pullback = arm;
         sym.pullback_loaded_session = Some(s.open);
+        if let Some(raw) = raw {
+            if let (Ok(session), Some(reason), Some(at)) = (
+                serde_json::from_value::<Session>(raw["session"].clone()),
+                raw["assessment_reason"].as_str(),
+                raw["at"]
+                    .as_str()
+                    .and_then(|v| v.parse::<DateTime<Utc>>().ok()),
+            ) {
+                sym.last_assessment = Some((session, at, reason.to_owned()));
+            }
+        }
         if let Some(a) = arm {
             self.prepare(id, a.session, now).await?;
         }
@@ -4703,7 +4714,7 @@ mod tests {
     fn the_embedded_pre_registration_is_the_file() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18407.md"
+            "/../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18409.md"
         );
         let disk = std::fs::read(path).unwrap();
         let disk_hash: String = Sha256::digest(&disk)

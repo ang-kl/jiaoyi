@@ -159,7 +159,8 @@ fn run(r: Request) -> Result<Value, String> {
                 t.done = true;
                 t.status = "invalid_seed".into();
             }
-            if let Err(reason) = ps::symbol_entry_window(&t.seed.symbol, &arm.session, arm.armed_at)
+            if let Err(reason) =
+                ps::symbol_entry_window_18407(&t.seed.symbol, &arm.session, arm.armed_at)
             {
                 t.done = true;
                 t.status = reason.to_string();
@@ -323,7 +324,9 @@ fn run(r: Request) -> Result<Value, String> {
                     _ => return Err("unsupported symbol".into()),
                 };
                 let current_window = ps::session_at(market, at).ok_or("no current session")?;
-                if let Err(reason) = ps::symbol_entry_window(&t.seed.symbol, &current_window, at) {
+                if let Err(reason) =
+                    ps::symbol_entry_window_18407(&t.seed.symbol, &current_window, at)
+                {
                     t.done = true;
                     t.status = reason.to_string();
                     t.events
@@ -438,7 +441,7 @@ fn run(r: Request) -> Result<Value, String> {
     let net: f64 = trials.iter().filter_map(|t| t.net).sum();
     let gross: f64 = trials.iter().filter_map(|t| t.gross).sum();
     Ok(
-        json!({"account_id":r.account_id,"policy":mp::POLICY,"through":r.through,
+        json!({"account_id":r.account_id,"policy":"s3_macro_pullback_owner_18407_v1","through":r.through,
         "pair_enforced":r.enforce_pair,"old_net_pnl":trials.iter().map(|t|t.seed.old_net_pnl).sum::<f64>(),
         "modeled_closed_gross_cash":gross,"modeled_closed_net_cash_3_74bp":net,
         "counterfactual_net_pnl":if unclosed {None}else{Some(net)},"unresolved":unclosed,

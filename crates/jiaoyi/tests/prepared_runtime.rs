@@ -381,7 +381,7 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         let receipt: Value = serde_json::from_slice(&raw).unwrap();
         assert_eq!(receipt["result"], "passed");
         let admission = &receipt["pullback_admitted_price"];
-        assert_eq!(admission["policy"], "s3_macro_pullback_owner_18407_v1");
+        assert_eq!(admission["policy"], "s3_macro_pullback_owner_18409_v1");
         assert_eq!(admission["peer_min_signed_bps"], 24.0);
         let proof: jiaoyi_core::strategy3::macro_pullback::TurnProof =
             serde_json::from_value(admission["confirmed_turn"].clone()).unwrap();
