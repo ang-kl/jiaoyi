@@ -1,0 +1,541 @@
+{
+  "trace": "№18,392",
+  "generated_at_sgt": "09-11-2026 10:12:25 SGT",
+  "release": {
+    "trace": "№18,392",
+    "status": "deployed_and_verified_with_remaining_data_limits",
+    "pr": 204,
+    "merge_commit": "6aa5100a5055ec786e16fc05f8069113b00d7eff",
+    "four_account_bug_fixes": {
+      "live_43002148_exposure_fx_conversion_fixed": true,
+      "demo_46130058_dispatch_latency_reduced": "Earlier live path about 5200 ms; revised local actor/PostgreSQL/synthetic-broker test 7.364 ms. New live dispatch latency remains unobserved.",
+      "demo_47790949_pullback_tolerance_fixed": true,
+      "demo_49236051_min_volume_floor_fixed": true
+    },
+    "multisession_schedule_enabled": {
+      "crypto_24h_rolling_no_0730_blackout": true,
+      "metals_energy_indices_sydney_asia_london_ny_enabled": true,
+      "current_active_evaluation_windows_sgt": {
+        "BTCUSD_ETHUSD": "08:00–12:00 SGT; current opening references and macro context available.",
+        "XAUUSD_XAGUSD_SpotCrude_SpotBrent": "Asia to 15:00 SGT. Gold/silver opening references available; crude/Brent blocked by missing original opening quotes.",
+        "US500_NAS100": "Asia 07:00–15:00 SGT; blocked by missing original opening quotes."
+      }
+    },
+    "railway_deployment_status": "SUCCESS",
+    "railway_deployment_id": "806ccc1d-4e9f-41d6-8b20-d36e2c7d98de",
+    "account_loops_verified": 4,
+    "single_running_instance_verified": true,
+    "current_macro_contexts_ready": 32,
+    "current_opening_references_available": 16,
+    "current_opening_references_expected": 32,
+    "live_dispatch_latency_verified": false,
+    "financial_pass": false,
+    "observed_at": "2026-11-09T02:09:58.056057+00:00",
+    "report_file": "doc/LIVE_ENTRY_LATENCY_AND_MULTISESSION_FIX-18392-2026-11-09.md"
+  },
+  "ci": {
+    "head": "d9e02bc0300c473824c576d496029f440c7af33f",
+    "run_id": 42547714458,
+    "checks": {
+      "check": "SUCCESS",
+      "docker": "SUCCESS",
+      "engineering": "SUCCESS"
+    },
+    "rust_passed_including_example_steps": 773,
+    "rust_ignored": 1
+  },
+  "observations_utc": [
+    "2026-11-09T02:08:44.177190+00:00",
+    "2026-11-09T02:09:58.056057+00:00"
+  ],
+  "accounts": [
+    {
+      "account_id": 43002148,
+      "policy": "s3_macro_pullback_owner_18392_v1",
+      "paused": false,
+      "connected": true,
+      "actor_state": "observing",
+      "last_processed_quote_at": "2026-11-09T02:09:57.764106812Z",
+      "quote_age_seconds_at_observation": 0.292,
+      "exit_checks_first": 40,
+      "exit_checks_second": 65,
+      "macro_context_ready": 8,
+      "core_symbols": 8,
+      "opening_reference_missing": [
+        "SpotCrude",
+        "SpotBrent",
+        "US500",
+        "NAS100"
+      ],
+      "current_partial_coefficient_symbols": [
+        "SpotBrent"
+      ],
+      "fx_provenance": {
+        "account_id": 43002148,
+        "generation": 6,
+        "label": "jiaoyi-s3",
+        "observed_at": "2026-11-09T02:09:26.555578451Z",
+        "paths": [
+          {
+            "bounds": [
+              0.00631911532385466,
+              0.006319195187300946
+            ],
+            "deposit_asset": 15,
+            "from_asset": 8,
+            "legs": [
+              {
+                "from_asset": 8,
+                "inverse": true,
+                "symbol_id": 4,
+                "to_asset": 15
+              }
+            ],
+            "max_quote_age_ms": 5000,
+            "reason": null,
+            "state": "fresh",
+            "subscribed": true
+          }
+        ],
+        "prereg_hash": "b8f6c0c8310c8cbea7b8fc04227f465c8d8e47b2b204c0cfd162f51af111b669",
+        "strategy": "Strategy 3: macro pullback",
+        "warmup_error": null
+      },
+      "fx_provenance_is_current_quote": false,
+      "current_preparation": [
+        {
+          "symbol": "NAS100",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAUUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAGUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotCrude",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotBrent",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_partial_coefficients",
+          "macro_context_ready": true,
+          "missing_marks": 2
+        },
+        {
+          "symbol": "BTCUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "ETHUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "US500",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        }
+      ]
+    },
+    {
+      "account_id": 46130058,
+      "policy": "s3_macro_pullback_owner_18392_v1",
+      "paused": false,
+      "connected": true,
+      "actor_state": "observing",
+      "last_processed_quote_at": "2026-11-09T02:09:57.813058478Z",
+      "quote_age_seconds_at_observation": 0.243,
+      "exit_checks_first": 41,
+      "exit_checks_second": 66,
+      "macro_context_ready": 8,
+      "core_symbols": 8,
+      "opening_reference_missing": [
+        "SpotCrude",
+        "SpotBrent",
+        "US500",
+        "NAS100"
+      ],
+      "current_partial_coefficient_symbols": [
+        "SpotBrent"
+      ],
+      "fx_provenance": {
+        "account_id": 46130058,
+        "generation": 4,
+        "label": "jiaoyi-s3",
+        "observed_at": "2026-11-09T02:07:14.004232096Z",
+        "paths": [],
+        "prereg_hash": "b8f6c0c8310c8cbea7b8fc04227f465c8d8e47b2b204c0cfd162f51af111b669",
+        "strategy": "Strategy 3: macro pullback",
+        "warmup_error": null
+      },
+      "fx_provenance_is_current_quote": false,
+      "current_preparation": [
+        {
+          "symbol": "NAS100",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAUUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAGUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotCrude",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotBrent",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_partial_coefficients",
+          "macro_context_ready": true,
+          "missing_marks": 2
+        },
+        {
+          "symbol": "BTCUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "ETHUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "US500",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        }
+      ]
+    },
+    {
+      "account_id": 47790949,
+      "policy": "s3_macro_pullback_owner_18392_v1",
+      "paused": false,
+      "connected": true,
+      "actor_state": "observing",
+      "last_processed_quote_at": "2026-11-09T02:09:57.813160526Z",
+      "quote_age_seconds_at_observation": 0.243,
+      "exit_checks_first": 41,
+      "exit_checks_second": 66,
+      "macro_context_ready": 8,
+      "core_symbols": 8,
+      "opening_reference_missing": [
+        "SpotCrude",
+        "SpotBrent",
+        "US500",
+        "NAS100"
+      ],
+      "current_partial_coefficient_symbols": [
+        "SpotBrent"
+      ],
+      "fx_provenance": {
+        "account_id": 47790949,
+        "generation": 5,
+        "label": "jiaoyi-s3",
+        "observed_at": "2026-11-09T02:07:14.006109208Z",
+        "paths": [],
+        "prereg_hash": "b8f6c0c8310c8cbea7b8fc04227f465c8d8e47b2b204c0cfd162f51af111b669",
+        "strategy": "Strategy 3: macro pullback",
+        "warmup_error": null
+      },
+      "fx_provenance_is_current_quote": false,
+      "current_preparation": [
+        {
+          "symbol": "NAS100",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAUUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAGUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotCrude",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotBrent",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_partial_coefficients",
+          "macro_context_ready": true,
+          "missing_marks": 2
+        },
+        {
+          "symbol": "BTCUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "ETHUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "US500",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        }
+      ]
+    },
+    {
+      "account_id": 49236051,
+      "policy": "s3_macro_pullback_owner_18392_v1",
+      "paused": false,
+      "connected": true,
+      "actor_state": "observing",
+      "last_processed_quote_at": "2026-11-09T02:09:57.812663813Z",
+      "quote_age_seconds_at_observation": 0.243,
+      "exit_checks_first": 41,
+      "exit_checks_second": 66,
+      "macro_context_ready": 8,
+      "core_symbols": 8,
+      "opening_reference_missing": [
+        "SpotCrude",
+        "SpotBrent",
+        "US500",
+        "NAS100"
+      ],
+      "current_partial_coefficient_symbols": [
+        "SpotBrent"
+      ],
+      "fx_provenance": {
+        "account_id": 49236051,
+        "generation": 1,
+        "label": "jiaoyi-s3",
+        "observed_at": "2026-11-09T02:07:13.775436001Z",
+        "paths": [],
+        "prereg_hash": "b8f6c0c8310c8cbea7b8fc04227f465c8d8e47b2b204c0cfd162f51af111b669",
+        "strategy": "Strategy 3: macro pullback",
+        "warmup_error": null
+      },
+      "fx_provenance_is_current_quote": false,
+      "current_preparation": [
+        {
+          "symbol": "NAS100",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAUUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "XAGUSD",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotCrude",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "SpotBrent",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_partial_coefficients",
+          "macro_context_ready": true,
+          "missing_marks": 2
+        },
+        {
+          "symbol": "BTCUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "ETHUSD",
+          "session_open": "2026-11-09T00:00:00Z",
+          "session_close": "2026-11-09T04:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        },
+        {
+          "symbol": "US500",
+          "session_open": "2026-11-08T23:00:00Z",
+          "session_close": "2026-11-09T07:00:00Z",
+          "state": "prepared_late",
+          "macro_context_ready": true,
+          "missing_marks": 0
+        }
+      ]
+    }
+  ],
+  "single_writer": {
+    "observed_at": "2026-11-09T02:08:05.948270+00:00",
+    "expected_commit": "6aa5100a5055ec786e16fc05f8069113b00d7eff",
+    "status": "verified_single_running_instance",
+    "evidence_scope": "Railway control-plane deployment and instance metadata; not direct process/socket inspection",
+    "service_id": "0f67b4a0-629d-42f1-97f1-8910887896af",
+    "environment_id": "f3b64526-67e3-4ea6-98af-274043a8b657",
+    "service_configuration": {
+      "id": "e6ed93c9-1dc6-4df9-9546-f5adbda7694c",
+      "numReplicas": null,
+      "drainingSeconds": null
+    },
+    "pages": 3,
+    "deployments_scanned": 238,
+    "checks": {
+      "desired_latest_commit": true,
+      "latest_deployment_success": true,
+      "old_deployment_removed": true,
+      "old_has_no_active_instances": true,
+      "exactly_one_active_instance": true,
+      "sole_instance_running_expected_latest": true
+    },
+    "latest_deployment": {
+      "id": "806ccc1d-4e9f-41d6-8b20-d36e2c7d98de",
+      "status": "SUCCESS",
+      "updatedAt": "2026-11-09T02:07:12.070Z",
+      "instances": [
+        {
+          "id": "d450c0bf-92a2-46bb-9c98-0d1d7dace90e",
+          "status": "RUNNING"
+        }
+      ],
+      "commit": "6aa5100a5055ec786e16fc05f8069113b00d7eff"
+    },
+    "old_deployment": {
+      "id": "306a5080-1f2f-401b-923b-2b545499e8c7",
+      "status": "REMOVED",
+      "updatedAt": "2026-11-09T02:07:15.391Z",
+      "instances": [
+        {
+          "id": "4ad2e163-0cbf-4f18-b0cf-5313ca4d316a",
+          "status": "REMOVED"
+        }
+      ],
+      "commit": "0f3b89c700a33f98891b47827b99df550bbe0cea"
+    },
+    "active_or_transitioning_instances": [
+      {
+        "deployment_id": "806ccc1d-4e9f-41d6-8b20-d36e2c7d98de",
+        "deployment_status": "SUCCESS",
+        "commit": "6aa5100a5055ec786e16fc05f8069113b00d7eff",
+        "id": "d450c0bf-92a2-46bb-9c98-0d1d7dace90e",
+        "status": "RUNNING"
+      }
+    ]
+  },
+  "remaining_limits": [
+    "Missing recorded first-six-second opening midpoint for crude, Brent, US500 and NAS100 on all four accounts; origin of absent recording not established. Available captured broker calendar anchors match.",
+    "Current Brent and upcoming London retain two unavailable late-window coefficients; supported earlier marks remain usable.",
+    "Initial live history warm-up took about one minute; no continuing actor freeze observed after completion.",
+    "The older operations margin card reads separate legacy margin receipts and may remain stale/null for prepared entries. Selected prepared margin proof is atomically retained in strategy3_orders.detail.prepared_admission.margin; execution and stop-loss review use the retained order evidence. No extra display change was added to this repair.",
+    "Natural live entry latency, fill slippage, improved net win rate and financial qualification remain unverified."
+  ],
+  "source_sha256": {
+    "ci-final-receipt.json": "4cede09ce22a7687fbc499be63bc1df2f9835e1271521ef7efdd8fc415fe91a9",
+    "pr204-merged.json": "69a9360c7818afbdabce33d4cd2b7b8cc8a114c88025cba78e3986dabd038ab1",
+    "health-after-a.json": "a5a9de007b464b42ec44a9b5889a88c83a8a52ca89a6192bbc3c2923f0c6f8c3",
+    "health-after-b.json": "b822c9feca16db81847d9683797c19d7183773f50f0416178ee1bda9a36ca6f5",
+    "writer-instances-after-release.json": "9fc55621ca018ea9fae196249d467087b68bf7df2afb2f0fce11c6bcccaf4700",
+    "multisession-opening-anchor-audit.json": "c63661d1a8f7a6f2a8dd0aea81585dc37dd25f07865f4a5939cd53379dfb1af2"
+  }
+}
