@@ -694,6 +694,13 @@ mod tests {
             },
             ..Default::default()
         };
+        // №18,403: historical S3 evidence cannot authorise an unlabelled
+        // current position. Quantity checks apply after exact ownership.
+        assert!(a
+            .validate_current(&p)
+            .unwrap_err()
+            .contains("label ownership"));
+        p.trade_data.label = Some("jiaoyi-s3".into());
         assert!(a.validate_current(&p).is_ok());
         p.trade_data.volume = 75;
         assert!(a

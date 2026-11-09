@@ -29,6 +29,7 @@ Historical market-data observation and read-only human-position assessment remai
 - Archive regression verifies all file paths, byte counts and SHA256 values; separate comparison verifies all base Git blobs.
 - S3 suite: 80 passed, one existing manual benchmark ignored before the final durable-arm restart hardening; the strengthened restart/cancellation regression passes separately. Full exact-head CI repeats the full suite.
 - cTrader suite passes, including 49 writer-gate tests. New tests cover external pending orders, automatic release without cancellation, S1 exclusion and relabelled-position amendment/close refusal.
+- CI also exposed an old quantity-authority fixture with no current label. It now explicitly requires rejection without a label, then checks the original quantity/side cases with the exact S3 label.
 - Existing quantity, risk, margin, uncertain transmission, late revision, owned exit and partial-fill tests remain enabled. No test or lint gate was disabled.
 - Reconnect fixtures now obtain a broker ownership snapshot before entry, as the production actor does. The pre-open test uses its simulated first-slot reconnect time instead of the real wall clock.
 
