@@ -1,14 +1,14 @@
 # Live-entry and multi-session repair — interim report
 
-№18,392 §§1–7 · 09-11-2026 09:15:31 SGT · by Codex (GPT-6; effort inherited, not independently exposed)
+№18,392 §§1–9 · 09-11-2026 09:29:46 SGT · by Codex (GPT-6; effort inherited, not independently exposed)
 
 Repository: https://github.com/ang-kl/jiaoyi · Branch: `fix/live-entry-multisession-18392`
 
-**Status: implementation and integration testing in progress; not merged; not deployed.**
+**Status: implementation and focused integration verified; PR #204 awaiting CI; not deployed.**
 
 ## §1 · TLDR — implementation in progress
 
-The repair is implemented in the working branch and focused checks have passed. It is not yet merged or deployed. Production improvement, live dispatch below 250 ms and a higher win rate have not been verified. No verification order has been placed.
+The repair is committed in [PR #204](https://github.com/ang-kl/jiaoyi/pull/204), with focused integration checks passing. It is not yet merged or deployed. Production improvement, live dispatch below 250 ms and a higher win rate have not been verified. No verification order has been placed.
 The missing cross-currency valuation and long dispatch path are concrete engineering defects. The bounce refusal and below-minimum quantity refusal followed the earlier registered rules; the owner has now authorised bounded changes to those policies. Those changes require their own evidence and do not demonstrate a trading edge.
 
 ## §2 · What happened at approximately 07:11 SGT
@@ -19,8 +19,8 @@ The owner directive reproduces the earlier №18,384 diagnostic. The following i
 |---|---|---|---|
 | 46130058 · Demo | About 5.2 seconds elapsed against a 5-second dispatch deadline. | Background prepared admission; final writer guards and durable intent retained. | Implemented; live timing unverified. |
 | 43002148 · Live | Existing foreign exposure lacked a fresh verified conversion in the margin calculation. | Removed candidate-currency-only valuation restriction; broker-identified fresh FX paths cover existing exposure. | Unit + broker-fixture regression passed; production proof pending. |
-| 47790949 · Demo | Latest quote no longer satisfied the original pullback-touch rule. | Owner-approved 0.10-impulse bounce allowance after a genuine fresh touch. | New policy implemented; final integration pending. |
-| 49236051 · Demo | Positive calculated volume below broker minimum. | Owner-approved minimum/step floor subject to existing cash-risk, aggregate-risk and margin caps. | New policy implemented; final integration pending. |
+| 47790949 · Demo | Latest quote no longer satisfied the original pullback-touch rule. | Owner-approved 0.10-impulse bounce allowance after a genuine fresh touch. | New policy and focused integration passed; production verification pending. |
+| 49236051 · Demo | Positive calculated volume below broker minimum. | Owner-approved minimum/step floor subject to existing cash-risk, aggregate-risk and margin caps. | New policy and focused integration passed; production verification pending. |
 
 ## §3 · What is implemented
 
@@ -41,8 +41,19 @@ The first half-hour uses the prepared first-half-hour sigma and the 48 bp impuls
 ## §5 · Verification so far
 
 The counts below are separate suites, not a combined production certification. They are an interim snapshot; the main agent will update this report after the remaining checks and release verification.
-Observed local results: FX arithmetic and freshness unit tests 3 passed; broker integration regression 1 passed; existing margin gate regression selection 10 passed. The integration fixture exercises an external JPY-denominated holding with a USD candidate, requests the broker conversion path once, subscribes once, reuses the cache and sends zero orders.
-The main agent reports research checks: 113 passed and 1 skipped; UI lifecycle checks: 12 passed. The application library compiles. The workspace-wide run had three fixture type errors being adapted at this snapshot, so the complete workspace suite and CI are not yet green. Earlier bounce/core focused tests reported 12 passed, but the final integrated run remains outstanding.
+| Check | Measured result | Limit |
+|---|---|---|
+| Actual S3 actor + local PostgreSQL + synthetic broker | Passed; 9.186 ms touch-to-write; one intent, order record and broker order; zero admission/history broker requests between touch and write | A local fixture, not measured Railway latency |
+| Strategy 3 integration | 78 passed; 1 existing manual benchmark ignored | Covers new session fixtures and preserved historical position management |
+| Admission evidence review | 7 passed, including six bounded-policy variants | Missing evidence stays unknown |
+| FX | 3 arithmetic/freshness tests, 1 broker-path integration and 10 existing margin regressions passed | No real broker verification order |
+| Atomic settings/intent/order | 2 PostgreSQL tests passed | Concurrent settings change, duplicate and rollback refusal |
+| Production calendar/preparation/storage | 12 focused tests passed | Actual broker proof remains mandatory at writer |
+| Broader checks | Strict Clippy, 113 research tests (1 skipped), 12 browser lifecycle tests, 191 engineering tests passed | Full CI remains the release gate |
+
+The wider local run found one outdated S1 fixture: it supplied USDJPY quotes without the broker asset identities now required by the conversion guard. The fixture was corrected; its original missing-rate refusal, eventual order and size assertions still pass. Production conversion freshness and risk guards were not relaxed. The final actor test includes the durable database path; an earlier 1.362 ms gate-only fixture excluded S3 consumption and is not substituted for that measurement.
+
+The HTML report was checked at 1366 px and 390 px widths with no page overflow. Raw logs and secret values are excluded.
 
 ## §6 · Remaining release checks
 
@@ -67,4 +78,16 @@ Time is money. Preparation, traceable evidence and a bounded correction are the 
 - `crates/jiaoyi/src/strategy3/fast_entry.rs` and `strategy3/exposure_fx.rs`
 - `crates/jiaoyi-core/src/strategy3/production_sessions.rs`
 
-This is an interim report. PR, merged SHA, Railway deployment SHA and live latency must be appended only after observed verification.
+## §8 · Operational schedule in Singapore time
+
+On 9 November, when New York is on standard time, the active crypto window is 08:00–12:00 SGT. Traditional Asian windows run from the broker reopening to 15:00; London runs 15:00–22:30; New York runs 22:30–05:59 the following day (Friday closes at 05:55 Saturday). Most Monday Asian reopenings are 07:00 SGT; metals first trade at 07:01. Brent has a later 09:00 SGT reopening on Tuesday–Friday. New York daylight saving shifts its local anchors by one hour in SGT. Actual account-specific broker closures, holidays and permissions override these evaluation windows.
+
+A missing original opening quote or complete causal history remains a legitimate blocker. The repair retries original opening evidence within a bounded first minute instead of unnecessarily waiting five minutes after a recorder flush delay. It never invents an opening midpoint from a later quote. Two concurrent background preparations per account are bounded; eight simultaneous arms are not guaranteed to retain fresh receipts. Health exposes readiness and refusal evidence.
+
+## §9 · Agent responsibilities and release evidence
+
+The main agent integrated the production actor and owns the release. Six delegated roles covered prepared admission/sizing, FX exposure, session calendars/storage, bounce and exit preservation, admission review/regression fixtures, and independent safety/atomic persistence. These engineering agents do not autonomously manage broker positions; the deployed deterministic actors retain execution authority.
+
+Before a touch: causal preparation → arm → background order/account proofs. At a touch: durable consumption → atomic settings/intent/order → fresh writer checks → broker frame. After dispatch: broker receipt, reconciliation and existing protective exits. The UI is an observer of this server workflow.
+
+Release evidence is pending. [PR #204](https://github.com/ang-kl/jiaoyi/pull/204) contains the implementation. Its required `check`, `docker` and `engineering` outcomes, actual merge SHA, Railway SHA, four-account liveness and any observed production entry timing will be added after verification. No deployed or financial PASS is inferred from local tests.
