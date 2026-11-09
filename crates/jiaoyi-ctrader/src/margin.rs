@@ -6,6 +6,11 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
+mod fx;
+pub use fx::{
+    conversion_bounds, conversion_path, foreign_reserve, validate_cached_fx, CachedGuard,
+    ConversionLeg, FxExposure,
+};
 
 type Locks = Mutex<HashMap<(String, i64), Arc<AsyncMutex<()>>>>;
 static LOCKS: OnceLock<Locks> = OnceLock::new();
@@ -33,6 +38,8 @@ pub struct Receipt {
     pub positions: usize,
     pub pending_entries: usize,
     pub reason: Option<String>,
+    /// Fresh foreign-exposure revaluation proof for the final writer.
+    pub fx_guard: Option<CachedGuard>,
 }
 impl Receipt {
     pub fn unavailable(reason: String) -> Self {
@@ -46,6 +53,7 @@ impl Receipt {
             positions: 0,
             pending_entries: 0,
             reason: Some(reason),
+            fx_guard: None,
         }
     }
 }
@@ -106,6 +114,83 @@ pub fn evaluate(
     Ok((projected, stressed))
 }
 
+fn quote_asset(symbols: &pb::ProtoOaSymbolsListRes, id: i64) -> Result<i64, String> {
+    let mut found = symbols.symbol.iter().filter(|s| s.symbol_id == id);
+    let value = found.next().ok_or("margin symbol identity missing")?;
+    if found.next().is_some() {
+        return Err("margin symbol identity duplicated".into());
+    }
+    value
+        .quote_asset_id
+        .filter(|v| *v > 0)
+        .ok_or_else(|| "margin quote asset missing".into())
+}
+
+fn add_exposure_reserve(
+    asset: i64,
+    deposit: i64,
+    gross: f64,
+    stop_cash: f64,
+    paths: &HashMap<i64, Vec<ConversionLeg>>,
+    base: &mut f64,
+    foreign: &mut Vec<FxExposure>,
+) -> Result<(), String> {
+    if !gross.is_finite() || !stop_cash.is_finite() {
+        return Err("invalid stop reserve arithmetic".into());
+    }
+    if asset == deposit {
+        *base += (gross - stop_cash).max(0.0);
+    } else {
+        foreign.push(FxExposure {
+            quote_asset: asset,
+            deposit_asset: deposit,
+            chain: paths
+                .get(&asset)
+                .ok_or("exposure conversion chain not warmed")?
+                .clone(),
+            gross_deposit: gross,
+            stop_cash_quote: stop_cash,
+        });
+    }
+    Ok(())
+}
+
+/// Run at startup and whenever the observed book changes. Preparation only;
+/// it neither changes exposure nor treats an unavailable rate as one.
+pub async fn warm_account_conversions(
+    session: &AccountSession<'_>,
+    trader: &pb::ProtoOaTrader,
+    book: &pb::ProtoOaReconcileRes,
+) -> Result<(), String> {
+    if trader.ctid_trader_account_id != session.account().id()
+        || book.ctid_trader_account_id != session.account().id()
+    {
+        return Err("conversion warm-up account mismatch".into());
+    }
+    let symbols = session
+        .cached_symbols_list()
+        .await
+        .map_err(|e| format!("conversion symbol identities unreadable: {e}"))?;
+    let assets: BTreeSet<_> = book
+        .position
+        .iter()
+        .map(|p| quote_asset(&symbols, p.trade_data.symbol_id))
+        .chain(
+            book.order
+                .iter()
+                .filter(|o| o.closing_order != Some(true) && o.order_type != 4)
+                .map(|o| quote_asset(&symbols, o.trade_data.symbol_id)),
+        )
+        .collect::<Result<_, _>>()?;
+    for asset in assets.into_iter().filter(|a| *a != trader.deposit_asset_id) {
+        session
+            .exposure_conversion_path(asset, trader.deposit_asset_id)
+            .await
+            .map_err(|e| format!("conversion warm-up refused: {e}"))?;
+    }
+    Ok(())
+}
+
 /// Uses fresh broker state, account-specific warnings and exact-volume estimates.
 /// Unsupported/ambiguous protection is an entry refusal, never a stop change.
 pub async fn check(
@@ -135,14 +220,15 @@ pub async fn check(
     {
         return Err("limited-risk/GSL margin needs compatible guaranteed protection; no ordinary-stop entry".into());
     }
-    let pnl = session
-        .unrealized_pnl()
-        .await
-        .map_err(|e| format!("margin P&L unreadable: {e}"))?;
-    let calls = session
-        .margin_calls()
-        .await
-        .map_err(|e| format!("margin warnings unreadable: {e}"))?;
+    // Independent read-only requests run concurrently during background admission.
+    let (pnl, calls, symbols) = tokio::join!(
+        session.unrealized_pnl(),
+        session.margin_calls(),
+        session.cached_symbols_list()
+    );
+    let pnl = pnl.map_err(|e| format!("margin P&L unreadable: {e}"))?;
+    let calls = calls.map_err(|e| format!("margin warnings unreadable: {e}"))?;
+    let symbols = symbols.map_err(|e| format!("margin symbol identity unreadable: {e}"))?;
     if calls
         .margin_call
         .iter()
@@ -157,41 +243,36 @@ pub async fn check(
         .filter(|v| v.is_finite() && *v > 0.0)
         .reduce(f64::max)
         .ok_or("no positive broker margin warning threshold")?;
-    let symbols = session
-        .symbols_list()
-        .await
-        .map_err(|e| format!("margin symbol identity unreadable: {e}"))?;
-    let quote = |id: i64| -> Result<i64, String> {
-        let v: Vec<_> = symbols
-            .symbol
-            .iter()
-            .filter(|s| s.symbol_id == id)
-            .collect();
-        if v.len() != 1 {
-            return Err("margin symbol identity missing/ambiguous".into());
-        }
-        v[0].quote_asset_id
-            .filter(|v| *v > 0)
-            .ok_or("margin quote asset missing".into())
-    };
+    let quote = |id: i64| -> Result<i64, String> { quote_asset(&symbols, id) };
     let candidate_quote = quote(*symbol_id)?;
     if candidate_quote == trader.deposit_asset_id
         && quote_to_deposit.is_none_or(|r| !r.is_finite() || (r - 1.0).abs() > 1e-9)
     {
         return Err("quote-to-deposit rate disagrees with broker currency identity".into());
     }
-    let rate = |id: i64| -> Result<f64, String> {
-        let asset = quote(id)?;
-        if asset == trader.deposit_asset_id {
-            return Ok(1.0);
-        }
-        if asset == candidate_quote {
-            return quote_to_deposit
-                .filter(|r| r.is_finite() && *r > 0.0)
-                .ok_or("margin conversion rate unknown".into());
-        }
-        Err("existing exposure has no fresh verified quote-to-deposit conversion".into())
-    };
+    let mut assets: BTreeSet<_> = book
+        .position
+        .iter()
+        .map(|p| quote(p.trade_data.symbol_id))
+        .chain(
+            book.order
+                .iter()
+                .filter(|o| o.closing_order != Some(true) && o.order_type != 4)
+                .map(|o| quote(o.trade_data.symbol_id)),
+        )
+        .collect::<Result<_, _>>()?;
+    assets.insert(candidate_quote);
+    let mut paths = HashMap::new();
+    for asset in assets.into_iter().filter(|a| *a != trader.deposit_asset_id) {
+        let path = session
+            .exposure_conversion_path(asset, trader.deposit_asset_id)
+            .await
+            .map_err(|e| {
+                format!("margin exposure conversion unavailable for asset {asset}: {e}")
+            })?;
+        paths.insert(asset, path);
+    }
+    let mut foreign_exposures = Vec::new();
     let mut marks = HashMap::new();
     for p in &pnl.position_unrealized_pn_l {
         if p.position_id <= 0 || marks.insert(p.position_id, p).is_some() {
@@ -203,7 +284,16 @@ pub async fn check(
     let mut future: BTreeMap<i64, [i64; 2]> = BTreeMap::new();
     let mut equity = money(trader.balance, trader.money_digits)?;
     let mut used = 0.0;
-    let mut reserve = crate::trading::risk_of(*volume, *relative_stop, rate(*symbol_id)?);
+    let mut reserve = 0.0;
+    add_exposure_reserve(
+        candidate_quote,
+        trader.deposit_asset_id,
+        0.0,
+        -(*relative_stop as f64 / 100000.0 * *volume as f64 / 100.0),
+        &paths,
+        &mut reserve,
+        &mut foreign_exposures,
+    )?;
     let mut pending = 0;
     let sign = |s: i32| -> Result<(usize, f64), String> {
         match s {
@@ -256,10 +346,15 @@ pub async fn check(
             .filter(|v| v.is_finite() && *v > 0.0)
             .ok_or("existing position has no verified stop")?;
         let gross = money(m.gross_unrealized_pn_l, Some(pnl.money_digits))?;
-        reserve += (gross
-            - sgn * (stop - entry) * p.trade_data.volume as f64 / 100.0
-                * rate(p.trade_data.symbol_id)?)
-        .max(0.0);
+        add_exposure_reserve(
+            quote(p.trade_data.symbol_id)?,
+            trader.deposit_asset_id,
+            gross,
+            sgn * (stop - entry) * p.trade_data.volume as f64 / 100.0,
+            &paths,
+            &mut reserve,
+            &mut foreign_exposures,
+        )?;
     }
     // Some brokers allocate a future position ID while an entry is pending.
     // An exactly matched zero mark has no equity effect; it is not adopted.
@@ -331,7 +426,15 @@ pub async fn check(
         if sgn * (entry - stop) <= 0.0 {
             return Err("pending stop is not on loss side".into());
         }
-        reserve += sgn * (entry - stop) * remaining as f64 / 100.0 * rate(o.trade_data.symbol_id)?;
+        add_exposure_reserve(
+            quote(o.trade_data.symbol_id)?,
+            trader.deposit_asset_id,
+            0.0,
+            sgn * (stop - entry) * remaining as f64 / 100.0,
+            &paths,
+            &mut reserve,
+            &mut foreign_exposures,
+        )?;
         add(&mut future, o.trade_data.symbol_id, index, remaining)?;
         pending += 1;
     }
@@ -384,18 +487,41 @@ pub async fn check(
         return Err("margin estimate falls as gross exposure increases".into());
     }
     let projected = final_margin.max(used + (final_margin - initial_margin));
-    let after = session
-        .margin_book()
-        .await
-        .map_err(|e| format!("margin final book unreadable: {e}"))?;
-    let balance = session
-        .trader()
-        .await
-        .map_err(|e| format!("margin final balance unreadable: {e}"))?;
+    let (after, balance) = tokio::join!(session.margin_book(), session.trader());
+    let after = after.map_err(|e| format!("margin final book unreadable: {e}"))?;
+    let balance = balance.map_err(|e| format!("margin final balance unreadable: {e}"))?;
     if !same_book(book, &after) || trader != &balance {
         return Err("account state changed during margin admission".into());
     }
-    let (level, stress) = evaluate(equity, projected, reserve, floor, warning)?;
+    let guard = CachedGuard {
+        account_id: account,
+        equity,
+        projected_margin: projected,
+        base_loss_reserve: reserve,
+        floor_pct: floor,
+        warning_pct: warning,
+        foreign_exposures,
+        candidate_exposure: FxExposure {
+            quote_asset: candidate_quote,
+            deposit_asset: trader.deposit_asset_id,
+            chain: paths.get(&candidate_quote).cloned().unwrap_or_default(),
+            gross_deposit: 0.0,
+            stop_cash_quote: -(*relative_stop as f64 / 100000.0 * *volume as f64 / 100.0),
+        },
+        candidate_max_risk: None,
+    };
+    let quotes: HashMap<_, _> = guard
+        .foreign_exposures
+        .iter()
+        .flat_map(|x| x.chain.iter())
+        .filter_map(|leg| {
+            session
+                .connection()
+                .quote_snapshot(account, leg.symbol_id)
+                .map(|q| (leg.symbol_id, q))
+        })
+        .collect();
+    let (level, stress) = validate_cached_fx(&guard, chrono::Utc::now(), |id| quotes.get(&id))?;
     Ok(Receipt {
         schema_version: 1,
         state: "passed",
@@ -406,5 +532,6 @@ pub async fn check(
         positions: book.position.len(),
         pending_entries: pending,
         reason: None,
+        fx_guard: Some(guard),
     })
 }

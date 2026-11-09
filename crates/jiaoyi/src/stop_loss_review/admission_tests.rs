@@ -354,6 +354,12 @@ async fn only_v7_uses_unsent_evidence_known_at_the_original_opening(pool: PgPool
 async fn pullback_review_uses_arm_not_peak_and_does_not_inherit_legacy_cost_veto(pool: PgPool) {
     use jiaoyi_core::strategy3::{band::Band, cost_reserve, targets::Dir};
     use jiaoyi_ctrader::trading::VolumeLimits;
+    let legacy_hash = format!(
+        "{:x}",
+        Sha256::digest(include_bytes!(
+            "../../../../docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md"
+        ))
+    );
     for account in 1..=6 {
         let planned_cost = cost_reserve(0.02, 0.0, 24.0, 100.51).unwrap();
         let planned = mp::geometry(true, 100.51, 100.0, planned_cost.total, 2).unwrap();
@@ -363,7 +369,7 @@ async fn pullback_review_uses_arm_not_peak_and_does_not_inherit_legacy_cost_veto
             crate::trading::relative_stop(planned.risk, 2),
         )
         .await;
-        open.prereg_hash = crate::strategy3::prereg_hash();
+        open.prereg_hash = legacy_hash.clone();
         let at = open.decided_at;
         let session = Session {
             date: at.date_naive(),
@@ -420,7 +426,7 @@ async fn pullback_review_uses_arm_not_peak_and_does_not_inherit_legacy_cost_veto
         }
         open.bid = Some(100.49);
         open.ask = Some(100.51);
-        open.detail = json!({"production_policy":mp::POLICY,"session_date":session.date,"session":session,
+        open.detail = json!({"production_policy":mp::LEGACY_REPLAY_POLICY,"session_date":session.date,"session":session,
             "decided_at":at,"armed":armed,"macro_context":armed.macro_context,"band":band,
             "bid":100.49,"ask":100.51,"entry":entry,"volume_limits":limits,"order":order});
         if account == 4 {
@@ -428,7 +434,7 @@ async fn pullback_review_uses_arm_not_peak_and_does_not_inherit_legacy_cost_veto
             open.detail["ask"] = json!(101.01);
         }
         if account != 3 {
-            let arm_receipt = json!({"production_policy":mp::POLICY,"prereg_hash":open.prereg_hash,
+            let arm_receipt = json!({"production_policy":mp::LEGACY_REPLAY_POLICY,"prereg_hash":open.prereg_hash,
                 "state":armed,"bid":100.99,"ask":101.01,
                 "detail":{"band":band,"cost":arm_cost,"peer_move":null}});
             sqlx::query("INSERT INTO trading_decisions(account_id,symbol,kind,reason,detail,at) VALUES($1,'BTCUSD','s3_pullback_state','armed_pullback',$2,$3)")
@@ -463,7 +469,7 @@ async fn pullback_review_uses_arm_not_peak_and_does_not_inherit_legacy_cost_veto
     for c in out["cases"].as_array().unwrap() {
         let id = c["account_id"].as_i64().unwrap();
         let checks = &c["checks"];
-        assert_eq!(checks["preregistration_matches_current_reference"], true);
+        assert_eq!(checks["preregistration_matches_current_reference"], false);
         assert_eq!(checks["entry_trigger_valid"], id != 4, "retouch {id}");
         assert_eq!(
             checks["original_decision_mark_valid"], true,
@@ -484,12 +490,184 @@ async fn pullback_review_uses_arm_not_peak_and_does_not_inherit_legacy_cost_veto
         assert_eq!(checks["first_recorded_session_entry"], true);
         assert_eq!(
             c["original_entry"]["rule_registration"],
-            crate::strategy3::PREREG_FILE
+            "docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md"
         );
         assert_eq!(c["original_entry"]["setup_complete"], id != 3);
         assert_eq!(
             c["net_costs_complete"], false,
             "missing history must never become measured costs"
         );
+    }
+}
+
+#[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+async fn bounded_pullback_review_separates_trigger_bound_and_window_history(pool: PgPool) {
+    use jiaoyi_core::strategy3::{band::Band, cost_reserve, targets::Dir};
+    use jiaoyi_ctrader::trading::VolumeLimits;
+    let hash = format!(
+        "{:x}",
+        Sha256::digest(include_bytes!(
+            "../../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18392.md"
+        ))
+    );
+    for account in 1..=6 {
+        let planned_cost = cost_reserve(0.02, 0.0, 3.74, 100.61).unwrap();
+        let planned_risk = mp::geometry(true, 100.61, 100.0, planned_cost.total, 2)
+            .unwrap()
+            .risk;
+        let mut open = opening_with_stop(
+            &pool,
+            account,
+            crate::trading::relative_stop(planned_risk, 2),
+        )
+        .await;
+        let at = open.decided_at;
+        let session = ps::session_at(ps::Market::Crypto, at).unwrap();
+        let band = Band {
+            open: 100.0,
+            sigma: 0.004,
+            lower: 99.6,
+            upper: 100.4,
+            half_width: 0.4,
+            minutes: 0.0,
+        };
+        let context = mp::Context {
+            drift_5: 0.01,
+            drift_20: 0.02,
+            latest_bar_end: session.open,
+        };
+        let arm_cost = cost_reserve(0.02, 0.0, 3.74, 101.01).unwrap();
+        let armed = mp::ArmedPullback::arm_window(
+            "BTCUSD",
+            session,
+            band,
+            100.99,
+            101.01,
+            session.open + Duration::seconds(1),
+            context,
+            None,
+            arm_cost.total,
+        )
+        .unwrap();
+        let price = mp::dispatch_entry_bound(&armed, 0.02, 2).unwrap();
+        let cost = cost_reserve(0.02, 0.0, 3.74, price).unwrap();
+        let geometry = mp::geometry(true, price, armed.origin, cost.total, 2).unwrap();
+        let relative = crate::trading::relative_stop(geometry.risk, 2);
+        let limits = VolumeLimits {
+            min: 100,
+            step: 100,
+            max: None,
+            digits: 2,
+        };
+        let entry = crate::strategy3::Entry {
+            side: Dir::Buy,
+            band,
+            entry_price: price,
+            relative_stop: relative,
+            r: geometry.risk,
+            cost,
+        };
+        let order = crate::strategy3::pullback_order(&entry, &limits, 100).unwrap();
+        open.prereg_hash = hash.clone();
+        open.session_date = Some(session.date);
+        open.bid = Some(100.49);
+        open.ask = Some(100.51);
+        open.detail = json!({"production_policy":mp::POLICY,"session_date":session.date,"session":session,
+            "decided_at":at,"armed":armed,"macro_context":context,"band":band,
+            "bid":100.49,"ask":100.51,"entry":entry,"volume_limits":limits,"order":order});
+        let receipt = json!({"production_policy":mp::POLICY,"prereg_hash":hash,"state":armed,
+            "detail":{"impulse_quote":{"bid":100.99,"ask":101.01},"band":band,"cost":arm_cost,"peer_move":null}});
+        sqlx::query("INSERT INTO trading_decisions(account_id,symbol,kind,reason,detail,at) VALUES($1,'BTCUSD','s3_pullback_state','armed_pullback',$2,$3)")
+            .bind(account).bind(receipt).bind(armed.armed_at).execute(&pool).await.unwrap();
+        let checked = at + Duration::milliseconds(50);
+        let touched_at = at - Duration::milliseconds(50);
+        open.detail["trigger_quote"] = json!({"bid":100.49,"ask":100.51,
+            "bid_at":touched_at,"ask_at":touched_at});
+        let mut guard = json!({"policy":jiaoyi_ctrader::entry_guard::POLICY,
+            "stage":"after_writer_lock","result":"passed","checked_at":checked,"deadline_elapsed":false,
+            "account_revision":0,"expected_account_revision":0,"selected_side":"buy",
+            "bid":{"price":100.54,"received_at":checked,"receipt_age_ms":0},
+            "ask":{"price":100.56,"received_at":checked,"receipt_age_ms":0},
+            "pullback_admitted_price":{"bounded":true,"price":price,"digits":2,
+                "origin":armed.origin,"level":armed.level,"impulse_range":armed.impulse_range,"bounce_fraction":0.10,
+                "trigger_bid":{"price":100.49,"received_at":touched_at,"receipt_age_ms":100},
+                "trigger_ask":{"price":100.51,"received_at":touched_at,"receipt_age_ms":100}}});
+        if account <= 3 {
+            let mut prior = OrderRow {
+                entry_key: format!("s3:{account}:prior"),
+                decided_at: at - Duration::minutes(1),
+                ..open.clone()
+            };
+            if account == 1 {
+                // Same reporting date but another slot cannot veto this slot.
+                prior.detail["session"]["open"] = json!(session.open - Duration::hours(4));
+            } else if account == 3 {
+                prior.detail["session"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("open");
+            }
+            skip(&pool, &prior, prior.decided_at, true).await;
+            record_order(&pool, &prior).await.unwrap();
+        } else if account == 4 {
+            guard["pullback_admitted_price"]
+                .as_object_mut()
+                .unwrap()
+                .remove("bounded");
+        } else if account == 5 {
+            // A permissible later bounce cannot manufacture the first 50% touch.
+            open.detail["bid"] = json!(100.54);
+            open.detail["ask"] = json!(100.56);
+            open.detail["trigger_quote"]["bid"] = json!(100.54);
+            open.detail["trigger_quote"]["ask"] = json!(100.56);
+            guard["pullback_admitted_price"]["trigger_bid"]["price"] = json!(100.54);
+            guard["pullback_admitted_price"]["trigger_ask"]["price"] = json!(100.56);
+        } else if account == 6 {
+            guard["ask"]["price"] = json!(price + 0.01);
+        }
+        sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,received_at,raw) VALUES($1,$2,0,'ENTRY_VALIDATED_BEFORE_SEND',$3,$4)")
+            .bind(account).bind(&open.entry_key).bind(checked).bind(serde_json::to_vec(&guard).unwrap())
+            .execute(&pool).await.unwrap();
+        record_case(&pool, &open).await;
+    }
+    let out = evidence(&pool, &[1, 2, 3, 4, 5, 6]).await.unwrap();
+    assert_eq!(out["cases"].as_array().unwrap().len(), 6);
+    for case in out["cases"].as_array().unwrap() {
+        let account = case["account_id"].as_i64().unwrap();
+        let checks = &case["checks"];
+        for name in [
+            "original_session_valid",
+            "original_decision_mark_valid",
+            "original_impulse_valid",
+            "original_stop_geometry_valid",
+            "original_target_geometry_valid",
+        ] {
+            assert_eq!(checks[name], true, "{account} {name}");
+        }
+        assert_eq!(checks["entry_trigger_valid"], account != 5);
+        assert_eq!(
+            checks["final_dispatch_guard_verified"],
+            match account {
+                4 => Value::Null,
+                5 | 6 => json!(false),
+                _ => json!(true),
+            },
+            "bounded writer snapshot {account}"
+        );
+        for name in [
+            "no_prior_recorded_session_cost_veto",
+            "first_recorded_session_entry",
+        ] {
+            assert_eq!(
+                checks[name],
+                match account {
+                    2 => json!(false),
+                    3 => Value::Null,
+                    _ => json!(true),
+                },
+                "window-scoped evidence {account} {name}"
+            );
+        }
+        assert_eq!(case["net_costs_complete"], false);
     }
 }

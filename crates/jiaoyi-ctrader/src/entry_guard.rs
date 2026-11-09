@@ -19,6 +19,7 @@ pub struct Quote {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)] // Keep the bounded proof together on the rare entry path.
 pub enum Signal {
     Trend {
         level: f64,
@@ -32,6 +33,19 @@ pub enum Signal {
         planned_entry: f64,
         price_digits: i32,
         peer: Option<(i64, f64)>,
+    },
+    /// Owner №18,392: a strict touch has occurred, and risk was reserved
+    /// beforehand for the worst executable price inside the 10% bounce band.
+    PullbackBounded {
+        origin: f64,
+        level: f64,
+        impulse_range: f64,
+        admitted_entry: f64,
+        price_digits: i32,
+        peer: Option<(i64, f64)>,
+        trigger_quote: Quote,
+        margin: Option<crate::margin::CachedGuard>,
+        calendar: crate::market_hours::ContractCalendar,
     },
 }
 
@@ -93,8 +107,18 @@ impl EntryGuard {
             "deadline_elapsed": monotonic_now >= self.expires,
             "remaining_dispatch_ms": self.expires.saturating_duration_since(monotonic_now).as_millis(),
             "max_quote_age_ms": MAX_QUOTE_AGE.as_millis(),
+            "broker_calendar_symbol_id": match &self.signal {
+                Signal::PullbackBounded { calendar, .. } => Some(calendar.symbol_id),
+                _ => None,
+            },
             "pullback_admitted_price": match &self.signal {
                 Signal::Pullback { planned_entry, price_digits, .. } => Some(serde_json::json!({"price":planned_entry,"digits":price_digits})),
+                Signal::PullbackBounded { admitted_entry, price_digits, origin, level, impulse_range, trigger_quote, .. } => Some(serde_json::json!({
+                    "price":admitted_entry,"digits":price_digits,"bounded":true,
+                    "origin":origin,"level":level,"impulse_range":impulse_range,
+                    "bounce_fraction":jiaoyi_core::strategy3::macro_pullback::BOUNCE_FRACTION,
+                    "trigger_bid":side(trigger_quote.bid),"trigger_ask":side(trigger_quote.ask)
+                })),
                 _ => None,
             },
         })
@@ -134,6 +158,17 @@ impl EntryGuard {
                 "account execution changed during admission",
             ));
         }
+        if let Signal::PullbackBounded { calendar, .. } = &self.signal {
+            if calendar.symbol_id != self.symbol_id {
+                return Err(fail(
+                    "ENTRY_BROKER_CALENDAR_MISMATCH",
+                    "broker calendar does not belong to this entry symbol",
+                ));
+            }
+            calendar
+                .validate(now, self.side)
+                .map_err(|error| fail(error.code, error.reason))?;
+        }
         let current = |value: Option<(f64, DateTime<Utc>)>| {
             value
                 .filter(|(p, at)| {
@@ -159,6 +194,44 @@ impl EntryGuard {
         if bid > ask {
             return Err(fail("ENTRY_QUOTE_UNKNOWN", "quote is crossed"));
         }
+        if let Signal::PullbackBounded {
+            origin,
+            level,
+            trigger_quote,
+            ..
+        } = &self.signal
+        {
+            // A relaxed final bound must never manufacture the first retest.
+            // Preserve both source-leg times, not just the later callback time.
+            let touched_leg = |leg: Option<(f64, DateTime<Utc>)>| {
+                leg.filter(|(price, at)| {
+                    price.is_finite()
+                        && *price > 0.0
+                        && *at <= now
+                        && now.signed_duration_since(*at).num_milliseconds() <= 5_000
+                })
+                .map(|(price, _)| price)
+            };
+            let touched = match (
+                touched_leg(trigger_quote.bid),
+                touched_leg(trigger_quote.ask),
+            ) {
+                (Some(tb), Some(ta)) => jiaoyi_core::strategy3::macro_pullback::retest(
+                    self.side == Side::Buy,
+                    *origin,
+                    *level,
+                    tb,
+                    ta,
+                ),
+                _ => false,
+            };
+            if !touched {
+                return Err(fail(
+                    "ENTRY_TOUCH_UNVERIFIED",
+                    "bounded dispatch requires a fresh strict pullback touch",
+                ));
+            }
+        }
         let side = match &self.signal {
             Signal::Trend { level } if level.is_finite() && *level > 0.0 => match self.side {
                 Side::Buy => (ask >= *level).then_some(Side::Buy),
@@ -181,6 +254,20 @@ impl EntryGuard {
                 )
                 .then_some(self.side)
             }
+            Signal::PullbackBounded {
+                origin,
+                level,
+                impulse_range,
+                ..
+            } => jiaoyi_core::strategy3::macro_pullback::dispatch_retest(
+                self.side == Side::Buy,
+                *origin,
+                *level,
+                *impulse_range,
+                bid,
+                ask,
+            )
+            .then_some(self.side),
         };
         if side != Some(self.side) {
             return Err(fail(
@@ -209,10 +296,41 @@ impl EntryGuard {
                 ));
             }
         }
+        if let Signal::PullbackBounded {
+            admitted_entry,
+            price_digits,
+            ..
+        } = &self.signal
+        {
+            let executable = if self.side == Side::Buy { ask } else { bid };
+            let bound =
+                jiaoyi_core::strategy3::targets::price_ticks(*admitted_entry, *price_digits)
+                    .filter(|n| *n > 0);
+            let current = jiaoyi_core::strategy3::targets::price_ticks(executable, *price_digits)
+                .filter(|n| *n > 0);
+            // Rounding a genuinely off-grid quote down must not admit a fill
+            // beyond the funded bound. Only float residue on a native tick is
+            // tolerated here.
+            let scale = 10_f64.powi(*price_digits);
+            let on_grid = (executable * scale - (executable * scale).round()).abs() <= 1e-6
+                && (*admitted_entry * scale - (*admitted_entry * scale).round()).abs() <= 1e-6;
+            let inside = on_grid
+                && matches!((current, bound), (Some(c),Some(b)) if
+                (self.side == Side::Buy && c <= b) || (self.side == Side::Sell && c >= b));
+            if !inside {
+                return Err(fail(
+                    "ENTRY_PULLBACK_BOUND_EXCEEDED",
+                    "executable price exceeds the funded structural bound",
+                ));
+            }
+        }
         if let Some(c) = &self.cost {
             let price = if self.side == Side::Buy { ask } else { bid };
             let cost = cost_reserve(
-                if matches!(self.signal, Signal::Pullback { .. }) {
+                if matches!(
+                    self.signal,
+                    Signal::Pullback { .. } | Signal::PullbackBounded { .. }
+                ) {
                     c.prepared_spread.max(ask - bid)
                 } else {
                     c.prepared_spread
@@ -242,11 +360,11 @@ impl EntryGuard {
         peer: Option<&Quote>,
         now: DateTime<Utc>,
     ) -> Result<serde_json::Value, GuardRefusal> {
-        let Signal::Pullback {
-            peer: Some((id, origin)),
-            ..
-        } = &self.signal
-        else {
+        let peer_ref = match &self.signal {
+            Signal::Pullback { peer, .. } | Signal::PullbackBounded { peer, .. } => peer,
+            _ => return Ok(serde_json::json!({"status":"not_available"})),
+        };
+        let Some((id, origin)) = peer_ref else {
             return Ok(serde_json::json!({"status":"not_available"}));
         };
         let fresh = |q: Option<(f64, DateTime<Utc>)>| {
@@ -286,6 +404,23 @@ impl EntryGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn calendar_symbol() -> crate::messages::ProtoOaSymbol {
+        crate::messages::ProtoOaSymbol {
+            symbol_id: 9,
+            schedule_time_zone: Some("UTC".into()),
+            schedule: vec![crate::messages::ProtoOaInterval {
+                start_second: 0,
+                end_second: 7 * 86400,
+            }],
+            enable_short_selling: Some(true),
+            ..Default::default()
+        }
+    }
+
+    fn calendar() -> crate::market_hours::ContractCalendar {
+        crate::market_hours::ContractCalendar::from_symbol(&calendar_symbol()).unwrap()
+    }
 
     fn guard() -> EntryGuard {
         EntryGuard {
@@ -489,6 +624,182 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn bounded_pullback_requires_strict_touch_and_keeps_expiry_revision_and_origin_guards() {
+        let now = Utc::now();
+        for side in [Side::Buy, Side::Sell] {
+            let sign = if side == Side::Buy { 1.0 } else { -1.0 };
+            let q = |mid, at| Quote {
+                bid: Some((mid - 0.01, at)),
+                ask: Some((mid + 0.01, at)),
+            };
+            let mut g = guard();
+            g.side = side;
+            g.signal = Signal::PullbackBounded {
+                origin: 100.0,
+                level: 100.0 + sign * 0.5,
+                impulse_range: 1.0,
+                admitted_entry: 100.0 + sign * 0.61,
+                price_digits: 2,
+                peer: None,
+                trigger_quote: q(100.0 + sign * 0.5, now),
+                margin: None,
+                calendar: calendar(),
+            };
+            let bounce = q(100.0 + sign * 0.55, now);
+            assert!(g.validate(Some(&bounce), 0, now, Instant::now()).is_ok());
+            assert_eq!(
+                g.validate(Some(&bounce), 1, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_ACCOUNT_CHANGED"
+            );
+            assert_eq!(
+                g.validate(Some(&bounce), 0, now, g.expires)
+                    .unwrap_err()
+                    .code,
+                "ENTRY_EXPIRED"
+            );
+            assert_eq!(
+                g.validate(Some(&q(100.0, now)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_SIGNAL_CHANGED"
+            );
+            assert_eq!(
+                g.validate(Some(&q(100.0 + sign * 0.61, now)), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_SIGNAL_CHANGED"
+            );
+            if let Signal::PullbackBounded { trigger_quote, .. } = &mut g.signal {
+                *trigger_quote = bounce.clone();
+            }
+            assert_eq!(
+                g.validate(Some(&bounce), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_TOUCH_UNVERIFIED"
+            );
+            if let Signal::PullbackBounded { trigger_quote, .. } = &mut g.signal {
+                *trigger_quote = q(
+                    100.0 + sign * 0.5,
+                    now - chrono::Duration::milliseconds(5001),
+                );
+            }
+            assert_eq!(
+                g.validate(Some(&bounce), 0, now, Instant::now())
+                    .unwrap_err()
+                    .code,
+                "ENTRY_TOUCH_UNVERIFIED"
+            );
+        }
+    }
+
+    #[test]
+    fn bounded_writer_rechecks_broker_window_at_send_and_binds_calendar_symbol() {
+        let now: DateTime<Utc> = "2026-11-09T12:00:00Z".parse().unwrap();
+        let quote = Quote {
+            bid: Some((100.49, now)),
+            ask: Some((100.51, now)),
+        };
+        let mut contract = calendar_symbol();
+        contract.schedule = vec![crate::messages::ProtoOaInterval {
+            start_second: 86400 + 12 * 3600,
+            end_second: 86400 + 12 * 3600 + 1,
+        }];
+        let mut g = guard();
+        g.signal = Signal::PullbackBounded {
+            origin: 100.0,
+            level: 100.5,
+            impulse_range: 1.0,
+            admitted_entry: 100.61,
+            price_digits: 2,
+            peer: None,
+            trigger_quote: quote.clone(),
+            margin: None,
+            calendar: crate::market_hours::ContractCalendar::from_symbol(&contract).unwrap(),
+        };
+        assert!(g.validate(Some(&quote), 0, now, Instant::now()).is_ok());
+        assert_eq!(
+            g.validate(
+                Some(&quote),
+                0,
+                now + chrono::Duration::seconds(2),
+                Instant::now(),
+            )
+            .unwrap_err()
+            .code,
+            "ENTRY_BROKER_MARKET_CLOSED",
+            "a fresh quote and prepared admission cannot survive a broker closure"
+        );
+        g.symbol_id += 1;
+        assert_eq!(
+            g.validate(Some(&quote), 0, now, Instant::now())
+                .unwrap_err()
+                .code,
+            "ENTRY_BROKER_CALENDAR_MISMATCH"
+        );
+    }
+
+    #[test]
+    fn bounded_pullback_refuses_unfunded_executable_and_cost_widening() {
+        let now = Utc::now();
+        let mut g = guard();
+        g.signal = Signal::PullbackBounded {
+            origin: 100.0,
+            level: 100.5,
+            impulse_range: 1.0,
+            admitted_entry: 100.61,
+            price_digits: 2,
+            peer: None,
+            trigger_quote: Quote {
+                bid: Some((100.49, now)),
+                ask: Some((100.51, now)),
+            },
+            margin: None,
+            calendar: calendar(),
+        };
+        let wide = Quote {
+            bid: Some((100.4, now)),
+            ask: Some((100.7, now)),
+        };
+        assert_eq!(
+            g.validate(Some(&wide), 0, now, Instant::now())
+                .unwrap_err()
+                .code,
+            "ENTRY_PULLBACK_BOUND_EXCEEDED"
+        );
+        let off_grid = Quote {
+            bid: Some((100.49, now)),
+            ask: Some((100.614, now)),
+        };
+        assert_eq!(
+            g.validate(Some(&off_grid), 0, now, Instant::now())
+                .unwrap_err()
+                .code,
+            "ENTRY_PULLBACK_BOUND_EXCEEDED"
+        );
+        let allowed = Quote {
+            bid: Some((100.49, now)),
+            ask: Some((100.61, now)),
+        };
+        g.cost = Some(Cost {
+            prepared_spread: 0.02,
+            commission_round_trip: 0.0,
+            slippage_bps_per_side: 0.0,
+            original_r: 0.1,
+        });
+        assert_eq!(
+            g.validate(Some(&allowed), 0, now, Instant::now())
+                .unwrap_err()
+                .code,
+            "ENTRY_COST_GE_R"
+        );
+        g.cost.as_mut().unwrap().original_r = 1.0;
+        assert!(g.validate(Some(&allowed), 0, now, Instant::now()).is_ok());
+    }
+
     #[test]
     fn peer_guard_vetoes_fresh_opposition_and_labels_missing_or_stale() {
         let now = Utc::now();

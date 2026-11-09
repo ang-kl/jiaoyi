@@ -57,6 +57,10 @@ pub const SENDABLE: &[(i32, &str)] = &[
         Oa::ProtoOaSymbolByIdReq as i32,
         "read symbol details and costs",
     ),
+    (
+        Oa::ProtoOaSymbolsForConversionReq as i32,
+        "read broker-authorised exposure currency conversion chains",
+    ),
     (Oa::ProtoOaGetTrendbarsReq as i32, "read daily bars"),
     (Oa::ProtoOaSubscribeSpotsReq as i32, "sample spreads"),
     (
@@ -197,6 +201,8 @@ request!(pb::ProtoOaRefreshTokenReq => Oa::ProtoOaRefreshTokenReq,
          pb::ProtoOaRefreshTokenRes => Oa::ProtoOaRefreshTokenRes);
 request!(pb::ProtoOaSymbolsListReq => Oa::ProtoOaSymbolsListReq,
          pb::ProtoOaSymbolsListRes => Oa::ProtoOaSymbolsListRes);
+request!(pb::ProtoOaSymbolsForConversionReq => Oa::ProtoOaSymbolsForConversionReq,
+         pb::ProtoOaSymbolsForConversionRes => Oa::ProtoOaSymbolsForConversionRes);
 request!(pb::ProtoOaSymbolByIdReq => Oa::ProtoOaSymbolByIdReq,
          pb::ProtoOaSymbolByIdRes => Oa::ProtoOaSymbolByIdRes);
 request!(pb::ProtoOaGetTrendbarsReq => Oa::ProtoOaGetTrendbarsReq,

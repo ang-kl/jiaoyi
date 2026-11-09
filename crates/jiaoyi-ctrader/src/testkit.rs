@@ -455,6 +455,33 @@ impl FakeBroker {
                             )),
                             None => out.push(oa_error(id, "UNSUPPORTED_MESSAGE")),
                         }
+                    } else if pt == Oa::ProtoOaSymbolsForConversionReq as i32 {
+                        let req =
+                            pb::ProtoOaSymbolsForConversionReq::decode(body.as_slice()).unwrap();
+                        match crate::margin::conversion_path(
+                            &self.light_symbols,
+                            req.first_asset_id,
+                            req.last_asset_id,
+                        ) {
+                            Ok(path) => out.push(reply(
+                                id,
+                                Oa::ProtoOaSymbolsForConversionRes as i32,
+                                pb::ProtoOaSymbolsForConversionRes {
+                                    payload_type: None,
+                                    ctid_trader_account_id: self.account_id,
+                                    symbol: self
+                                        .light_symbols
+                                        .iter()
+                                        .filter(|s| {
+                                            path.iter().any(|leg| leg.symbol_id == s.symbol_id)
+                                        })
+                                        .cloned()
+                                        .collect(),
+                                }
+                                .encode_to_vec(),
+                            )),
+                            Err(_) => out.push(oa_error(id, "CONVERSION_CHAIN_UNAVAILABLE")),
+                        }
                     } else if pt == Oa::ProtoOaSymbolsListReq as i32 {
                         out.push(reply(
                             id,

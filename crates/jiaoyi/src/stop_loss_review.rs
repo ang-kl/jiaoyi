@@ -2,7 +2,7 @@
 //! Saved entry facts are compared with registered rules; no current quotes,
 //! broker requests, execution decisions, or free-form details cross this API.
 use chrono::{DateTime, Duration, NaiveDate, Utc};
-use jiaoyi_core::strategy3::{macro_pullback as mp, sessions::Session};
+use jiaoyi_core::strategy3::{macro_pullback as mp, production_sessions as ps, sessions::Session};
 use jiaoyi_store::sqlx::{self, PgPool, Row};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -34,7 +34,8 @@ SELECT r.*,a.environment,i.entry_key,i.symbol_id,i.side,i.volume,i.relative_stop
  s3.session_date AS original_session_date,s3.decided_at AS original_decided_at,
  arm_history.detail AS armed_receipt, dispatch_history.raw AS dispatch_receipt,
  cost_history.prior_cost_veto,cost_history.same_time_cost_veto,
- entry_history.prior_open,entry_history.same_time_open
+ cost_history.unknown_window_cost_veto,
+ entry_history.prior_open,entry_history.same_time_open,entry_history.unknown_window_open
 FROM recent r JOIN accounts a ON a.account_id=r.account_id
 JOIN LATERAL (
  SELECT i.*,count(*) OVER() AS owner_count FROM trading_intents i
@@ -72,11 +73,16 @@ LEFT JOIN LATERAL (
  ORDER BY e.id LIMIT 1
 ) dispatch_history ON true
 LEFT JOIN LATERAL (
- SELECT bool_or(d.at<s3.decided_at) AS prior_cost_veto,
-        bool_or(d.at=s3.decided_at) AS same_time_cost_veto
+ SELECT bool_or(d.at<s3.decided_at AND (s3.prereg_hash<>$8 OR
+          d.detail->'session'->>'open'=s3.detail->'session'->>'open')) AS prior_cost_veto,
+        bool_or(d.at=s3.decided_at AND (s3.prereg_hash<>$8 OR
+          d.detail->'session'->>'open'=s3.detail->'session'->>'open')) AS same_time_cost_veto,
+        bool_or(s3.prereg_hash=$8 AND d.detail->'session'->>'open' IS NULL) AS unknown_window_cost_veto
  FROM trading_decisions d
  WHERE d.account_id=r.account_id AND d.symbol=s3.symbol AND d.kind='s3_skip'
    AND d.detail->>'session_date'=s3.session_date::text
+   AND (s3.prereg_hash<>$8 OR d.detail->'session'->>'open'=s3.detail->'session'->>'open'
+        OR d.detail->'session'->>'open' IS NULL)
    AND (d.detail->>'prereg_hash'=s3.prereg_hash
         OR (s3.prereg_hash=$5 AND d.detail->>'prereg_hash'=$4))
    AND d.detail->>'label'='jiaoyi-s3'
@@ -85,8 +91,11 @@ LEFT JOIN LATERAL (
    AND d.at<=s3.decided_at
 ) cost_history ON true
 LEFT JOIN LATERAL (
- SELECT bool_or(o.decided_at<s3.decided_at AND unsent.refused_at IS NULL) AS prior_open,
-        bool_or(o.decided_at=s3.decided_at OR unsent.refused_at=s3.decided_at) AS same_time_open
+ SELECT bool_or(o.decided_at<s3.decided_at AND unsent.refused_at IS NULL AND
+          (s3.prereg_hash<>$8 OR o.detail->'session'->>'open'=s3.detail->'session'->>'open')) AS prior_open,
+        bool_or((o.decided_at=s3.decided_at OR unsent.refused_at=s3.decided_at) AND
+          (s3.prereg_hash<>$8 OR o.detail->'session'->>'open'=s3.detail->'session'->>'open')) AS same_time_open,
+        bool_or(s3.prereg_hash=$8 AND o.detail->'session'->>'open' IS NULL) AS unknown_window_open
  FROM strategy3_orders o
  LEFT JOIN LATERAL (
    SELECT min(e.received_at) AS refused_at FROM trading_events e
@@ -95,9 +104,11 @@ LEFT JOIN LATERAL (
      AND NOT EXISTS (SELECT 1 FROM trading_events other
        WHERE other.account_id=o.account_id AND other.entry_key=o.entry_key
          AND other.kind<>'REFUSED_BEFORE_SEND' AND other.received_at<=s3.decided_at)
- ) unsent ON s3.prereg_hash IN ($5,$6,$7)
+ ) unsent ON s3.prereg_hash IN ($5,$6,$7,$8)
  WHERE o.account_id=r.account_id AND o.symbol_id=s3.symbol_id
    AND o.session_date=s3.session_date AND o.kind='open' AND o.entry_key<>s3.entry_key
+   AND (s3.prereg_hash<>$8 OR o.detail->'session'->>'open'=s3.detail->'session'->>'open'
+        OR o.detail->'session'->>'open' IS NULL)
    AND o.decided_at<=s3.decided_at
    AND (unsent.refused_at IS NULL OR unsent.refused_at=s3.decided_at)
 ) entry_history ON true
@@ -133,6 +144,118 @@ fn close(a: f64, b: f64) -> bool {
     (a - b).abs() <= 1e-9 * a.abs().max(b.abs()).max(1.0)
 }
 
+// Keep historical policies tied to their own entry rules as production changes.
+fn bounded_policy(setup: &Value) -> bool {
+    setup["production_policy"] == "s3_macro_pullback_owner_18392_v1"
+}
+
+fn saved_entry_session(setup: &Value, symbol: &str) -> Option<bool> {
+    let old = session::check(setup)?; // also validates complete date/lunch metadata
+    if !bounded_policy(setup) {
+        return Some(old);
+    }
+    let a: mp::ArmedPullback = serde_json::from_value(setup["armed"].clone()).ok()?;
+    let s: Session = serde_json::from_value(setup["session"].clone()).ok()?;
+    let at: DateTime<Utc> = serde_json::from_value(setup["decided_at"].clone()).ok()?;
+    Some(
+        s == a.session
+            && ps::entry_window(&s, a.armed_at).is_ok()
+            && at > a.armed_at
+            && at < ps::arm_expiry(symbol, &s, a.armed_at),
+    )
+}
+
+/// Evidence for the changed final quote, not a claim that the broker filled at
+/// that price. Missing bounded-receipt fields remain unknown rather than being
+/// tested against the older policy's exact-price requirement.
+fn bounded_dispatch(setup: &Value, a: &mp::ArmedPullback, g: &Value) -> Option<bool> {
+    use jiaoyi_core::strategy3::{cost_reserve, targets::price_ticks};
+    let admitted = &g["pullback_admitted_price"];
+    let entry = number(&setup["entry"], "entry_price")?;
+    let digits = i32::try_from(setup["volume_limits"]["digits"].as_i64()?).ok()?;
+    let bid = number(&g["bid"], "price")?;
+    let ask = number(&g["ask"], "price")?;
+    let trigger_bid = number(&admitted["trigger_bid"], "price")?;
+    let trigger_ask = number(&admitted["trigger_ask"], "price")?;
+    let saved_bid = number(setup, "bid")?;
+    let saved_ask = number(setup, "ask")?;
+    let at: DateTime<Utc> = serde_json::from_value(setup["decided_at"].clone()).ok()?;
+    let checked: DateTime<Utc> = serde_json::from_value(g["checked_at"].clone()).ok()?;
+    let trigger = &setup["trigger_quote"];
+    let trigger_at = [
+        serde_json::from_value::<DateTime<Utc>>(trigger["bid_at"].clone()).ok()?,
+        serde_json::from_value::<DateTime<Utc>>(trigger["ask_at"].clone()).ok()?,
+    ];
+    let trigger_prices = (number(trigger, "bid")?, number(trigger, "ask")?);
+    let spread = number(&setup["entry"]["cost"], "spread")?;
+    let commission = number(&setup["entry"]["cost"], "commission_round_trip")?;
+    let mut quotes_valid = true;
+    for (leg, max_age, initial) in [
+        (&g["bid"], 6000, false),
+        (&g["ask"], 6000, false),
+        (&admitted["trigger_bid"], 5000, true),
+        (&admitted["trigger_ask"], 5000, true),
+    ] {
+        let time: DateTime<Utc> = serde_json::from_value(leg["received_at"].clone()).ok()?;
+        let age = leg["receipt_age_ms"].as_i64()?;
+        quotes_valid &= (0..=max_age).contains(&age)
+            && age == (checked - time).num_milliseconds()
+            && time <= checked
+            && (!initial || time <= at);
+    }
+    let bounded = admitted["bounded"].as_bool()?;
+    let origin = number(admitted, "origin")?;
+    let level = number(admitted, "level")?;
+    let impulse_range = number(admitted, "impulse_range")?;
+    let fraction = number(admitted, "bounce_fraction")?;
+    let admitted_price = number(admitted, "price")?;
+    let receipt_digits = admitted["digits"].as_i64()?;
+    let account_revision = g["account_revision"].as_u64()?;
+    let expected_revision = g["expected_account_revision"].as_u64()?;
+    let deadline_elapsed = g["deadline_elapsed"].as_bool()?;
+    let policy = g["policy"].as_str()?;
+    let stage = g["stage"].as_str()?;
+    let result = g["result"].as_str()?;
+    let selected_side = g["selected_side"].as_str()?;
+    let px = if a.long { ask } else { bid };
+    let observed = price_ticks(px, digits);
+    let planned = price_ticks(entry, digits);
+    let scale = 10_f64.powi(digits);
+    let funded = (px * scale - (px * scale).round()).abs() <= 1e-6
+        && (entry * scale - (entry * scale).round()).abs() <= 1e-6
+        && matches!((observed, planned), (Some(p), Some(b)) if p > 0 && b > 0 &&
+            if a.long { p <= b } else { p >= b });
+    Some(
+        policy == jiaoyi_ctrader::entry_guard::POLICY
+            && stage == "after_writer_lock"
+            && result == "passed"
+            && !deadline_elapsed
+            && account_revision == expected_revision
+            && selected_side == if a.long { "buy" } else { "sell" }
+            && bounded
+            && checked >= at
+            && quotes_valid
+            && receipt_digits == i64::from(digits)
+            && close(origin, a.origin)
+            && close(level, a.level)
+            && close(impulse_range, a.impulse_range)
+            && close(fraction, 0.10)
+            && close(admitted_price, entry)
+            && close(trigger_bid, saved_bid)
+            && close(trigger_ask, saved_ask)
+            && close(trigger_prices.0, trigger_bid)
+            && close(trigger_prices.1, trigger_ask)
+            && json!(trigger_at[0]) == admitted["trigger_bid"]["received_at"]
+            && json!(trigger_at[1]) == admitted["trigger_ask"]["received_at"]
+            && mp::retest(a.long, a.origin, a.level, trigger_bid, trigger_ask)
+            && mp::dispatch_retest(a.long, a.origin, a.level, a.impulse_range, bid, ask)
+            && mp::dispatch_entry_bound(a, spread, digits).is_ok_and(|p| close(p, entry))
+            && funded
+            && cost_reserve(spread.max(ask - bid), commission, 3.74, px)
+                .is_ok_and(|cost| a.impulse_range > cost.total),
+    )
+}
+
 /// Recompute only facts evidenced by the saved opening/arming snapshots. Missing
 /// receipt fields remain unknown; these checks never assert historical M30 or
 /// full round-trip cost completeness and never query current market prices.
@@ -150,6 +273,7 @@ fn pullback_facts(
     };
     let saved_session = serde_json::from_value::<Session>(setup["session"].clone()).ok();
     let decided_at = serde_json::from_value::<DateTime<Utc>>(setup["decided_at"].clone()).ok();
+    let bounded = bounded_policy(setup);
     f.macro_alignment = Some(
         mp::aligns(a.macro_context, a.long, a.session.open)
             && setup["macro_context"] == json!(a.macro_context)
@@ -157,8 +281,13 @@ fn pullback_facts(
     );
     f.mark = decided_at.map(|at| {
         saved_session == Some(a.session)
-            && jiaoyi_core::strategy3::band::decision_mark(&a.session, a.armed_at).is_some()
-            && jiaoyi_core::strategy3::band::entry_window(&a.session, a.armed_at).is_ok()
+            && if bounded {
+                ps::decision_mark(&a.session, a.armed_at).is_some()
+                    && ps::entry_window(&a.session, a.armed_at).is_ok()
+            } else {
+                jiaoyi_core::strategy3::band::decision_mark(&a.session, a.armed_at).is_some()
+                    && jiaoyi_core::strategy3::band::entry_window(&a.session, a.armed_at).is_ok()
+            }
             && at > a.armed_at
     });
     if let (Some(at), Some(bid), Some(ask), Some(entry)) = (
@@ -169,9 +298,33 @@ fn pullback_facts(
     ) {
         f.trigger = Some(
             saved_session == Some(a.session)
-                && a.touch(bid, ask, at) == mp::Touch::Trigger
-                && close(entry, if a.long { ask } else { bid }),
+                && if bounded {
+                    a.touch_window(ps::arm_expiry(symbol, &a.session, a.armed_at), bid, ask, at)
+                        == mp::Touch::Trigger
+                } else {
+                    a.touch(bid, ask, at) == mp::Touch::Trigger
+                        && close(entry, if a.long { ask } else { bid })
+                },
         );
+        if bounded {
+            // The trigger callback time cannot substitute for each quote leg's
+            // receive time. An incomplete new receipt remains unknown.
+            let q = &setup["trigger_quote"];
+            f.trigger = (|| {
+                let tb = number(q, "bid")?;
+                let ta = number(q, "ask")?;
+                let bt: DateTime<Utc> = serde_json::from_value(q["bid_at"].clone()).ok()?;
+                let atime: DateTime<Utc> = serde_json::from_value(q["ask_at"].clone()).ok()?;
+                Some(
+                    f.trigger?
+                        && close(tb, bid)
+                        && close(ta, ask)
+                        && [bt, atime]
+                            .into_iter()
+                            .all(|t| t <= at && (0..=5000).contains(&(at - t).num_milliseconds())),
+                )
+            })();
+        }
     }
     if let Some(r) = receipt {
         let q = r["detail"].get("impulse_quote").unwrap_or(r);
@@ -182,13 +335,18 @@ fn pullback_facts(
             number(&r["detail"]["cost"], "total"),
         ) {
             let peer_move = r["detail"]["peer_move"].as_f64();
+            let rebuild = if bounded {
+                mp::ArmedPullback::arm_window
+            } else {
+                mp::ArmedPullback::arm
+            };
             f.impulse = Some(
                 r["production_policy"] == setup["production_policy"]
                     && r["production_policy"]
                         .as_str()
                         .is_some_and(mp::two_stage_policy)
                     && r["state"] == json!(a)
-                    && mp::ArmedPullback::arm(
+                    && rebuild(
                         symbol,
                         a.session,
                         b,
@@ -199,7 +357,18 @@ fn pullback_facts(
                         peer_move,
                         cost,
                     )
-                    .is_ok_and(|rebuilt| rebuilt == a),
+                    .is_ok_and(|mut rebuilt| {
+                        // PostgreSQL JSON float decoding can shift derived bps
+                        // by one ULP. Preserve exact identity and prices; allow
+                        // only the same narrow arithmetic residue as restoration.
+                        if bounded
+                            && (rebuilt.impulse_bps - a.impulse_bps).abs()
+                                <= 1e-12 * a.impulse_bps.abs().max(1.0)
+                        {
+                            rebuilt.impulse_bps = a.impulse_bps;
+                        }
+                        rebuilt == a
+                    }),
             );
         }
     }
@@ -236,6 +405,10 @@ fn pullback_facts(
         }
     }
     if let Some(g) = guard {
+        if bounded {
+            f.dispatch = bounded_dispatch(setup, &a, g);
+            return f;
+        }
         if let (Some(bid), Some(ask), Some(entry), Some(digits)) = (
             number(&g["bid"], "price"),
             number(&g["ask"], "price"),
@@ -291,6 +464,10 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
             "../../../docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md"
         )
         .as_slice(),
+        include_bytes!(
+            "../../../docs/preregistration-2026-11-09-strategy3-macro-pullback-18392.md"
+        )
+        .as_slice(),
     ]
     .map(|text| format!("{:x}", Sha256::digest(text)));
     let rows = sqlx::query(CANDIDATES)
@@ -301,6 +478,7 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         .bind(&admission_hashes[1])
         .bind(&admission_hashes[2])
         .bind(&admission_hashes[3])
+        .bind(&admission_hashes[4])
         .fetch_all(pool)
         .await?;
     let mut cases = Vec::new();
@@ -344,12 +522,16 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
                 .as_ref()
                 .is_some_and(|h| admission_hashes[..2].contains(h));
         let pullback = strategy == "s3"
-            && saved_hash
-                .as_ref()
-                .is_some_and(|h| admission_hashes[2..].contains(h))
-            && setup["production_policy"]
-                .as_str()
-                .is_some_and(mp::two_stage_policy);
+            && [
+                (2, "s3_macro_pullback_owner_18377_v1"),
+                (3, "s3_macro_pullback_owner_18380_v1"),
+                (4, "s3_macro_pullback_owner_18392_v1"),
+            ]
+            .into_iter()
+            .any(|(i, policy)| {
+                saved_hash.as_ref() == Some(&admission_hashes[i])
+                    && setup["production_policy"] == policy
+            });
         let rules_known = strategy == "s1" || legacy_mark || pullback;
         let mut macro_alignment = None;
         let mut impulse = None;
@@ -432,7 +614,7 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         // Only the saved original S3 snapshot can establish entry-window
         // eligibility; legacy/date-only evidence remains unknown.
         let session = (strategy == "s3" && rules_known)
-            .then(|| session::check(&setup))
+            .then(|| saved_entry_session(&setup, row.get::<String, _>("symbol").as_str()))
             .flatten();
         let mut decision_mark = legacy_mark
             .then(|| session::decision_mark_check(&setup))
@@ -482,25 +664,31 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
                 .ok()
                 .map(|at| at.timestamp_micros())
                 == original_at.map(|at| at.timestamp_micros())
-            && session::check(&setup).is_some();
-        let history_clear = |prior: &str, same_time: &str| {
+            && session.is_some();
+        let history_clear = |prior: &str, same_time: &str, unknown_window: &str| {
             if !admission_known {
                 None
             } else if row.get::<Option<bool>, _>(prior) == Some(true) {
                 Some(false)
-            } else if row.get::<Option<bool>, _>(same_time) == Some(true) {
+            } else if row.get::<Option<bool>, _>(same_time) == Some(true)
+                || row.get::<Option<bool>, _>(unknown_window) == Some(true)
+            {
                 // Equal timestamps do not prove the ordering of two decisions.
                 None
             } else {
                 Some(true)
             }
         };
-        let cost_veto_clear = history_clear("prior_cost_veto", "same_time_cost_veto");
+        let cost_veto_clear = history_clear(
+            "prior_cost_veto",
+            "same_time_cost_veto",
+            "unknown_window_cost_veto",
+        );
         // The registered one-entry cap counts all prior S3 opens in this
         // account/symbol/session, including opens under an older hash. Only
         // v7 and pullback exclude already proven-unsent attempts; later evidence must
         // not rewrite what was known at the saved original opening.
-        let first_entry = history_clear("prior_open", "same_time_open");
+        let first_entry = history_clear("prior_open", "same_time_open", "unknown_window_open");
         let checks = json!({"gate_risk_recorded":gate,"sizing_within_gate_cap":sizing,
             "preregistration_matches_current_reference":registered,"entry_direction_valid":direction,
             "entry_trigger_valid":trigger,"original_stop_geometry_valid":stop,
@@ -644,8 +832,12 @@ pub async fn evidence(pool: &PgPool, accounts: &[i64]) -> Result<Value, sqlx::Er
         };
         let registration = if strategy == "s1" {
             Some("docs/preregistration-2026-10-24.md")
-        } else if pullback {
-            Some(crate::strategy3::PREREG_FILE)
+        } else if pullback && saved_hash.as_ref() == Some(&admission_hashes[2]) {
+            Some("docs/preregistration-2026-11-08-strategy3-macro-pullback.md")
+        } else if pullback && saved_hash.as_ref() == Some(&admission_hashes[3]) {
+            Some("docs/preregistration-2026-11-08-strategy3-macro-pullback-18380.md")
+        } else if pullback && saved_hash.as_ref() == Some(&admission_hashes[4]) {
+            Some("docs/preregistration-2026-11-09-strategy3-macro-pullback-18392.md")
         } else if saved_hash.as_ref() == Some(&admission_hashes[0]) {
             Some("docs/preregistration-2026-10-28-strategy3-v6.md")
         } else if saved_hash.as_ref() == Some(&admission_hashes[1]) {

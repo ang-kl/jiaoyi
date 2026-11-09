@@ -11,14 +11,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const MODEL: &str = "s3_macro_pullback_v1";
-pub const POLICY: &str = "s3_macro_pullback_owner_18380_v1";
+pub const POLICY: &str = "s3_macro_pullback_owner_18392_v1";
+/// Retained by the original bounded replay; its historical semantics do not change.
+pub const LEGACY_REPLAY_POLICY: &str = "s3_macro_pullback_owner_18380_v1";
+pub const BOUNCE_FRACTION: f64 = 0.10;
 /// Explicit owner-selected allowance, not a statistically calibrated full
 /// round-trip execution-cost estimate. The 24bp stress model stays in research.
 pub const LIVE_SLIPPAGE_BPS_PER_SIDE: f64 = 3.74;
 pub fn two_stage_policy(policy: &str) -> bool {
     matches!(
         policy,
-        "s3_macro_pullback_owner_18377_v1" | "s3_macro_pullback_owner_18380_v1"
+        "s3_macro_pullback_owner_18377_v1"
+            | "s3_macro_pullback_owner_18380_v1"
+            | "s3_macro_pullback_owner_18392_v1"
     )
 }
 pub const CORE: [&str; 8] = [
@@ -169,11 +174,53 @@ impl ArmedPullback {
         peer_move: Option<f64>,
         cost: f64,
     ) -> Result<Self, &'static str> {
+        Self::arm_impl(
+            symbol, session, b, bid, ask, at, context, peer_move, cost, false,
+        )
+    }
+
+    /// Versioned production entry marks. The archived arm/replay keeps its
+    /// original first/last-30-minute semantics.
+    #[allow(clippy::too_many_arguments)]
+    pub fn arm_window(
+        symbol: &str,
+        session: Session,
+        b: Band,
+        bid: f64,
+        ask: f64,
+        at: DateTime<Utc>,
+        context: Context,
+        peer_move: Option<f64>,
+        cost: f64,
+    ) -> Result<Self, &'static str> {
+        Self::arm_impl(
+            symbol, session, b, bid, ask, at, context, peer_move, cost, true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn arm_impl(
+        symbol: &str,
+        session: Session,
+        b: Band,
+        bid: f64,
+        ask: f64,
+        at: DateTime<Utc>,
+        context: Context,
+        peer_move: Option<f64>,
+        cost: f64,
+        production_window: bool,
+    ) -> Result<Self, &'static str> {
         if peer(symbol).is_none() {
             return Err("symbol_retired_from_s3_core");
         }
-        if band::decision_mark(&session, at).is_none() || band::entry_window(&session, at).is_err()
-        {
+        let permitted = if production_window {
+            super::production_sessions::decision_mark(&session, at).is_some()
+                && super::production_sessions::entry_window(&session, at).is_ok()
+        } else {
+            band::decision_mark(&session, at).is_some() && band::entry_window(&session, at).is_ok()
+        };
+        if !permitted {
             return Err("outside_impulse_mark");
         }
         if ![bid, ask, b.open, cost].into_iter().all(f64::is_finite)
@@ -217,6 +264,37 @@ impl ArmedPullback {
             macro_context: context,
         })
     }
+    /// An explicitly bounded production arm can survive an adjacent crypto
+    /// window. Only the original strict 50% touch can trigger; bounce tolerance
+    /// is permitted after that touch, never to manufacture the first trigger.
+    pub fn touch_window(
+        &self,
+        expires_at: DateTime<Utc>,
+        bid: f64,
+        ask: f64,
+        at: DateTime<Utc>,
+    ) -> Touch {
+        if at >= expires_at {
+            return Touch::Expired;
+        }
+        if at <= self.armed_at
+            || expires_at <= self.armed_at
+            || ![bid, ask].into_iter().all(|v| v.is_finite() && v > 0.0)
+            || ask < bid
+        {
+            return Touch::Waiting;
+        }
+        let mid = bid + (ask - bid) / 2.0;
+        if (self.long && mid <= self.origin) || (!self.long && mid >= self.origin) {
+            return Touch::Invalidated;
+        }
+        if retest(self.long, self.origin, self.level, bid, ask) {
+            Touch::Trigger
+        } else {
+            Touch::Waiting
+        }
+    }
+
     pub fn touch(&self, bid: f64, ask: f64, at: DateTime<Utc>) -> Touch {
         if at >= self.session.close - Duration::minutes(30) {
             return Touch::Expired;
@@ -290,6 +368,98 @@ pub fn geometry(
         stop,
         target_distance,
         target,
+    })
+}
+
+/// Current quotes may bounce only after a separately evidenced strict touch.
+/// The frozen level must remain exactly the midpoint of the original impulse.
+pub fn dispatch_retest(
+    long: bool,
+    origin: f64,
+    level: f64,
+    impulse_range: f64,
+    bid: f64,
+    ask: f64,
+) -> bool {
+    if ![origin, level, impulse_range, bid, ask]
+        .into_iter()
+        .all(|v| v.is_finite() && v > 0.0)
+        || bid > ask
+        || (long && level <= origin)
+        || (!long && level >= origin)
+        || ((level - origin).abs() * 2.0 - impulse_range).abs() > impulse_range * 1e-9
+    {
+        return false;
+    }
+    let mid = bid + (ask - bid) / 2.0;
+    let bounce = BOUNCE_FRACTION * impulse_range;
+    if long {
+        origin < mid && mid <= level + bounce
+    } else {
+        level - bounce <= mid && mid < origin
+    }
+}
+
+/// Worst executable price is reserved before the triggering quote arrives.
+/// Round outwards so native-price granularity cannot understate admitted risk.
+pub fn dispatch_entry_bound(
+    armed: &ArmedPullback,
+    reserved_spread: f64,
+    digits: i32,
+) -> Result<f64, &'static str> {
+    if !(0..=5).contains(&digits)
+        || !reserved_spread.is_finite()
+        || reserved_spread < 0.0
+        || !dispatch_retest(
+            armed.long,
+            armed.origin,
+            armed.level,
+            armed.impulse_range,
+            armed.level,
+            armed.level,
+        )
+    {
+        return Err("invalid_dispatch_bound");
+    }
+    let sign = if armed.long { 1.0 } else { -1.0 };
+    let limit =
+        armed.level + sign * (BOUNCE_FRACTION * armed.impulse_range + reserved_spread / 2.0);
+    let scale = 10_f64.powi(digits);
+    let scaled = limit * scale;
+    let nearest = scaled.round();
+    let ticks = if (scaled - nearest).abs() <= 1e-7 {
+        nearest
+    } else if armed.long {
+        scaled.ceil()
+    } else {
+        scaled.floor()
+    };
+    let bound = ticks / scale;
+    if !bound.is_finite() || bound <= 0.0 {
+        return Err("invalid_dispatch_bound");
+    }
+    Ok(bound)
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct DispatchGeometry {
+    pub admitted_entry: f64,
+    pub geometry: Geometry,
+}
+
+/// Fix relative brackets and volume from the worst permitted executable price.
+/// A better fill retains that funded distance and target ratio; its stop remains
+/// beyond the impulse origin. This is not a licence to increase risk at send.
+pub fn dispatch_geometry(
+    armed: &ArmedPullback,
+    reserved_spread: f64,
+    cost: f64,
+    digits: i32,
+) -> Result<DispatchGeometry, &'static str> {
+    let admitted_entry = dispatch_entry_bound(armed, reserved_spread, digits)?;
+    Ok(DispatchGeometry {
+        admitted_entry,
+        geometry: geometry(armed.long, admitted_entry, armed.origin, cost, digits)?,
     })
 }
 
@@ -456,7 +626,7 @@ pub fn replay_armed(
         previous = Some(q.at);
     }
     let mut result = ReplayResult {
-        policy: POLICY, status: "no_retest", entry: None, exit: None, geometry: None,
+        policy: LEGACY_REPLAY_POLICY, status: "no_retest", entry: None, exit: None, geometry: None,
         gross_r: None, net_r_assuming_costs: None, cost_assumptions: costs,
         execution_assumption: "executable-quote entry and stop; target-limit price; next-quote BE ack; account admission and latency not simulated",
         financial_pass: false, events: Vec::new(),
@@ -602,6 +772,135 @@ mod tests {
             },
         )
     }
+    #[test]
+    fn bounded_bounce_geometry_preserves_origin_and_funded_relative_risk() {
+        for long in [true, false] {
+            let (session, band, context) = setup(long);
+            let sign = if long { 1.0 } else { -1.0 };
+            let extreme = 100.0 + sign;
+            let armed = ArmedPullback::arm(
+                "BTCUSD",
+                session,
+                band,
+                extreme - 0.01,
+                extreme + 0.01,
+                session.open + Duration::minutes(30),
+                context,
+                None,
+                0.2,
+            )
+            .unwrap();
+            let reserved = dispatch_geometry(&armed, 0.02, 0.2, 2).unwrap();
+            assert!((reserved.admitted_entry - (100.0 + sign * 0.61)).abs() < 1e-9);
+            assert!((reserved.geometry.risk - 0.81).abs() < 1e-9);
+            assert!(reserved.geometry.target_distance + 1e-9 >= 1.38 * reserved.geometry.risk);
+            for displacement in [0.1, 0.5, 0.55, 0.6] {
+                let mid = 100.0 + sign * displacement;
+                let fill = mid + sign * 0.01;
+                assert!(dispatch_retest(
+                    long,
+                    armed.origin,
+                    armed.level,
+                    armed.impulse_range,
+                    mid - 0.01,
+                    mid + 0.01
+                ));
+                let actual_stop = fill - sign * reserved.geometry.risk;
+                assert!((actual_stop - armed.origin) * sign <= 0.0);
+                assert!((fill - actual_stop).abs() <= reserved.geometry.risk + 1e-9);
+            }
+            assert!(!dispatch_retest(
+                long,
+                100.0,
+                armed.level,
+                1.0,
+                99.99,
+                100.01
+            ));
+            let far = 100.0 + sign * 0.61;
+            assert!(!dispatch_retest(
+                long,
+                100.0,
+                armed.level,
+                1.0,
+                far - 0.01,
+                far + 0.01
+            ));
+            assert!(!dispatch_retest(
+                long,
+                100.0,
+                armed.level,
+                2.0,
+                armed.level,
+                armed.level
+            ));
+        }
+    }
+
+    #[test]
+    fn production_touch_carries_until_explicit_expiry_but_never_uses_bounce_to_trigger() {
+        let (session, band, context) = setup(true);
+        let armed = ArmedPullback::arm(
+            "BTCUSD",
+            session,
+            band,
+            100.99,
+            101.01,
+            session.close - Duration::minutes(60),
+            context,
+            None,
+            0.2,
+        )
+        .unwrap();
+        let expiry = armed.armed_at + Duration::hours(4);
+        let at = session.close + Duration::minutes(1);
+        assert_eq!(armed.touch(100.49, 100.51, at), Touch::Expired);
+        assert_eq!(
+            armed.touch_window(expiry, 100.49, 100.51, at),
+            Touch::Trigger
+        );
+        assert_eq!(
+            armed.touch_window(expiry, 100.54, 100.56, at),
+            Touch::Waiting
+        );
+        assert!(dispatch_retest(
+            true,
+            armed.origin,
+            armed.level,
+            armed.impulse_range,
+            100.54,
+            100.56
+        ));
+        assert_eq!(
+            armed.touch_window(expiry, 99.99, 100.01, at),
+            Touch::Invalidated
+        );
+        assert_eq!(
+            armed.touch_window(expiry, 100.49, 100.51, expiry),
+            Touch::Expired
+        );
+    }
+
+    #[test]
+    fn production_marks_remove_blackout_without_changing_archived_arm_rules() {
+        let (session, band, context) = setup(true);
+        for at in [
+            session.open + Duration::seconds(1),
+            session.close - Duration::seconds(1),
+        ] {
+            assert_eq!(
+                ArmedPullback::arm("BTCUSD", session, band, 100.99, 101.01, at, context, None, 0.2),
+                Err("outside_impulse_mark")
+            );
+            assert!(ArmedPullback::arm_window(
+                "BTCUSD", session, band, 100.99, 101.01, at, context, None, 0.2
+            )
+            .is_ok());
+        }
+        assert_eq!(LEGACY_REPLAY_POLICY, "s3_macro_pullback_owner_18380_v1");
+        assert_eq!(POLICY, "s3_macro_pullback_owner_18392_v1");
+    }
+
     #[test]
     fn production_allowance_is_separate_from_research_stress_and_keeps_floor() {
         let (session, b, c) = setup(true);

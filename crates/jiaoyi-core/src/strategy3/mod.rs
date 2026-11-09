@@ -11,6 +11,7 @@
 pub mod band;
 pub mod kelly;
 pub mod macro_pullback;
+pub mod production_sessions;
 pub mod sessions;
 pub mod targets;
 

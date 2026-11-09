@@ -21,6 +21,7 @@ mod pb {
 pub mod client;
 pub mod entry_guard;
 pub mod frame;
+pub mod market_hours;
 pub mod payload;
 pub mod tickdata;
 pub mod trading;
