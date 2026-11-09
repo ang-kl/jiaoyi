@@ -18,7 +18,7 @@ const {chromium}=require('playwright');
   try {
     await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'networkidle'});
     const table=page.locator('[data-trigger-pager]').filter({has:page.locator('.entry-gate')});
-    for(const label of ['Vetoed: 5d/20d macro','Vetoed: peer ETHUSD','Blocked: pair reservation','Armed: waiting','Invalidated: retraced']) {
+    for(const label of ['Vetoed: 5d/20d macro','Vetoed: peer ETHUSD','Blocked: pair reservation','Armed: waiting','Invalidated: retraced','Blocked: prepared admission unavailable']) {
       check(label,await table.locator('.entry-gate').filter({hasText:label}).first().isVisible());
     }
     check('numeric distance coexists with veto',await table.locator('tbody tr').first().innerText().then(t=>t.includes('-0.25')&&t.includes('Vetoed:')));

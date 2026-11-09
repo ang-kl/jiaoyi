@@ -9,6 +9,7 @@ fn numeric_distance_keeps_every_gate_visible_and_escaped() {
         "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 7398.6, extreme: 7450)",
         "Invalidated: retraced > 61.8% without turn confirmation",
         "Blocked: <img src=x onerror=window.bad=true>",
+        "Blocked: prepared admission unavailable; last refusal: margin buffer: projected margin level 209.46% below floor 250.00%",
     ];
     let triggers: serde_json::Map<String, serde_json::Value> = (0..25)
         .map(|i| {
@@ -27,6 +28,7 @@ fn numeric_distance_keeps_every_gate_visible_and_escaped() {
         "2026-11-09T11:00:00Z".parse().unwrap(),
     );
     assert!(html.contains("Entry state / gate"));
+    assert!(html.contains("209.46% below floor 250.00%"));
     assert_eq!(html.matches("class=\"entry-gate\"").count(), 25);
     assert_eq!(html.matches(">-0.25</td>").count(), 25);
     assert!(html.contains("5d: -2.790%, 20d: -6.870%"));

@@ -6,6 +6,32 @@ fn gate(code: &str, state: &str, message: String) -> Value {
     json!({"code":code,"state":state,"message":message})
 }
 
+fn preparation_gate(
+    prepared: bool,
+    source: Option<&str>,
+    last_refusal: Option<&str>,
+) -> Option<Value> {
+    if prepared {
+        return None;
+    }
+    let message = if let Some(reason) = source {
+        format!("Blocked: prepared admission source invalid: {reason}")
+    } else if let Some(reason) = last_refusal {
+        format!("Blocked: prepared admission unavailable; last refusal: {reason}")
+    } else {
+        "Preparing: background entry admission is not ready yet".into()
+    };
+    Some(gate(
+        "prepared_admission_unavailable",
+        if source.is_some() || last_refusal.is_some() {
+            "blocked"
+        } else {
+            "preparing"
+        },
+        message,
+    ))
+}
+
 impl Trader<'_, '_> {
     pub fn trigger_status(&self, id: i64, now: DateTime<Utc>) -> Value {
         let sym = &self.syms[&id];
@@ -162,6 +188,13 @@ impl Trader<'_, '_> {
             }
         }
         if let Some(a) = arm {
+            if let Some(preparation) = preparation_gate(
+                result["entry_preparation"]["prepared_now"].as_bool() == Some(true),
+                result["entry_preparation"]["source_refusal"].as_str(),
+                result["entry_preparation"]["last_refusal"].as_str(),
+            ) {
+                gates.push(preparation);
+            }
             result["impulse_extreme"] = json!(a.extreme);
             gates.push(gate(
                 "armed_pullback",
@@ -220,5 +253,38 @@ impl Trader<'_, '_> {
         result["reason"] = gates[0]["message"].clone();
         result["entry_gates"] = json!(gates);
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unavailable_admission_discloses_margin_or_source_refusal_and_clears_after_success() {
+        let margin = "margin buffer: projected margin level 209.46% below floor 250.00%";
+        let blocked = preparation_gate(false, None, Some(margin)).unwrap();
+        assert_eq!(blocked["state"], "blocked");
+        assert!(blocked["message"].as_str().unwrap().contains(margin));
+        assert!(blocked["message"]
+            .as_str()
+            .unwrap()
+            .contains("last refusal"));
+        assert!(
+            preparation_gate(true, None, Some(margin)).is_none(),
+            "old refusal must not override a current valid plan"
+        );
+        let source = preparation_gate(
+            false,
+            Some("original-window evidence unavailable"),
+            Some(margin),
+        )
+        .unwrap();
+        assert!(source["message"]
+            .as_str()
+            .unwrap()
+            .contains("source invalid"));
+        let waiting = preparation_gate(false, None, None).unwrap();
+        assert_eq!(waiting["state"], "preparing");
+        assert!(!waiting["message"].as_str().unwrap().contains("margin"));
     }
 }
