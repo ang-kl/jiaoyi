@@ -2960,14 +2960,16 @@ impl<'a, 'c> Trader<'a, 'c> {
     async fn entry(&mut self, symbol_id: i64, now: DateTime<Utc>) -> anyhow::Result<()> {
         if let Some(reason) = self.human_entry_refusal(symbol_id) {
             let name = self.syms[&symbol_id].name.clone();
-            self.skip(
-                symbol_id,
-                &name,
-                reason,
-                json!({"human_protection_law":true}),
-                now,
-            )
-            .await;
+            // A human lock is not a failed broker attempt. Do not stamp
+            // last_try and impose an artificial 60-second delay after release.
+            self.d
+                .note(
+                    Some(&name),
+                    "skip",
+                    reason,
+                    json!({"human_protection_law":true}),
+                )
+                .await;
             return Ok(());
         }
         // The running actor compares queued event time with the wall clock;

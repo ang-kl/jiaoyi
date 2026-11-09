@@ -5220,6 +5220,10 @@ async fn external_position_cancels_armed_setup_and_release_requires_a_new_impuls
         .await
         .unwrap();
         assert!(t.syms[&BTC].day.is_none(), "locked symbol is not prepared");
+        assert!(
+            t.syms[&BTC].last_try.is_none(),
+            "yielding must not create a failed-attempt cooldown"
+        );
         assert_eq!(log.lock().unwrap().trendbar_requests.len(), history_calls);
         assert!(orders(&log).is_empty());
         assert!(closes(&log).is_empty());

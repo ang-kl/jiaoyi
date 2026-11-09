@@ -15,7 +15,7 @@ The three owner laws are enforced in S3 and the shared broker writer, with an ex
 | Law | Enforcement | Result |
 |---|---|---|
 | Exact `jiaoyi-s3` label | S3 reconciliation, S3-specific ledger provenance, fresh broker-position validation in shared amend/close writer | A missing, blank, changed or different label prevents S3 amendments and closes, even if an old S3 fill exists. A label alone is insufficient without opening evidence. |
-| Yield to external position or pending order | Account-local reconcile book, entry/prepare/arm and both dispatch paths, fresh broker admission and existing final revision guard | S1 and every other non-S3 label block S3 on that symbol. Cached/durable arms are cancelled, including after restart. When the external book clears, normal new-signal eligibility returns without cancelling the human order. |
+| Yield to external position or pending order | Account-local reconcile book, entry/prepare/arm and both dispatch paths, fresh broker admission and existing final revision guard | S1 and every other non-S3 label block S3 on that symbol. Cached/durable arms are cancelled, including after restart. When the external book clears, normal new-signal eligibility returns without cancelling the human order or adding a failed-order cooldown. |
 | NatGas/JPN225 reserved | Compiled `HUMAN_RESERVED_SYMBOLS`, entry/prepare gates and owned-position exit paths | S3 never arms, opens, amends or closes these symbols. Case-insensitive symbol-name matching. |
 
 An existing S3-owned position retains its registered exits if a human opens another position on the same symbol; the new-entry lock never grants authority over the human position. Permanent NatGas/JPN225 reservation remains the explicit exception to S3 management.
