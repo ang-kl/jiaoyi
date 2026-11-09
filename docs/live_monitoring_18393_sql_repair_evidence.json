@@ -1,0 +1,26 @@
+{
+  "trace": "\u211618,393",
+  "paragraphs": "\u00a7\u00a718\u201321",
+  "written_at_sgt": "2026-11-09T11:37:08.107148+08:00",
+  "initial_pr": 206,
+  "initial_merge_commit": "4639f0f0e7892aa3c69ce04324e973bb0fe9f36c",
+  "initial_checkpoint_sql_status": "unavailable",
+  "confirmed_cause": "evidence_output_limit",
+  "before": {
+    "total_output_bytes": 16915407,
+    "deal_fetch_receipts": 79559,
+    "deal_fetch_bytes": 16827745
+  },
+  "corrected_readonly_probe": {
+    "sql_sha256": "9437e6092e17127a3a257b49f25af4b8bc8780875145234d8d7bcab7e952cedb",
+    "total_output_bytes": 92736,
+    "deal_fetch_receipts": 24,
+    "assessment_status": "complete",
+    "account_coverage_complete": 4
+  },
+  "max_output_bytes_unchanged": 8388608,
+  "production_database_writes": 0,
+  "broker_requests": 0,
+  "initial_checkpoint_rewritten": false,
+  "financial_pass": false
+}

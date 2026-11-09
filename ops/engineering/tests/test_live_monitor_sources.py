@@ -24,6 +24,15 @@ class Reply(io.BytesIO):
 
 
 class SourcesTests(unittest.TestCase):
+    def test_sql_failure_exposes_only_fixed_diagnostic_codes(self):
+        for reason, expected in (("evidence_output_limit", "evidence_output_limit"),
+                                 ("database SECRET failed", "sql_unavailable")):
+            with patch("monitoring.sql_evidence.collect_sql_evidence",
+                       return_value={"status": "unavailable", "reason": reason}):
+                _, receipt = sources._sql({}, time.monotonic() + 1, SINCE, NOW)
+            self.assertEqual(receipt["error_code"], expected)
+            self.assertNotIn("SECRET", json.dumps(receipt))
+
     def test_explicit_checkpoint_budget_is_capped_without_extending_sql_or_once(self):
         http_budgets, sql_budgets = [], []
 

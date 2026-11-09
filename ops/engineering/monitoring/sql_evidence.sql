@@ -89,7 +89,10 @@ opens AS MATERIALIZED (
 ), fetches AS (
  SELECT d.account_id,d.window_from,d.window_to,d.fetched_at,d.status,d.error IS NOT NULL AS has_error
  FROM deal_fetches d JOIN scope a USING(account_id),bounds b
- WHERE d.fetched_at<=b.until AND d.window_from<=d.window_to
+ -- A receipt ending before monitor start cannot contribute to continuous
+ -- [start,through] coverage. Keep crossing intervals, not an arbitrary LIMIT.
+ WHERE d.fetched_at<=b.until AND d.window_from<=d.window_to AND d.window_to>=b.since
+ AND d.window_from<=b.until
 ), marks AS (
  SELECT r.account_id,r.observed_at,jsonb_build_object('observed_at',r.detail->'observed_at',
  'source_complete',r.detail->'source_complete','balance_stable',r.detail->'balance_stable','pnl_coverage_complete',r.detail->'pnl_coverage_complete',

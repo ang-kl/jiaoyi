@@ -62,6 +62,13 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(m._history([fetch(-100, 3600), fetch(3600, 7190)], START, NOW)['history_complete'])
         self.assertFalse(m._history([fetch(-100, 3600), fetch(3601, 7190)], START, NOW)['history_complete'])
         self.assertFalse(m._history([fetch(-100, 6000)], START, NOW)['history_complete'])
+        # SQL may discard ONLY intervals ending before start: overlapping
+        # intervals beginning earlier still establish complete coverage.
+        overlapping = [fetch(-600, 3600), fetch(3600, 7190)]
+        historical = [fetch(-100000 - n * 100, -99900 - n * 100) for n in range(1000)]
+        self.assertEqual(m._history(historical + overlapping, START, NOW),
+                         m._history(overlapping, START, NOW))
+
 
     def test_psql_url_is_env_only_readonly_and_failure_text_never_leaks(self):
         url = 'postgresql://user:supersecret@localhost:5432/test_db'
@@ -130,6 +137,13 @@ INSERT INTO trading_events VALUES(1,43002148,'s3:test','client','ORDER_FILLED','
 INSERT INTO deals VALUES(43002148,11,1,1,1,'BUY',100,'FILLED',false,'2026-11-09 00:11Z','2026-11-09 01:59Z',2,null,null,null,null,null),
 (43002148,11,2,2,1,'SELL',100,'FILLED',true,'2026-11-09 01:00Z','2026-11-09 01:59Z',2,2,1000,-10,20,5);
 INSERT INTO deal_fetches VALUES(43002148,'2026-11-08 00:00Z','2026-11-09 01:59Z','2026-11-09 01:59Z','ok',null);
+-- Historical receipts can be large in production; they do not prove any
+-- part of this monitor window and must not inflate the returned evidence.
+INSERT INTO deal_fetches
+SELECT 43002148, '2026-01-01'::timestamptz+n*interval '1 hour',
+ '2026-01-01'::timestamptz+(n+1)*interval '1 hour', '2026-11-09 01:59Z', 'ok', null
+FROM generate_series(1,1000) n;
+
 '''
             result = psql(schema)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -139,6 +153,10 @@ INSERT INTO deal_fetches VALUES(43002148,'2026-11-08 00:00Z','2026-11-09 01:59Z'
             raw = json.loads(result.stdout)
             self.assertEqual(raw['transaction_read_only'], 'on')
             self.assertEqual(len(raw['attempts']), 1)
+            self.assertEqual(len(raw['deal_fetches']), 1)
+            self.assertLess(m._clock(raw['deal_fetches'][0]['window_from']), START)
+            self.assertEqual(m._clock(raw['deal_fetches'][0]['window_to']), NOW-dt.timedelta(minutes=1))
+
             self.assertEqual(m._position(raw['positions'][0])['net'], 9.65)
             data = m.assess(raw, START, NOW)
             metrics = data['accounts']['43002148']['metrics']
