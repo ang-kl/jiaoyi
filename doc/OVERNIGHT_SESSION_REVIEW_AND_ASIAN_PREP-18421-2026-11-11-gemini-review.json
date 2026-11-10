@@ -1,0 +1,111 @@
+{
+  "trace": "\u211618,421",
+  "status": "overnight_session_audit_completed",
+  "as_of_sgt": "2026-11-11T06:19:00+08:00",
+  "activity_window_sgt": "2026-11-10T19:45:00+08:00..2026-11-11T06:19:00+08:00",
+  "production_commit": "ef04699334c423e5b1794101189977832d4cb1bf",
+  "active_production_policy": "s3_macro_pullback_owner_18409_v1",
+  "accounts_connected_and_unpaused": 4,
+  "accounts_audited": {
+    "43002148": {
+      "s3_open": 0,
+      "s1_open": 0,
+      "window_closes": 0,
+      "window_wins": 0,
+      "window_net_usd": 0.0,
+      "latest20_wins": 3,
+      "latest20_win_rate": 0.15,
+      "change_vs_18420_percentage_points": 0
+    },
+    "46130058": {
+      "s3_open": 0,
+      "s1_open": 2,
+      "window_closes": 2,
+      "window_wins": 1,
+      "window_net_usd": 204.69,
+      "latest20_wins": 8,
+      "latest20_win_rate": 0.4,
+      "change_vs_18420_percentage_points": 5
+    },
+    "47790949": {
+      "s3_open": 0,
+      "s1_open": 2,
+      "window_closes": 2,
+      "window_wins": 1,
+      "window_net_usd": 200.37,
+      "latest20_wins": 8,
+      "latest20_win_rate": 0.4,
+      "change_vs_18420_percentage_points": 5
+    },
+    "49236051": {
+      "s3_open": 0,
+      "s1_open": 0,
+      "window_closes": 1,
+      "window_wins": 1,
+      "window_net_usd": 6.49,
+      "latest20_wins": 8,
+      "latest20_win_rate": 0.4,
+      "change_vs_18420_percentage_points": 5
+    }
+  },
+  "overnight_s3": {
+    "filled_entries": 5,
+    "closed_trades": 5,
+    "wins": 3,
+    "losses": 2,
+    "net_usd": 411.55,
+    "entries_since_ny_2230": 0,
+    "entries_since_sgt_midnight": 0,
+    "open_positions_at_snapshot": 0,
+    "unknown_persisted_guard_receipts": 0
+  },
+  "full_10_nov_sgt_s3": {
+    "closed_trades": 26,
+    "wins": 17,
+    "net_usd": 1662.66
+  },
+  "activity_funnel": {
+    "new_account_symbol_arms": 31,
+    "qualified_impulse_marks": 31,
+    "consumed_triggers": 15,
+    "persisted_opening_intents": 9,
+    "new_filled_entries": 5,
+    "final_peer_refusals": 4,
+    "pair_skip_records": 54,
+    "pair_disarm_records": 3,
+    "pair_unknown_pre_intent_refusal_records": 3,
+    "unattributed_consumed_triggers": 3,
+    "deep_retracement_invalidations": 14,
+    "pullback_touch_records": 320,
+    "macro_veto_records": 503,
+    "all_stage_unique_min_volume_refusals": null,
+    "all_stage_unique_margin_refusals": null
+  },
+  "pre_intent_evidence_gap": {
+    "direct_pair_unknown_refusals": 3,
+    "later_consumed_triggers_without_individual_reason": 3,
+    "likely_diagnostic_deduplication_explanation": "Same symbol/kind/reason is suppressed indefinitely until reason changes; repeated pair-unknown is plausible but unproven for the second cohort.",
+    "pair_unknown_source_meaning": "Missing peer identity/origin (or invalid self-peer), not evidence of an occupied sibling position.",
+    "fix_deployed": false
+  },
+  "next_session_preparation": {
+    "traditional_0700_full": "20/20",
+    "spotbrent_0900_full": "4/4",
+    "crypto_0800_full": "8/8",
+    "future_opening_prices_observable": false
+  },
+  "human_protection": {
+    "live_bot_intents": 0,
+    "recorded_bot_interference": 0,
+    "live_external_positions": 3,
+    "live_external_pending_orders": 5,
+    "external_nvda_closing_cash_usd": -49.43,
+    "all_human_positions_unchanged": false,
+    "all_historical_human_stop_amendments_certified": null
+  },
+  "financial_pass": false,
+  "production_deployment_unchanged": true,
+  "new_broker_backtest_requests": 0,
+  "telegram_messages_sent": 0,
+  "report_file": "doc/OVERNIGHT_SESSION_REVIEW_AND_ASIAN_PREP-18421-2026-11-11.md"
+}
