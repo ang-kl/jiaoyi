@@ -334,10 +334,20 @@ pub(crate) async fn read(
     cutoff: DateTime<Utc>,
 ) -> Result<Evidence, sqlx::Error> {
     let mut tx = snapshot(pool).await?;
-    let rows = facts(&mut tx, account_id, strategy).await?;
-    let positions: Vec<i64> = rows.iter().map(|f| f.position_id).collect();
-    let deals = money(&mut tx, account_id, &positions).await?;
+    let evidence = read_in_transaction(&mut tx, account_id, strategy, cutoff).await?;
     tx.commit().await?;
+    Ok(evidence)
+}
+
+pub(crate) async fn read_in_transaction(
+    tx: &mut Transaction<'_, Postgres>,
+    account_id: i64,
+    strategy: &str,
+    cutoff: DateTime<Utc>,
+) -> Result<Evidence, sqlx::Error> {
+    let rows = facts(tx, account_id, strategy).await?;
+    let positions: Vec<i64> = rows.iter().map(|f| f.position_id).collect();
+    let deals = money(tx, account_id, &positions).await?;
     Ok(qualify(rows, deals, cutoff))
 }
 

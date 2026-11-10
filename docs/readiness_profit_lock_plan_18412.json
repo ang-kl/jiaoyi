@@ -1,0 +1,51 @@
+{
+  "trace": "\u211618,412",
+  "frozen_at_utc": "2026-11-09T23:54:18.970083+00:00",
+  "parent_commit": "11d5137b7671cba5cf10c38841ba91c4cd6b8cbd",
+  "source_sha256": {
+    "crates/jiaoyi/src/strategy3.rs": "aa896afec9d4769d0c9318b990557e7f5db8703c913982730ab4773f5df15ed9",
+    "crates/jiaoyi-store/src/goals.rs": "ade199f628b0ba3133b10b3200b8df38ab4e56fa68bc6d2de90a786171d84e00",
+    "crates/jiaoyi-store/src/outcomes.rs": "6c52dd04315c0a17331a3b6765b601f0a7f9d6289901eaf935558ea6e6afcce3",
+    "ops/engineering/monitoring/dispatch_evidence.py": "5d3b1d762d702dde4605e9f3a5d7050f832ab7774719647371231b84157b8ad2",
+    "docs/rebuild_phase3_coverage_and_pullback_results_18360.json": "d35aae8b82889b8bc4168646828978195bd438becdb72898016b2220cbd000d8",
+    "docs/gate10_stage1_2024_11_11_results_18382.json": "6da64e121cc83cb71a2e0abdc69f86b552146903c3409e22f7382ace3ee7e05d",
+    "doc/FOLLOWUP_TRADING_AND_REPAIR_REVIEW-18411-2026-11-10.json": "a2d89bda1c2847292dfc62c0c0b460909d049e775200a29768a879b9b2196c02"
+  },
+  "engineering": [
+    "opening quote + causal prepared context without current M30 dependency; retain original first-six-second quote rule and native calendar",
+    "explicit versioned receipt schemas, unknown versions fail closed",
+    "single read-only repeatable-read goal/outcome/settings/history snapshot"
+  ],
+  "exit_experiment": {
+    "baseline": {
+      "be_trigger_r": 1.0,
+      "be_stop_r": 0.0
+    },
+    "candidate": {
+      "be_trigger_r": 0.65,
+      "be_stop_r": 0.0,
+      "lock_trigger_r": 0.8,
+      "lock_stop_r": 0.5
+    },
+    "target_r": 1.38,
+    "initial_stop_r": -1.0,
+    "entry_rules_and_volume": "unchanged within each cohort; never pool different policy eras",
+    "stop_execution": "executable bid/ask; amendment effective only on next later quote, stop fills may gap; no guaranteed profit",
+    "sensitivity_bps_per_side": [
+      0,
+      3.74,
+      24
+    ],
+    "broker_actual_parity": "reconcile actual receipts and cash separately from quote-model fill differences; do not fabricate exact tick/broker parity",
+    "historical": [
+      "phase3 tier1",
+      "phase3 tier2",
+      "stage1 18382"
+    ],
+    "no_post_hoc_tuning": true
+  },
+  "broker_requests": 0,
+  "protected_validation_opened": false,
+  "gate_policy": "No production deployment of combined change unless all five checks pass; never treat reused development dates as independent holdout proof",
+  "independent_validation_status": "not yet established; preserve named per-cohort status"
+}

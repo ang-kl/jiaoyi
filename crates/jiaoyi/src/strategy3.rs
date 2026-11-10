@@ -1029,71 +1029,60 @@ async fn load_day(
     now: DateTime<Utc>,
     prepared_table: Option<(SigmaTable, mp::Context)>,
 ) -> Result<Day, (String, DateTime<Utc>)> {
-    let from = if prepared_table.is_some() {
-        s.open
-    } else {
-        s.open - chrono::Duration::days(BAR_DAYS)
-    };
-    match session.m30_bars(symbol_id, from, now).await {
-        Err(e) => Err((format!("M30 bars unreadable: {e}"), now)),
-        Ok(raw) => {
-            let mut bars = Vec::new();
-            let mut first_volume = None;
-            for tb in &raw {
-                let Ok(b) = jiaoyi_ctrader::decode_bar(
-                    tb,
-                    jiaoyi_ctrader::messages::ProtoOaTrendbarPeriod::M30,
-                ) else {
-                    continue;
-                };
-                if now < s.open && b.open_time + chrono::Duration::minutes(30) > now {
-                    continue;
-                }
-                let (Some(o), Some(c)) = (b.open.to_f64(), b.close.to_f64()) else {
-                    continue;
-                };
-                if b.open_time == s.open {
-                    first_volume = Some(b.tick_volume);
-                }
-                bars.push(M30 {
-                    open_time: b.open_time,
-                    open: o,
-                    close: c,
-                });
-            }
-            let (table, macro_context) = match prepared_table {
-                Some((table, context)) => (table, Ok(context)),
-                None => (
-                    prod::sigma_table(&rule, &s, &bars),
-                    prod::context(&rule, s, &bars, now.min(s.open)),
-                ),
-            };
-            let observed_open =
-                opening_midpoint(pool, account_id, symbol_id, symbol_name, s, now).await;
-            let opening_quote = observed_open.as_ref().ok().map(|(_, v)| v.clone());
-            let open = match first_volume {
-                Some(v) if v > 0 => observed_open.map(|(mid, _)| mid),
-                _ => Err(format!(
-                    "no M30 bar with ticks at the session open {}: a holiday, skipped",
-                    s.open
-                )),
-            };
-            let spread = match s3s::median_spread(pool, account_id, symbol_id).await {
-                Ok(Some(x)) => Ok(x),
-                Ok(None) => Err("no recorded two-sided quote in 7 days: no spread".into()),
-                Err(e) => Err(format!("recorded quotes unreadable: {e}")),
-            };
-            Ok(Day {
-                session: s,
-                open,
-                opening_quote,
-                table,
-                spread,
-                prepared_at: now,
-                macro_context,
-            })
+    // The closed preparation bars and the first six seconds of executable
+    // opening quotes are independent evidence. A forming opening M30 candle
+    // is not a holiday check: many brokers publish it only after it closes.
+    let (table, macro_context) = match prepared_table {
+        Some((table, context)) => (table, Ok(context)),
+        None => {
+            let cutoff = now.min(s.open);
+            let raw = session
+                .m30_bars(symbol_id, s.open - chrono::Duration::days(BAR_DAYS), cutoff)
+                .await
+                .map_err(|e| (format!("M30 preparation unreadable: {e}"), now))?;
+            let bars: Vec<_> = raw
+                .iter()
+                .filter_map(|tb| {
+                    let b = jiaoyi_ctrader::decode_bar(
+                        tb,
+                        jiaoyi_ctrader::messages::ProtoOaTrendbarPeriod::M30,
+                    )
+                    .ok()?;
+                    if b.open_time + chrono::Duration::minutes(30) > cutoff {
+                        return None;
+                    }
+                    Some(M30 {
+                        open_time: b.open_time,
+                        open: b.open.to_f64()?,
+                        close: b.close.to_f64()?,
+                    })
+                })
+                .collect();
+            (
+                prod::sigma_table(&rule, &s, &bars),
+                prod::context(&rule, s, &bars, cutoff),
+            )
         }
-    }
+    };
+    // Session eligibility is checked by the caller. Closed/holiday sessions
+    // without a genuine opening quote still fail; later quotes cannot replace it.
+    let observed_open = opening_midpoint(pool, account_id, symbol_id, symbol_name, s, now).await;
+    let opening_quote = observed_open.as_ref().ok().map(|(_, v)| v.clone());
+    let open = observed_open.map(|(mid, _)| mid);
+    let spread = match s3s::median_spread(pool, account_id, symbol_id).await {
+        Ok(Some(x)) => Ok(x),
+        Ok(None) => Err("no recorded two-sided quote in 7 days: no spread".into()),
+        Err(e) => Err(format!("recorded quotes unreadable: {e}")),
+    };
+    Ok(Day {
+        session: s,
+        open,
+        opening_quote,
+        table,
+        spread,
+        prepared_at: now,
+        macro_context,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -2097,7 +2086,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 .and_then(|d| d.open.as_ref().err())
                 .is_some_and(|why| why.starts_with("opening_midpoint"))
         {
-            // The forming M30 bar was already verified. Only wait for the
+            // The causal preparation was already verified. Only wait for the
             // recorder to flush the original first-six-second quote evidence.
             let observed =
                 opening_midpoint(self.pool, self.account_id(), symbol_id, &name, s, now).await;

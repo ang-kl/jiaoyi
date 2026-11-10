@@ -46,6 +46,14 @@ pub async fn definitions(pool: &PgPool) -> Result<Vec<Definition>, sqlx::Error> 
 /// The settings in force for `account_id` (global values plus its overrides),
 /// or the global values alone for `None`, with the version, read in one snapshot.
 pub async fn snapshot(pool: &PgPool, account_id: Option<i64>) -> Result<Snapshot, sqlx::Error> {
+    let mut connection = pool.acquire().await?;
+    snapshot_on(&mut connection, account_id).await
+}
+
+pub(crate) async fn snapshot_on(
+    connection: &mut sqlx::PgConnection,
+    account_id: Option<i64>,
+) -> Result<Snapshot, sqlx::Error> {
     // A single PostgreSQL statement sees one MVCC snapshot, including the
     // version. This retains the old repeatable-read view without six serial
     // commands for every account snapshot. The left join retains an empty
@@ -56,7 +64,7 @@ pub async fn snapshot(pool: &PgPool, account_id: Option<i64>) -> Result<Snapshot
            ON s.account_id IS NULL OR s.account_id = $1",
     )
     .bind(account_id)
-    .fetch_all(pool)
+    .fetch_all(connection)
     .await?;
     let version = rows.first().ok_or(sqlx::Error::RowNotFound)?.get("version");
     let mut global = Vec::new();

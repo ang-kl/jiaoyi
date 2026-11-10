@@ -232,25 +232,9 @@ fn summarize_at(
 // All source tables are existing action-owner receipts. We only detect gaps;
 // we do not infer a fill from absence or create/reconcile any trading record.
 
-async fn watermark(pool: &PgPool, account_id: i64) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT json_build_array(
-          (SELECT max(id) FROM trading_intents WHERE account_id=$1),
-          (SELECT max(id) FROM trading_events WHERE account_id=$1),
-          (SELECT max(id) FROM strategy3_fills WHERE account_id=$1),
-          (SELECT max(id) FROM strategy1_fills WHERE account_id=$1),
-          (SELECT max(fetched_at) FROM deals WHERE account_id=$1),
-          (SELECT count(*) FROM deals WHERE account_id=$1),
-          (SELECT max(id) FROM deal_fetches WHERE account_id=$1))::text",
-    )
-    .bind(account_id)
-    .fetch_one(pool)
-    .await
-}
-
 /// The latest 20 owned, fully closed positions. Missing later exits never
 /// silently disappear behind an older passing sample. Concurrent receipt or
-/// history changes make this poll unknown; a later stable poll can assess it.
+/// history changes are observed on the next atomic assessment snapshot.
 ///
 /// **Episode note (27-10-2026).** This window is per strategy and account.
 /// Three demos copying one signal are one episode, not three. A claim about
@@ -271,21 +255,39 @@ pub async fn assess(
             None,
         ));
     }
-    let cutoff = Utc::now();
-    let before = watermark(pool, account_id).await?;
-    let evidence = crate::outcomes::read(pool, account_id, strategy, cutoff).await?;
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    // This first statement establishes the MVCC snapshot and its DB-clock
+    // cutoff together. New receipts committed afterwards belong to the next poll.
+    let cutoff: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
+        .fetch_one(&mut *tx)
+        .await?;
+    let assessment = assess_snapshot(&mut tx, account_id, strategy, cutoff).await?;
+    tx.commit().await?;
+    Ok(assessment)
+}
+
+async fn assess_snapshot(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    account_id: i64,
+    strategy: &str,
+    cutoff: DateTime<Utc>,
+) -> Result<Assessment, sqlx::Error> {
+    let evidence = crate::outcomes::read_in_transaction(tx, account_id, strategy, cutoff).await?;
     let trades = evidence.trades;
     let unmeasured = evidence.unmeasured;
     let mut reasons = evidence.reasons;
     let latest_exit = evidence.latest_exit;
-    let snapshot = crate::settings::snapshot(pool, Some(account_id)).await?;
+    let snapshot = crate::settings::snapshot_on(tx, Some(account_id)).await?;
     let horizon = snapshot
         .integer("trading.reconcile_secs")
         .unwrap_or(300)
         .max(1)
         .saturating_mul(2);
     let fetch = sqlx::query("SELECT window_from,window_to,fetched_at,status,error FROM deal_fetches WHERE account_id=$1 ORDER BY window_to DESC,fetched_at DESC,id DESC LIMIT 1")
-        .bind(account_id).fetch_optional(pool).await?;
+        .bind(account_id).fetch_optional(&mut **tx).await?;
     let mut history_fetched_at = None;
     let mut history_through = None;
     let mut history_window_from = None;
@@ -317,9 +319,6 @@ pub async fn assess(
         }
     } else {
         reasons.push("no broker-history fetch receipt is stored".into());
-    }
-    if watermark(pool, account_id).await? != before {
-        reasons.push("account receipts or broker history changed during assessment".into());
     }
     let reference_exit = latest_exit.max(trades.iter().map(|t| t.closed_at).max());
     if let (Some(through), Some(exit)) = (history_through, reference_exit) {
@@ -353,6 +352,54 @@ pub async fn assess(
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn concurrent_history_settings_and_outcomes_are_seen_only_next_snapshot(pool: PgPool) {
+        sqlx::query("INSERT INTO deal_fetches(account_id,window_from,window_to,fetched_at,status,complete) VALUES(77,now()-interval '1 day',now()-interval '3 seconds',now()-interval '3 seconds','ok',false)")
+            .execute(&pool).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let cutoff = sqlx::query_scalar("SELECT clock_timestamp()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let before = assess_snapshot(&mut tx, 77, "s3", cutoff).await.unwrap();
+        assert_eq!(before.state, AssessmentState::InsufficientEvidence);
+        assert!(before.history_complete);
+        // Three independently committed writers run while the assessment's
+        // snapshot remains open. No sleeps or scheduler-dependent race.
+        sqlx::query("INSERT INTO deal_fetches(account_id,window_from,window_to,fetched_at,status,complete,error) VALUES(77,now()-interval '1 day',clock_timestamp(),clock_timestamp(),'failed',false,'broker unavailable')")
+            .execute(&pool).await.unwrap();
+        crate::settings::change(
+            &pool,
+            "trading.reconcile_secs",
+            Some(77),
+            Some(serde_json::json!(60)),
+            "test",
+            "concurrent change",
+        )
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO trading_intents(account_id,entry_key,client_msg_id,kind,symbol_id,position_id,side,volume,relative_stop,risk,max_risk) VALUES(77,'s3:77:1','open','open',1,1,'buy',100,100000,1,1)")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO trading_events(account_id,entry_key,client_msg_id,payload_type,kind,position_id,deal_id,symbol_id,volume,raw,received_at) VALUES(77,'s3:77:1','open',2126,'ORDER_FILLED',1,10,1,100,''::bytea,now()-interval '1 minute')")
+            .execute(&pool).await.unwrap();
+        let same = assess_snapshot(&mut tx, 77, "s3", cutoff).await.unwrap();
+        assert_eq!(same, before);
+        tx.commit().await.unwrap();
+        let after = assess(&pool, 77, "s3").await.unwrap();
+        assert_eq!(after.state, AssessmentState::Unknown);
+        assert!(!after.history_complete);
+        assert_eq!(after.history_max_age_secs, 120);
+        assert!(after
+            .missing_reasons
+            .iter()
+            .any(|r| r.contains("request failed")));
+        assert_ne!(after.sample_identity, before.sample_identity);
+    }
 
     fn trade(id: i64, r: f64) -> ClosedTrade {
         ClosedTrade {
