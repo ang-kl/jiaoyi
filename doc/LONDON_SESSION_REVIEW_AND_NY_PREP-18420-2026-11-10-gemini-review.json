@@ -1,0 +1,83 @@
+{
+  "trace": "\u211618,420",
+  "status": "london_session_audit_and_ny_prep_completed",
+  "as_of_sgt": "2026-11-10T19:45:00+08:00",
+  "activity_window_sgt": "2026-11-10T14:15:00+08:00..2026-11-10T19:45:00+08:00",
+  "production_commit": "ef04699334c423e5b1794101189977832d4cb1bf",
+  "active_production_policy": "s3_macro_pullback_owner_18409_v1",
+  "accounts_connected_and_unpaused": 4,
+  "accounts_audited": {
+    "live_43002148": {
+      "open_s3": 0,
+      "closed_window_s3": 0,
+      "window_net_usd": 0.0,
+      "latest20_wins": 3,
+      "bot_positions": 0,
+      "human_external_positions": 4,
+      "recorded_bot_interference": 0,
+      "human_positions_intact": null,
+      "external_closing_cash_usd": -164.89
+    },
+    "demo_46130058": {
+      "open_s3": 0,
+      "closed_window_s3": 4,
+      "window_net_usd": 617.03,
+      "latest20_wins": 7
+    },
+    "demo_47790949": {
+      "open_s3": 0,
+      "closed_window_s3": 4,
+      "window_net_usd": 415.58,
+      "latest20_wins": 7
+    },
+    "demo_49236051": {
+      "open_s3": 0,
+      "closed_window_s3": 4,
+      "window_net_usd": 12.57,
+      "latest20_wins": 7
+    }
+  },
+  "london_session_activity": {
+    "carryover_s3_resolved": 3,
+    "new_account_symbol_arms": 49,
+    "entries_dispatched": 9,
+    "persisted_opening_intents": 12,
+    "vetoes_by_reason": {
+      "pair_reservation": 54,
+      "touch_turn_or_peer_hold": {
+        "deep_retracement_invalidations": 23,
+        "final_peer_refusals": 3
+      },
+      "macro_regime": 261,
+      "min_volume_risk_cap": null,
+      "margin_guard": null
+    },
+    "veto_count_scope": "Persisted diagnostics except final peer refusals, which count unique intents. All-stage minimum-volume/margin counts unavailable.",
+    "window_closed_s3_net_usd": 1045.18,
+    "full_day_closed_s3_net_usd": 1251.11,
+    "full_day_scope": "10 Nov 00:00 to 19:45 SGT, not an entire completed day",
+    "unknown_entry_guard_receipts": 0
+  },
+  "capital_sizing_empirical_check": {
+    "demo_47790949_equity_usd": 24812.260000000002,
+    "small_demo_49236051_equity_usd": 813.92,
+    "setups_blocked_by_min_lot_or_margin_today": null,
+    "min_equity_usd_at_1_200_for_all_todays_setups": null,
+    "observed_small_demo_btc_refusal": "min_volume_exceeds_trade_risk_budget",
+    "conditional_btc_risk_only_equity_usd": 884.85,
+    "initial_arm_sensitivity_maximum_usd": 2456.67,
+    "threshold_scope": "Conditional reconstruction, not a complete all-day capital certificate or a broker margin quote."
+  },
+  "ny_session_2230_readiness": {
+    "accounts_ready": "4/4 connected and unpaused; entry permission remains conditional",
+    "traditional_base_and_full_coefficients_prepared": "24/24",
+    "opening_references_available": "0/24 for future NY window; opening prices not yet observable",
+    "crypto_2000_prepared": "8/8",
+    "crypto_2000_opening_references_available": "0/8 at audit snapshot; separate window",
+    "observed_confirmation_to_guard_max_ms": 26.633,
+    "latency_samples": 9
+  },
+  "financial_pass": false,
+  "production_deployment_unchanged": true,
+  "report_file": "doc/LONDON_SESSION_REVIEW_AND_NY_PREP-18420-2026-11-10.md"
+}
