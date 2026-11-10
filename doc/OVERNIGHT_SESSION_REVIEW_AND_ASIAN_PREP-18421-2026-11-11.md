@@ -120,7 +120,7 @@ S1 independently opened AUDUSD shorts at 23:50:06 on 46130058 and 47790949, 0.09
 | 400083120 / JPN225 | pending_entry / buy / 1.5 | 55679.5 | Not set |
 | 399322019 / NatGas | pending_entry / buy / 0.1 | 2.423 | 3.095 |
 
-Current margin projection was 812.55%; observed pending entries projected 246.62%, below 250%. Stress projection is unknown because complete marks/conversion/protection evidence is unavailable. The live mark estimates price-only stop loss exposure of about $4,804.20 versus equity $3,896.42; full cost-inclusive open risk is unknown. These are external-book observations, not authority to amend or cancel human trades.
+Current margin projection was 812.55%; observed pending entries projected 246.62%, below 250%. Stress projection is unknown because complete marks/conversion/protection evidence is unavailable. The live mark estimates price-only stop loss exposure of about $4,804.29 versus equity $3,896.42; full cost-inclusive open risk is unknown. These are external-book observations, not authority to amend or cancel human trades.
 
 ## §7. NY opening verification and next Asian preparations
 
