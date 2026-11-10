@@ -8,7 +8,15 @@ import math
 import re
 
 ACCOUNTS = (43002148, 46130058, 47790949, 49236051)
-POLICY = 's3_macro_pullback_owner_18392_v1'
+# Explicit schema registry: an unknown future policy is not automatically trusted.
+POLICY = 's3_macro_pullback_owner_18392_v1'  # historical bounded-touch schema
+POLICY_SCHEMAS = {
+    's3_macro_pullback_owner_18377_v1': 'touch',
+    's3_macro_pullback_owner_18380_v1': 'touch',
+    POLICY: 'bounded',
+    's3_macro_pullback_owner_18407_v1': 'confirmed_turn',
+    's3_macro_pullback_owner_18409_v1': 'confirmed_turn',
+}
 FILLS = {'ORDER_FILLED', 'ORDER_PARTIAL_FILL', 'RECONCILED_FILL', 'RECONCILED_PARTIAL_FILL'}
 FULL = {'ORDER_FILLED', 'RECONCILED_FILL'}
 REJECTS = {'ORDER_REJECTED', 'ORDER_ERROR', 'ERROR_RES', 'ORDER_CANCELLED', 'ORDER_EXPIRED'}
@@ -38,17 +46,47 @@ def _raw(event):
         return None
 
 
+def _admission_times(attempt, raw, checked, decided):
+    """Decode the recorded proof schema, not a new execution permission."""
+    admitted = raw.get('pullback_admitted_price')
+    schema = POLICY_SCHEMAS.get(attempt.get('production_policy'))
+    if not isinstance(admitted, dict) or checked is None or decided is None:
+        return None
+    if schema == 'bounded':
+        return (decided, None) if admitted.get('bounded') is True else None
+    if schema == 'touch':
+        return (decided, None) if (_number(admitted.get('price')) and admitted['price'] > 0
+            and type(admitted.get('digits')) is int and 0 <= admitted['digits'] <= 5) else None
+    if schema != 'confirmed_turn' or admitted.get('policy') != attempt.get('production_policy'):
+        return None
+    proof = admitted.get('confirmed_turn')
+    if not isinstance(proof, dict):
+        return None
+    touch, turn, confirmed = (_clock(proof.get(k)) for k in ('touched_at', 'turn_extreme_at', 'confirmed_at'))
+    if (touch is None or turn is None or confirmed is None or not touch <= turn <= confirmed <= checked
+            or type(proof.get('long')) is not bool or proof['long'] != (attempt.get('side') == 'buy')
+            or not all(_number(proof.get(k)) and proof[k] > 0 for k in
+                       ('origin', 'extreme', 'turn_extreme', 'confirmed_bid', 'confirmed_ask'))
+            or proof['confirmed_bid'] > proof['confirmed_ask']
+            or not _number(admitted.get('price')) or admitted['price'] <= 0):
+        return None
+    # PostgreSQL timestamps have microsecond precision; the JSON proof retains ns.
+    if abs((confirmed - decided).total_seconds()) > 0.000001:
+        return None
+    return touch, confirmed
+
+
 def _empty():
     return dict(confirmed_refused_entries=0, broker_rejected_entries=0,
                 partially_filled_entries=0, uncertain_entry_attempts=0,
                 confirmed_missing_conversion_path_errors=0, confirmed_subminimum_volume_refusals=0,
-                max_touch_to_final_guard_ms=None, samples=0, invalid_guard_receipts=0,
+                max_touch_to_final_guard_ms=None, max_confirmation_to_final_guard_ms=None, samples=0, invalid_guard_receipts=0,
                 persisted_attempts_observed=0, invalid_attempt_records=0, refusal_reasons={},
                 max_dispatch_latency_ms=None, refused_entries=None,
                 fx_conversion_errors_count=None, min_volume_refusal_count=None,
                 unexpected_entry_refusals_count=None,
                 refusal_scope='distinct persisted S3 opening intents; pre-admission failures and background vetoes are not counted',
-                latency_scope='touch receipt to successful final guard after writer lock, before socket bytes; not socket-write duration')
+                latency_scope='recorded touch and (for confirmed-turn policies) confirmation to final guard after writer lock; not socket-write duration')
 
 
 def _missing_fx(code, raw):
@@ -144,8 +182,8 @@ def summarize_dispatch(attempts, since, now):
             checked = _clock((raw or {}).get('checked_at'))
             decided = _clock(attempt.get('decided_at'))
             received = _clock(event.get('received_at'))
-            admitted = (raw or {}).get('pullback_admitted_price')
-            ok = (attempt.get('production_policy') == POLICY and raw is not None
+            times = _admission_times(attempt, raw or {}, checked, decided)
+            ok = (times is not None and raw is not None
                   and attempt.get('client_msg_id') is not None
                   and event.get('client_msg_id') == attempt.get('client_msg_id')
                   and attempt.get('side') in ('buy', 'sell')
@@ -154,16 +192,18 @@ def summarize_dispatch(attempts, since, now):
                   and raw.get('result') == 'passed' and raw.get('stage') == 'after_writer_lock'
                   and raw.get('account_id') == account and raw.get('symbol_id') == attempt.get('symbol_id')
                   and raw.get('selected_side') == attempt.get('side')
-                  and isinstance(admitted, dict) and admitted.get('bounded') is True
                   and checked is not None and decided is not None and decided <= checked <= received)
             if ok:
-                valid.append((checked, (checked-decided).total_seconds()*1000))
+                valid.append((checked, (checked-times[0]).total_seconds()*1000,
+                              (checked-times[1]).total_seconds()*1000 if times[1] is not None else None))
             else:
                 out['invalid_guard_receipts'] += 1
         if valid:
-            _, latency = max(valid)
+            _, latency, confirmation_latency = max(valid, key=lambda v: v[0])
             out['samples'] += 1
             out['max_touch_to_final_guard_ms'] = max(out['max_touch_to_final_guard_ms'] or 0, latency)
+            if confirmation_latency is not None:
+                out['max_confirmation_to_final_guard_ms'] = max(out['max_confirmation_to_final_guard_ms'] or 0, confirmation_latency)
     system = _empty()
     sums = ('confirmed_refused_entries', 'broker_rejected_entries', 'partially_filled_entries',
             'uncertain_entry_attempts', 'confirmed_missing_conversion_path_errors',
@@ -173,6 +213,9 @@ def summarize_dispatch(attempts, since, now):
         system[name] = sum(a[name] for a in accounts.values())
     values = [a['max_touch_to_final_guard_ms'] for a in accounts.values() if a['samples']]
     system['max_touch_to_final_guard_ms'] = max(values) if values else None
+    confirmations = [a['max_confirmation_to_final_guard_ms'] for a in accounts.values()
+                     if a['max_confirmation_to_final_guard_ms'] is not None]
+    system['max_confirmation_to_final_guard_ms'] = max(confirmations) if confirmations else None
     system['refusal_reasons'] = dict(sum((Counter(a['refusal_reasons']) for a in accounts.values()), Counter()))
     system['source_counts'] = {k: system[k] for k in ('persisted_attempts_observed', 'samples', 'invalid_guard_receipts', 'invalid_attempt_records')}
     system['touch_to_final_guard_samples'] = system['samples']

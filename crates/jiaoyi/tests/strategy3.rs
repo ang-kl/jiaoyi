@@ -2124,7 +2124,11 @@ async fn the_budget_and_a_holiday_skip_with_the_reason(pool: PgPool) {
         "{d:?}"
     );
 
-    // A session whose first M30 bar has no ticks: a holiday, no entry.
+    // No opening quote: a closed/holiday session remains unready even with
+    // a synthetic current M30 candle. Remove spread-fixture overlaps too.
+    sqlx::query("DELETE FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2 AND received_at BETWEEN $3 AND $4")
+        .bind(DEMO).bind(BTC).bind(today().open).bind(today().open+Duration::seconds(6))
+        .execute(&pool).await.unwrap();
     let mut f = fake((60_455.0, 60_460.0));
     f.m30_bars = HashMap::from([(BTC, bars(0, 20))]);
     settings::change(
@@ -2146,7 +2150,7 @@ async fn the_budget_and_a_holiday_skip_with_the_reason(pool: PgPool) {
     let d = decisions(&pool).await;
     assert!(
         d.iter()
-            .any(|(k, r)| k == "s3_session" && r.contains("holiday")),
+            .any(|(k, r)| k == "s3_session" && r.contains("opening_midpoint_unavailable")),
         "{d:?}"
     );
 }
@@ -4392,18 +4396,10 @@ async fn crypto_four_hour_preopen_is_ready_then_finalises_causally(pool: PgPool)
     {
         let wire = log.lock().unwrap();
         let finalisation = &wire.trendbar_requests[requests..];
-        assert_eq!(
-            finalisation.len(),
-            1,
-            "only the current opening bar is needed; prior same-slot context is complete"
+        assert!(
+            finalisation.is_empty(),
+            "verified preparation plus opening ticks need no forming M30 bar"
         );
-        assert_eq!(
-            finalisation.iter().map(|r| r.1).min(),
-            Some(today().open.timestamp_millis())
-        );
-        assert!(finalisation
-            .iter()
-            .all(|r| r.0 == BTC && r.2 <= at(30).timestamp_millis()));
     }
     assert_eq!(
         log.lock().unwrap().orders.len(),
@@ -5192,7 +5188,8 @@ async fn a_retired_historical_symbol_outside_settings_keeps_legacy_exits(pool: P
 #[sqlx::test(migrator = "store::MIGRATOR")]
 async fn a_bid_m30_open_cannot_replace_missing_two_sided_opening_evidence(pool: PgPool) {
     loaded(&pool).await;
-    sqlx::query("DELETE FROM ticks WHERE session_id='opening-mid-fixture'")
+    sqlx::query("DELETE FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2 AND received_at BETWEEN $3 AND $4")
+        .bind(DEMO).bind(BTC).bind(today().open).bind(today().open + Duration::seconds(6))
         .execute(&pool)
         .await
         .unwrap();
@@ -5739,9 +5736,9 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
     use jiaoyi_core::strategy3::{band, macro_pullback as mp, production_sessions as prod};
     loaded(&pool).await;
     let london = london_fixture();
-    let crypto = prod::session_at(prod::Market::Crypto, london.open + Duration::hours(2)).unwrap();
-    let now = london.open + Duration::hours(2);
-    let mut fixture = fake((OPEN, OPEN + 5.0));
+    let now = london.open + Duration::seconds(5);
+    let crypto = prod::session_at(prod::Market::Crypto, now).unwrap();
+    let fixture = fake((OPEN, OPEN + 5.0));
     let mut specs = Vec::new();
     let run = store::start_run(&pool, DEMO).await.unwrap();
     for (n, symbol) in mp::CORE.into_iter().enumerate() {
@@ -5839,17 +5836,7 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
         )
         .await
         .unwrap();
-        fixture.m30_bars.insert(
-            id,
-            vec![m30_bar(
-                s.open,
-                e5(OPEN - 100.0),
-                e5(OPEN + 100.0),
-                e5(OPEN - 100.0),
-                e5(OPEN + 10.0),
-                100,
-            )],
-        );
+        // No current-session M30 bar exists yet: readiness must not wait 31m.
         specs.push((id, symbol, class, s, table, context));
     }
     settings::change(
@@ -5901,7 +5888,12 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
                     strategy3::preopen::compatible_preparation_hashes()[1]
                 );
                 assert!(prep.matches(*id, *s));
-                t.prepare(*id, *s, now).await.unwrap();
+                let prepare_at = if restart == 0 {
+                    s.open + Duration::seconds(5)
+                } else {
+                    now
+                };
+                t.prepare(*id, *s, prepare_at).await.unwrap();
                 let d = t.syms[id].day.as_ref().unwrap().as_ref().unwrap();
                 assert_eq!(
                     d.open,
@@ -5924,21 +5916,20 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
                 assert_eq!(got.latest_bar_end, context.latest_bar_end);
                 assert!((got.drift_5 - context.drift_5).abs() <= f64::EPSILON);
                 assert!((got.drift_20 - context.drift_20).abs() <= f64::EPSILON);
-                let visible = t.trigger_status(*id, now);
+                if restart == 0 {
+                    assert_eq!(
+                        (d.prepared_at - s.open).num_seconds(),
+                        5,
+                        "{symbol}: ready under 60s"
+                    );
+                }
+                let visible = t.trigger_status(*id, prepare_at);
                 assert_eq!(visible["entry_session_enabled"], true);
                 assert_eq!(visible["opening_reference"]["mid"], OPEN);
             }
         }
         let wire = log.lock().unwrap();
         assert!(wire.orders.is_empty() && wire.closes.is_empty() && wire.amends.is_empty());
-        for (id, from, _) in &wire.trendbar_requests {
-            let (_, _, _, s, _, _) = specs.iter().find(|(sid, _, _, _, _, _)| sid == id).unwrap();
-            assert_eq!(
-                *from,
-                s.open.timestamp_millis(),
-                "no repeated historical M30 collection"
-            );
-        }
-        assert_eq!(wire.trendbar_requests.len(), 16);
+        assert!(wire.trendbar_requests.is_empty());
     });
 }

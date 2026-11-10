@@ -2,6 +2,7 @@ import copy
 import datetime as dt
 import json
 import unittest
+from pathlib import Path
 
 from monitoring.dispatch_evidence import summarize_dispatch, POLICY
 
@@ -41,6 +42,31 @@ class DispatchEvidence(unittest.TestCase):
         self.assertEqual(out['invalid_guard_receipts'], 2)
         self.assertEqual(out['samples'], 0)
         self.assertIsNone(out['max_touch_to_final_guard_ms'])
+
+    def test_real_six_confirmed_turn_receipts_and_wrong_schema_rejection(self):
+        rows = json.loads((Path(__file__).parent / 'fixtures/dispatch_18409_six.json').read_text())
+        def run(rows):
+            return summarize_dispatch(rows, '2026-11-09T11:47:00Z', '2026-11-09T22:49:35Z')['system_metrics']
+        out = run(rows)
+        self.assertEqual((out['samples'], out['invalid_guard_receipts']), (6, 0))
+        self.assertLess(out['max_confirmation_to_final_guard_ms'], 20)
+        self.assertGreater(out['max_touch_to_final_guard_ms'], 2000)
+        for fault in ('unknown_policy', 'policy_mismatch', 'reversed_time', 'wrong_side', 'missing_proof'):
+            row = copy.deepcopy(rows[0])
+            event = row['events'][0]
+            raw = json.loads(bytes.fromhex(event['raw_hex']))
+            if fault == 'unknown_policy':
+                row['production_policy'] = 's3_macro_pullback_owner_99999_v1'
+            elif fault == 'policy_mismatch':
+                raw['pullback_admitted_price']['policy'] = POLICY
+            elif fault == 'reversed_time':
+                raw['pullback_admitted_price']['confirmed_turn']['touched_at'] = '2027-01-01T00:00:00Z'
+            elif fault == 'wrong_side':
+                raw['pullback_admitted_price']['confirmed_turn']['long'] = True
+            else:
+                del raw['pullback_admitted_price']['confirmed_turn']
+            event['raw_hex'] = json.dumps(raw).encode().hex()
+            self.assertEqual(run([row])['invalid_guard_receipts'], 1, fault)
 
     def test_refusals_are_unique_fills_override_and_risk_caps_are_not_missing_fx(self):
         missing = {'code': 'ENTRY_FX_UNAVAILABLE', 'reason': 'unavailable',
