@@ -20499,7 +20499,7 @@
   },
   "trace": "\u211618,412",
   "validation_opened": false,
-  "generated_at_sgt": "2026-11-10T08:13:06+08:00",
+  "generated_at_sgt": "2026-11-10T08:15:24+08:00",
   "status": "engineering_repairs_tested_profit_lock_release_held",
   "pr": 214,
   "merge_commit": null,
@@ -20521,7 +20521,7 @@
       "check": 3,
       "name": "broker reconciliation and replay parity",
       "status": "partial_exact_fill_parity_not_met",
-      "evidence": "21/21 broker cash/quantity/price receipts reconcile; 0/21 exact quote-replay fill/time matches. Historical native outputs match 1212 variants and 24 Stage1 episodes."
+      "evidence": "21/21 broker cash/quantity/price receipts reconcile; 0/21 exact quote-replay fill/time matches. Historical native outputs match 1212 variants and 24 Stage 1 episodes."
     },
     {
       "check": 4,
@@ -20533,7 +20533,7 @@
       "check": 5,
       "name": "CI and production rollout",
       "status": "release_held_CI_tracked_on_PR214",
-      "evidence": "PR214 draft; owner conditioned combined release on all five checks. No production change or verification trade."
+      "evidence": "PR #214 draft; owner conditioned combined release on all five checks. No production change or verification trade."
     }
   ],
   "historical_regressions": [
@@ -20763,5 +20763,5 @@
     "new_qualified_live_trades_from_this_run": 0,
     "progress_to_goal_proven": false
   },
-  "review_instruction": "Read this report and JSON on PR214. Do not label cash estimates actual profit, duplicated account signals independent, or the combined release approved."
+  "review_instruction": "Read this report and JSON on PR #214. Do not label cash estimates actual profit, duplicated account signals independent, or the combined release approved."
 }
