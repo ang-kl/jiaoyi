@@ -1,0 +1,79 @@
+{
+  "trace": "\u211618,417",
+  "status": "asian_session_audit_completed",
+  "as_of_sgt": "2026-11-10T14:15:00+08:00",
+  "activity_window_start_sgt": "2026-11-10T09:42:00+08:00",
+  "operational_snapshot_at_sgt": "2026-11-10T14:17:34.513466+08:00",
+  "production_commit": "ef04699334c423e5b1794101189977832d4cb1bf",
+  "accounts_audited": {
+    "live_43002148": {
+      "status": "healthy_unpaused",
+      "s3_active_positions": 0,
+      "s1_active_positions": 0,
+      "all_active_positions": 5,
+      "latest20_wins": 3,
+      "human_positions_intact": null,
+      "human_external_positions_observed": 5,
+      "recorded_bot_interference_count": 0,
+      "laws_compliance": "PASS_for_recorded_bot_actions; entire_human_change_history_not_certified"
+    },
+    "demo_46130058": {
+      "status": "healthy_unpaused",
+      "s3_active_positions": 1,
+      "s1_active_positions": 1,
+      "all_active_positions": 2,
+      "latest20_wins": 4
+    },
+    "demo_47790949": {
+      "status": "healthy_unpaused",
+      "s3_active_positions": 1,
+      "s1_active_positions": 1,
+      "all_active_positions": 2,
+      "latest20_wins": 4
+    },
+    "demo_49236051": {
+      "status": "healthy_unpaused",
+      "s3_active_positions": 1,
+      "s1_active_positions": 0,
+      "all_active_positions": 1,
+      "latest20_wins": 5
+    }
+  },
+  "asian_session_setups_summary": {
+    "setups_detected": 10,
+    "setups_armed": 10,
+    "entries_dispatched": 3,
+    "pre_send_peer_refusals": 4,
+    "s3_closed_positions": 3,
+    "closed_s3_net_usd": 412.88,
+    "vetoes_enforced": {
+      "pair_skip_log_records": 54,
+      "pair_disarm_records": 3,
+      "deep_retracement_invalidations": 7,
+      "macro_regime_log_records": 250
+    },
+    "count_scope": "decision rows are deduplicated state reports, not all evaluated ticks or independent opportunities"
+  },
+  "london_session_readiness": {
+    "actual_session_open_sgt": "2026-11-10T15:00:00+08:00",
+    "preparation_start_sgt": "2026-11-10T14:40:00+08:00",
+    "preparation_deadline_sgt": "2026-11-10T14:50:00+08:00",
+    "traditional_base_prepared": "24/24",
+    "traditional_all_coefficients_ready": "0/24",
+    "missing_late_marks_minutes": [
+      420,
+      450
+    ],
+    "crypto_next_window_sgt": "2026-11-10T16:00:00+08:00",
+    "crypto_full_preparation": "8/8",
+    "all_core_base_prepared": "32/32",
+    "future_opening_references": "not_yet_observable",
+    "current_prepared_admissions": 0,
+    "background_admission_worker_latency_ms": null,
+    "observed_confirmation_to_final_guard_ms_max": 23.371,
+    "railway_container_uptime_hours": null,
+    "observed_account_actor_uptime_hours": 4.934
+  },
+  "financial_pass": false,
+  "report_file": "doc/ASIAN_SESSION_REVIEW_AND_LONDON_PREP-18417-2026-11-10.md"
+}
