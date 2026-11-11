@@ -1,0 +1,2602 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>№18,432 Pure breakeven audit</title><style>body{font:17px/1.6 system-ui,sans-serif;background:#f4f7fa;color:#1a2d3b;margin:0}main{max-width:1200px;background:white;margin:auto;padding:32px}h1{font-size:2rem}h2{color:#174b64;margin-top:2.3rem}table{display:block;overflow-x:auto;border-collapse:collapse;font-size:14px;width:100%}td,th{padding:9px;border:1px solid #ccd7df;text-align:left;min-width:85px}th{background:#edf2f7}code{overflow-wrap:anywhere}a{color:#075da7}figure{margin:24px 0}svg{width:100%;height:auto}figcaption{font-size:13px;color:#52616c}@media(max-width:650px){main{padding:18px}body{font-size:16px}h1{font-size:1.6rem}}</style><main><h1>Pure +0.80R breakeven and oil-entry anatomy</h1>
+<p>№18,432 §§1–11 · 11 November 2026 · as of 20:35 SGT · by Codex (runtime model/effort not exposed; Extra High requested).</p>
+<h2>TLDR</h2>
+<p><strong>Reject this candidate for deployment under the tested assumptions. Removing the +0.50R lock does not remove the historical regression.</strong> The isolated +0.80R → entry stop cuts two historical Tier-1 oil runners and seven of the thirteen actual TP winners in the recent demo ledger.</p>
+<ul>
+<li>Tier 1, 3.74bp: mean net R <strong>1.204630 → 0.809965</strong>; wins <strong>7/7 → 5/7</strong>.</li>
+<li>Tier 1, 24bp stress: <strong>0.419593 → 0.024129R</strong>; the strict-close subset turns slightly negative.</li>
+<li>Tier 2, 3.74bp: unchanged at <strong>0.279986R</strong>, 6/8 forced-close wins.</li>
+<li>Across 35 recent demo trades, paired replay cash falls <strong>$698.03 → $157.77</strong>, a <strong>$540.26 deterioration</strong>. Actual broker cash was <strong>$718.81</strong>; replay estimates are not actual earnings.</li>
+<li>The candidate reduces the selected overnight Crude and 11 November BTC losses, but leaves the 17:14 oil losses unchanged. None of those oil trades came near +0.80R.</li>
+</ul>
+<p>All research remained off the trading path. Existing PostgreSQL quotes were copied with explicitly authorised read-only queries; there were <strong>zero broker requests, zero orders, zero production source changes and no deployment</strong>. The baseline policy remains <code>s3_macro_pullback_owner_18409_v1</code> on <code>aebf404d</code>.</p>
+<h2>§1. Scope and evidence boundaries</h2>
+<p>The plan and its SHA256 were frozen before replay. This run uses exactly the Phase-3/PR214 development manifest and selected cells: 35 Tier-1 sessions at 48bp impulse/3.74bp admission, and 167 Tier-2 sessions at 28bp/3.74bp admission. All 202 native baseline results and normalised input hashes match the frozen results. The 7 and 8 admitted trades are subsets of those denominators, not a new selected list of winners.</p>
+<p>“Sealed historical manifest” means frozen inputs here. The protected <strong>19 August–5 September 2025 validation holdout was not opened</strong>. These development dates have already informed earlier hypotheses; this is retrospective comparison, not independent out-of-sample validation. The former 1,212 cells were overlapping admission/threshold variants; only the 202 cases needed for this directive were rerun. Stage 1’s previous zero-entry result was not rerun or counted as evidence for exits.</p>
+<p>The live comparison covers 35 post-PR210 demo positions opening from 10 November 00:59 SGT through 11 November 17:14 SGT. A read-only tail reconciliation found <strong>zero new demo deals or S3 fill records in [19:45,20:35) SGT</strong> on 11 November, so the ledger did not change after the preceding audit cutoff. All 13 actual TP winners are included. No live-account orders were involved.</p>
+<h2>§2. Frozen exit semantics and costs</h2>
+<p>The only candidate change is <strong>breakeven trigger 1.00R → 0.80R</strong>. The stop moves to the recorded entry price, never +0.50R. Entry, direction, volume, original R, price precision, TP and each saved deadline are identical between arms. Historical strict and forced-boundary paths preserve their original adapter semantics; they are reported separately.</p>
+<p>The old server stop/target is checked before a pending amendment. A proposal becomes active only on a strictly later quote where an entry-price stop is still valid. A gap through an active stop fills at the recorded executable quote, not an invented stop price. This is an optimistic <strong>next-quote acknowledgement model</strong>, not measured broker amendment latency. There is no same-quote retroactive protection and no automatic re-entry after a hypothetical early exit.</p>
+<p>Bid/ask spread is already present in executable prices. The 3.74bp and 24bp figures are additional per-side reserves, charged as <code>(entry + exit) × bps / 10,000 / original R</code>. For the historical stress row, admission remains frozen at 3.74bp; only costs are repriced at 24bp. That is different from applying a new 24bp admission filter. All actual closing fee components in this scoped live ledger are recorded as zero; cash calculations use those receipts directly, not a price-to-cash rounding remainder. <strong>An entry-price stop is not net breakeven</strong>: spread, costs and stop slippage can make it a loss.</p>
+<h2>§3. Historical result, strict versus forced</h2>
+<table>
+<thead>
+<tr>
+<th>Tier / mode</th>
+<th>Reserve bp/side</th>
+<th>Baseline closed / wins</th>
+<th>Candidate closed / wins</th>
+<th>Baseline mean net R</th>
+<th>Candidate mean net R</th>
+<th>Candidate PF</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tier1 / floor=48 / admission=3.74 / forced</td>
+<td>3.74</td>
+<td>7 / 7</td>
+<td>7 / 5</td>
+<td>1.204630</td>
+<td>0.809965</td>
+<td>22.4636</td>
+</tr>
+<tr>
+<td>tier1 / floor=48 / admission=3.74 / forced</td>
+<td>24.0</td>
+<td>7 / 7</td>
+<td>7 / 5</td>
+<td>0.419593</td>
+<td>0.024129</td>
+<td>1.0996</td>
+</tr>
+<tr>
+<td>tier1 / floor=48 / admission=3.74 / strict</td>
+<td>3.74</td>
+<td>6 / 6</td>
+<td>6 / 4</td>
+<td>1.234595</td>
+<td>0.774153</td>
+<td>18.5839</td>
+</tr>
+<tr>
+<td>tier1 / floor=48 / admission=3.74 / strict</td>
+<td>24.0</td>
+<td>6 / 6</td>
+<td>6 / 4</td>
+<td>0.441394</td>
+<td>-0.019980</td>
+<td>0.9293</td>
+</tr>
+<tr>
+<td>tier2 / floor=28 / admission=3.74 / forced</td>
+<td>3.74</td>
+<td>8 / 6</td>
+<td>8 / 6</td>
+<td>0.279986</td>
+<td>0.279986</td>
+<td>2.1861</td>
+</tr>
+<tr>
+<td>tier2 / floor=28 / admission=3.74 / forced</td>
+<td>24.0</td>
+<td>8 / 0</td>
+<td>8 / 0</td>
+<td>-0.940631</td>
+<td>-0.940631</td>
+<td>0.0000</td>
+</tr>
+<tr>
+<td>tier2 / floor=28 / admission=3.74 / strict</td>
+<td>3.74</td>
+<td>4 / 3</td>
+<td>4 / 3</td>
+<td>0.550127</td>
+<td>0.550127</td>
+<td>2.7196</td>
+</tr>
+<tr>
+<td>tier2 / floor=28 / admission=3.74 / strict</td>
+<td>24.0</td>
+<td>4 / 0</td>
+<td>4 / 0</td>
+<td>-0.675294</td>
+<td>-0.675294</td>
+<td>0.0000</td>
+</tr>
+</tbody>
+</table>
+<p>Tier 1 has one unresolved strict path in each arm; Tier 2 has four. Forced outcomes mark these at the original boundary and must not be mixed with strict target/stop completions. The two harmed Tier-1 trades are <strong>SpotBrent and SpotCrude on 11 April 2025</strong> (<code>70e3acf0ef22a39ed2354106</code>, <code>ce5a75c11b08e52a205e5350</code>): both baseline targets of about +1.38R become gross entry-price exits and negative net outcomes after costs. They belong to one correlated oil date, not two independent macro regimes. Tier 2 is byte-for-byte unchanged in exit outcomes.</p>
+<p>The earlier bundled lock produced Tier-1 0.595017R; the pure rule is less damaging at 0.809965R, but still worse than 1.204630R. Relative improvement over a rejected candidate is not qualification against the baseline.</p>
+<h2>§4. Recent live-ledger counterfactual</h2>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Trades</th>
+<th>Actual broker USD</th>
+<th>Baseline replay USD</th>
+<th>Pure 0.80R replay USD</th>
+<th>Actual TP winners cut</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>46130058</td>
+<td>12</td>
+<td>455.79</td>
+<td>450.57</td>
+<td>69.72</td>
+<td>3</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>12</td>
+<td>253.24</td>
+<td>238.39</td>
+<td>85.69</td>
+<td>2</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>11</td>
+<td>9.78</td>
+<td>9.07</td>
+<td>2.36</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Additional bp/side</th>
+<th>Baseline W/L/flat</th>
+<th>Candidate W/L/flat</th>
+<th>Baseline mean R / PF</th>
+<th>Candidate mean R / PF</th>
+<th>Baseline / candidate closed-curve max DD R</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.0</td>
+<td>16/19/0</td>
+<td>6/27/2</td>
+<td>0.184171 / 1.5191</td>
+<td>0.049692 / 1.2658</td>
+<td>9.2588 / 6.2336</td>
+</tr>
+<tr>
+<td>3.74</td>
+<td>16/19/0</td>
+<td>6/29/0</td>
+<td>0.070523 / 1.1675</td>
+<td>-0.064006 / 0.7699</td>
+<td>10.5711 / 7.8731</td>
+</tr>
+<tr>
+<td>24.0</td>
+<td>13/22/0</td>
+<td>6/29/0</td>
+<td>-0.545120 / 0.3220</td>
+<td>-0.679922 / 0.1199</td>
+<td>19.0792 / 23.7973</td>
+</tr>
+</tbody>
+</table>
+<p>There is a trade-off: the earlier stop reduces some large losses and the low-cost closed-trade R drawdown, but sacrifices more winner cash and net expectancy. This drawdown is an ordered closed-trade curve, not floating portfolio drawdown. Three accounts often copy one market episode; pooled wins and dollar totals are not independent trials or a replacement for each account’s official latest-20. No simulated trade was appended to live performance.</p>
+<h2>§5. Check of all thirteen actual TP winners</h2>
+<p>The following seven have an observed return to entry after +0.80R and are cut by the candidate. The remaining six retained their target in the paired replay. Times are SGT.</p>
+<table>
+<thead>
+<tr>
+<th>Position / account</th>
+<th>Symbol</th>
+<th>First +0.80R</th>
+<th>First return to entry</th>
+<th>Candidate exit R</th>
+<th>Actual TP preserved?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>260838301 / 49236051</td>
+<td>ETHUSD</td>
+<td>10 Nov 11:25:48.511</td>
+<td>Not observed</td>
+<td>1.380046</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>260838304 / 47790949</td>
+<td>ETHUSD</td>
+<td>10 Nov 11:25:48.511</td>
+<td>Not observed</td>
+<td>1.380046</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>260838310 / 46130058</td>
+<td>ETHUSD</td>
+<td>10 Nov 10:41:18.088</td>
+<td>10 Nov 10:55:08.277</td>
+<td>-0.021325</td>
+<td>No</td>
+</tr>
+<tr>
+<td>260862431 / 49236051</td>
+<td>SpotCrude</td>
+<td>10 Nov 11:46:00.973</td>
+<td>10 Nov 12:02:07.216</td>
+<td>-0.037383</td>
+<td>No</td>
+</tr>
+<tr>
+<td>260862442 / 47790949</td>
+<td>SpotCrude</td>
+<td>10 Nov 11:46:01.172</td>
+<td>10 Nov 12:02:06.988</td>
+<td>-0.024299</td>
+<td>No</td>
+</tr>
+<tr>
+<td>260862445 / 46130058</td>
+<td>SpotCrude</td>
+<td>10 Nov 11:46:01.189</td>
+<td>10 Nov 12:02:07.014</td>
+<td>-0.024299</td>
+<td>No</td>
+</tr>
+<tr>
+<td>260971498 / 46130058</td>
+<td>SpotCrude</td>
+<td>10 Nov 16:30:11.429</td>
+<td>Not observed</td>
+<td>1.380435</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>260982208 / 46130058</td>
+<td>SpotBrent</td>
+<td>10 Nov 17:34:05.879</td>
+<td>Not observed</td>
+<td>1.380769</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>260982991 / 47790949</td>
+<td>SpotCrude</td>
+<td>10 Nov 17:29:49.465</td>
+<td>Not observed</td>
+<td>1.380846</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>260982989 / 49236051</td>
+<td>SpotCrude</td>
+<td>10 Nov 17:29:50.755</td>
+<td>Not observed</td>
+<td>1.381057</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>261128944 / 49236051</td>
+<td>ETHUSD</td>
+<td>10 Nov 21:30:28.534</td>
+<td>10 Nov 21:30:33.745</td>
+<td>-0.010057</td>
+<td>No</td>
+</tr>
+<tr>
+<td>261128943 / 47790949</td>
+<td>ETHUSD</td>
+<td>10 Nov 21:30:28.553</td>
+<td>10 Nov 21:30:33.766</td>
+<td>-0.010057</td>
+<td>No</td>
+</tr>
+<tr>
+<td>261128942 / 46130058</td>
+<td>ETHUSD</td>
+<td>10 Nov 21:30:28.576</td>
+<td>10 Nov 21:30:33.752</td>
+<td>-0.010057</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p>The harmed winners are one of the three 10 November morning ETH copies, all three Asian Crude copies, and all three New York ETH copies. The New York ETH return occurred about <strong>5.2 seconds after +0.80R</strong>; exact broker amendment timing is especially material there. The observed return is a quote-path fact; the hypothetical exit requires the specified acknowledgement assumption. Earlier threshold crossing does not guarantee a filled protective stop.</p>
+<p>Actual winner cash totals $1,888.84; the baseline replay estimates $1,862.76 and the candidate $817.05. Differences between broker cash and baseline quote replay are shown separately rather than crediting them to the candidate.</p>
+<h2>§6. All 35 positions and selected-loss benefit</h2>
+<table>
+<thead>
+<tr>
+<th>Position / account</th>
+<th>Symbol</th>
+<th>Actual USD</th>
+<th>Baseline est. USD</th>
+<th>Candidate est. USD</th>
+<th>Baseline → candidate gross R</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>260655209 / 46130058</td>
+<td>ETHUSD</td>
+<td>44.97</td>
+<td>44.89</td>
+<td>-0.26</td>
+<td>0.3040 → -0.0017</td>
+</tr>
+<tr>
+<td>260655210 / 49236051</td>
+<td>ETHUSD</td>
+<td>1.43</td>
+<td>1.43</td>
+<td>0.00</td>
+<td>0.3057 → -0.0000</td>
+</tr>
+<tr>
+<td>260655217 / 47790949</td>
+<td>ETHUSD</td>
+<td>44.65</td>
+<td>44.56</td>
+<td>0.00</td>
+<td>0.3057 → -0.0000</td>
+</tr>
+<tr>
+<td>260741238 / 47790949</td>
+<td>SpotCrude</td>
+<td>-143.72</td>
+<td>-145.43</td>
+<td>-0.86</td>
+<td>-1.0000 → -0.0059</td>
+</tr>
+<tr>
+<td>260741239 / 46130058</td>
+<td>SpotCrude</td>
+<td>-150.38</td>
+<td>-147.73</td>
+<td>-11.03</td>
+<td>-1.0030 → -0.0749</td>
+</tr>
+<tr>
+<td>260741495 / 49236051</td>
+<td>SpotCrude</td>
+<td>-3.90</td>
+<td>-4.03</td>
+<td>-0.01</td>
+<td>-1.0050 → -0.0030</td>
+</tr>
+<tr>
+<td>260838301 / 49236051</td>
+<td>ETHUSD</td>
+<td>6.58</td>
+<td>6.52</td>
+<td>6.52</td>
+<td>1.3800 → 1.3800</td>
+</tr>
+<tr>
+<td>260838304 / 47790949</td>
+<td>ETHUSD</td>
+<td>201.00</td>
+<td>200.23</td>
+<td>200.23</td>
+<td>1.3800 → 1.3800</td>
+</tr>
+<tr>
+<td>260838310 / 46130058</td>
+<td>ETHUSD</td>
+<td>205.30</td>
+<td>202.94</td>
+<td>-3.14</td>
+<td>1.3800 → -0.0213</td>
+</tr>
+<tr>
+<td>260862431 / 49236051</td>
+<td>SpotCrude</td>
+<td>6.11</td>
+<td>5.91</td>
+<td>-0.16</td>
+<td>1.3813 → -0.0374</td>
+</tr>
+<tr>
+<td>260862442 / 47790949</td>
+<td>SpotCrude</td>
+<td>201.62</td>
+<td>200.27</td>
+<td>-3.52</td>
+<td>1.3813 → -0.0243</td>
+</tr>
+<tr>
+<td>260862445 / 46130058</td>
+<td>SpotCrude</td>
+<td>203.86</td>
+<td>202.49</td>
+<td>-3.56</td>
+<td>1.3813 → -0.0243</td>
+</tr>
+<tr>
+<td>260963913 / 49236051</td>
+<td>SpotBrent</td>
+<td>-0.02</td>
+<td>-0.02</td>
+<td>-0.02</td>
+<td>-0.0043 → -0.0043</td>
+</tr>
+<tr>
+<td>260963925 / 47790949</td>
+<td>SpotBrent</td>
+<td>0.63</td>
+<td>-0.95</td>
+<td>-0.95</td>
+<td>-0.0065 → -0.0065</td>
+</tr>
+<tr>
+<td>260971498 / 46130058</td>
+<td>SpotCrude</td>
+<td>208.28</td>
+<td>206.25</td>
+<td>206.25</td>
+<td>1.3804 → 1.3804</td>
+</tr>
+<tr>
+<td>260982208 / 46130058</td>
+<td>SpotBrent</td>
+<td>208.44</td>
+<td>207.86</td>
+<td>207.86</td>
+<td>1.3808 → 1.3808</td>
+</tr>
+<tr>
+<td>260982991 / 47790949</td>
+<td>SpotCrude</td>
+<td>216.15</td>
+<td>203.36</td>
+<td>203.36</td>
+<td>1.3808 → 1.3808</td>
+</tr>
+<tr>
+<td>260982989 / 49236051</td>
+<td>SpotCrude</td>
+<td>6.59</td>
+<td>6.27</td>
+<td>6.27</td>
+<td>1.3811 → 1.3811</td>
+</tr>
+<tr>
+<td>260983374 / 47790949</td>
+<td>ETHUSD</td>
+<td>-2.82</td>
+<td>-2.82</td>
+<td>-5.26</td>
+<td>-0.0191 → -0.0356</td>
+</tr>
+<tr>
+<td>260983375 / 46130058</td>
+<td>ETHUSD</td>
+<td>-3.55</td>
+<td>-2.88</td>
+<td>-5.37</td>
+<td>-0.0191 → -0.0356</td>
+</tr>
+<tr>
+<td>260983373 / 49236051</td>
+<td>ETHUSD</td>
+<td>-0.11</td>
+<td>-0.09</td>
+<td>-0.17</td>
+<td>-0.0191 → -0.0356</td>
+</tr>
+<tr>
+<td>261063163 / 47790949</td>
+<td>BTCUSD</td>
+<td>-6.68</td>
+<td>-6.12</td>
+<td>-6.12</td>
+<td>-0.0412 → -0.0412</td>
+</tr>
+<tr>
+<td>261063162 / 46130058</td>
+<td>BTCUSD</td>
+<td>-6.68</td>
+<td>-6.12</td>
+<td>-6.12</td>
+<td>-0.0409 → -0.0409</td>
+</tr>
+<tr>
+<td>261128944 / 49236051</td>
+<td>ETHUSD</td>
+<td>6.49</td>
+<td>6.42</td>
+<td>-0.05</td>
+<td>1.3801 → -0.0101</td>
+</tr>
+<tr>
+<td>261128943 / 47790949</td>
+<td>ETHUSD</td>
+<td>207.05</td>
+<td>204.98</td>
+<td>-1.49</td>
+<td>1.3801 → -0.0101</td>
+</tr>
+<tr>
+<td>261128942 / 46130058</td>
+<td>ETHUSD</td>
+<td>211.37</td>
+<td>209.26</td>
+<td>-1.52</td>
+<td>1.3801 → -0.0101</td>
+</tr>
+<tr>
+<td>261474373 / 47790949</td>
+<td>ETHUSD</td>
+<td>-157.59</td>
+<td>-150.52</td>
+<td>-150.52</td>
+<td>-1.0046 → -1.0046</td>
+</tr>
+<tr>
+<td>261474372 / 49236051</td>
+<td>ETHUSD</td>
+<td>-5.02</td>
+<td>-4.93</td>
+<td>-4.93</td>
+<td>-1.0130 → -1.0130</td>
+</tr>
+<tr>
+<td>261474378 / 46130058</td>
+<td>ETHUSD</td>
+<td>-161.99</td>
+<td>-155.05</td>
+<td>-155.05</td>
+<td>-1.0130 → -1.0130</td>
+</tr>
+<tr>
+<td>261629338 / 47790949</td>
+<td>BTCUSD</td>
+<td>-159.67</td>
+<td>-160.33</td>
+<td>-0.34</td>
+<td>-1.0951 → -0.0023</td>
+</tr>
+<tr>
+<td>261629441 / 49236051</td>
+<td>BTCUSD</td>
+<td>-3.22</td>
+<td>-3.38</td>
+<td>-0.06</td>
+<td>-1.0398 → -0.0175</td>
+</tr>
+<tr>
+<td>261629442 / 46130058</td>
+<td>BTCUSD</td>
+<td>-148.11</td>
+<td>-155.62</td>
+<td>-2.62</td>
+<td>-1.0398 → -0.0175</td>
+</tr>
+<tr>
+<td>261636289 / 46130058</td>
+<td>SpotCrude</td>
+<td>-155.72</td>
+<td>-155.72</td>
+<td>-155.72</td>
+<td>-1.0223 → -1.0223</td>
+</tr>
+<tr>
+<td>261636412 / 49236051</td>
+<td>SpotBrent</td>
+<td>-5.15</td>
+<td>-5.03</td>
+<td>-5.03</td>
+<td>-1.0311 → -1.0311</td>
+</tr>
+<tr>
+<td>261636417 / 47790949</td>
+<td>SpotBrent</td>
+<td>-147.38</td>
+<td>-148.84</td>
+<td>-148.84</td>
+<td>-1.0000 → -1.0000</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Selected cohort</th>
+<th>Actual USD</th>
+<th>Baseline replay USD</th>
+<th>Candidate replay USD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>overnight_crude</td>
+<td>-298.00</td>
+<td>-297.19</td>
+<td>-11.90</td>
+</tr>
+<tr>
+<td>nov11_btc</td>
+<td>-311.00</td>
+<td>-319.33</td>
+<td>-3.02</td>
+</tr>
+<tr>
+<td>nov11_oil</td>
+<td>-308.25</td>
+<td>-309.59</td>
+<td>-309.59</td>
+</tr>
+<tr>
+<td>actual_13_tp_winners</td>
+<td>1888.84</td>
+<td>1862.76</td>
+<td>817.05</td>
+</tr>
+</tbody>
+</table>
+<p>The overnight Crude and 11 November BTC examples do improve, but selecting only those losers would hide the seven sacrificed TP winners, lost overnight ETH time-exit gains and slightly worse slippage on other early exits. The 17:14 oil paths are unchanged because their best observed favourable returns were at most about 0.069R.</p>
+<h2>§7. Oil event-local anatomy with parameters frozen</h2>
+<p>The three loss positions entered at 17:14 SGT on 11 November. The named comparator <strong>260862445 entered at 09:48 SGT in the Asian session and closed at 14:43</strong>, before London; it is retained as requested but must not be labelled a London entry. The other three named comparators are London entries on 10 November.</p>
+<table>
+<thead>
+<tr>
+<th>Position / symbol</th>
+<th>Session open SGT</th>
+<th>Entry SGT</th>
+<th>Hold seconds</th>
+<th>Impulse bp</th>
+<th>Touch→turn seconds</th>
+<th>Turn fraction</th>
+<th>Peer signed bp at guard</th>
+<th>Best observed R</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>261636289 / SpotCrude</td>
+<td>11 Nov 15:00:00.000</td>
+<td>11 Nov 17:14:20.985</td>
+<td>138.761</td>
+<td>66.475</td>
+<td>2.017</td>
+<td>0.0867</td>
+<td>54.229</td>
+<td>-0.0848</td>
+</tr>
+<tr>
+<td>261636412 / SpotBrent</td>
+<td>11 Nov 15:00:00.000</td>
+<td>11 Nov 17:14:37.517</td>
+<td>206.656</td>
+<td>85.924</td>
+<td>12.300</td>
+<td>0.0821</td>
+<td>25.541</td>
+<td>0.0689</td>
+</tr>
+<tr>
+<td>261636417 / SpotBrent</td>
+<td>11 Nov 15:00:00.000</td>
+<td>11 Nov 17:14:38.559</td>
+<td>201.725</td>
+<td>85.924</td>
+<td>13.312</td>
+<td>0.0882</td>
+<td>26.694</td>
+<td>0.0443</td>
+</tr>
+<tr>
+<td>260862445 / SpotCrude</td>
+<td>10 Nov 07:00:00.000</td>
+<td>10 Nov 09:48:00.757</td>
+<td>17730.285</td>
+<td>82.045</td>
+<td>14.390</td>
+<td>0.1011</td>
+<td>71.297</td>
+<td>1.3907</td>
+</tr>
+<tr>
+<td>260971498 / SpotCrude</td>
+<td>10 Nov 15:00:00.000</td>
+<td>10 Nov 16:14:51.447</td>
+<td>1080.086</td>
+<td>50.557</td>
+<td>3.321</td>
+<td>0.0806</td>
+<td>42.636</td>
+<td>1.3940</td>
+</tr>
+<tr>
+<td>260982208 / SpotBrent</td>
+<td>10 Nov 15:00:00.000</td>
+<td>10 Nov 17:00:20.884</td>
+<td>2725.996</td>
+<td>100.052</td>
+<td>2.609</td>
+<td>0.0956</td>
+<td>52.421</td>
+<td>1.3846</td>
+</tr>
+<tr>
+<td>260982991 / SpotCrude</td>
+<td>10 Nov 15:00:00.000</td>
+<td>10 Nov 17:01:38.186</td>
+<td>1969.762</td>
+<td>67.564</td>
+<td>4.212</td>
+<td>0.0862</td>
+<td>52.099</td>
+<td>1.4076</td>
+</tr>
+</tbody>
+</table>
+<p>All seven retained guards pass the frozen 8% turn and 24bp peer requirements, with a touch/turn extreme inside 50%–61.8% retracement. The confirmation quote can already have moved out of that touch band in the intended trade direction; that is the turn mechanic, not proof of an invalid touch.</p>
+<table>
+<thead>
+<tr>
+<th>Loss position</th>
+<th>Opening origin / saved extreme</th>
+<th>Entry / SL</th>
+<th>First peer &lt;24bp after entry</th>
+<th>First opening-origin reclaim</th>
+<th>Actual stop fill SGT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>261636289</td>
+<td>86.7245 / 86.148</td>
+<td>86.383 / 86.831</td>
+<td>11 Nov 17:15:43.924</td>
+<td>11 Nov 17:15:50.363</td>
+<td>11 Nov 17:16:39.746</td>
+</tr>
+<tr>
+<td>261636412</td>
+<td>94.96799999999999 / 94.152</td>
+<td>94.546 / 95.156</td>
+<td>11 Nov 17:15:21.194</td>
+<td>11 Nov 17:16:41.068</td>
+<td>11 Nov 17:18:04.173</td>
+</tr>
+<tr>
+<td>261636417</td>
+<td>94.96799999999999 / 94.152</td>
+<td>94.531 / 95.141</td>
+<td>11 Nov 17:15:21.196</td>
+<td>11 Nov 17:16:41.104</td>
+<td>11 Nov 17:18:00.284</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Sequence:</strong> the opening reference and negative multi-day macro context supported a short impulse. Crude armed around 17:01, touched the retracement near 17:14:18 and confirmed after about 2.0 seconds. It sold at 86.383; the peer still showed 54.23bp down from its opening reference. Brent sold roughly 17 seconds later on the other accounts, with only 25.54–26.69bp of remaining peer displacement. Both markets then rallied. Peer displacement fell below 24bp approximately 43–83 seconds after entry; each instrument reclaimed its opening origin before its initial stop was hit. Full event quotes and 1-minute traces from 15:00–17:20 across all three account feeds are in JSON.</p>
+<p>The HTML copy includes an annotated price-path chart using one account’s recorded feed. Minute aggregation is for presentation only; the exit replay uses ordered quotes.</p>
+<figure><svg xmlns:xlink="http://www.w3.org/1999/xlink" width="792pt" height="288pt" viewBox="0 0 792 288" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-11-11T13:00:16.610783</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 288 
+L 792 288 
+L 792 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 52.94 246.04 
+L 781.2 246.04 
+L 781.2 26.88 
+L 52.94 26.88 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <path d="M 86.042727 246.04 
+L 86.042727 26.88 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_2">
+      <defs>
+       <path id="m01bfacf2fd" d="M 0 0 
+L 0 3.5 
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m01bfacf2fd" x="86.042727" y="246.04" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <!-- 15:00 -->
+      <g transform="translate(71.633352 260.638438) scale(0.1 -0.1)">
+       <defs>
+        <path id="DejaVuSans-31" d="M 794 531 
+L 1825 531 
+L 1825 4091 
+L 703 3866 
+L 703 4441 
+L 1819 4666 
+L 2450 4666 
+L 2450 531 
+L 3481 531 
+L 3481 0 
+L 794 0 
+L 794 531 
+z
+" transform="scale(0.015625)"/>
+        <path id="DejaVuSans-35" d="M 691 4666 
+L 3169 4666 
+L 3169 4134 
+L 1269 4134 
+L 1269 2991 
+Q 1406 3038 1543 3061 
+Q 1681 3084 1819 3084 
+Q 2600 3084 3056 2656 
+Q 3513 2228 3513 1497 
+Q 3513 744 3044 326 
+Q 2575 -91 1722 -91 
+Q 1428 -91 1123 -41 
+Q 819 9 494 109 
+L 494 744 
+Q 775 591 1075 516 
+Q 1375 441 1709 441 
+Q 2250 441 2565 725 
+Q 2881 1009 2881 1497 
+Q 2881 1984 2565 2268 
+Q 2250 2553 1709 2553 
+Q 1456 2553 1204 2497 
+Q 953 2441 691 2322 
+L 691 4666 
+z
+" transform="scale(0.015625)"/>
+        <path id="DejaVuSans-3a" d="M 750 794 
+L 1409 794 
+L 1409 0 
+L 750 0 
+L 750 794 
+z
+M 750 3309 
+L 1409 3309 
+L 1409 2516 
+L 750 2516 
+L 750 3309 
+z
+" transform="scale(0.015625)"/>
+        <path id="DejaVuSans-30" d="M 2034 4250 
+Q 1547 4250 1301 3770 
+Q 1056 3291 1056 2328 
+Q 1056 1369 1301 889 
+Q 1547 409 2034 409 
+Q 2525 409 2770 889 
+Q 3016 1369 3016 2328 
+Q 3016 3291 2770 3770 
+Q 2525 4250 2034 4250 
+z
+M 2034 4750 
+Q 2819 4750 3233 4129 
+Q 3647 3509 3647 2328 
+Q 3647 1150 3233 529 
+Q 2819 -91 2034 -91 
+Q 1250 -91 836 529 
+Q 422 1150 422 2328 
+Q 422 3509 836 4129 
+Q 1250 4750 2034 4750 
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#DejaVuSans-31"/>
+       <use xlink:href="#DejaVuSans-35" transform="translate(63.623047 0)"/>
+       <use xlink:href="#DejaVuSans-3a" transform="translate(127.246094 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(160.9375 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(224.560547 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_3">
+      <path d="M 228.932198 246.04 
+L 228.932198 26.88 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4">
+      <g>
+       <use xlink:href="#m01bfacf2fd" x="228.932198" y="246.04" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <!-- 15:30 -->
+      <g transform="translate(214.522823 260.638438) scale(0.1 -0.1)">
+       <defs>
+        <path id="DejaVuSans-33" d="M 2597 2516 
+Q 3050 2419 3304 2112 
+Q 3559 1806 3559 1356 
+Q 3559 666 3084 287 
+Q 2609 -91 1734 -91 
+Q 1441 -91 1130 -33 
+Q 819 25 488 141 
+L 488 750 
+Q 750 597 1062 519 
+Q 1375 441 1716 441 
+Q 2309 441 2620 675 
+Q 2931 909 2931 1356 
+Q 2931 1769 2642 2001 
+Q 2353 2234 1838 2234 
+L 1294 2234 
+L 1294 2753 
+L 1863 2753 
+Q 2328 2753 2575 2939 
+Q 2822 3125 2822 3475 
+Q 2822 3834 2567 4026 
+Q 2313 4219 1838 4219 
+Q 1578 4219 1281 4162 
+Q 984 4106 628 3988 
+L 628 4550 
+Q 988 4650 1302 4700 
+Q 1616 4750 1894 4750 
+Q 2613 4750 3031 4423 
+Q 3450 4097 3450 3541 
+Q 3450 3153 3228 2886 
+Q 3006 2619 2597 2516 
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#DejaVuSans-31"/>
+       <use xlink:href="#DejaVuSans-35" transform="translate(63.623047 0)"/>
+       <use xlink:href="#DejaVuSans-3a" transform="translate(127.246094 0)"/>
+       <use xlink:href="#DejaVuSans-33" transform="translate(160.9375 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(224.560547 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_5">
+      <path d="M 371.821668 246.04 
+L 371.821668 26.88 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#m01bfacf2fd" x="371.821668" y="246.04" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <!-- 16:00 -->
+      <g transform="translate(357.412293 260.638438) scale(0.1 -0.1)">
+       <defs>
+        <path id="DejaVuSans-36" d="M 2113 2584 
+Q 1688 2584 1439 2293 
+Q 1191 2003 1191 1497 
+Q 1191 994 1439 701 
+Q 1688 409 2113 409 
+Q 2538 409 2786 701 
+Q 3034 994 3034 1497 
+Q 3034 2003 2786 2293 
+Q 2538 2584 2113 2584 
+z
+M 3366 4563 
+L 3366 3988 
+Q 3128 4100 2886 4159 
+Q 2644 4219 2406 4219 
+Q 1781 4219 1451 3797 
+Q 1122 3375 1075 2522 
+Q 1259 2794 1537 2939 
+Q 1816 3084 2150 3084 
+Q 2853 3084 3261 2657 
+Q 3669 2231 3669 1497 
+Q 3669 778 3244 343 
+Q 2819 -91 2113 -91 
+Q 1303 -91 875 529 
+Q 447 1150 447 2328 
+Q 447 3434 972 4092 
+Q 1497 4750 2381 4750 
+Q 2619 4750 2861 4703 
+Q 3103 4656 3366 4563 
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#DejaVuSans-31"/>
+       <use xlink:href="#DejaVuSans-36" transform="translate(63.623047 0)"/>
+       <use xlink:href="#DejaVuSans-3a" transform="translate(127.246094 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(160.9375 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(224.560547 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_7">
+      <path d="M 514.711138 246.04 
+L 514.711138 26.88 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#m01bfacf2fd" x="514.711138" y="246.04" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <!-- 16:30 -->
+      <g transform="translate(500.301763 260.638438) scale(0.1 -0.1)">
+       <use xlink:href="#DejaVuSans-31"/>
+       <use xlink:href="#DejaVuSans-36" transform="translate(63.623047 0)"/>
+       <use xlink:href="#DejaVuSans-3a" transform="translate(127.246094 0)"/>
+       <use xlink:href="#DejaVuSans-33" transform="translate(160.9375 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(224.560547 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_9">
+      <path d="M 657.600608 246.04 
+L 657.600608 26.88 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#m01bfacf2fd" x="657.600608" y="246.04" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <!-- 17:00 -->
+      <g transform="translate(643.191233 260.638438) scale(0.1 -0.1)">
+       <defs>
+        <path id="DejaVuSans-37" d="M 525 4666 
+L 3525 4666 
+L 3525 4397 
+L 1831 0 
+L 1172 0 
+L 2766 4134 
+L 525 4134 
+L 525 4666 
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#DejaVuSans-31"/>
+       <use xlink:href="#DejaVuSans-37" transform="translate(63.623047 0)"/>
+       <use xlink:href="#DejaVuSans-3a" transform="translate(127.246094 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(160.9375 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(224.560547 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="text_6">
+     <!-- 11 November 2026, SGT -->
+     <g transform="translate(355.692656 274.316562) scale(0.1 -0.1)">
+      <defs>
+       <path id="DejaVuSans-20" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-4e" d="M 628 4666 
+L 1478 4666 
+L 3547 763 
+L 3547 4666 
+L 4159 4666 
+L 4159 0 
+L 3309 0 
+L 1241 3903 
+L 1241 0 
+L 628 0 
+L 628 4666 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-6f" d="M 1959 3097 
+Q 1497 3097 1228 2736 
+Q 959 2375 959 1747 
+Q 959 1119 1226 758 
+Q 1494 397 1959 397 
+Q 2419 397 2687 759 
+Q 2956 1122 2956 1747 
+Q 2956 2369 2687 2733 
+Q 2419 3097 1959 3097 
+z
+M 1959 3584 
+Q 2709 3584 3137 3096 
+Q 3566 2609 3566 1747 
+Q 3566 888 3137 398 
+Q 2709 -91 1959 -91 
+Q 1206 -91 779 398 
+Q 353 888 353 1747 
+Q 353 2609 779 3096 
+Q 1206 3584 1959 3584 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-76" d="M 191 3500 
+L 800 3500 
+L 1894 563 
+L 2988 3500 
+L 3597 3500 
+L 2284 0 
+L 1503 0 
+L 191 3500 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-65" d="M 3597 1894 
+L 3597 1613 
+L 953 1613 
+Q 991 1019 1311 708 
+Q 1631 397 2203 397 
+Q 2534 397 2845 478 
+Q 3156 559 3463 722 
+L 3463 178 
+Q 3153 47 2828 -22 
+Q 2503 -91 2169 -91 
+Q 1331 -91 842 396 
+Q 353 884 353 1716 
+Q 353 2575 817 3079 
+Q 1281 3584 2069 3584 
+Q 2775 3584 3186 3129 
+Q 3597 2675 3597 1894 
+z
+M 3022 2063 
+Q 3016 2534 2758 2815 
+Q 2500 3097 2075 3097 
+Q 1594 3097 1305 2825 
+Q 1016 2553 972 2059 
+L 3022 2063 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-6d" d="M 3328 2828 
+Q 3544 3216 3844 3400 
+Q 4144 3584 4550 3584 
+Q 5097 3584 5394 3201 
+Q 5691 2819 5691 2113 
+L 5691 0 
+L 5113 0 
+L 5113 2094 
+Q 5113 2597 4934 2840 
+Q 4756 3084 4391 3084 
+Q 3944 3084 3684 2787 
+Q 3425 2491 3425 1978 
+L 3425 0 
+L 2847 0 
+L 2847 2094 
+Q 2847 2600 2669 2842 
+Q 2491 3084 2119 3084 
+Q 1678 3084 1418 2786 
+Q 1159 2488 1159 1978 
+L 1159 0 
+L 581 0 
+L 581 3500 
+L 1159 3500 
+L 1159 2956 
+Q 1356 3278 1631 3431 
+Q 1906 3584 2284 3584 
+Q 2666 3584 2933 3390 
+Q 3200 3197 3328 2828 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-62" d="M 3116 1747 
+Q 3116 2381 2855 2742 
+Q 2594 3103 2138 3103 
+Q 1681 3103 1420 2742 
+Q 1159 2381 1159 1747 
+Q 1159 1113 1420 752 
+Q 1681 391 2138 391 
+Q 2594 391 2855 752 
+Q 3116 1113 3116 1747 
+z
+M 1159 2969 
+Q 1341 3281 1617 3432 
+Q 1894 3584 2278 3584 
+Q 2916 3584 3314 3078 
+Q 3713 2572 3713 1747 
+Q 3713 922 3314 415 
+Q 2916 -91 2278 -91 
+Q 1894 -91 1617 61 
+Q 1341 213 1159 525 
+L 1159 0 
+L 581 0 
+L 581 4863 
+L 1159 4863 
+L 1159 2969 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-72" d="M 2631 2963 
+Q 2534 3019 2420 3045 
+Q 2306 3072 2169 3072 
+Q 1681 3072 1420 2755 
+Q 1159 2438 1159 1844 
+L 1159 0 
+L 581 0 
+L 581 3500 
+L 1159 3500 
+L 1159 2956 
+Q 1341 3275 1631 3429 
+Q 1922 3584 2338 3584 
+Q 2397 3584 2469 3576 
+Q 2541 3569 2628 3553 
+L 2631 2963 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-32" d="M 1228 531 
+L 3431 531 
+L 3431 0 
+L 469 0 
+L 469 531 
+Q 828 903 1448 1529 
+Q 2069 2156 2228 2338 
+Q 2531 2678 2651 2914 
+Q 2772 3150 2772 3378 
+Q 2772 3750 2511 3984 
+Q 2250 4219 1831 4219 
+Q 1534 4219 1204 4116 
+Q 875 4013 500 3803 
+L 500 4441 
+Q 881 4594 1212 4672 
+Q 1544 4750 1819 4750 
+Q 2544 4750 2975 4387 
+Q 3406 4025 3406 3419 
+Q 3406 3131 3298 2873 
+Q 3191 2616 2906 2266 
+Q 2828 2175 2409 1742 
+Q 1991 1309 1228 531 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-2c" d="M 750 794 
+L 1409 794 
+L 1409 256 
+L 897 -744 
+L 494 -744 
+L 750 256 
+L 750 794 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-53" d="M 3425 4513 
+L 3425 3897 
+Q 3066 4069 2747 4153 
+Q 2428 4238 2131 4238 
+Q 1616 4238 1336 4038 
+Q 1056 3838 1056 3469 
+Q 1056 3159 1242 3001 
+Q 1428 2844 1947 2747 
+L 2328 2669 
+Q 3034 2534 3370 2195 
+Q 3706 1856 3706 1288 
+Q 3706 609 3251 259 
+Q 2797 -91 1919 -91 
+Q 1588 -91 1214 -16 
+Q 841 59 441 206 
+L 441 856 
+Q 825 641 1194 531 
+Q 1563 422 1919 422 
+Q 2459 422 2753 634 
+Q 3047 847 3047 1241 
+Q 3047 1584 2836 1778 
+Q 2625 1972 2144 2069 
+L 1759 2144 
+Q 1053 2284 737 2584 
+Q 422 2884 422 3419 
+Q 422 4038 858 4394 
+Q 1294 4750 2059 4750 
+Q 2388 4750 2728 4690 
+Q 3069 4631 3425 4513 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-47" d="M 3809 666 
+L 3809 1919 
+L 2778 1919 
+L 2778 2438 
+L 4434 2438 
+L 4434 434 
+Q 4069 175 3628 42 
+Q 3188 -91 2688 -91 
+Q 1594 -91 976 548 
+Q 359 1188 359 2328 
+Q 359 3472 976 4111 
+Q 1594 4750 2688 4750 
+Q 3144 4750 3555 4637 
+Q 3966 4525 4313 4306 
+L 4313 3634 
+Q 3963 3931 3569 4081 
+Q 3175 4231 2741 4231 
+Q 1884 4231 1454 3753 
+Q 1025 3275 1025 2328 
+Q 1025 1384 1454 906 
+Q 1884 428 2741 428 
+Q 3075 428 3337 486 
+Q 3600 544 3809 666 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-54" d="M -19 4666 
+L 3928 4666 
+L 3928 4134 
+L 2272 4134 
+L 2272 0 
+L 1638 0 
+L 1638 4134 
+L -19 4134 
+L -19 4666 
+z
+" transform="scale(0.015625)"/>
+      </defs>
+      <use xlink:href="#DejaVuSans-31"/>
+      <use xlink:href="#DejaVuSans-31" transform="translate(63.623047 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(127.246094 0)"/>
+      <use xlink:href="#DejaVuSans-4e" transform="translate(159.033203 0)"/>
+      <use xlink:href="#DejaVuSans-6f" transform="translate(233.837891 0)"/>
+      <use xlink:href="#DejaVuSans-76" transform="translate(295.019531 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(354.199219 0)"/>
+      <use xlink:href="#DejaVuSans-6d" transform="translate(415.722656 0)"/>
+      <use xlink:href="#DejaVuSans-62" transform="translate(513.134766 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(576.611328 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(638.134766 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(679.248047 0)"/>
+      <use xlink:href="#DejaVuSans-32" transform="translate(711.035156 0)"/>
+      <use xlink:href="#DejaVuSans-30" transform="translate(774.658203 0)"/>
+      <use xlink:href="#DejaVuSans-32" transform="translate(838.28125 0)"/>
+      <use xlink:href="#DejaVuSans-36" transform="translate(901.904297 0)"/>
+      <use xlink:href="#DejaVuSans-2c" transform="translate(965.527344 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(997.314453 0)"/>
+      <use xlink:href="#DejaVuSans-53" transform="translate(1029.101562 0)"/>
+      <use xlink:href="#DejaVuSans-47" transform="translate(1092.578125 0)"/>
+      <use xlink:href="#DejaVuSans-54" transform="translate(1166.443359 0)"/>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_11">
+      <path d="M 52.94 233.656579 
+L 781.2 233.656579 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12">
+      <defs>
+       <path id="m247fc2bb67" d="M 0 0 
+L -3.5 0 
+" style="stroke: #000000; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m247fc2bb67" x="52.94" y="233.656579" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <!-- −80 -->
+      <g transform="translate(24.835313 237.455798) scale(0.1 -0.1)">
+       <defs>
+        <path id="DejaVuSans-2212" d="M 678 2272 
+L 4684 2272 
+L 4684 1741 
+L 678 1741 
+L 678 2272 
+z
+" transform="scale(0.015625)"/>
+        <path id="DejaVuSans-38" d="M 2034 2216 
+Q 1584 2216 1326 1975 
+Q 1069 1734 1069 1313 
+Q 1069 891 1326 650 
+Q 1584 409 2034 409 
+Q 2484 409 2743 651 
+Q 3003 894 3003 1313 
+Q 3003 1734 2745 1975 
+Q 2488 2216 2034 2216 
+z
+M 1403 2484 
+Q 997 2584 770 2862 
+Q 544 3141 544 3541 
+Q 544 4100 942 4425 
+Q 1341 4750 2034 4750 
+Q 2731 4750 3128 4425 
+Q 3525 4100 3525 3541 
+Q 3525 3141 3298 2862 
+Q 3072 2584 2669 2484 
+Q 3125 2378 3379 2068 
+Q 3634 1759 3634 1313 
+Q 3634 634 3220 271 
+Q 2806 -91 2034 -91 
+Q 1263 -91 848 271 
+Q 434 634 434 1313 
+Q 434 1759 690 2068 
+Q 947 2378 1403 2484 
+z
+M 1172 3481 
+Q 1172 3119 1398 2916 
+Q 1625 2713 2034 2713 
+Q 2441 2713 2670 2916 
+Q 2900 3119 2900 3481 
+Q 2900 3844 2670 4047 
+Q 2441 4250 2034 4250 
+Q 1625 4250 1398 4047 
+Q 1172 3844 1172 3481 
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#DejaVuSans-2212"/>
+       <use xlink:href="#DejaVuSans-38" transform="translate(83.789062 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(147.412109 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_13">
+      <path d="M 52.94 203.507816 
+L 781.2 203.507816 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_14">
+      <g>
+       <use xlink:href="#m247fc2bb67" x="52.94" y="203.507816" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <!-- −60 -->
+      <g transform="translate(24.835313 207.307035) scale(0.1 -0.1)">
+       <use xlink:href="#DejaVuSans-2212"/>
+       <use xlink:href="#DejaVuSans-36" transform="translate(83.789062 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(147.412109 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_15">
+      <path d="M 52.94 173.359054 
+L 781.2 173.359054 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_16">
+      <g>
+       <use xlink:href="#m247fc2bb67" x="52.94" y="173.359054" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_9">
+      <!-- −40 -->
+      <g transform="translate(24.835313 177.158272) scale(0.1 -0.1)">
+       <defs>
+        <path id="DejaVuSans-34" d="M 2419 4116 
+L 825 1625 
+L 2419 1625 
+L 2419 4116 
+z
+M 2253 4666 
+L 3047 4666 
+L 3047 1625 
+L 3713 1625 
+L 3713 1100 
+L 3047 1100 
+L 3047 0 
+L 2419 0 
+L 2419 1100 
+L 313 1100 
+L 313 1709 
+L 2253 4666 
+z
+" transform="scale(0.015625)"/>
+       </defs>
+       <use xlink:href="#DejaVuSans-2212"/>
+       <use xlink:href="#DejaVuSans-34" transform="translate(83.789062 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(147.412109 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_17">
+      <path d="M 52.94 143.210291 
+L 781.2 143.210291 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_18">
+      <g>
+       <use xlink:href="#m247fc2bb67" x="52.94" y="143.210291" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_10">
+      <!-- −20 -->
+      <g transform="translate(24.835313 147.00951) scale(0.1 -0.1)">
+       <use xlink:href="#DejaVuSans-2212"/>
+       <use xlink:href="#DejaVuSans-32" transform="translate(83.789062 0)"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(147.412109 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_19">
+      <path d="M 52.94 113.061528 
+L 781.2 113.061528 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_20">
+      <g>
+       <use xlink:href="#m247fc2bb67" x="52.94" y="113.061528" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_11">
+      <!-- 0 -->
+      <g transform="translate(39.5775 116.860747) scale(0.1 -0.1)">
+       <use xlink:href="#DejaVuSans-30"/>
+      </g>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_21">
+      <path d="M 52.94 82.912765 
+L 781.2 82.912765 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_22">
+      <g>
+       <use xlink:href="#m247fc2bb67" x="52.94" y="82.912765" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_12">
+      <!-- 20 -->
+      <g transform="translate(33.215 86.711984) scale(0.1 -0.1)">
+       <use xlink:href="#DejaVuSans-32"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(63.623047 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="ytick_7">
+     <g id="line2d_23">
+      <path d="M 52.94 52.764003 
+L 781.2 52.764003 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #b0b0b0; stroke-opacity: 0.18; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_24">
+      <g>
+       <use xlink:href="#m247fc2bb67" x="52.94" y="52.764003" style="stroke: #000000; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_13">
+      <!-- 40 -->
+      <g transform="translate(33.215 56.563221) scale(0.1 -0.1)">
+       <use xlink:href="#DejaVuSans-34"/>
+       <use xlink:href="#DejaVuSans-30" transform="translate(63.623047 0)"/>
+      </g>
+     </g>
+    </g>
+    <g id="text_14">
+     <!-- Midpoint change from 15:00 open (bp) -->
+     <g transform="translate(18.755625 233.206875) rotate(-90) scale(0.1 -0.1)">
+      <defs>
+       <path id="DejaVuSans-4d" d="M 628 4666 
+L 1569 4666 
+L 2759 1491 
+L 3956 4666 
+L 4897 4666 
+L 4897 0 
+L 4281 0 
+L 4281 4097 
+L 3078 897 
+L 2444 897 
+L 1241 4097 
+L 1241 0 
+L 628 0 
+L 628 4666 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-69" d="M 603 3500 
+L 1178 3500 
+L 1178 0 
+L 603 0 
+L 603 3500 
+z
+M 603 4863 
+L 1178 4863 
+L 1178 4134 
+L 603 4134 
+L 603 4863 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-64" d="M 2906 2969 
+L 2906 4863 
+L 3481 4863 
+L 3481 0 
+L 2906 0 
+L 2906 525 
+Q 2725 213 2448 61 
+Q 2172 -91 1784 -91 
+Q 1150 -91 751 415 
+Q 353 922 353 1747 
+Q 353 2572 751 3078 
+Q 1150 3584 1784 3584 
+Q 2172 3584 2448 3432 
+Q 2725 3281 2906 2969 
+z
+M 947 1747 
+Q 947 1113 1208 752 
+Q 1469 391 1925 391 
+Q 2381 391 2643 752 
+Q 2906 1113 2906 1747 
+Q 2906 2381 2643 2742 
+Q 2381 3103 1925 3103 
+Q 1469 3103 1208 2742 
+Q 947 2381 947 1747 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-70" d="M 1159 525 
+L 1159 -1331 
+L 581 -1331 
+L 581 3500 
+L 1159 3500 
+L 1159 2969 
+Q 1341 3281 1617 3432 
+Q 1894 3584 2278 3584 
+Q 2916 3584 3314 3078 
+Q 3713 2572 3713 1747 
+Q 3713 922 3314 415 
+Q 2916 -91 2278 -91 
+Q 1894 -91 1617 61 
+Q 1341 213 1159 525 
+z
+M 3116 1747 
+Q 3116 2381 2855 2742 
+Q 2594 3103 2138 3103 
+Q 1681 3103 1420 2742 
+Q 1159 2381 1159 1747 
+Q 1159 1113 1420 752 
+Q 1681 391 2138 391 
+Q 2594 391 2855 752 
+Q 3116 1113 3116 1747 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-6e" d="M 3513 2113 
+L 3513 0 
+L 2938 0 
+L 2938 2094 
+Q 2938 2591 2744 2837 
+Q 2550 3084 2163 3084 
+Q 1697 3084 1428 2787 
+Q 1159 2491 1159 1978 
+L 1159 0 
+L 581 0 
+L 581 3500 
+L 1159 3500 
+L 1159 2956 
+Q 1366 3272 1645 3428 
+Q 1925 3584 2291 3584 
+Q 2894 3584 3203 3211 
+Q 3513 2838 3513 2113 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-74" d="M 1172 4494 
+L 1172 3500 
+L 2356 3500 
+L 2356 3053 
+L 1172 3053 
+L 1172 1153 
+Q 1172 725 1289 603 
+Q 1406 481 1766 481 
+L 2356 481 
+L 2356 0 
+L 1766 0 
+Q 1100 0 847 248 
+Q 594 497 594 1153 
+L 594 3053 
+L 172 3053 
+L 172 3500 
+L 594 3500 
+L 594 4494 
+L 1172 4494 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-63" d="M 3122 3366 
+L 3122 2828 
+Q 2878 2963 2633 3030 
+Q 2388 3097 2138 3097 
+Q 1578 3097 1268 2742 
+Q 959 2388 959 1747 
+Q 959 1106 1268 751 
+Q 1578 397 2138 397 
+Q 2388 397 2633 464 
+Q 2878 531 3122 666 
+L 3122 134 
+Q 2881 22 2623 -34 
+Q 2366 -91 2075 -91 
+Q 1284 -91 818 406 
+Q 353 903 353 1747 
+Q 353 2603 823 3093 
+Q 1294 3584 2113 3584 
+Q 2378 3584 2631 3529 
+Q 2884 3475 3122 3366 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-68" d="M 3513 2113 
+L 3513 0 
+L 2938 0 
+L 2938 2094 
+Q 2938 2591 2744 2837 
+Q 2550 3084 2163 3084 
+Q 1697 3084 1428 2787 
+Q 1159 2491 1159 1978 
+L 1159 0 
+L 581 0 
+L 581 4863 
+L 1159 4863 
+L 1159 2956 
+Q 1366 3272 1645 3428 
+Q 1925 3584 2291 3584 
+Q 2894 3584 3203 3211 
+Q 3513 2838 3513 2113 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-61" d="M 2194 1759 
+Q 1497 1759 1228 1600 
+Q 959 1441 959 1056 
+Q 959 750 1161 570 
+Q 1363 391 1709 391 
+Q 2188 391 2477 730 
+Q 2766 1069 2766 1631 
+L 2766 1759 
+L 2194 1759 
+z
+M 3341 1997 
+L 3341 0 
+L 2766 0 
+L 2766 531 
+Q 2569 213 2275 61 
+Q 1981 -91 1556 -91 
+Q 1019 -91 701 211 
+Q 384 513 384 1019 
+Q 384 1609 779 1909 
+Q 1175 2209 1959 2209 
+L 2766 2209 
+L 2766 2266 
+Q 2766 2663 2505 2880 
+Q 2244 3097 1772 3097 
+Q 1472 3097 1187 3025 
+Q 903 2953 641 2809 
+L 641 3341 
+Q 956 3463 1253 3523 
+Q 1550 3584 1831 3584 
+Q 2591 3584 2966 3190 
+Q 3341 2797 3341 1997 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-67" d="M 2906 1791 
+Q 2906 2416 2648 2759 
+Q 2391 3103 1925 3103 
+Q 1463 3103 1205 2759 
+Q 947 2416 947 1791 
+Q 947 1169 1205 825 
+Q 1463 481 1925 481 
+Q 2391 481 2648 825 
+Q 2906 1169 2906 1791 
+z
+M 3481 434 
+Q 3481 -459 3084 -895 
+Q 2688 -1331 1869 -1331 
+Q 1566 -1331 1297 -1286 
+Q 1028 -1241 775 -1147 
+L 775 -588 
+Q 1028 -725 1275 -790 
+Q 1522 -856 1778 -856 
+Q 2344 -856 2625 -561 
+Q 2906 -266 2906 331 
+L 2906 616 
+Q 2728 306 2450 153 
+Q 2172 0 1784 0 
+Q 1141 0 747 490 
+Q 353 981 353 1791 
+Q 353 2603 747 3093 
+Q 1141 3584 1784 3584 
+Q 2172 3584 2450 3431 
+Q 2728 3278 2906 2969 
+L 2906 3500 
+L 3481 3500 
+L 3481 434 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-66" d="M 2375 4863 
+L 2375 4384 
+L 1825 4384 
+Q 1516 4384 1395 4259 
+Q 1275 4134 1275 3809 
+L 1275 3500 
+L 2222 3500 
+L 2222 3053 
+L 1275 3053 
+L 1275 0 
+L 697 0 
+L 697 3053 
+L 147 3053 
+L 147 3500 
+L 697 3500 
+L 697 3744 
+Q 697 4328 969 4595 
+Q 1241 4863 1831 4863 
+L 2375 4863 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-28" d="M 1984 4856 
+Q 1566 4138 1362 3434 
+Q 1159 2731 1159 2009 
+Q 1159 1288 1364 580 
+Q 1569 -128 1984 -844 
+L 1484 -844 
+Q 1016 -109 783 600 
+Q 550 1309 550 2009 
+Q 550 2706 781 3412 
+Q 1013 4119 1484 4856 
+L 1984 4856 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-29" d="M 513 4856 
+L 1013 4856 
+Q 1481 4119 1714 3412 
+Q 1947 2706 1947 2009 
+Q 1947 1309 1714 600 
+Q 1481 -109 1013 -844 
+L 513 -844 
+Q 928 -128 1133 580 
+Q 1338 1288 1338 2009 
+Q 1338 2731 1133 3434 
+Q 928 4138 513 4856 
+z
+" transform="scale(0.015625)"/>
+      </defs>
+      <use xlink:href="#DejaVuSans-4d"/>
+      <use xlink:href="#DejaVuSans-69" transform="translate(86.279297 0)"/>
+      <use xlink:href="#DejaVuSans-64" transform="translate(114.0625 0)"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(177.539062 0)"/>
+      <use xlink:href="#DejaVuSans-6f" transform="translate(241.015625 0)"/>
+      <use xlink:href="#DejaVuSans-69" transform="translate(302.197266 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(329.980469 0)"/>
+      <use xlink:href="#DejaVuSans-74" transform="translate(393.359375 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(432.568359 0)"/>
+      <use xlink:href="#DejaVuSans-63" transform="translate(464.355469 0)"/>
+      <use xlink:href="#DejaVuSans-68" transform="translate(519.335938 0)"/>
+      <use xlink:href="#DejaVuSans-61" transform="translate(582.714844 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(643.994141 0)"/>
+      <use xlink:href="#DejaVuSans-67" transform="translate(707.373047 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(770.849609 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(832.373047 0)"/>
+      <use xlink:href="#DejaVuSans-66" transform="translate(864.160156 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(899.365234 0)"/>
+      <use xlink:href="#DejaVuSans-6f" transform="translate(938.228516 0)"/>
+      <use xlink:href="#DejaVuSans-6d" transform="translate(999.410156 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(1096.822266 0)"/>
+      <use xlink:href="#DejaVuSans-31" transform="translate(1128.609375 0)"/>
+      <use xlink:href="#DejaVuSans-35" transform="translate(1192.232422 0)"/>
+      <use xlink:href="#DejaVuSans-3a" transform="translate(1255.855469 0)"/>
+      <use xlink:href="#DejaVuSans-30" transform="translate(1289.546875 0)"/>
+      <use xlink:href="#DejaVuSans-30" transform="translate(1353.169922 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(1416.792969 0)"/>
+      <use xlink:href="#DejaVuSans-6f" transform="translate(1448.580078 0)"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(1509.761719 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(1573.238281 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(1634.761719 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(1698.140625 0)"/>
+      <use xlink:href="#DejaVuSans-28" transform="translate(1729.927734 0)"/>
+      <use xlink:href="#DejaVuSans-62" transform="translate(1768.941406 0)"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(1832.417969 0)"/>
+      <use xlink:href="#DejaVuSans-29" transform="translate(1895.894531 0)"/>
+     </g>
+    </g>
+   </g>
+   <g id="line2d_25">
+    <path d="M 86.042727 115.060449 
+L 90.80571 120.275024 
+L 95.568692 104.805117 
+L 100.331674 119.927386 
+L 105.094657 137.656942 
+L 109.857639 131.74709 
+L 114.620621 131.225632 
+L 119.383604 145.131167 
+L 124.146586 146.52172 
+L 128.909568 134.180558 
+L 133.672551 127.227791 
+L 143.198515 134.180558 
+L 152.72448 119.579747 
+L 157.487462 121.317939 
+L 162.250445 137.309304 
+L 167.013427 156.081775 
+L 171.776409 131.74709 
+L 176.539392 135.91875 
+L 181.302374 146.347901 
+L 186.065356 154.343583 
+L 190.828339 163.729819 
+L 195.591321 165.989468 
+L 200.354303 165.468011 
+L 205.117286 151.214838 
+L 209.880268 162.513085 
+L 214.64325 144.609709 
+L 219.406233 140.785687 
+L 224.169215 146.869358 
+L 228.932198 146.347901 
+L 233.69518 135.223473 
+L 238.458162 143.392975 
+L 243.221145 146.000263 
+L 247.984127 145.478805 
+L 252.747109 147.738454 
+L 257.510092 152.605391 
+L 262.273074 142.523879 
+L 267.036056 140.785687 
+L 271.799039 115.060449 
+L 276.562021 95.245062 
+L 281.325003 106.36949 
+L 286.087986 110.367331 
+L 290.850968 109.498235 
+L 295.61395 109.498235 
+L 300.376933 100.807276 
+L 305.139915 102.545468 
+L 309.902897 106.890947 
+L 314.66588 126.532514 
+L 319.428862 114.71281 
+L 324.191844 121.665577 
+L 328.954827 114.365172 
+L 333.717809 111.236427 
+L 338.480791 98.199988 
+L 343.243774 100.807276 
+L 348.006756 106.021851 
+L 352.769738 121.665577 
+L 357.532721 141.654783 
+L 362.295703 129.139802 
+L 367.058685 139.916591 
+L 371.821668 130.356536 
+L 376.58465 125.141961 
+L 381.347632 123.403769 
+L 386.110615 149.129008 
+L 390.873597 139.047495 
+L 395.636579 142.523879 
+L 400.399562 128.270706 
+L 405.162544 135.571112 
+L 409.925526 116.79864 
+L 414.688509 125.141961 
+L 419.451491 112.105523 
+L 424.214474 106.021851 
+L 428.977456 118.536832 
+L 433.740438 119.927386 
+L 438.503421 113.843714 
+L 443.266403 125.663419 
+L 448.029385 133.83292 
+L 452.792368 138.178399 
+L 457.55535 134.354378 
+L 462.318332 140.785687 
+L 467.081315 135.049654 
+L 471.844297 147.216997 
+L 476.607279 155.907956 
+L 481.370262 150.345742 
+L 486.133244 152.95303 
+L 490.896226 155.03886 
+L 495.659209 141.654783 
+L 500.422191 147.738454 
+L 505.185173 146.000263 
+L 509.948156 127.40161 
+L 514.711138 146.347901 
+L 519.47412 139.916591 
+L 524.237103 104.805117 
+L 529.000085 129.835079 
+L 533.763067 143.392975 
+L 538.52605 147.738454 
+L 543.289032 158.167605 
+L 548.052014 179.373545 
+L 552.814997 148.086093 
+L 557.577979 164.772734 
+L 562.340961 146.000263 
+L 567.103944 143.045336 
+L 571.866926 154.691221 
+L 576.629908 170.334948 
+L 581.392891 150.345742 
+L 586.155873 143.392975 
+L 590.918855 133.83292 
+L 595.681838 145.652624 
+L 600.44482 143.914432 
+L 605.207802 144.609709 
+L 609.970785 147.216997 
+L 614.733767 156.429413 
+L 619.496749 166.337106 
+L 624.259732 163.38218 
+L 629.022714 161.29635 
+L 633.785697 155.03886 
+L 638.548679 167.206202 
+L 643.311661 165.120372 
+L 648.074644 167.380022 
+L 652.837626 172.073139 
+L 657.600608 195.017271 
+L 662.363591 205.620241 
+L 667.126573 190.845611 
+L 671.889555 175.549523 
+L 676.652538 186.326312 
+L 681.41552 177.287715 
+L 686.178502 190.671791 
+L 690.941485 191.540887 
+L 695.704467 194.669633 
+L 700.467449 199.53657 
+L 705.230432 192.931441 
+L 709.993414 195.886367 
+L 714.756396 198.146016 
+L 719.519379 183.892844 
+L 724.282361 159.558158 
+L 729.045343 110.714969 
+L 733.808326 107.760043 
+L 738.571308 73.343846 
+L 743.33429 36.841818 
+L 748.097273 36.841818 
+L 748.097273 36.841818 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #1768a4; stroke-width: 1.5; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_26">
+    <path d="M 86.042727 113.061528 
+L 90.80571 115.283764 
+L 95.568692 108.299593 
+L 100.331674 118.617119 
+L 105.094657 140.045826 
+L 109.857639 135.283891 
+L 114.620621 133.69658 
+L 119.383604 144.014106 
+L 124.146586 147.982385 
+L 128.909568 133.69658 
+L 133.672551 127.347333 
+L 138.435533 129.569569 
+L 143.198515 136.236278 
+L 147.961498 130.521956 
+L 152.72448 129.093376 
+L 157.487462 128.934645 
+L 162.250445 144.807761 
+L 167.013427 168.617436 
+L 171.776409 134.490236 
+L 176.539392 138.458515 
+L 181.302374 149.569696 
+L 186.065356 163.855501 
+L 195.591321 173.379371 
+L 200.354303 170.204748 
+L 205.117286 155.918943 
+L 209.880268 168.617436 
+L 214.64325 143.855374 
+L 219.406233 143.22045 
+L 224.169215 151.950664 
+L 228.932198 148.77604 
+L 233.69518 144.014106 
+L 243.221145 155.284018 
+L 247.984127 149.569696 
+L 252.747109 153.537975 
+L 257.510092 162.26819 
+L 262.273074 150.522083 
+L 267.036056 144.807761 
+L 271.799039 116.871076 
+L 276.562021 106.55355 
+L 281.325003 117.982194 
+L 286.087986 120.998086 
+L 290.850968 119.410775 
+L 295.61395 120.998086 
+L 300.376933 109.886905 
+L 305.139915 113.061528 
+L 309.902897 117.823463 
+L 314.66588 135.283891 
+L 319.428862 119.410775 
+L 324.191844 127.347333 
+L 328.954827 125.760021 
+L 333.717809 120.998086 
+L 338.480791 106.712281 
+L 343.243774 108.299593 
+L 348.006756 112.267872 
+L 352.769738 125.760021 
+L 357.532721 143.22045 
+L 362.295703 132.109268 
+L 367.058685 139.252171 
+L 371.821668 132.109268 
+L 381.347632 119.410775 
+L 386.110615 148.617309 
+L 390.873597 139.252171 
+L 395.636579 146.395073 
+L 400.399562 134.331504 
+L 405.162544 143.22045 
+L 409.925526 121.633011 
+L 414.688509 134.490236 
+L 419.451491 122.585398 
+L 424.214474 121.791742 
+L 428.977456 133.855311 
+L 433.740438 135.283891 
+L 438.503421 127.347333 
+L 443.266403 145.760148 
+L 448.029385 151.157008 
+L 452.792368 155.918943 
+L 457.55535 155.918943 
+L 462.318332 161.474534 
+L 467.081315 153.537975 
+L 471.844297 170.204748 
+L 476.607279 182.903241 
+L 481.370262 179.728618 
+L 486.133244 181.31593 
+L 490.896226 180.522274 
+L 495.659209 171.79206 
+L 500.422191 178.141306 
+L 505.185173 174.966683 
+L 509.948156 153.537975 
+L 514.711138 166.236469 
+L 519.47412 160.680878 
+L 524.237103 129.569569 
+L 529.000085 152.74432 
+L 533.763067 170.204748 
+L 538.52605 178.141306 
+L 543.289032 189.252488 
+L 548.052014 212.427238 
+L 552.814997 182.268317 
+L 557.577979 201.950981 
+L 562.340961 178.934962 
+L 567.103944 179.728618 
+L 571.866926 188.458832 
+L 576.629908 199.570014 
+L 581.392891 177.188919 
+L 586.155873 172.585715 
+L 590.918855 162.26819 
+L 595.681838 171.79206 
+L 600.44482 172.585715 
+L 605.207802 165.442813 
+L 609.970785 167.030125 
+L 614.733767 179.728618 
+L 619.496749 188.458832 
+L 624.259732 185.284209 
+L 629.022714 185.284209 
+L 633.785697 171.79206 
+L 638.548679 187.665176 
+L 643.311661 186.87152 
+L 648.074644 193.220767 
+L 652.837626 197.189046 
+L 657.600608 214.649474 
+L 662.363591 236.078182 
+L 667.126573 215.44313 
+L 671.889555 201.950981 
+L 676.652538 208.300228 
+L 681.41552 203.538293 
+L 686.178502 211.474851 
+L 690.941485 209.887539 
+L 695.704467 216.236786 
+L 700.467449 225.760656 
+L 705.230432 211.31612 
+L 709.993414 217.824098 
+L 714.756396 221.792377 
+L 719.519379 211.474851 
+L 724.282361 186.077865 
+L 729.045343 137.029934 
+L 733.808326 128.934645 
+L 738.571308 90.045509 
+L 743.33429 55.918308 
+L 748.097273 46.394438 
+L 748.097273 46.394438 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #bb5a17; stroke-width: 1.5; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_27">
+    <path d="M 52.94 113.061528 
+L 781.2 113.061528 
+" clip-path="url(#p421f985939)" style="fill: none; stroke: #666677; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_28">
+    <path d="M 52.94 149.240043 
+L 781.2 149.240043 
+" clip-path="url(#p421f985939)" style="fill: none; stroke-dasharray: 1.5,2.475; stroke-dashoffset: 0; stroke: #999999; stroke-width: 1.5"/>
+   </g>
+   <g id="line2d_29">
+    <path d="M 724.282361 246.04 
+L 724.282361 26.88 
+" clip-path="url(#p421f985939)" style="fill: none; stroke-dasharray: 5.55,2.4; stroke-dashoffset: 0; stroke: #b32323; stroke-width: 1.5"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 52.94 246.04 
+L 52.94 26.88 
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 781.2 246.04 
+L 781.2 26.88 
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 52.94 246.04 
+L 781.2 246.04 
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 52.94 26.88 
+L 781.2 26.88 
+" style="fill: none; stroke: #000000; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_15">
+    <!-- Oil reverses after the 17:14 short entries — recorded demo 46130058 feed -->
+    <g transform="translate(191.28625 20.88) scale(0.12 -0.12)">
+     <defs>
+      <path id="DejaVuSans-4f" d="M 2522 4238 
+Q 1834 4238 1429 3725 
+Q 1025 3213 1025 2328 
+Q 1025 1447 1429 934 
+Q 1834 422 2522 422 
+Q 3209 422 3611 934 
+Q 4013 1447 4013 2328 
+Q 4013 3213 3611 3725 
+Q 3209 4238 2522 4238 
+z
+M 2522 4750 
+Q 3503 4750 4090 4092 
+Q 4678 3434 4678 2328 
+Q 4678 1225 4090 567 
+Q 3503 -91 2522 -91 
+Q 1538 -91 948 565 
+Q 359 1222 359 2328 
+Q 359 3434 948 4092 
+Q 1538 4750 2522 4750 
+z
+" transform="scale(0.015625)"/>
+      <path id="DejaVuSans-6c" d="M 603 4863 
+L 1178 4863 
+L 1178 0 
+L 603 0 
+L 603 4863 
+z
+" transform="scale(0.015625)"/>
+      <path id="DejaVuSans-73" d="M 2834 3397 
+L 2834 2853 
+Q 2591 2978 2328 3040 
+Q 2066 3103 1784 3103 
+Q 1356 3103 1142 2972 
+Q 928 2841 928 2578 
+Q 928 2378 1081 2264 
+Q 1234 2150 1697 2047 
+L 1894 2003 
+Q 2506 1872 2764 1633 
+Q 3022 1394 3022 966 
+Q 3022 478 2636 193 
+Q 2250 -91 1575 -91 
+Q 1294 -91 989 -36 
+Q 684 19 347 128 
+L 347 722 
+Q 666 556 975 473 
+Q 1284 391 1588 391 
+Q 1994 391 2212 530 
+Q 2431 669 2431 922 
+Q 2431 1156 2273 1281 
+Q 2116 1406 1581 1522 
+L 1381 1569 
+Q 847 1681 609 1914 
+Q 372 2147 372 2553 
+Q 372 3047 722 3315 
+Q 1072 3584 1716 3584 
+Q 2034 3584 2315 3537 
+Q 2597 3491 2834 3397 
+z
+" transform="scale(0.015625)"/>
+      <path id="DejaVuSans-2014" d="M 313 1978 
+L 6088 1978 
+L 6088 1528 
+L 313 1528 
+L 313 1978 
+z
+" transform="scale(0.015625)"/>
+     </defs>
+     <use xlink:href="#DejaVuSans-4f"/>
+     <use xlink:href="#DejaVuSans-69" transform="translate(78.710938 0)"/>
+     <use xlink:href="#DejaVuSans-6c" transform="translate(106.494141 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(134.277344 0)"/>
+     <use xlink:href="#DejaVuSans-72" transform="translate(166.064453 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(204.927734 0)"/>
+     <use xlink:href="#DejaVuSans-76" transform="translate(266.451172 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(325.630859 0)"/>
+     <use xlink:href="#DejaVuSans-72" transform="translate(387.154297 0)"/>
+     <use xlink:href="#DejaVuSans-73" transform="translate(428.267578 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(480.367188 0)"/>
+     <use xlink:href="#DejaVuSans-73" transform="translate(541.890625 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(593.990234 0)"/>
+     <use xlink:href="#DejaVuSans-61" transform="translate(625.777344 0)"/>
+     <use xlink:href="#DejaVuSans-66" transform="translate(687.056641 0)"/>
+     <use xlink:href="#DejaVuSans-74" transform="translate(720.511719 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(759.720703 0)"/>
+     <use xlink:href="#DejaVuSans-72" transform="translate(821.244141 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(862.357422 0)"/>
+     <use xlink:href="#DejaVuSans-74" transform="translate(894.144531 0)"/>
+     <use xlink:href="#DejaVuSans-68" transform="translate(933.353516 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(996.732422 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(1058.255859 0)"/>
+     <use xlink:href="#DejaVuSans-31" transform="translate(1090.042969 0)"/>
+     <use xlink:href="#DejaVuSans-37" transform="translate(1153.666016 0)"/>
+     <use xlink:href="#DejaVuSans-3a" transform="translate(1217.289062 0)"/>
+     <use xlink:href="#DejaVuSans-31" transform="translate(1250.980469 0)"/>
+     <use xlink:href="#DejaVuSans-34" transform="translate(1314.603516 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(1378.226562 0)"/>
+     <use xlink:href="#DejaVuSans-73" transform="translate(1410.013672 0)"/>
+     <use xlink:href="#DejaVuSans-68" transform="translate(1462.113281 0)"/>
+     <use xlink:href="#DejaVuSans-6f" transform="translate(1525.492188 0)"/>
+     <use xlink:href="#DejaVuSans-72" transform="translate(1586.673828 0)"/>
+     <use xlink:href="#DejaVuSans-74" transform="translate(1627.787109 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(1666.996094 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(1698.783203 0)"/>
+     <use xlink:href="#DejaVuSans-6e" transform="translate(1760.306641 0)"/>
+     <use xlink:href="#DejaVuSans-74" transform="translate(1823.685547 0)"/>
+     <use xlink:href="#DejaVuSans-72" transform="translate(1862.894531 0)"/>
+     <use xlink:href="#DejaVuSans-69" transform="translate(1904.007812 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(1931.791016 0)"/>
+     <use xlink:href="#DejaVuSans-73" transform="translate(1993.314453 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(2045.414062 0)"/>
+     <use xlink:href="#DejaVuSans-2014" transform="translate(2077.201172 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(2177.201172 0)"/>
+     <use xlink:href="#DejaVuSans-72" transform="translate(2208.988281 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(2247.851562 0)"/>
+     <use xlink:href="#DejaVuSans-63" transform="translate(2309.375 0)"/>
+     <use xlink:href="#DejaVuSans-6f" transform="translate(2364.355469 0)"/>
+     <use xlink:href="#DejaVuSans-72" transform="translate(2425.537109 0)"/>
+     <use xlink:href="#DejaVuSans-64" transform="translate(2464.900391 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(2528.376953 0)"/>
+     <use xlink:href="#DejaVuSans-64" transform="translate(2589.900391 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(2653.376953 0)"/>
+     <use xlink:href="#DejaVuSans-64" transform="translate(2685.164062 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(2748.640625 0)"/>
+     <use xlink:href="#DejaVuSans-6d" transform="translate(2810.164062 0)"/>
+     <use xlink:href="#DejaVuSans-6f" transform="translate(2907.576172 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(2968.757812 0)"/>
+     <use xlink:href="#DejaVuSans-34" transform="translate(3000.544922 0)"/>
+     <use xlink:href="#DejaVuSans-36" transform="translate(3064.167969 0)"/>
+     <use xlink:href="#DejaVuSans-31" transform="translate(3127.791016 0)"/>
+     <use xlink:href="#DejaVuSans-33" transform="translate(3191.414062 0)"/>
+     <use xlink:href="#DejaVuSans-30" transform="translate(3255.037109 0)"/>
+     <use xlink:href="#DejaVuSans-30" transform="translate(3318.660156 0)"/>
+     <use xlink:href="#DejaVuSans-35" transform="translate(3382.283203 0)"/>
+     <use xlink:href="#DejaVuSans-38" transform="translate(3445.90625 0)"/>
+     <use xlink:href="#DejaVuSans-20" transform="translate(3509.529297 0)"/>
+     <use xlink:href="#DejaVuSans-66" transform="translate(3541.316406 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(3576.521484 0)"/>
+     <use xlink:href="#DejaVuSans-65" transform="translate(3638.044922 0)"/>
+     <use xlink:href="#DejaVuSans-64" transform="translate(3699.568359 0)"/>
+    </g>
+   </g>
+   <g id="legend_1">
+    <g id="patch_7">
+     <path d="M 58.54 242.04 
+L 321.24875 242.04 
+Q 322.84875 242.04 322.84875 240.44 
+L 322.84875 206.0125 
+Q 322.84875 204.4125 321.24875 204.4125 
+L 58.54 204.4125 
+Q 56.94 204.4125 56.94 206.0125 
+L 56.94 240.44 
+Q 56.94 242.04 58.54 242.04 
+z
+" style="fill: #ffffff; opacity: 0.8; stroke: #cccccc; stroke-linejoin: miter"/>
+    </g>
+    <g id="line2d_30">
+     <path d="M 60.14 210.89125 
+L 68.14 210.89125 
+L 76.14 210.89125 
+" style="fill: none; stroke: #1768a4; stroke-width: 1.5; stroke-linecap: square"/>
+    </g>
+    <g id="text_16">
+     <!-- SpotCrude -->
+     <g transform="translate(82.54 213.69125) scale(0.08 -0.08)">
+      <defs>
+       <path id="DejaVuSans-43" d="M 4122 4306 
+L 4122 3641 
+Q 3803 3938 3442 4084 
+Q 3081 4231 2675 4231 
+Q 1875 4231 1450 3742 
+Q 1025 3253 1025 2328 
+Q 1025 1406 1450 917 
+Q 1875 428 2675 428 
+Q 3081 428 3442 575 
+Q 3803 722 4122 1019 
+L 4122 359 
+Q 3791 134 3420 21 
+Q 3050 -91 2638 -91 
+Q 1578 -91 968 557 
+Q 359 1206 359 2328 
+Q 359 3453 968 4101 
+Q 1578 4750 2638 4750 
+Q 3056 4750 3426 4639 
+Q 3797 4528 4122 4306 
+z
+" transform="scale(0.015625)"/>
+       <path id="DejaVuSans-75" d="M 544 1381 
+L 544 3500 
+L 1119 3500 
+L 1119 1403 
+Q 1119 906 1312 657 
+Q 1506 409 1894 409 
+Q 2359 409 2629 706 
+Q 2900 1003 2900 1516 
+L 2900 3500 
+L 3475 3500 
+L 3475 0 
+L 2900 0 
+L 2900 538 
+Q 2691 219 2414 64 
+Q 2138 -91 1772 -91 
+Q 1169 -91 856 284 
+Q 544 659 544 1381 
+z
+M 1991 3584 
+L 1991 3584 
+z
+" transform="scale(0.015625)"/>
+      </defs>
+      <use xlink:href="#DejaVuSans-53"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(63.476562 0)"/>
+      <use xlink:href="#DejaVuSans-6f" transform="translate(126.953125 0)"/>
+      <use xlink:href="#DejaVuSans-74" transform="translate(188.134766 0)"/>
+      <use xlink:href="#DejaVuSans-43" transform="translate(227.34375 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(297.167969 0)"/>
+      <use xlink:href="#DejaVuSans-75" transform="translate(338.28125 0)"/>
+      <use xlink:href="#DejaVuSans-64" transform="translate(401.660156 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(465.136719 0)"/>
+     </g>
+    </g>
+    <g id="line2d_31">
+     <path d="M 60.14 222.63375 
+L 68.14 222.63375 
+L 76.14 222.63375 
+" style="fill: none; stroke: #bb5a17; stroke-width: 1.5; stroke-linecap: square"/>
+    </g>
+    <g id="text_17">
+     <!-- SpotBrent -->
+     <g transform="translate(82.54 225.43375) scale(0.08 -0.08)">
+      <defs>
+       <path id="DejaVuSans-42" d="M 1259 2228 
+L 1259 519 
+L 2272 519 
+Q 2781 519 3026 730 
+Q 3272 941 3272 1375 
+Q 3272 1813 3026 2020 
+Q 2781 2228 2272 2228 
+L 1259 2228 
+z
+M 1259 4147 
+L 1259 2741 
+L 2194 2741 
+Q 2656 2741 2882 2914 
+Q 3109 3088 3109 3444 
+Q 3109 3797 2882 3972 
+Q 2656 4147 2194 4147 
+L 1259 4147 
+z
+M 628 4666 
+L 2241 4666 
+Q 2963 4666 3353 4366 
+Q 3744 4066 3744 3513 
+Q 3744 3084 3544 2831 
+Q 3344 2578 2956 2516 
+Q 3422 2416 3680 2098 
+Q 3938 1781 3938 1306 
+Q 3938 681 3513 340 
+Q 3088 0 2303 0 
+L 628 0 
+L 628 4666 
+z
+" transform="scale(0.015625)"/>
+      </defs>
+      <use xlink:href="#DejaVuSans-53"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(63.476562 0)"/>
+      <use xlink:href="#DejaVuSans-6f" transform="translate(126.953125 0)"/>
+      <use xlink:href="#DejaVuSans-74" transform="translate(188.134766 0)"/>
+      <use xlink:href="#DejaVuSans-42" transform="translate(227.34375 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(295.947266 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(334.810547 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(396.333984 0)"/>
+      <use xlink:href="#DejaVuSans-74" transform="translate(459.712891 0)"/>
+     </g>
+    </g>
+    <g id="line2d_32">
+     <path d="M 60.14 234.37625 
+L 68.14 234.37625 
+L 76.14 234.37625 
+" style="fill: none; stroke: #666677; stroke-linecap: square"/>
+    </g>
+    <g id="text_18">
+     <!-- Opening reference -->
+     <g transform="translate(82.54 237.17625) scale(0.08 -0.08)">
+      <use xlink:href="#DejaVuSans-4f"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(78.710938 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(142.1875 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(203.710938 0)"/>
+      <use xlink:href="#DejaVuSans-69" transform="translate(267.089844 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(294.873047 0)"/>
+      <use xlink:href="#DejaVuSans-67" transform="translate(358.251953 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(421.728516 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(453.515625 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(492.378906 0)"/>
+      <use xlink:href="#DejaVuSans-66" transform="translate(553.902344 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(589.107422 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(650.630859 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(689.494141 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(751.017578 0)"/>
+      <use xlink:href="#DejaVuSans-63" transform="translate(814.396484 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(869.376953 0)"/>
+     </g>
+    </g>
+    <g id="line2d_33">
+     <path d="M 173.015 210.89125 
+L 181.015 210.89125 
+L 189.015 210.89125 
+" style="fill: none; stroke-dasharray: 1.5,2.475; stroke-dashoffset: 0; stroke: #999999; stroke-width: 1.5"/>
+    </g>
+    <g id="text_19">
+     <!-- −24bp displacement reference -->
+     <g transform="translate(195.415 213.69125) scale(0.08 -0.08)">
+      <use xlink:href="#DejaVuSans-2212"/>
+      <use xlink:href="#DejaVuSans-32" transform="translate(83.789062 0)"/>
+      <use xlink:href="#DejaVuSans-34" transform="translate(147.412109 0)"/>
+      <use xlink:href="#DejaVuSans-62" transform="translate(211.035156 0)"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(274.511719 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(337.988281 0)"/>
+      <use xlink:href="#DejaVuSans-64" transform="translate(369.775391 0)"/>
+      <use xlink:href="#DejaVuSans-69" transform="translate(433.251953 0)"/>
+      <use xlink:href="#DejaVuSans-73" transform="translate(461.035156 0)"/>
+      <use xlink:href="#DejaVuSans-70" transform="translate(513.134766 0)"/>
+      <use xlink:href="#DejaVuSans-6c" transform="translate(576.611328 0)"/>
+      <use xlink:href="#DejaVuSans-61" transform="translate(604.394531 0)"/>
+      <use xlink:href="#DejaVuSans-63" transform="translate(665.673828 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(720.654297 0)"/>
+      <use xlink:href="#DejaVuSans-6d" transform="translate(782.177734 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(879.589844 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(941.113281 0)"/>
+      <use xlink:href="#DejaVuSans-74" transform="translate(1004.492188 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(1043.701172 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(1075.488281 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(1114.351562 0)"/>
+      <use xlink:href="#DejaVuSans-66" transform="translate(1175.875 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(1211.080078 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(1272.603516 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(1311.466797 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(1372.990234 0)"/>
+      <use xlink:href="#DejaVuSans-63" transform="translate(1436.369141 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(1491.349609 0)"/>
+     </g>
+    </g>
+    <g id="line2d_34">
+     <path d="M 173.015 222.63375 
+L 181.015 222.63375 
+L 189.015 222.63375 
+" style="fill: none; stroke-dasharray: 5.55,2.4; stroke-dashoffset: 0; stroke: #b32323; stroke-width: 1.5"/>
+    </g>
+    <g id="text_20">
+     <!-- 17:14 entries -->
+     <g transform="translate(195.415 225.43375) scale(0.08 -0.08)">
+      <use xlink:href="#DejaVuSans-31"/>
+      <use xlink:href="#DejaVuSans-37" transform="translate(63.623047 0)"/>
+      <use xlink:href="#DejaVuSans-3a" transform="translate(127.246094 0)"/>
+      <use xlink:href="#DejaVuSans-31" transform="translate(160.9375 0)"/>
+      <use xlink:href="#DejaVuSans-34" transform="translate(224.560547 0)"/>
+      <use xlink:href="#DejaVuSans-20" transform="translate(288.183594 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(319.970703 0)"/>
+      <use xlink:href="#DejaVuSans-6e" transform="translate(381.494141 0)"/>
+      <use xlink:href="#DejaVuSans-74" transform="translate(444.873047 0)"/>
+      <use xlink:href="#DejaVuSans-72" transform="translate(484.082031 0)"/>
+      <use xlink:href="#DejaVuSans-69" transform="translate(525.195312 0)"/>
+      <use xlink:href="#DejaVuSans-65" transform="translate(552.978516 0)"/>
+      <use xlink:href="#DejaVuSans-73" transform="translate(614.501953 0)"/>
+     </g>
+    </g>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p421f985939">
+   <rect x="52.94" y="26.88" width="728.26" height="219.16"/>
+  </clipPath>
+ </defs>
+</svg>
+<figcaption>One-minute last midpoint for display; ordered quote replay and three account feeds remain in JSON.</figcaption></figure><h2>§8. What the anatomy supports—and what it does not</h2>
+<p><strong>Supported:</strong> a peer can remain 24bp below its session open while already moving upward against a short. The guard measures displacement, not persistence of the immediate trend. A one-off 8% turn can be a brief fluctuation within a larger rebound. The November 11 guards were valid at dispatch; their successful evaluation did not establish positive expectancy.</p>
+<p><strong>Important counterexamples:</strong> winning London Crude 260971498 confirmed in about 3.3 seconds; winning Brent 260982208 in about 2.6 seconds. Some winners also had positive 1-minute/5-minute price changes before their short entry, or later fell below the peer threshold. The Asian Crude winner reclaimed its opening origin and lost peer displacement before eventually reaching TP. Therefore “wait longer”, “reject any upward pullback”, “exit whenever peer falls below 24bp”, or “close on origin reclaim” are not validated fixes from this small sample.</p>
+<p><strong>Not established:</strong> an external news catalyst, a coding failure in the saved entry guards, or a profitable replacement entry rule. No news/time-of-sales evidence was introduced into this strictly bounded study. The near-term reversal and macro filter disagreement with the later price path are observed; their economic cause is not proven by these quotes alone.</p>
+<h2>§9. Verification and limitations</h2>
+<ol>
+<li>Eight focused synthetic semantic cases checked both long and short paths: no trigger below 0.80R; entry-price stop only after a later valid quote; preservation of a runner that retraces below +0.50R; and no retroactive rescue through the original stop. These fixtures are not research trades.</li>
+<li>All 202 requested historical cases matched frozen native baseline outputs and normalised input hashes. Every paired historical baseline also matched PR214, with unchanged entry and deadline. The frozen plan hash was rechecked.</li>
+<li>All 35 unique positions reconcile to stored deal receipts. Exactly 13 actual TP winners were checked; seven candidate cuts were identified. Every applied candidate stop equals entry, never +0.50R. Reversing equal-timestamp update order changed zero scoped live outcomes. Seven oil guard checks pass the original geometry.</li>
+</ol>
+<p>Recorded quote gaps reach <strong>31.3 seconds</strong> in the Asian oil paths and about <strong>14.1 seconds</strong> in the recent BTC paths. This is not a complete exchange tape. Quote-replay fill price/time is not byte-identical to broker execution: the largest price difference is 16.33 BTC price units, and replay close timing differs by roughly −953 to +23ms. Actual broker results remain authoritative; paired estimates compare model with model.</p>
+<p>The next-quote model omits a measured future amend/ack latency distribution, queue/transport failure and changed liquidity from hypothetical orders. It is unsuitable as a live profit guarantee. No causal entry/re-entry feedback simulation was performed: later recorded entries remain fixed even if an earlier hypothetical exit might have altered an account’s subsequent state. The comparison isolates exits, not an entire alternate trading history.</p>
+<p>Historical development reuse, cross-account correlation, small admitted samples and unverified round-trip reserves prevent an edge claim. Gross entry stops may still incur negative net cash. Strict and forced outcomes are kept separate; no unseen protected date is consumed.</p>
+<h2>§10. Decision and next step</h2>
+<p>Keep the current production exit unchanged. The isolated candidate fails the comparison on Tier 1 and on the full recent demo ledger, even though it helps the highlighted losers and reduces some low-cost drawdown. It does not qualify the 73% / latest-20 goal or establish a 50% interim class edge.</p>
+<p>The useful next investigation is entry-context discrimination: whether multi-day drift plus opening displacement reliably distinguishes continuation from reversal <strong>before</strong> entry. First define an economically motivated, causal hypothesis and its evidence requirements; then evaluate it against both the winning and losing episodes, freeze it, and use separate dates. Do not select a longer turn duration or a new peer threshold from these seven oil paths. If execution-latency modelling is required, use recorded amendment receipts rather than assuming instantaneous protection.</p>
+<p>This report authorises no production change. No parameter tuning loop, broker collection, protected-holdout test, Railway deployment or Telegram message was performed.</p>
+<h2>§11. Reproduction, files and publication</h2>
+<p>Plan SHA256: <code>fdedf21a8caf5bab8d4e6ff38f48b4e7fa46b6882f6e0d5b9ffb6b2577361854</code>. Native binary SHA256: <code>3346fc1d7f336285249f8d66b39021e48a152cf939897f8667e284de4a514de3</code>. The JSON contains the frozen plan, all historical/live paired exits, the 13-winner check, oil event/guard records, minute traces, receipt hashes, private-engine source and offline evaluator/test scripts. The native research copy was built from <code>8c9bcb9</code> with only its private candidate proposal changed to entry at 0.80R; it is outside the repository worktree and has no live transport. Current production Rust files were never edited.</p>
+<p>To reproduce, use the same repository readers and verified private cache, build the isolated native example offline, then run the embedded historical/live evaluators. Raw market archives are not published; the recorded SHA256 receipts identify the required bytes. Read this Markdown before inspecting the <a href="OFFLINE_PURE_080R_BE_AND_OIL_ANATOMY-18432-2026-11-11.json">JSON</a>. The <a href="OFFLINE_PURE_080R_BE_AND_OIL_ANATOMY-18432-2026-11-11.html">HTML</a> is a standalone readable copy. Only these three <code>doc/</code> files are in the PR. Its final merge receipt and unchanged deployment check will be recorded on the PR after all required CI checks pass.</p></main></html>
