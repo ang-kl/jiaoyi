@@ -103,6 +103,18 @@ After BTC stopped at 18:31–18:32 SGT, ETH sibling attempts at approximately 18
 
 No consumed arm crossed a session rollover in this window. The carried-arm/current-peer repair is therefore **not exercised by this consumed-attempt sample**. A null regression count in the review JSON is intentional; zero would imply evidence that this window does not supply.
 
+
+| Account | Arms | Deep invalidations | Macro-veto records | Below-impulse records | Ownership-refresh skips |
+| --- | --- | --- | --- | --- | --- |
+| 43002148 | 12 | 11 | 62 | 65 | 0 |
+| 46130058 | 11 | 2 | 63 | 68 | 18 |
+| 47790949 | 11 | 3 | 56 | 61 | 14 |
+| 49236051 | 11 | 3 | 63 | 68 | 8 |
+
+Live had 12 arms but no consumed trigger: 11 deep invalidation records, plus macro/impulse filtering and the metal ownership locks. These counts are not an exhaustive mutually exclusive arm funnel; a surviving arm can remain waiting. This distinguishes an active evaluator from an idle or disconnected bot.
+
+Exposure-FX diagnostics also alternated between fresh/unavailable frequently (210 of each state on live; 421 of each on demo 46130058; 413 of each on demo 47790949). That deserves a separate telemetry/freshness review; this audit does not establish that it caused a refused entry. Early session-opening “unavailable” records must likewise be distinguished from later successful persisted captures.
+
 ## §6. Opening references and preparation
 
 | Window | Evidence | Qualification |
@@ -150,7 +162,7 @@ The three demos all entered, including the small account: minimum-lot/margin ref
 
 ## §10. Publication and production isolation
 
-Only this Markdown report and its HTML/JSON companions belong to the change. Railway watch patterns exclude `doc/**`; the earlier report merge left deployment `c0fedaca-0370-4cec-9234-f59f8c7cafce` on `aebf404d`. The report PR must pass `check`, `docker` and `engineering` before squash merge. Final PR/merge and post-merge deployment evidence will be returned in the completion response. No report text claims that an unobserved deployment or merge has succeeded.
+Only this Markdown report and its HTML/JSON companions belong to the change. Railway watch patterns exclude `doc/**`; the earlier report merge left deployment `c0fedaca-0370-4cec-9234-f59f8c7cafce` on `aebf404d`. [Report PR #221](https://github.com/ang-kl/jiaoyi/pull/221) must pass `check`, `docker` and `engineering` before squash merge. Final PR/merge and post-merge deployment evidence will be returned in the completion response. No report text claims that an unobserved deployment or merge has succeeded.
 
 ## §11. Gemini review instructions
 

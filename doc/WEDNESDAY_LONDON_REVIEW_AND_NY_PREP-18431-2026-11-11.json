@@ -1,8 +1,8 @@
 {
   "summary": {
     "trace": "\u211618,431",
-    "status": "audit_complete_publication_pending",
-    "pr": null,
+    "status": "audit_completed",
+    "pr": 221,
     "merge_commit": null,
     "as_of_sgt": "2026-11-11T19:45:00+08:00",
     "activity_window_sgt": "2026-11-11T12:55:00+08:00..2026-11-11T19:45:00+08:00",
@@ -13628,5 +13628,54 @@
         }
       ]
     }
+  },
+  "publication": {
+    "pr_url": "https://github.com/ang-kl/jiaoyi/pull/221",
+    "merge_status_source": "GitHub PR state and final owner review block; not inferred before CI"
+  },
+  "diagnostic_summary": {
+    "columns": [
+      "account_id",
+      "arms",
+      "deep_invalidations",
+      "macro_veto_records",
+      "below_impulse_records",
+      "ownership_refresh_skip_records"
+    ],
+    "rows": [
+      [
+        43002148,
+        12,
+        11,
+        62,
+        65,
+        0
+      ],
+      [
+        46130058,
+        11,
+        2,
+        63,
+        68,
+        18
+      ],
+      [
+        47790949,
+        11,
+        3,
+        56,
+        61,
+        14
+      ],
+      [
+        49236051,
+        11,
+        3,
+        63,
+        68,
+        8
+      ]
+    ],
+    "scope": "Deduplicated diagnostic records, not mutually exclusive trades or all quote checks."
   }
 }

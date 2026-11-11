@@ -437,6 +437,54 @@
 <p>Each consumed decision ID joins exactly once to <code>consumed_decision_id</code> in its outcome. Each demo had six opening attempts, two fills and four peer refusals; live had no opening intent. Diagnostic rows are deduplicated state reports, not tick counts or independent missed trades. The 19 invalidations must not be added to the 18 consumed triggers as though they were fills.</p>
 <p>After BTC stopped at 18:31–18:32 SGT, ETH sibling attempts at approximately 18:51:58 and 19:13:51 SGT were refused on all three demos by the &lt;24bp peer guard. Pair occupancy prevents simultaneous exposure; it is not a same-session loss cooldown. No further crypto fill occurred before cutoff. The maximum recorded confirmation-to-final-guard latency was 25.008 ms; this is distinct from order-to-broker-fill latency.</p>
 <p>No consumed arm crossed a session rollover in this window. The carried-arm/current-peer repair is therefore <strong>not exercised by this consumed-attempt sample</strong>. A null regression count in the review JSON is intentional; zero would imply evidence that this window does not supply.</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Arms</th>
+<th>Deep invalidations</th>
+<th>Macro-veto records</th>
+<th>Below-impulse records</th>
+<th>Ownership-refresh skips</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>12</td>
+<td>11</td>
+<td>62</td>
+<td>65</td>
+<td>0</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>11</td>
+<td>2</td>
+<td>63</td>
+<td>68</td>
+<td>18</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>11</td>
+<td>3</td>
+<td>56</td>
+<td>61</td>
+<td>14</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>11</td>
+<td>3</td>
+<td>63</td>
+<td>68</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+<p>Live had 12 arms but no consumed trigger: 11 deep invalidation records, plus macro/impulse filtering and the metal ownership locks. These counts are not an exhaustive mutually exclusive arm funnel; a surviving arm can remain waiting. This distinguishes an active evaluator from an idle or disconnected bot.</p>
+<p>Exposure-FX diagnostics also alternated between fresh/unavailable frequently (210 of each state on live; 421 of each on demo 46130058; 413 of each on demo 47790949). That deserves a separate telemetry/freshness review; this audit does not establish that it caused a refused entry. Early session-opening “unavailable” records must likewise be distinguished from later successful persisted captures.</p>
 <h2>§6. Opening references and preparation</h2>
 <table>
 <thead>
@@ -536,6 +584,6 @@
 <li>Six account trades represent two closely related market episodes across three demo accounts; they are not six independent strategy experiments.</li>
 </ul>
 <h2>§10. Publication and production isolation</h2>
-<p>Only this Markdown report and its HTML/JSON companions belong to the change. Railway watch patterns exclude <code>doc/**</code>; the earlier report merge left deployment <code>c0fedaca-0370-4cec-9234-f59f8c7cafce</code> on <code>aebf404d</code>. The report PR must pass <code>check</code>, <code>docker</code> and <code>engineering</code> before squash merge. Final PR/merge and post-merge deployment evidence will be returned in the completion response. No report text claims that an unobserved deployment or merge has succeeded.</p>
+<p>Only this Markdown report and its HTML/JSON companions belong to the change. Railway watch patterns exclude <code>doc/**</code>; the earlier report merge left deployment <code>c0fedaca-0370-4cec-9234-f59f8c7cafce</code> on <code>aebf404d</code>. <a href="https://github.com/ang-kl/jiaoyi/pull/221">Report PR #221</a> must pass <code>check</code>, <code>docker</code> and <code>engineering</code> before squash merge. Final PR/merge and post-merge deployment evidence will be returned in the completion response. No report text claims that an unobserved deployment or merge has succeeded.</p>
 <h2>§11. Gemini review instructions</h2>
 <p>Read this report first, then the same-name JSON. Check: six-trade cash sums, individual trigger/outcome join, full-day versus window cutoffs, strict SL classification limits, London late-coefficient gaps, current snapshots versus historical activity, and latest-20 cohort age. Treat <code>financial_pass:false</code> as binding evidence status. Do not interpret the report as authorisation to deploy a new entry/exit policy. The JSON carries source hashes and full per-trade evidence for independent arithmetic checks.</p></main></html>
