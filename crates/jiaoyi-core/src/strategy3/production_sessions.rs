@@ -149,8 +149,13 @@ pub fn same_slot_before(market: Market, opening: DateTime<Utc>, n: usize) -> Vec
         .collect()
 }
 
+/// Owner №18,425: capture the first recorded two-sided native-open quote within
+/// 15 seconds, accommodating evidenced upstream broker reopening latency.
+pub const OPENING_QUOTE_WINDOW_SECONDS: i64 = 15;
+pub const OPENING_QUOTE_POLICY: &str = "native_open_first_quote_v18425_15s";
+
 /// Metals' M30 opening bar starts18:00NY, but the first valid executable quote
-/// is18:01. Restrict evidence to the actual broker opening + the usual6seconds.
+/// is18:01. The capture window starts at that actual broker observation time.
 pub fn opening_observation_start(symbol: &str, session: Session) -> DateTime<Utc> {
     if matches!(symbol, "XAUUSD" | "XAGUSD") && slot(Market::Metal, session) == Some(0) {
         session.open + Duration::minutes(1)

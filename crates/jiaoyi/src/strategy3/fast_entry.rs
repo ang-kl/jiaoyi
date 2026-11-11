@@ -47,7 +47,11 @@ fn same_number(a: f64, b: f64) -> bool {
 /// A restored arm's stored arithmetic does not replace the original verified
 /// opening quote and causal preparation. Require both before publishing or
 /// consuming a prepared admission, including after a carried-window restart.
-fn validate_source(name: &str, day: &Day, arm: ArmedPullback) -> Result<(), &'static str> {
+pub(super) fn validate_source(
+    name: &str,
+    day: &Day,
+    arm: ArmedPullback,
+) -> Result<(), &'static str> {
     if day.session != arm.session {
         return Err("prepared source has wrong original window");
     }
@@ -73,7 +77,6 @@ fn validate_source(name: &str, day: &Day, arm: ArmedPullback) -> Result<(), &'st
         || ask < bid
         || !same_number(mid, bid + (ask - bid) / 2.)
         || !same_number(mid, *open)
-        || quote["source"].as_str() != Some("recorded_ticks_native_open_6s")
     {
         return Err("prepared opening quote prices or source invalid");
     }
@@ -89,7 +92,21 @@ fn validate_source(name: &str, day: &Day, arm: ArmedPullback) -> Result<(), &'st
         return Err("prepared opening quote timestamps missing");
     };
     let start = prod::opening_observation_start(name, arm.session);
-    let end = start + chrono::Duration::seconds(6);
+    let window_seconds = match quote["source"].as_str() {
+        Some("recorded_ticks_native_open_6s") => 6,
+        Some("recorded_ticks_native_open_15s_v18425")
+            if quote["window_policy"].as_str() == Some(prod::OPENING_QUOTE_POLICY)
+                && parse("observation_start") == Some(start)
+                && parse("window_end")
+                    == Some(
+                        start + chrono::Duration::seconds(prod::OPENING_QUOTE_WINDOW_SECONDS),
+                    ) =>
+        {
+            prod::OPENING_QUOTE_WINDOW_SECONDS
+        }
+        _ => return Err("prepared opening quote source or window policy invalid"),
+    };
+    let end = start + chrono::Duration::seconds(window_seconds);
     if [bid_at, ask_at]
         .iter()
         .any(|at| *at < start || *at > end || *at > arm.armed_at)
@@ -113,8 +130,8 @@ fn validate_source(name: &str, day: &Day, arm: ArmedPullback) -> Result<(), &'st
 
 pub(super) fn source_refusal(sym: &Sym) -> Option<String> {
     let arm = sym.pullback?;
-    match sym.day.as_ref() {
-        Some(Ok(day)) => validate_source(&sym.name, day, arm)
+    match sym.pullback_day(arm) {
+        Some(day) => validate_source(&sym.name, day, arm)
             .err()
             .map(str::to_owned),
         _ => Some("prepared original-window evidence unavailable".into()),
@@ -149,7 +166,7 @@ impl Trader<'_, '_> {
                 continue;
             }
             let Some(arm) = sym.pullback else { continue };
-            let Some(Ok(day)) = sym.day.as_ref() else {
+            let Some(day) = sym.pullback_day(arm) else {
                 continue;
             };
             if validate_source(&sym.name, day, arm).is_err() {
@@ -203,7 +220,7 @@ impl Trader<'_, '_> {
 
     pub(super) fn fast_plan(&self, id: i64, arm: ArmedPullback) -> Option<Prepared> {
         let sym = self.syms.get(&id)?;
-        let day = sym.day.as_ref()?.as_ref().ok()?;
+        let day = sym.pullback_day(arm)?;
         validate_source(&sym.name, day, arm).ok()?;
         let plan = self.fast_cache.plans.get(&id)?;
         if plan.request.arm.armed_at != arm.armed_at
@@ -240,8 +257,10 @@ impl Trader<'_, '_> {
         now: DateTime<Utc>,
         deadline: tokio::time::Instant,
         plan: Prepared,
+        outcome: &mut TriggerOutcome,
     ) -> anyhow::Result<()> {
-        if self.human_entry_refusal(id).is_some() {
+        if let Some(reason) = self.human_entry_refusal(id) {
+            outcome.refuse(reason);
             return Ok(());
         }
         let started = tokio::time::Instant::now();
@@ -249,6 +268,7 @@ impl Trader<'_, '_> {
         let sym = self.syms[&id].clone();
         let _admission = crate::admission::lock(self.account_id()).await;
         if self.pair_entry_refusal(id).is_some() {
+            outcome.refuse("pair_risk_reservation_active");
             self.skip(
                 id,
                 &name,
@@ -264,18 +284,21 @@ impl Trader<'_, '_> {
             .and_then(|rule| sessions::session_at(&rule, now))
             .is_none_or(|window| prod::symbol_entry_window(&name, &window, now).is_err())
         {
+            outcome.refuse("current_execution_window_unavailable");
             return Ok(());
         }
         let held = self.open_risk().map_err(anyhow::Error::msg)?;
         if let Err(reason) =
             within_budget(held, plan.sized.risk, plan.equity, plan.rules.open_risk_pct)
         {
+            outcome.refuse(&reason);
             self.skip(id, &name, &reason, json!({"armed":arm}), now)
                 .await;
             return Ok(());
         }
         let (_, peer) = self.peer_evidence(&name, now);
         let Some(proof) = self.writer_turn_proof(arm, bid, ask, now) else {
+            outcome.refuse("confirmed_pullback_proof_unavailable");
             return Ok(());
         };
         let guard = jiaoyi_ctrader::entry_guard::EntryGuard {
@@ -344,6 +367,7 @@ impl Trader<'_, '_> {
         };
         self.d.version = Some(plan.rules.version);
         self.syms.get_mut(&id).unwrap().last_try = Some(now);
+        outcome.sending(&plan.key);
         let result = gate::send_prepared_entry(
             self.session,
             self.allowlist,
@@ -363,6 +387,7 @@ impl Trader<'_, '_> {
         let latency = intent_at.map(|at| (at - now).num_milliseconds());
         match result {
             Ok(sent) => {
+                outcome.sent(&sent);
                 self.syms.get_mut(&id).unwrap().entered_session = Some(arm.session.open);
                 self.record_fill(
                     &ledger,
@@ -396,6 +421,7 @@ impl Trader<'_, '_> {
                 self.d.note(Some(&name),"sent",&format!("{STRATEGY} prepared {} {} cents: {:?}",dir_side(plan.entry.side).as_str(),plan.sized.volume,sent.outcome),json!({"entry_key":plan.key,"touch_to_intent_ms":latency,"response_wait_ms":started.elapsed().as_millis(),"relative_stop":plan.entry.relative_stop})).await;
             }
             Err(SendError::Refused(e)) => {
+                outcome.refuse(&e.reason);
                 if e.reason.contains("ENTRY_COST_GE_R") {
                     self.syms.get_mut(&id).unwrap().cost_skip_session = Some(arm.session.open);
                 }
@@ -636,6 +662,30 @@ mod tests {
             validate_source("BTCUSD", &day, restored).is_ok(),
             "JSON rounding must preserve a valid restored receipt"
         );
+        for milliseconds in [6000, 7100, 15000, 15001] {
+            let mut extended = day.clone();
+            let quote = extended.opening_quote.as_mut().unwrap();
+            let at = open + chrono::Duration::milliseconds(milliseconds);
+            quote["bid_at"] = json!(at);
+            quote["ask_at"] = json!(at);
+            quote["observed_at"] = json!(at);
+            assert_eq!(
+                validate_source("BTCUSD", &extended, arm).is_ok(),
+                milliseconds <= 6000,
+                "legacy policy must never acquire the extended window implicitly"
+            );
+            let quote = extended.opening_quote.as_mut().unwrap();
+            quote["source"] = json!("recorded_ticks_native_open_15s_v18425");
+            quote["window_policy"] = json!(prod::OPENING_QUOTE_POLICY);
+            quote["observation_start"] = json!(open);
+            quote["window_end"] = json!(open + chrono::Duration::seconds(15));
+            assert_eq!(
+                validate_source("BTCUSD", &extended, arm).is_ok(),
+                milliseconds <= 15000
+            );
+            extended.opening_quote.as_mut().unwrap()["window_policy"] = json!("unknown");
+            assert!(validate_source("BTCUSD", &extended, arm).is_err());
+        }
         let mut bad = day.clone();
         bad.open = Err("missing".into());
         assert!(validate_source("BTCUSD", &bad, arm).is_err());

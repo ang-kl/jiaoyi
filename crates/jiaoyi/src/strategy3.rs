@@ -9,6 +9,8 @@
 mod exposure_fx;
 mod fast_entry;
 pub mod preopen;
+mod trigger_outcome;
+use trigger_outcome::TriggerOutcome;
 
 /// Read/monitor universe: retain configured names and resolve all eight S3
 /// core names. This does not write S1's configured entry universe.
@@ -967,7 +969,7 @@ impl Ledger for S3Ledger<'_> {
 // ---------------------------------------------------------------- state
 
 /// One symbol's session preparation: the open, σ and the median spread.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct Day {
     pub session: Session,
     pub open: Result<f64, String>,
@@ -978,8 +980,20 @@ pub struct Day {
     pub macro_context: Result<mp::Context, String>,
 }
 
+impl Day {
+    fn preparation_refusal(&self) -> Option<&'static str> {
+        if self.macro_context.is_err() {
+            Some("macro_preparation_unavailable")
+        } else if self.open.is_err() {
+            Some("opening_reference_unavailable")
+        } else {
+            None
+        }
+    }
+}
+
 /// The first evidenced midpoint after native open. An M30 bid open is not
-/// a midpoint. Each leg must be recorded in the opening six-second window.
+/// a midpoint. Each leg must be recorded in the versioned opening window.
 async fn opening_midpoint(
     pool: &PgPool,
     account: i64,
@@ -992,7 +1006,8 @@ async fn opening_midpoint(
     if now < observed_open {
         return Err("opening_midpoint_not_yet_observable".into());
     }
-    let until = (observed_open + chrono::Duration::seconds(6)).min(now);
+    let window_end = observed_open + chrono::Duration::seconds(prod::OPENING_QUOTE_WINDOW_SECONDS);
+    let until = window_end.min(now);
     let rows: Vec<(DateTime<Utc>, Option<i64>, Option<i64>)> = sqlx::query_as(
         "SELECT received_at,bid_e5,ask_e5 FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2 AND received_at >= $3 AND received_at <= $4 ORDER BY received_at,session_id,seq LIMIT 10000")
         .bind(account).bind(symbol).bind(observed_open).bind(until).fetch_all(pool).await.map_err(|e|format!("opening_midpoint_read_failed: {e}"))?;
@@ -1007,14 +1022,24 @@ async fn opening_midpoint(
         if let (Some((b, bt)), Some((a, at))) = (bid, ask) {
             if b > 0.0 && a >= b {
                 let mid = b + (a - b) / 2.0;
-                return Ok((
-                    mid,
-                    json!({"source":"recorded_ticks_native_open_6s","bid":b,"ask":a,"mid":mid,"bid_at":bt,"ask_at":at,"observed_at":bt.max(at)}),
-                ));
+                let mut evidence = json!({"source":"recorded_ticks_native_open_6s","bid":b,"ask":a,"mid":mid,"bid_at":bt,"ask_at":at,"observed_at":bt.max(at)});
+                // Preserve old valid receipt metadata byte-for-byte on replay.
+                // Only the newly admitted interval uses the extended policy.
+                if bt.max(at) > observed_open + chrono::Duration::seconds(6) {
+                    evidence["source"] = json!("recorded_ticks_native_open_15s_v18425");
+                    evidence["window_policy"] = json!(prod::OPENING_QUOTE_POLICY);
+                    evidence["observation_start"] = json!(observed_open);
+                    evidence["window_end"] = json!(window_end);
+                }
+                return Ok((mid, evidence));
             }
         }
     }
-    Err("opening_midpoint_unavailable: no valid recorded two-sided quote in first 6 seconds".into())
+    Err(format!(
+        "opening_midpoint_unavailable: no valid recorded two-sided quote in first {} seconds ({})",
+        prod::OPENING_QUOTE_WINDOW_SECONDS,
+        prod::OPENING_QUOTE_POLICY
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1029,7 +1054,7 @@ async fn load_day(
     now: DateTime<Utc>,
     prepared_table: Option<(SigmaTable, mp::Context)>,
 ) -> Result<Day, (String, DateTime<Utc>)> {
-    // The closed preparation bars and the first six seconds of executable
+    // The closed preparation bars and the bounded native-open executable
     // opening quotes are independent evidence. A forming opening M30 candle
     // is not a holiday check: many brokers publish it only after it closes.
     let (table, macro_context) = match prepared_table {
@@ -1107,11 +1132,29 @@ pub struct Sym {
     /// Exact window open of a cost skip.
     pub cost_skip_session: Option<DateTime<Utc>>,
     pub pullback: Option<ArmedPullback>,
+    /// Immutable source-window preparation for a carried arm; `day` advances
+    /// independently so this symbol remains a current-session peer.
+    pub pullback_source_day: Option<Day>,
     pub pullback_loaded_session: Option<DateTime<Utc>>,
     /// Latest actual assessment; never mistaken for a fresh execution grant.
     pub last_assessment: Option<(Session, DateTime<Utc>, String)>,
     pub admission_restored_window: Option<DateTime<Utc>>,
     pub last_impulse_check: Option<DateTime<Utc>>,
+}
+
+impl Sym {
+    fn pullback_day(&self, arm: ArmedPullback) -> Option<&Day> {
+        self.pullback_source_day
+            .as_ref()
+            .filter(|day| day.session == arm.session)
+            .or_else(|| {
+                self.day
+                    .as_ref()?
+                    .as_ref()
+                    .ok()
+                    .filter(|day| day.session == arm.session)
+            })
+    }
 }
 
 /// A Strategy 3 position as reconciled, with its plan when recorded.
@@ -1450,6 +1493,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     entered_session: None,
                     cost_skip_session: None,
                     pullback: None,
+                    pullback_source_day: None,
                     pullback_loaded_session: None,
                     last_assessment: None,
                     admission_restored_window: None,
@@ -2055,15 +2099,14 @@ impl<'a, 'c> Trader<'a, 'c> {
         if self.human_entry_refusal(symbol_id).is_some() {
             return Ok(());
         }
-        // A carried crypto arm keeps its causal opening quote and band. A
-        // peer's preparation request must not replace them with the next slot.
-        if self
-            .syms
-            .get(&symbol_id)
-            .and_then(|sym| sym.pullback)
-            .is_some_and(|arm| arm.session != s)
-        {
-            return Ok(());
+        // Freeze the arm's original evidence before advancing the shared
+        // current-session cache. A carried arm must not stale its peer context.
+        if let Some(sym) = self.syms.get_mut(&symbol_id) {
+            if let Some(arm) = sym.pullback {
+                if sym.pullback_source_day.is_none() {
+                    sym.pullback_source_day = sym.pullback_day(arm).cloned();
+                }
+            }
         }
         let name = self.syms[&symbol_id].name.clone();
         let cached = self.syms[&symbol_id]
@@ -2087,7 +2130,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 .is_some_and(|why| why.starts_with("opening_midpoint"))
         {
             // The causal preparation was already verified. Only wait for the
-            // recorder to flush the original first-six-second quote evidence.
+            // recorder to flush the original bounded native-open quote evidence.
             let observed =
                 opening_midpoint(self.pool, self.account_id(), symbol_id, &name, s, now).await;
             if let Some(Ok(day)) = self
@@ -2819,6 +2862,20 @@ impl<'a, 'c> Trader<'a, 'c> {
         reason: &str,
         detail: Value,
     ) -> anyhow::Result<()> {
+        self.save_pullback_with_id(id, s, now, arm, reason, detail)
+            .await?;
+        Ok(())
+    }
+
+    async fn save_pullback_with_id(
+        &mut self,
+        id: i64,
+        s: Session,
+        now: DateTime<Utc>,
+        arm: Option<ArmedPullback>,
+        reason: &str,
+        detail: Value,
+    ) -> anyhow::Result<Option<i64>> {
         self.syms.get_mut(&id).unwrap().last_assessment = Some((s, now, reason.into()));
         let sym = &self.syms[&id];
         if arm.is_none() && sym.pullback.is_none() && reason != "pullback_trigger_consumed" {
@@ -2833,7 +2890,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 )
                 .await;
             self.syms.get_mut(&id).unwrap().pullback_loaded_session = Some(s.open);
-            return Ok(());
+            return Ok(None);
         }
         let quote = detail.get("impulse_quote").cloned().unwrap_or_else(
             || json!({"bid":sym.bid,"ask":sym.ask,"bid_at":sym.bid_at,"ask_at":sym.ask_at}),
@@ -2842,7 +2899,11 @@ impl<'a, 'c> Trader<'a, 'c> {
             .as_f64()
             .zip(quote["ask"].as_f64())
             .map(|(b, a)| b + (a - b) / 2.0);
-        ts::record_decision(
+        let source_day = arm
+            .or(sym.pullback)
+            .and_then(|a| sym.pullback_day(a))
+            .cloned();
+        let decision_id = ts::record_decision_returning_id(
             self.pool,
             self.account_id(),
             Some(&sym.name),
@@ -2851,14 +2912,19 @@ impl<'a, 'c> Trader<'a, 'c> {
             &json!({"production_policy":mp::POLICY,"prereg_hash":self.hash,"label":LABEL,
                 "session_date":s.date,"session":s,"at":now,"at_ms":now.timestamp_millis(),
                 "bid":quote["bid"],"ask":quote["ask"],"mid":mid,
-                "bid_at":quote["bid_at"],"ask_at":quote["ask_at"],"state":arm,"detail":detail}),
+                "bid_at":quote["bid_at"],"ask_at":quote["ask_at"],"state":arm,"source_day":source_day,"detail":detail}),
             self.d.version,
         )
         .await?;
         let sym = self.syms.get_mut(&id).unwrap();
         sym.pullback = arm;
+        // Consumption clears the arm before dispatch; retain its source until
+        // the next arm replaces it so the same immutable evidence reaches send.
+        if source_day.is_some() {
+            sym.pullback_source_day = source_day;
+        }
         sym.pullback_loaded_session = Some(s.open);
-        Ok(())
+        Ok(Some(decision_id))
     }
 
     async fn restore_pullback(
@@ -2870,10 +2936,12 @@ impl<'a, 'c> Trader<'a, 'c> {
         if self.syms[&id].pullback_loaded_session == Some(s.open) {
             return Ok(());
         }
-        if self.syms[&id]
+        if let Some(arm) = self.syms[&id]
             .pullback
-            .is_some_and(|a| now < prod::arm_expiry(&self.syms[&id].name, &a.session, a.armed_at))
+            .filter(|a| now < prod::arm_expiry(&self.syms[&id].name, &a.session, a.armed_at))
         {
+            self.restore_pullback_source(id, arm, now).await?;
+            self.prepare(id, s, now).await?;
             return Ok(());
         }
         // Latest state includes consumption/expiry tombstones. Looking up
@@ -2918,8 +2986,18 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
             None => None,
         };
+        let restored_source = match (raw.as_ref().map(|v| &v["source_day"]), arm) {
+            (Some(value), Some(arm)) if !value.is_null() => {
+                let day: Day = serde_json::from_value(value.clone())?;
+                fast_entry::validate_source(&self.syms[&id].name, &day, arm)
+                    .map_err(anyhow::Error::msg)?;
+                Some(day)
+            }
+            _ => None,
+        };
         let sym = self.syms.get_mut(&id).unwrap();
         sym.pullback = arm;
+        sym.pullback_source_day = restored_source;
         sym.pullback_loaded_session = Some(s.open);
         if let Some(raw) = raw {
             if let (Ok(session), Some(reason), Some(at)) = (
@@ -2933,8 +3011,47 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
         }
         if let Some(a) = arm {
-            self.prepare(id, a.session, now).await?;
+            self.restore_pullback_source(id, a, now).await?;
+            self.prepare(id, s, now).await?;
         }
+        Ok(())
+    }
+
+    /// Old receipts predate the explicit source snapshot. Reconstruct their
+    /// original preparation independently; never roll the current peer cache
+    /// back to the carried arm's source window.
+    async fn restore_pullback_source(
+        &mut self,
+        id: i64,
+        arm: ArmedPullback,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        if let Some(day) = self.syms[&id].pullback_day(arm).cloned() {
+            self.syms.get_mut(&id).unwrap().pullback_source_day = Some(day);
+            return Ok(());
+        }
+        let sym = &self.syms[&id];
+        let Some(rule) = sym.rule else {
+            return Ok(());
+        };
+        let name = sym.name.clone();
+        let prepared = preopen::stored(self.pool, self.account_id(), &name, arm.session)
+            .await?
+            .filter(|p| p.matches(id, arm.session))
+            .and_then(|p| p.table.zip(p.macro_context));
+        let read = load_day(
+            self.pool,
+            self.session,
+            self.account_id(),
+            id,
+            &name,
+            rule,
+            arm.session,
+            now,
+            prepared,
+        );
+        let source = self.protect_while_reading(read).await?;
+        self.syms.get_mut(&id).unwrap().pullback_source_day = source.ok();
         Ok(())
     }
 
@@ -3150,22 +3267,50 @@ impl<'a, 'c> Trader<'a, 'c> {
                     let revision = self.session.connection().entry_revision(self.account_id());
                     // Consumption precedes all awaited admission work. Crash or
                     // uncertain send cannot restore the old trigger as fresh.
-                    self.save_pullback(
-                        symbol_id,
-                        a.session,
-                        now,
-                        None,
-                        "pullback_trigger_consumed",
-                        json!({"armed":a}),
-                    )
-                    .await?;
-                    if let Some(prepared) = prepared {
-                        self.dispatch_prepared(symbol_id, a, bid, ask, now, deadline, prepared)
-                            .await?;
+                    let consumed_decision_id = self
+                        .save_pullback_with_id(
+                            symbol_id,
+                            a.session,
+                            now,
+                            None,
+                            "pullback_trigger_consumed",
+                            json!({"armed":a}),
+                        )
+                        .await?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("consumed trigger has no durable row identity")
+                        })?;
+                    let mut outcome = TriggerOutcome::pending();
+                    let dispatch_result = if let Some(prepared) = prepared {
+                        self.dispatch_prepared(
+                            symbol_id,
+                            a,
+                            bid,
+                            ask,
+                            now,
+                            deadline,
+                            prepared,
+                            &mut outcome,
+                        )
+                        .await
                     } else {
-                        self.dispatch_pullback(symbol_id, a, bid, ask, now, deadline, revision)
-                            .await?;
-                    }
+                        self.dispatch_pullback(
+                            symbol_id,
+                            a,
+                            bid,
+                            ask,
+                            now,
+                            deadline,
+                            revision,
+                            &mut outcome,
+                        )
+                        .await
+                    };
+                    outcome.finish(&dispatch_result);
+                    self.d
+                        .trigger_outcome(&name, consumed_decision_id, &outcome)
+                        .await?;
+                    dispatch_result?;
                 }
             }
             return Ok(());
@@ -3247,7 +3392,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 s,
                 now,
                 None,
-                "macro_preparation_unavailable",
+                day.preparation_refusal().expect("opening or macro preparation failed"),
                 json!({"open":day.open,"opening_quote":day.opening_quote,"macro_context":day.macro_context}),
             )
             .await?;
@@ -3332,8 +3477,10 @@ impl<'a, 'c> Trader<'a, 'c> {
         now: DateTime<Utc>,
         dispatch_deadline: tokio::time::Instant,
         dispatch_revision: u64,
+        outcome: &mut TriggerOutcome,
     ) -> anyhow::Result<()> {
-        if self.human_entry_refusal(symbol_id).is_some() {
+        if let Some(reason) = self.human_entry_refusal(symbol_id) {
+            outcome.refuse(reason);
             return Ok(());
         }
         let s = armed.session;
@@ -3343,38 +3490,49 @@ impl<'a, 'c> Trader<'a, 'c> {
         if current.is_none_or(|window| {
             prod::symbol_entry_window(&self.syms[&symbol_id].name, &window, now).is_err()
         }) {
+            outcome.refuse("current_execution_window_unavailable");
             return Ok(());
         }
         let side = if armed.long { Dir::Buy } else { Dir::Sell };
         let name = self.syms[&symbol_id].name.clone();
         if mp::peer(&name).is_none() || now >= prod::arm_expiry(&name, &s, armed.armed_at) {
+            outcome.refuse("peer_unconfigured_or_arm_expired");
             return Ok(());
         }
         if self.syms[&symbol_id]
             .last_try
             .is_some_and(|t| now - t < chrono::Duration::seconds(60))
         {
+            outcome.refuse("entry_retry_cooldown");
             return Ok(());
         }
         if self.funding_retry_at.is_some_and(|t| now < t) {
+            outcome.refuse("funding_retry_cooldown");
             return Ok(());
         }
         if session_already_entered(
             s3s::opens_in_window(self.pool, self.account_id(), symbol_id, s.open, &self.hash)
                 .await?,
         ) {
+            outcome.refuse("source_session_already_entered");
             return Ok(());
         }
-        self.prepare(symbol_id, s, now).await?;
+        self.prepare(symbol_id, current.unwrap(), now).await?;
         let mut sym = self.syms[&symbol_id].clone();
         sym.bid = Some(bid);
         sym.ask = Some(ask);
-        let Some(Ok(day)) = sym.day.as_ref() else {
+        let Some(day) = sym.pullback_day(armed) else {
+            outcome.refuse("pullback_source_day_unavailable");
             return Ok(());
         };
+        if let Err(reason) = fast_entry::validate_source(&name, day, armed) {
+            outcome.refuse(reason);
+            return Ok(());
+        }
         let b = prod::band_at(&day.table, &s, armed.origin, armed.armed_at)
             .map_err(anyhow::Error::msg)?;
         let Some(limits) = sym.limits else {
+            outcome.refuse("symbol_volume_limits_unavailable");
             return Ok(());
         };
         let entry_price = mp::dispatch_entry_bound(&armed, ask - bid, limits.digits)
@@ -3385,6 +3543,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         {
             Ok(v) => v,
             Err(e) => {
+                outcome.refuse(&e);
                 self.skip(symbol_id, &name, &e, json!({"armed":armed}), now)
                     .await;
                 return Ok(());
@@ -3417,6 +3576,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         // the owner's pause ("only human can pause trade"): no new entry. TP1,
         // the session end and the broker's stop and take-profit are untouched.
         if r.paused {
+            outcome.refuse("owner_pause_active");
             if let Some(s) = self.syms.get_mut(&symbol_id) {
                 s.last_try = Some(now);
             }
@@ -3435,11 +3595,13 @@ impl<'a, 'c> Trader<'a, 'c> {
         // fresh broker state; the account's lock is held through the send.
         let _admission = crate::admission::lock(self.account_id()).await;
         if let Some(reason) = self.pair_entry_refusal(symbol_id) {
+            outcome.refuse(reason);
             self.skip(symbol_id, &name, reason, detail, now).await;
             return Ok(());
         }
         if r.live {
             if let Err(why) = crate::admission::live_minimum(self.pool, self.session).await {
+                outcome.refuse(&why);
                 self.skip(symbol_id, &name, &why, detail, now).await;
                 return Ok(());
             }
@@ -3447,6 +3609,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         let equity = match fresh_equity(self.session).await {
             Ok(x) => x,
             Err(why) => {
+                outcome.refuse(format!("fresh equity unreadable: {why}"));
                 self.skip(
                     symbol_id,
                     &name,
@@ -3489,6 +3652,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             "writes_size": false,
         });
         if jiaoyi_core::strategy3::kelly::skip(&kelly) {
+            outcome.refuse("kelly_fraction_not_positive");
             self.skip(
                 symbol_id,
                 &name,
@@ -3506,6 +3670,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         let sized = match size(&r, equity, rel, rate, &limits, open_programs) {
             Ok(x) => x,
             Err(why) => {
+                outcome.refuse(&why);
                 self.skip(symbol_id, &name, &why, detail, now).await;
                 return Ok(());
             }
@@ -3514,6 +3679,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         let order = match pullback_order(&e, &limits, sized.volume) {
             Ok(o) => o,
             Err(why) => {
+                outcome.refuse(&why);
                 self.skip(symbol_id, &name, &why, detail, now).await;
                 return Ok(());
             }
@@ -3523,6 +3689,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             .open_risk()
             .and_then(|held| within_budget(held, sized.risk, equity, r.open_risk_pct));
         if let Err(why) = budget {
+            outcome.refuse(&why);
             self.skip(symbol_id, &name, &why, detail, now).await;
             return Ok(());
         }
@@ -3606,6 +3773,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             edge: Ok(()),
             max_risk: sized.max_risk,
         };
+        outcome.sending(&key);
         match gate::send_entry(
             self.session,
             self.allowlist,
@@ -3619,6 +3787,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         .await
         {
             Ok(sent) => {
+                outcome.sent(&sent);
                 self.record_fill(
                     &ledger,
                     &key,
@@ -3673,6 +3842,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                     .await;
             }
             Err(SendError::Refused(x)) => {
+                outcome.refuse(&x.reason);
                 self.d.note(Some(&name), "refused", &x.reason, detail).await;
             }
             Err(e) => return Err(e.into()),

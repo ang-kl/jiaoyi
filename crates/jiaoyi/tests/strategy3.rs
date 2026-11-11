@@ -2127,7 +2127,7 @@ async fn the_budget_and_a_holiday_skip_with_the_reason(pool: PgPool) {
     // No opening quote: a closed/holiday session remains unready even with
     // a synthetic current M30 candle. Remove spread-fixture overlaps too.
     sqlx::query("DELETE FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2 AND received_at BETWEEN $3 AND $4")
-        .bind(DEMO).bind(BTC).bind(today().open).bind(today().open+Duration::seconds(6))
+        .bind(DEMO).bind(BTC).bind(today().open).bind(today().open+Duration::seconds(15))
         .execute(&pool).await.unwrap();
     let mut f = fake((60_455.0, 60_460.0));
     f.m30_bars = HashMap::from([(BTC, bars(0, 20))]);
@@ -3258,10 +3258,30 @@ fn independent_prepared_metal(t: &mut strategy3::Trader<'_, '_>) -> (i64, DateTi
         if let Ok(context) = day.macro_context.as_mut() {
             context.latest_bar_end += offset;
         }
+        // This is a synthetic London source, not the BTC source carried into
+        // another market. Shift its opening-evidence timestamps alongside its
+        // calendar; production validation must keep rejecting mixed windows.
+        if let Some(quote) = day.opening_quote.as_mut() {
+            for key in [
+                "bid_at",
+                "ask_at",
+                "observed_at",
+                "observation_start",
+                "window_end",
+            ] {
+                if let Some(at) = quote[key]
+                    .as_str()
+                    .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+                {
+                    quote[key] = json!(at + offset);
+                }
+            }
+        }
         day.prepared_at += offset;
         day.session = session;
     }
     other.pullback = None;
+    other.pullback_source_day = None;
     other.entered_session = None;
     other.last_try = None;
     other.last_decision_mark = None;
@@ -5189,7 +5209,7 @@ async fn a_retired_historical_symbol_outside_settings_keeps_legacy_exits(pool: P
 async fn a_bid_m30_open_cannot_replace_missing_two_sided_opening_evidence(pool: PgPool) {
     loaded(&pool).await;
     sqlx::query("DELETE FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2 AND received_at BETWEEN $3 AND $4")
-        .bind(DEMO).bind(BTC).bind(today().open).bind(today().open + Duration::seconds(6))
+        .bind(DEMO).bind(BTC).bind(today().open).bind(today().open + Duration::seconds(15))
         .execute(&pool)
         .await
         .unwrap();
@@ -5211,8 +5231,155 @@ async fn a_bid_m30_open_cannot_replace_missing_two_sided_opening_evidence(pool: 
                 .unwrap()
                 .open
                 .is_err());
+            assert!(t.syms[&BTC]
+                .day
+                .as_ref()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .macro_context
+                .is_ok());
+            let status = t.trigger_status(BTC, at(30));
+            assert!(status["entry_gates"].as_array().unwrap().iter().any(|g| {
+                g["code"] == "opening_reference_unavailable"
+                    && g["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains("macro preparation is ready")
+            }));
+            assert!(decisions(&pool).await.iter().any(|(kind, why)| {
+                kind == "s3_pullback_assessment"
+                    && why.starts_with("opening_reference_unavailable [")
+            }));
         }
     );
+}
+
+/// PostgreSQL replay accepts the actual broker reopening delay, never a later
+/// session quote, and regenerates legacy six-second receipts unchanged.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn owner18425_native_open_window_first_quote_and_restart_preserve_provenance(pool: PgPool) {
+    use jiaoyi_core::strategy3::production_sessions as prod;
+    loaded(&pool).await;
+    let s = today();
+    for offset_ms in [Some(6000), Some(7100), Some(15000), Some(15001), None] {
+        sqlx::query("DELETE FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2")
+            .bind(DEMO)
+            .bind(BTC)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut rows = vec![];
+        if let Some(ms) = offset_ms {
+            // Separate leg updates exercise exact timestamp capture.
+            for (seq, at, bid, ask) in [
+                (
+                    0,
+                    s.open + Duration::milliseconds(ms - 80),
+                    Some(OPEN - 2.5),
+                    None,
+                ),
+                (
+                    1,
+                    s.open + Duration::milliseconds(ms),
+                    None,
+                    Some(OPEN + 2.5),
+                ),
+            ] {
+                rows.push(store::ticks::TickRow {
+                    account_id: DEMO,
+                    session_id: "18425-native-open".into(),
+                    seq,
+                    broker_symbol_id: BTC,
+                    received_at: at,
+                    broker_timestamp: Some(at.timestamp_millis()),
+                    bid_e5: bid.map(e5),
+                    ask_e5: ask.map(e5),
+                });
+            }
+        }
+        // Missing/holiday opening evidence must not be repaired with these.
+        for (seq, at) in [
+            (2, s.open + Duration::milliseconds(15002)),
+            (3, s.open + Duration::minutes(30)),
+        ] {
+            rows.push(store::ticks::TickRow {
+                account_id: DEMO,
+                session_id: "18425-native-open".into(),
+                seq,
+                broker_symbol_id: BTC,
+                received_at: at,
+                broker_timestamp: Some(at.timestamp_millis()),
+                bid_e5: Some(e5(OPEN + 100.0)),
+                ask_e5: Some(e5(OPEN + 105.0)),
+            });
+        }
+        store::ticks::insert(&pool, &rows).await.unwrap();
+        with_trader!(
+            &pool,
+            fake((OPEN, OPEN + 5.0)),
+            Environment::Demo,
+            |t, log| {
+                t.prepare(BTC, s, s.open + Duration::seconds(5))
+                    .await
+                    .unwrap();
+                assert!(t.syms[&BTC]
+                    .day
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .open
+                    .is_err());
+                t.prepare(BTC, s, s.open + Duration::seconds(20))
+                    .await
+                    .unwrap();
+                let day = t.syms[&BTC].day.as_ref().unwrap().as_ref().unwrap().clone();
+                assert!(day.macro_context.is_ok());
+                if let Some(ms) = offset_ms.filter(|ms| *ms <= 15000) {
+                    assert_eq!(day.open, Ok(OPEN));
+                    let quote = day.opening_quote.as_ref().unwrap();
+                    assert_eq!(
+                        quote["bid_at"],
+                        json!(s.open + Duration::milliseconds(ms - 80))
+                    );
+                    assert_eq!(quote["ask_at"], json!(s.open + Duration::milliseconds(ms)));
+                    assert_eq!(quote["observed_at"], quote["ask_at"]);
+                    if ms <= 6000 {
+                        let legacy = json!({"source":"recorded_ticks_native_open_6s", "bid":OPEN - 2.5,
+                        "ask":OPEN + 2.5,"mid":OPEN,"bid_at":s.open + Duration::milliseconds(ms - 80),
+                        "ask_at":s.open + Duration::milliseconds(ms),"observed_at":s.open + Duration::milliseconds(ms)});
+                        assert_eq!(
+                            serde_json::to_vec(quote).unwrap(),
+                            serde_json::to_vec(&legacy).unwrap()
+                        );
+                    } else {
+                        assert_eq!(quote["source"], "recorded_ticks_native_open_15s_v18425");
+                        assert_eq!(quote["window_policy"], prod::OPENING_QUOTE_POLICY);
+                        assert_eq!(quote["observation_start"], json!(s.open));
+                        assert_eq!(quote["window_end"], json!(s.open + Duration::seconds(15)));
+                    }
+                } else {
+                    assert!(day.open.as_ref().unwrap_err().contains("first 15 seconds"));
+                    assert!(day.opening_quote.is_none());
+                }
+                // A restart hours later must replay the first bounded quote, not
+                // today's M30 open, the later tick, or a newly stamped observation.
+                t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+                    .await
+                    .unwrap();
+                t.reconcile(s.open + Duration::hours(3)).await.unwrap();
+                t.prepare(BTC, s, s.open + Duration::hours(3))
+                    .await
+                    .unwrap();
+                let restarted = t.syms[&BTC].day.as_ref().unwrap().as_ref().unwrap();
+                assert_eq!(restarted.open, day.open);
+                assert_eq!(restarted.opening_quote, day.opening_quote);
+                let wire = log.lock().unwrap();
+                assert!(wire.orders.is_empty() && wire.closes.is_empty() && wire.amends.is_empty());
+            }
+        );
+    }
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
@@ -5933,3 +6100,8 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
         assert!(wire.trendbar_requests.is_empty());
     });
 }
+#[path = "strategy3/carry_context_18425.rs"]
+mod carry_context_18425;
+
+#[path = "strategy3/trigger_outcomes.rs"]
+mod trigger_outcomes;

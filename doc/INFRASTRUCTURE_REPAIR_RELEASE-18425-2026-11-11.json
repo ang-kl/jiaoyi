@@ -1,0 +1,93 @@
+{
+  "trace": "\u211618,425",
+  "paragraphs": "\u00a7\u00a71\u20138",
+  "as_of_sgt": "2026-11-11T08:46:28.063456+08:00",
+  "by": "Codex (GPT-6), effort not exposed",
+  "status": "implementation_verified_awaiting_required_ci_and_deployment",
+  "base_commit": "bcf665f2f15a7806e8d84f344f08f2cc6513de98",
+  "production_before": "ef04699334c423e5b1794101189977832d4cb1bf",
+  "scope": [
+    "carried arm source Day separated from current peer Day",
+    "versioned native-open first quote window of 15 seconds",
+    "one correlated outcome per durably consumed trigger"
+  ],
+  "alpha_exit_risk_changed": false,
+  "proposal4_btc_remaining_horizon": "offline_only_not_implemented",
+  "policy": "s3_macro_pullback_owner_18409_v1",
+  "opening_quote_policy": "native_open_first_quote_v18425_15s",
+  "preserved_invariants": {
+    "breakeven_trigger_r": 1.0,
+    "breakeven_stop_r": 0.0,
+    "target_r": 1.38,
+    "trade_risk_pct": 0.6,
+    "margin_floor_pct": 250,
+    "pair_cap": "unchanged: one leg per account/pair",
+    "human_laws": [
+      "exact jiaoyi-s3 label ownership",
+      "yield to external positions and pending orders",
+      "NatGas/JPN225 permanently human-reserved"
+    ]
+  },
+  "baseline_observation": {
+    "connected_and_unpaused": 4,
+    "valid_opening_references": 26,
+    "reference_denominator": 32,
+    "missing_crude": 4,
+    "human_protected_live_metals": 2
+  },
+  "local_checks": {
+    "cargo_check_workspace_all_targets": {
+      "status": "passed",
+      "log_sha256": "0d2c790c86c9fcf0042c8394bc89fe5e6bfd01c2e00de75845e14c4a893734d5"
+    },
+    "cargo_test_workspace": {
+      "status": "passed",
+      "log_sha256": "8a5cc769dc0c25de30489d37284e86b601b7d3c7224871ce68c2afc79613f957"
+    },
+    "cargo_clippy_workspace_deny_warnings": {
+      "status": "passed",
+      "log_sha256": "403d53c7116132b267d848edc20ecc6ee2acc7eadc1ae67c3bf8c1835d31caab"
+    },
+    "cargo_clippy_all_targets_locked": {
+      "status": "passed",
+      "log_sha256": "c36cf583a9f6ed2455540edc19da5cf1d14fbd9717832bee36c3d3b85f307fe0"
+    }
+  },
+  "test_totals": {
+    "passed": 798,
+    "failed": 0,
+    "ignored": 1
+  },
+  "prechange_backup_verified": {
+    "files": 12,
+    "all_hashes_match": true,
+    "manifest_sha256": "fa376b2600d6c9f986661cea060bfb1f756f4e871233f7b4f017dcd4106bc6c0",
+    "recoverable_git_base": "bcf665f2f15a7806e8d84f344f08f2cc6513de98"
+  },
+  "independent_review": "completed; one missing source-validation refusal receipt found and corrected",
+  "required_ci": [
+    "check",
+    "docker",
+    "engineering"
+  ],
+  "deployment_verification": "Post-merge evidence will be published in the linked PR release-verification comment; not assumed by this pre-merge report.",
+  "financial_pass": false,
+  "goal": {
+    "win_rate": 0.73,
+    "required_wins_latest 20": 15,
+    "reward_risk": 1.38,
+    "scope": "each strategy on each account"
+  },
+  "source_hashes": {
+    "crates/jiaoyi-core/src/strategy3/production_sessions.rs": "58335312453e0e10dfffb66c34b77213f78ab64f8674dde78157103a7dbd43c5",
+    "crates/jiaoyi-store/src/trading.rs": "21bf1bbbc56ddeb6f41f8cf51b9606ee1e4d9534aa9ef39a60d155b300a9124f",
+    "crates/jiaoyi/src/strategy3.rs": "ee2c0e61b5107b2aaa9c59f2659f8aea4d5387275c4fffce4321a82c3ff58f4f",
+    "crates/jiaoyi/src/strategy3/diagnostics.rs": "c54762ec01db4374bb0148b31744df44d05de70ecebaa4bd6a75ebf6c0f78933",
+    "crates/jiaoyi/src/strategy3/fast_entry.rs": "0d3ae4cb38999e51424ff22efe3a113b30d25fc327d9b1dc3ae1ce98ee9671f8",
+    "crates/jiaoyi/src/strategy3/preopen.rs": "44a70e8a61b71d25addecdac4e329d520e196269aebfbc68f6a9d3e33726e582",
+    "crates/jiaoyi/tests/strategy3.rs": "660281ffa64b13ba6c496ce6f7bf88999201d847a1d22684790a267d542543a5",
+    "crates/jiaoyi/src/strategy3/trigger_outcome.rs": "e4486b57124091aca44e1bd4b4cff752e892149f0ac94af68fc2814035a90347",
+    "crates/jiaoyi/tests/strategy3/carry_context_18425.rs": "33ca9db8d7ec5931def4998f283b9a2b2554054f39758e55d12f5af82e49cfd3",
+    "crates/jiaoyi/tests/strategy3/trigger_outcomes.rs": "f924c8b3cb9f27d6a2d005eb3228ea4bce5bf9581c97867c51f46ec4ba8cc13a"
+  }
+}

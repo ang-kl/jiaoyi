@@ -187,7 +187,7 @@ fn compatible_preparation(p: &Prepared) -> bool {
         })
 }
 
-async fn stored(
+pub(super) async fn stored(
     pool: &PgPool,
     account: i64,
     symbol: &str,

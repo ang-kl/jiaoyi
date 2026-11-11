@@ -119,6 +119,16 @@ impl Trader<'_, '_> {
             .as_ref()
             .and_then(|d| d.as_ref().ok())
             .filter(|d| Some(d.session) == session);
+        if arm.is_none() {
+            if let Some(reason) = day.and_then(Day::preparation_refusal) {
+                let message = if reason == "opening_reference_unavailable" {
+                    "Blocked: native opening quote unavailable; causal macro preparation is ready"
+                } else {
+                    "Blocked: causal macro preparation unavailable"
+                };
+                gates.push(gate(reason, "blocked", message.into()));
+            }
+        }
         let direction = arm.map(|a| a.long).or_else(|| {
             day.and_then(|d| {
                 let open = *d.open.as_ref().ok()?;
@@ -179,7 +189,10 @@ impl Trader<'_, '_> {
                         ),
                     ));
                 }
-            } else {
+            } else if !gates
+                .iter()
+                .any(|g| g["code"] == "macro_preparation_unavailable")
+            {
                 gates.push(gate(
                     "macro_preparation_unavailable",
                     "blocked",
