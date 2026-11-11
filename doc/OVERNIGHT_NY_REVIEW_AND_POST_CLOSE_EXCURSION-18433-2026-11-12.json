@@ -46758,6 +46758,17 @@
           "source_refusal": null
         }
       }
+    ],
+    "opening_references_visible": 30,
+    "opening_references_not_exposed_by_gate_view": [
+      [
+        43002148,
+        "XAUUSD"
+      ],
+      [
+        43002148,
+        "XAGUSD"
+      ]
     ]
   },
   "decision_counts": [
