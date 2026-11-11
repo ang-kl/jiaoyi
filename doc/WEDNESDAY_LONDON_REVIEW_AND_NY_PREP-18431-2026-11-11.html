@@ -1,0 +1,541 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>№18,431 London audit</title><style>body{font:17px/1.6 system-ui,sans-serif;color:#172b3a;background:#f5f7fa;margin:0}main{max-width:1150px;margin:auto;padding:32px;background:white}h1{font-size:2rem}h2{margin-top:2.3rem;color:#16465c}table{border-collapse:collapse;display:block;overflow-x:auto;font-size:14px;width:100%}td,th{border:1px solid #ccd5dd;padding:9px;text-align:left;min-width:85px}th{background:#e9f0f6}code{overflow-wrap:anywhere}a{color:#075eaa}@media(max-width:650px){main{padding:18px}body{font-size:16px}h1{font-size:1.6rem}}</style><main><h1>Wednesday London review and New York preparation</h1>
+<p>№18,431 §§1–11 · 11 November 2026 · Cutoff 19:45 SGT · by Codex (runtime model/effort not exposed; Extra High was requested).</p>
+<h2>TLDR</h2>
+<p><strong>S3 traded and lost: six new demo positions, zero winners, −$619.25 during 12:55–19:45 SGT. Day-to-cutoff S3 cash is −$943.85.</strong> All six positions closed; no live S3 entry was sent. The three demos remain at 8/20 latest net wins; live remains 3/20 on an older cohort. Financial qualification fails.</p>
+<p>All 18 consumed triggers have individual outcome receipts: six fills and twelve pre-send peer refusals. Crypto 20:00 preparation is 8/8 and NY 22:30 preparation 24/24. London opening evidence is 22/24 with the two live metal slots intentionally withheld by human/pair guards; crypto 16:00 is 8/8. London preparation has two unavailable late coefficients, so “fully ready all session” would overstate the evidence.</p>
+<p>This audit changed no trading code, settings, orders or deployment. Production was verified on <code>aebf404dedf89dbcdb8cee78c95a582eea042d51</code>. Publication/merge status is established by the linked PR, not predicted in this report.</p>
+<h2>§1. Scope, timing and evidence</h2>
+<p>The exact activity interval is <strong>[11 November 12:55, 19:45) SGT</strong>, continuing №18,427. Day totals use [00:00,19:45). The environment recovered after cutoff, so historical deal/intent/decision rows are filtered to the requested interval. Health and account books were collected around 20:12–20:14 SGT and are separate observations. No later trades are included in window cash. SQL ran read-only; no new historical market collection or strategy experiment was performed. The machine-readable companion contains trade receipts, guard evidence, individual trigger/outcome joins, preparation rows, opening evidence and source SHA256 hashes.</p>
+<h2>§2. Account reconciliation</h2>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Post-cutoff balance USD</th>
+<th>Float USD</th>
+<th>Equity USD</th>
+<th>Window S3 USD</th>
+<th>Day S3 USD</th>
+<th>Snapshot SGT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>501.84</td>
+<td>5194.32</td>
+<td>5696.16</td>
+<td>0.00</td>
+<td>0.00</td>
+<td>2026-11-11T20:11:53.401000+08:00</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>25082.80</td>
+<td>-19.68</td>
+<td>25063.12</td>
+<td>-303.83</td>
+<td>-465.82</td>
+<td>2026-11-11T20:11:52.919000+08:00</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>24543.59</td>
+<td>-13.17</td>
+<td>24530.42</td>
+<td>-307.05</td>
+<td>-464.64</td>
+<td>2026-11-11T20:11:53.125000+08:00</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>807.02</td>
+<td>0.00</td>
+<td>807.02</td>
+<td>-8.37</td>
+<td>-13.39</td>
+<td>2026-11-11T20:11:52.975000+08:00</td>
+</tr>
+</tbody>
+</table>
+<p>Account-snapshot margin level is <strong>not verifiable</strong> for nonempty books because broker aggregation is unverified; no sum of per-position margins is substituted. The empty small-demo book has no used-position margin, so a finite margin percentage is not meaningful. The separate owner-assessment current-margin checks are shown below as derived observations, not reconciled account-margin certificates.</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Derived current-margin check</th>
+<th>State</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>1187.8631159677184</td>
+<td>pass</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>50307.34644720996</td>
+<td>pass</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>6158.480618598112</td>
+<td>pass</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>None</td>
+<td>pass</td>
+</tr>
+</tbody>
+</table>
+<p>The live account’s pending-entry stress projection is a breach in the observer. This is a risk diagnostic, not authority to cancel human orders. Floating gains on human positions are not S3 realised profit.</p>
+<h2>§3. Open inventory and human protection</h2>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Kind / ownership</th>
+<th>ID</th>
+<th>Symbol</th>
+<th>Side</th>
+<th>Native volume</th>
+<th>SL</th>
+<th>TP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>position / human/external</td>
+<td>649992251</td>
+<td>JPN225</td>
+<td>buy</td>
+<td>4000</td>
+<td>56571.3</td>
+<td>None</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>position / human/external</td>
+<td>649772867</td>
+<td>JPN225</td>
+<td>buy</td>
+<td>12000</td>
+<td>56450.7</td>
+<td>None</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>position / human/external</td>
+<td>637075128</td>
+<td>NatGas</td>
+<td>buy</td>
+<td>150000</td>
+<td>2.327</td>
+<td>3.875</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>pending_entry / human/external</td>
+<td>400465199</td>
+<td>XAUUSD</td>
+<td>buy</td>
+<td>1000</td>
+<td>3877.3</td>
+<td>4339.75</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>pending_entry / human/external</td>
+<td>400937857</td>
+<td>JPN225</td>
+<td>buy</td>
+<td>5000</td>
+<td>59366.5</td>
+<td>None</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>pending_entry / human/external</td>
+<td>398403207</td>
+<td>NatGas</td>
+<td>buy</td>
+<td>200000</td>
+<td>2.381</td>
+<td>4.275</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>pending_entry / human/external</td>
+<td>400083120</td>
+<td>JPN225</td>
+<td>buy</td>
+<td>15000</td>
+<td>55679.5</td>
+<td>None</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>pending_entry / human/external</td>
+<td>400920027</td>
+<td>NatGas</td>
+<td>buy</td>
+<td>100000</td>
+<td>2.423</td>
+<td>None</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>position / s1</td>
+<td>260823431</td>
+<td>AUS200</td>
+<td>buy</td>
+<td>60</td>
+<td>8819.5</td>
+<td>None</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>position / s1</td>
+<td>261231902</td>
+<td>AUDUSD</td>
+<td>sell</td>
+<td>900000</td>
+<td>0.69978</td>
+<td>None</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>position / s1</td>
+<td>260743517</td>
+<td>AUS200</td>
+<td>buy</td>
+<td>60</td>
+<td>8819.5</td>
+<td>None</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>position / s1</td>
+<td>261231903</td>
+<td>AUDUSD</td>
+<td>sell</td>
+<td>900000</td>
+<td>0.69973</td>
+<td>None</td>
+</tr>
+</tbody>
+</table>
+<p>No S3 position was open in the post-cutoff snapshot; no S2 inventory was identified. The two large demos each retain S1 AUS200 and AUDUSD positions. Six S1 trailing amendments occurred in the window (three per large demo); these are not new trades or S3 interference.</p>
+<p>Live 43002148 retains three human positions and five pending entries. No live S3 events/intents or external closing deals were found in the selected window. NatGas and JPN225 remain permanently reserved. XAUUSD is dynamically blocked by the human pending order; XAGUSD is blocked by sibling-pair occupancy. <strong>The metals are not permanently human-reserved symbols.</strong> Label ownership remains <code>jiaoyi-s3</code>; no recorded bot interference is supported by the inspected receipts, rather than a blanket 100% guarantee.</p>
+<h2>§4. Complete afternoon S3 ledger</h2>
+<p>All entries below are shorts; native volume is cTrader volume in hundredths of a unit, not assumed broker lots. Initial SL and TP come from entry/protection receipts.</p>
+<table>
+<thead>
+<tr>
+<th>Account / position</th>
+<th>Symbol</th>
+<th>Entry SGT / price</th>
+<th>Exit SGT / price</th>
+<th>Native volume</th>
+<th>Initial SL / TP</th>
+<th>Net USD</th>
+<th>Net R</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>47790949 / 261629338</td>
+<td>BTCUSD</td>
+<td>17:03:33.033 / 73722.11</td>
+<td>18:31:09.756 / 74076.94</td>
+<td>45</td>
+<td>74047.45 / 73273.14</td>
+<td>-159.67</td>
+<td>-1.090620</td>
+</tr>
+<tr>
+<td>49236051 / 261629441</td>
+<td>BTCUSD</td>
+<td>17:03:43.091 / 73753.51</td>
+<td>18:32:29.623 / 74075.48</td>
+<td>1</td>
+<td>74078.85 / 73304.54</td>
+<td>-3.22</td>
+<td>-0.989734</td>
+</tr>
+<tr>
+<td>46130058 / 261629442</td>
+<td>BTCUSD</td>
+<td>17:03:43.076 / 73753.51</td>
+<td>18:32:29.615 / 74075.48</td>
+<td>46</td>
+<td>74078.85 / 73304.54</td>
+<td>-148.11</td>
+<td>-0.989667</td>
+</tr>
+<tr>
+<td>46130058 / 261636289</td>
+<td>SpotCrude</td>
+<td>17:14:20.985 / 86.383</td>
+<td>17:16:39.746 / 86.841</td>
+<td>34000</td>
+<td>86.831 / 85.764</td>
+<td>-155.72</td>
+<td>-1.022321</td>
+</tr>
+<tr>
+<td>49236051 / 261636412</td>
+<td>SpotBrent</td>
+<td>17:14:37.517 / 94.546</td>
+<td>17:18:04.173 / 95.19</td>
+<td>800</td>
+<td>95.156 / 93.704</td>
+<td>-5.15</td>
+<td>-1.055328</td>
+</tr>
+<tr>
+<td>47790949 / 261636417</td>
+<td>SpotBrent</td>
+<td>17:14:38.559 / 94.531</td>
+<td>17:18:00.284 / 95.135</td>
+<td>24400</td>
+<td>95.141 / 93.689</td>
+<td>-147.38</td>
+<td>-0.990191</td>
+</tr>
+</tbody>
+</table>
+<p>All closes are protective broker exits consistent with the original stop. Two BTC fills and one Brent fill improved on their stop levels; this does not make them discretionary exits. The application’s stop-loss classification is a nearest-level proxy. There were no S3 breakeven/trailing amendments on these six positions.</p>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Observed favourable R</th>
+<th>Signed worst R</th>
+<th>Original cash risk USD</th>
+<th>Quote rows / max gap s</th>
+<th>Confirmation→guard ms</th>
+<th>Order→fill ms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>261629338</td>
+<td>0.810168</td>
+<td>-1.095131</td>
+<td>146.4030</td>
+<td>22019 / 14.088</td>
+<td>17.332</td>
+<td>590</td>
+</tr>
+<tr>
+<td>261629441</td>
+<td>0.906682</td>
+<td>-1.039835</td>
+<td>3.2534</td>
+<td>22315 / 14.091</td>
+<td>25.008</td>
+<td>544</td>
+</tr>
+<tr>
+<td>261629442</td>
+<td>0.906682</td>
+<td>-1.039835</td>
+<td>149.6564</td>
+<td>22315 / 14.095</td>
+<td>18.679000000000002</td>
+<td>535</td>
+</tr>
+<tr>
+<td>261636289</td>
+<td>0.000000</td>
+<td>-1.022321</td>
+<td>152.3200</td>
+<td>305 / 3.835</td>
+<td>24.462999999999997</td>
+<td>530</td>
+</tr>
+<tr>
+<td>261636412</td>
+<td>0.068852</td>
+<td>-1.031148</td>
+<td>4.8800</td>
+<td>407 / 5.372</td>
+<td>17.322</td>
+<td>516</td>
+</tr>
+<tr>
+<td>261636417</td>
+<td>0.044262</td>
+<td>-1.000000</td>
+<td>148.8400</td>
+<td>393 / 5.404</td>
+<td>13.778</td>
+<td>542</td>
+</tr>
+</tbody>
+</table>
+<p>No retained quote reached +1R, so breakeven acknowledgement latency is <strong>N/A</strong>, not zero or a missed acknowledgement. Crude’s best retained ask-side return was −0.084821R; favourable excursion is displayed as zero and the signed raw value is retained in JSON. The largest BTC recorder gap was about 14.1 seconds, so the observations do not prove that no unrecorded price touched +1R.</p>
+<h2>§5. Trigger, veto and execution accounting</h2>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Recorded count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New arms</td>
+<td>45</td>
+</tr>
+<tr>
+<td>Consumed triggers</td>
+<td>18</td>
+</tr>
+<tr>
+<td>Individual terminal outcomes</td>
+<td>18</td>
+</tr>
+<tr>
+<td>Persisted opening intents</td>
+<td>18</td>
+</tr>
+<tr>
+<td>Filled entries</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Peer &lt;24bp refusals before send</td>
+<td>12</td>
+</tr>
+<tr>
+<td>Consumed triggers missing outcome</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Unknown final guard receipts</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Deep &gt;61.8% invalidations</td>
+<td>19</td>
+</tr>
+<tr>
+<td>Pair reservation state transitions</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Pair reservation diagnostic rows including skips</td>
+<td>16</td>
+</tr>
+</tbody>
+</table>
+<p>Each consumed decision ID joins exactly once to <code>consumed_decision_id</code> in its outcome. Each demo had six opening attempts, two fills and four peer refusals; live had no opening intent. Diagnostic rows are deduplicated state reports, not tick counts or independent missed trades. The 19 invalidations must not be added to the 18 consumed triggers as though they were fills.</p>
+<p>After BTC stopped at 18:31–18:32 SGT, ETH sibling attempts at approximately 18:51:58 and 19:13:51 SGT were refused on all three demos by the &lt;24bp peer guard. Pair occupancy prevents simultaneous exposure; it is not a same-session loss cooldown. No further crypto fill occurred before cutoff. The maximum recorded confirmation-to-final-guard latency was 25.008 ms; this is distinct from order-to-broker-fill latency.</p>
+<p>No consumed arm crossed a session rollover in this window. The carried-arm/current-peer repair is therefore <strong>not exercised by this consumed-attempt sample</strong>. A null regression count in the review JSON is intentional; zero would imply evidence that this window does not supply.</p>
+<h2>§6. Opening references and preparation</h2>
+<table>
+<thead>
+<tr>
+<th>Window</th>
+<th>Evidence</th>
+<th>Qualification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>London 15:00</td>
+<td>22/24 historical origins; 2 live metal slots withheld</td>
+<td>11 contemporaneous arm/session quote receipts plus later health historical-origin evidence for remaining active slots</td>
+</tr>
+<tr>
+<td>Crypto 16:00</td>
+<td>8/8 persisted opening quotes</td>
+<td>BTC origin 73991.55 live / 73991.34 demos; ETH 2066.44</td>
+</tr>
+<tr>
+<td>Crypto 20:00</td>
+<td>8/8 complete pre-open records; 8/8 opening quotes observed after cutoff</td>
+<td>BTC 73914.53; ETH 2055.39</td>
+</tr>
+<tr>
+<td>NY 22:30</td>
+<td>24/24 complete preparation records before cutoff</td>
+<td>Opening quotes not yet due; preparation is not permission to trade</td>
+</tr>
+</tbody>
+</table>
+<p>London’s 24 preparations reported base readiness, but marks 420 and 450 minutes each had only 7 same-slot endpoints against 14 required. Earlier marks were usable; later unavailable marks remain blocked. This is a preparation coverage limitation, not evidence that all London trading stopped. Crypto 20:00 preparation was last completed around 16:00:27 SGT; NY preparation around 15:00:36 SGT. Both precede their T−10 deadlines.</p>
+<p>The quote source tag <code>recorded_ticks_native_open_6s</code> remains valid for captures within the original six seconds; the repaired 15-second tag applies to later permitted captures. Its presence alone is not a regression. Opening quotes and their original bid/ask/observed timestamps are included in JSON.</p>
+<h2>§7. Latest-20 objective</h2>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Net wins / 20</th>
+<th>Win rate</th>
+<th>Realised payoff</th>
+<th>Net-R PF</th>
+<th>Latest close UTC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>3/20</td>
+<td>15.0%</td>
+<td>3.366963</td>
+<td>0.594170</td>
+<td>2026-10-29T22:24:36.655Z</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>8/20</td>
+<td>40.0%</td>
+<td>1.509341</td>
+<td>1.006228</td>
+<td>2026-11-11T10:32:29.615Z</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>8/20</td>
+<td>40.0%</td>
+<td>1.379972</td>
+<td>0.919981</td>
+<td>2026-11-11T10:31:09.756Z</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>8/20</td>
+<td>40.0%</td>
+<td>1.518121</td>
+<td>1.012081</td>
+<td>2026-11-11T10:32:29.623Z</td>
+</tr>
+</tbody>
+</table>
+<p>The discrete 20-trade target is at least 15/20. No account qualifies. Demo 47790949 payoff is 1.379972, slightly below 1.38 before rounding. Live’s last close was 29 October, so its latest-20 does not validate the current policy. Demo wins stayed 8/20 because incoming losses replaced older losses; unchanged win count does not mean no trading or no deterioration. Reused overlapping latest-20 windows are not independent evidence.</p>
+<h2>§8. Interpretation and next investigation</h2>
+<p><strong>Observed:</strong> BTC gained roughly 0.81–0.91R before reversing; oil barely moved favourably and stopped within roughly two to three-and-a-half minutes. Entry guards accepted direction, pullback and peer evidence, yet this sample lost. Engineering receipt completeness and profitable entry selection are different acceptance criteria.</p>
+<p><strong>Inference:</strong> the BTC failure deserves a frozen, offline horizon/exit counterfactual; the oil failure deserves event-local entry-quality and peer persistence analysis. A lower profit-lock threshold chosen after these losses would be an overfit proposal, not a verified repair. The previously rejected lock remains rejected for production. Six losses are two correlated market episodes replicated across demos, not enough independent evidence to select a new rule.</p>
+<p><strong>Next review:</strong> (1) replay the exact pre-entry/exit quotes against unchanged rules and record missing-tick sensitivity; (2) compare matched prior winning and losing BTC/oil episodes with parameters frozen; (3) report per-market net expectancy after evidenced costs and adverse fill tails; (4) evaluate any candidate on separate dates before proposing a production change. No experiment or rule change was executed in this read-only audit.</p>
+<p>The three demos all entered, including the small account: minimum-lot/margin refusal was not the cause of these six outcomes. Do not increase risk or weaken human/pair guards to make the activity count larger.</p>
+<h2>§9. Evidence limitations</h2>
+<ul>
+<li>Historical deal polling ended seconds before the cutoff; no atomic broker snapshot exactly at 19:45. Stored deals fetched later were filtered by execution time.</li>
+<li>Book, equity and health snapshots are post-cutoff and explicitly timestamped.</li>
+<li>MFE/MAE use retained executable ask quotes for short positions; recorder gaps mean they are observed extrema, not a complete exchange tick tape.</li>
+<li>Stop classification is supported by protective exit/fill geometry; a distinct broker SL-versus-TP reason is not present in the decoded close receipt.</li>
+<li>Current margin values differ in evidential strength: audited account snapshots cannot verify aggregation, while owner assessment exposes a derived current-margin check.</li>
+<li>3.74 bp/side is an owner-selected cost allowance, not verified round-trip calibration.</li>
+<li>No consumed cross-window arm in this window; carried-arm rollover correctness cannot be certified by this sample.</li>
+<li>Six account trades represent two closely related market episodes across three demo accounts; they are not six independent strategy experiments.</li>
+</ul>
+<h2>§10. Publication and production isolation</h2>
+<p>Only this Markdown report and its HTML/JSON companions belong to the change. Railway watch patterns exclude <code>doc/**</code>; the earlier report merge left deployment <code>c0fedaca-0370-4cec-9234-f59f8c7cafce</code> on <code>aebf404d</code>. The report PR must pass <code>check</code>, <code>docker</code> and <code>engineering</code> before squash merge. Final PR/merge and post-merge deployment evidence will be returned in the completion response. No report text claims that an unobserved deployment or merge has succeeded.</p>
+<h2>§11. Gemini review instructions</h2>
+<p>Read this report first, then the same-name JSON. Check: six-trade cash sums, individual trigger/outcome join, full-day versus window cutoffs, strict SL classification limits, London late-coefficient gaps, current snapshots versus historical activity, and latest-20 cohort age. Treat <code>financial_pass:false</code> as binding evidence status. Do not interpret the report as authorisation to deploy a new entry/exit policy. The JSON carries source hashes and full per-trade evidence for independent arithmetic checks.</p></main></html>
