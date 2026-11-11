@@ -2,7 +2,7 @@
   "summary": {
     "trace": "\u211618,427",
     "status": "forensic_investigation_completed_no_code_changes",
-    "pr": null,
+    "pr": 220,
     "production_changed": false,
     "active_production_commit": "aebf404dedf89dbcdb8cee78c95a582eea042d51",
     "as_of_sgt": "2026-11-11T12:55:00+08:00",
@@ -47748,6 +47748,48 @@
       ]
     }
   },
+  "production_deployment_after_audit": {
+    "trading": {
+      "latest": {
+        "id": "c0fedaca-0370-4cec-9234-f59f8c7cafce",
+        "status": "SUCCESS",
+        "createdAt": "2026-11-11T00:54:06.396Z",
+        "commit": "aebf404dedf89dbcdb8cee78c95a582eea042d51",
+        "message": null,
+        "image_digest": "sha256:631e668c1ca138d5810f22fdab1ba27f3b7f4f34c6a28fa544c7ad09c2a9fad3"
+      },
+      "active": [
+        {
+          "id": "c0fedaca-0370-4cec-9234-f59f8c7cafce",
+          "status": "SUCCESS",
+          "createdAt": "2026-11-11T00:54:06.396Z",
+          "commit": "aebf404dedf89dbcdb8cee78c95a582eea042d51",
+          "message": null,
+          "image_digest": "sha256:631e668c1ca138d5810f22fdab1ba27f3b7f4f34c6a28fa544c7ad09c2a9fad3"
+        }
+      ]
+    },
+    "engineering": {
+      "latest": {
+        "id": "c203668c-36a9-476f-b00f-5e317dc65776",
+        "status": "SUCCESS",
+        "createdAt": "2026-11-10T01:19:37.510Z",
+        "commit": null,
+        "message": "\u211618,414 PR214 engineering repairs; merged ef04699334c423e5b1794101189977832d4cb1bf",
+        "image_digest": "sha256:3b964442999519b9f0d0242d98336f2cb03bc3c80f72dd80862164669951e917"
+      },
+      "active": [
+        {
+          "id": "c203668c-36a9-476f-b00f-5e317dc65776",
+          "status": "SUCCESS",
+          "createdAt": "2026-11-10T01:19:37.510Z",
+          "commit": null,
+          "message": "\u211618,414 PR214 engineering repairs; merged ef04699334c423e5b1794101189977832d4cb1bf",
+          "image_digest": "sha256:3b964442999519b9f0d0242d98336f2cb03bc3c80f72dd80862164669951e917"
+        }
+      ]
+    }
+  },
   "trigger_attribution": {
     "consumed": 6,
     "individual_outcomes": 6,
@@ -47762,17 +47804,16 @@
     "production_files_changed": false
   },
   "source_capture_hashes": {
-    "deployment-final.json": "6cab90a4e75ee1ed9ad74d89b5cb42a8c91d062e0a39cbe9e231c04b4049604a",
+    "evidence.json": "74fa2b2b8d77c62697ac2f284867368f500a7682ae68ce195b72cb9a2ef2da78",
+    "activity.json": "ee037daacddfad23f1f6d3409512be8c0ab07d21be496da33ca31469149b450c",
     "monitor.json": "28c896258cfb27f8dd849aa5bf67d3f2085d33469cdccb3eeb89a186ba540dd6",
-    "deployment.json": "6cab90a4e75ee1ed9ad74d89b5cb42a8c91d062e0a39cbe9e231c04b4049604a",
+    "runtime.json": "29961f1879520e2cfe179f16171616cfc2b2047764e2883327df21fc3f46200c",
     "extra.json": "8e3b77f4ea58966c48d94c796af31487aa69671f186aa76a9ee36aba3103db39",
     "ticks.json": "11967e9532a4b249611258aa31ca2485e1ed4be2db757f2730e36d35017b08c6",
-    "activity.json": "ee037daacddfad23f1f6d3409512be8c0ab07d21be496da33ca31469149b450c",
-    "summary.json": "e40918fb7ee8434772d8639722a74eb1098d059f818ea3f17b8019b5e9ff24a6",
     "hash-proof.json": "eb89c7ff300653ddd56430f61e54a6f5423b1f069f9e2398daa8b2ab1efdab49",
-    "evidence.json": "74fa2b2b8d77c62697ac2f284867368f500a7682ae68ce195b72cb9a2ef2da78",
     "trade-ledger.json": "2e161054f1cedb357d55e0d1fc28d50d409b59d5051adca180bb6f555b14937a",
-    "runtime.json": "29961f1879520e2cfe179f16171616cfc2b2047764e2883327df21fc3f46200c"
+    "deployment.json": "6cab90a4e75ee1ed9ad74d89b5cb42a8c91d062e0a39cbe9e231c04b4049604a",
+    "deployment-final.json": "6cab90a4e75ee1ed9ad74d89b5cb42a8c91d062e0a39cbe9e231c04b4049604a"
   },
   "limitations": [
     "No new broker calls, orders, pause changes or redeployment. Existing PostgreSQL records and owner snapshots only.",
