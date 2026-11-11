@@ -1,0 +1,88 @@
+{
+  "trace": "\u211618,422",
+  "status": "audit_completed",
+  "pr": null,
+  "merge_commit": null,
+  "as_of_sgt": "2026-11-11T07:50:00+08:00",
+  "activity_window_sgt": "2026-11-10T19:45:00+08:00..2026-11-11T07:50:00+08:00",
+  "production_commit_audited": "ef04699334c423e5b1794101189977832d4cb1bf",
+  "accounts_connected_and_unpaused": 4,
+  "accounts_audited": {
+    "live_43002148": {
+      "equity_usd": 4086.17,
+      "latest20_wins": 3,
+      "bot_positions": 0,
+      "human_external_positions": 3,
+      "recorded_bot_interference": 0
+    },
+    "demo_46130058": {
+      "equity_usd": 25517.14,
+      "latest20_wins": 8,
+      "open_s3": 0,
+      "closed_window_s3": 2,
+      "window_net_usd": 204.69,
+      "post_pr214_net_usd": 1027.02
+    },
+    "demo_47790949": {
+      "equity_usd": 24983.31,
+      "latest20_wins": 8,
+      "open_s3": 0,
+      "closed_window_s3": 2,
+      "window_net_usd": 200.37,
+      "post_pr214_net_usd": 816.95
+    },
+    "demo_49236051": {
+      "equity_usd": 820.41,
+      "latest20_wins": 8,
+      "open_s3": 0,
+      "closed_window_s3": 1,
+      "window_net_usd": 6.49,
+      "post_pr214_net_usd": 25.64
+    }
+  },
+  "overnight_ny_activity": {
+    "new_account_symbol_arms": 31,
+    "persisted_opening_intents": 9,
+    "entries_dispatched": 5,
+    "closed_window_s3_count": 5,
+    "closed_by_exit_type": {
+      "broker_tp": 3,
+      "breakeven_stop": 0,
+      "stop_loss": 0,
+      "session_timeout": 2
+    },
+    "window_closed_s3_net_usd": 411.55,
+    "post_pr214_cumulative_s3_net_usd": 1869.61,
+    "post_pr214_start_sgt": "2026-11-10T09:42:00+08:00",
+    "post_pr214_elapsed_hours": 22.133333333333333,
+    "post_pr214_closed_positions": 20,
+    "unknown_entry_guard_receipts": 0
+  },
+  "ny_capital_sizing_empirical_check": {
+    "small_demo_49236051_min_vol_blocks": null,
+    "symbol_min_equity_0_6pct_risk_usd": {
+      "US500": null,
+      "NAS100": null,
+      "BTCUSD": 1855.17,
+      "XAUUSD": null,
+      "XAGUSD": null,
+      "SpotCrude": null,
+      "SpotBrent": null,
+      "ETHUSD": 19.49
+    },
+    "scope": "Exact recorded candidates and original-arm sensitivity are separate; absent durable sizing evidence remains null.",
+    "persisted_small_demo_min_vol_diagnostic_records": 0
+  },
+  "wednesday_asia_readiness": {
+    "accounts_ready": "4/4 connected/unpaused; entry readiness conditional",
+    "opening_references_available": "Asian07:00 14/20 valid;4Crude missing and2livehumanmetal exclusions. Current04:00crypto8/8; SpotBrent09:00 future.",
+    "loaded_opening_quotes_preserved": "No redeployment; original reference receipts retained. Current Crude references unavailable rather than replaced with later quotes.",
+    "observed_confirmation_to_guard_max_ms": 22.363,
+    "crypto_0800_preparation": "8/8 complete at pre-open capture; future opening prices unavailable",
+    "crypto_1200_preparation": "Not materialised in this snapshot; no failed readiness claim before preflight",
+    "spotcrude_opening_failure": "First retained quotes at07:00:07.023\u201307.081, beyond six-second observation window"
+  },
+  "financial_pass": false,
+  "production_deployment_unchanged": true,
+  "report_file": "doc/OVERNIGHT_NY_REVIEW_AND_WEDNESDAY_ASIA_PREP-18422-2026-11-11.md"
+}
