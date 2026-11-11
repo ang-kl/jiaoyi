@@ -307,9 +307,33 @@ pub async fn record_decision(
     detail: &Value,
     settings_version: Option<i64>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    record_decision_returning_id(
+        pool,
+        account_id,
+        symbol,
+        kind,
+        reason,
+        detail,
+        settings_version,
+    )
+    .await?;
+    Ok(())
+}
+
+/// The durable row identity lets a consumed trigger attribute its outcome
+/// without relying on timestamps or deduplicated diagnostic messages.
+pub async fn record_decision_returning_id(
+    pool: &PgPool,
+    account_id: i64,
+    symbol: Option<&str>,
+    kind: &str,
+    reason: &str,
+    detail: &Value,
+    settings_version: Option<i64>,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
         "INSERT INTO trading_decisions (account_id, symbol, kind, reason, detail, settings_version)
-         VALUES ($1,$2,$3,$4,$5,$6)",
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
     )
     .bind(account_id)
     .bind(symbol)
@@ -317,9 +341,8 @@ pub async fn record_decision(
     .bind(reason)
     .bind(detail)
     .bind(settings_version)
-    .execute(pool)
-    .await?;
-    Ok(())
+    .fetch_one(pool)
+    .await
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
