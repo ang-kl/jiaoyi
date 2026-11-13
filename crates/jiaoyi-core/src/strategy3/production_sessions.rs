@@ -182,6 +182,54 @@ pub fn broker_weekly_open(symbol: &str, at: DateTime<Utc>) -> bool {
     session_at(market, at).is_some_and(|s| at >= opening_observation_start(symbol, s))
 }
 
+/// Execution-only policy №18,455. Recorded Pepperstone schedules close the
+/// six traditional instruments at16:59NY (Mon–Thu),16:55NY (Fri). Do not move
+/// Session.close: it also defines preparation and volatility-band samples.
+pub const EXIT_DEADLINE_POLICY: &str = "native_preclose_v18455_120s";
+pub const PRE_CLOSE_BUFFER_SECONDS: i64 = 120;
+pub fn exit_deadline(symbol: &str, session: &Session) -> DateTime<Utc> {
+    let traditional = matches!(
+        symbol,
+        "XAUUSD" | "XAGUSD" | "SpotCrude" | "SpotBrent" | "US500" | "NAS100"
+    );
+    let hard_close = ny(
+        session.date,
+        16,
+        if session.date.weekday() == Weekday::Fri {
+            55
+        } else {
+            59
+        },
+    );
+    if traditional
+        && session.close == hard_close
+        && session.open < hard_close - Duration::seconds(PRE_CLOSE_BUFFER_SECONDS)
+    {
+        hard_close - Duration::seconds(PRE_CLOSE_BUFFER_SECONDS)
+    } else {
+        session.close
+    }
+}
+
+/// Strictly future observation boundary, including the metal minute offset
+/// when the nominal Asian session has already started. Unknown symbols have
+/// no invented schedule; their close retries use the bounded slow poll.
+pub fn next_opening_observation_start(symbol: &str, at: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    let market = match symbol {
+        "BTCUSD" | "ETHUSD" => Market::Crypto,
+        "XAUUSD" | "XAGUSD" => Market::Metal,
+        "SpotCrude" => Market::Crude,
+        "SpotBrent" => Market::Brent,
+        "US500" | "NAS100" => Market::Index,
+        _ => return None,
+    };
+    (-1..10)
+        .flat_map(|d| windows_on(market, at.date_naive() + Duration::days(d)))
+        .map(|s| opening_observation_start(symbol, s))
+        .filter(|opening| *opening > at)
+        .min()
+}
+
 pub fn entry_window(s: &Session, at: DateTime<Utc>) -> Result<(), String> {
     if !s.trading_at(at) {
         return Err("outside production evaluation window".into());
@@ -416,6 +464,71 @@ mod tests {
     fn at(s: &str) -> DateTime<Utc> {
         s.parse().unwrap()
     }
+    #[test]
+    fn preclose_buffer_changes_only_new_final_traditional_exit_deadlines() {
+        for text in ["2026-11-12", "2026-11-13", "2026-07-09", "2026-07-10"] {
+            let date: NaiveDate = text.parse().unwrap();
+            for (name, market) in [
+                ("XAUUSD", Market::Metal),
+                ("XAGUSD", Market::Metal),
+                ("SpotCrude", Market::Crude),
+                ("SpotBrent", Market::Brent),
+                ("US500", Market::Index),
+                ("NAS100", Market::Index),
+            ] {
+                let windows = windows_on(market, date);
+                let original = windows.clone();
+                for (index, s) in windows.iter().enumerate() {
+                    let deadline = exit_deadline(name, s);
+                    assert_eq!(
+                        deadline,
+                        if index == 2 {
+                            s.close - Duration::seconds(120)
+                        } else {
+                            s.close
+                        }
+                    );
+                    assert!(broker_weekly_open(name, deadline));
+                    assert_eq!(
+                        entry_deadline(name, s),
+                        s.close,
+                        "entry windows stay frozen"
+                    );
+                    assert!(symbol_entry_window(name, s, s.close - Duration::seconds(1)).is_ok());
+                    // Sigma still includes all native session marks, including the final mark.
+                    let table = sigma_table(&SessionRule::Production(market), s, &[]);
+                    assert!(table
+                        .marks
+                        .contains_key(&((s.close - s.open).num_minutes() / 30 * 30)));
+                }
+                assert_eq!(windows, original);
+                assert_eq!(windows_on(market, date), original);
+            }
+            for name in ["BTCUSD", "ETHUSD"] {
+                for s in windows_on(Market::Crypto, date) {
+                    assert_eq!(exit_deadline(name, &s), s.close);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn future_opening_observation_handles_dst_weekends_and_metal_offset() {
+        for (now, expected) in [
+            ("2026-11-13T21:55:00Z", "2026-11-15T23:01:00Z"),
+            ("2026-07-10T20:55:00Z", "2026-07-12T22:01:00Z"),
+            ("2026-11-15T23:00:30Z", "2026-11-15T23:01:00Z"),
+        ] {
+            assert_eq!(
+                next_opening_observation_start("XAUUSD", at(now)),
+                Some(at(expected))
+            );
+        }
+        let open = at("2026-11-15T23:01:00Z");
+        assert!(next_opening_observation_start("XAUUSD", open).unwrap() > open);
+        assert!(next_opening_observation_start("UNKNOWN", open).is_none());
+    }
+
     #[test]
     fn owner18409_enables_all_native_core_windows_without_repair4_or_maintenance_bypass() {
         for date in [

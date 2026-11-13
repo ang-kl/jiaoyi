@@ -330,11 +330,11 @@ impl Trader<'_, '_> {
             .rule
             .as_ref()
             .and_then(|rule| sessions::session_at(rule, now))
-            .map(|window| window.close)
+            .map(|window| prod::exit_deadline(&sym.name, &window))
             .ok_or_else(|| anyhow::anyhow!("no active execution window"))?;
         let detail = json!({"production_policy":mp::POLICY,"model":mp::MODEL,"armed":arm,
             "session_date":arm.session.date,"session":arm.session,"decided_at":now,"bid":bid,"ask":ask,"mid":(bid+ask)/2.,
-            "exit_deadline":exit_deadline,
+            "exit_deadline":exit_deadline,"exit_deadline_policy":prod::EXIT_DEADLINE_POLICY,
             "side":plan.entry.side,"band":plan.request.band,"open":arm.origin,"macro_context":arm.macro_context,
             "volume_limits":plan.request.limits,"cost":plan.entry.cost,"entry":plan.entry,
             "opening_quote":plan.request.opening_quote,"quote_to_deposit":plan.request.rate,
