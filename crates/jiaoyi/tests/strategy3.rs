@@ -2335,10 +2335,10 @@ async fn end_orders(pool: &PgPool) -> Vec<(String, String)> {
     .unwrap()
 }
 
-/// Codex P1 on #15: a rejected session-end close is tried again, with a new
-/// intent key, until it fills.
+/// Closed-market refusal suppresses timer retries; a fresh two-sided quote
+/// wakes the registered close, retaining the ten-second floor.
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn a_rejected_session_end_close_is_retried_with_a_new_key(pool: PgPool) {
+async fn market_closed_session_end_waits_for_a_fresh_quote_after_the_floor(pool: PgPool) {
     loaded(&pool).await;
     let f = FakeBroker {
         reject_closes: Arc::new(std::sync::atomic::AtomicUsize::new(1)),
@@ -2354,7 +2354,24 @@ async fn a_rejected_session_end_close_is_retried_with_a_new_key(pool: PgPool) {
         t.session_end(end + Duration::seconds(5)).await.unwrap();
         assert_eq!(log.lock().unwrap().closes.len(), 1, "waits 10 s");
         t.session_end(end + Duration::seconds(11)).await.unwrap();
-        assert_eq!(log.lock().unwrap().closes.len(), 2);
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            1,
+            "no ten-second timer storm"
+        );
+        t.on_quote(
+            BTC,
+            Some(60_455.0),
+            Some(60_460.0),
+            end + Duration::seconds(11),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            2,
+            "fresh quote wakes immediately"
+        );
     });
     let e = end_orders(&pool).await;
     assert_eq!(e.len(), 2, "{e:?}");
@@ -2362,10 +2379,107 @@ async fn a_rejected_session_end_close_is_retried_with_a_new_key(pool: PgPool) {
     assert!(e[1].0.ends_with(":2") && e[1].1 == "filled", "{e:?}");
 }
 
-/// Codex P1 on #15: after a restart, a session-end close that was rejected
-/// is tried again at once, with the next key.
+/// Mid-session/holiday quotes can remain fresh while the broker refuses
+/// execution. They must not cause a new PostgreSQL intent every ten seconds.
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn a_restart_after_a_rejected_session_end_close_retries_it(pool: PgPool) {
+async fn market_closed_continuous_quotes_slow_poll_and_quiet_feed_reopen(pool: PgPool) {
+    loaded(&pool).await;
+    let f = FakeBroker {
+        reject_closes: Arc::new(std::sync::atomic::AtomicUsize::new(3)),
+        ..fake((60_455.0, 60_462.0))
+    };
+    with_trader!(&pool, f, Environment::Demo, |t, log| {
+        t.legacy_position(BTC, Some(60_455.0), Some(60_460.0), at(30))
+            .await
+            .unwrap();
+        let end = at(24 * 60);
+        {
+            let sym = t.syms.get_mut(&BTC).unwrap();
+            sym.bid = Some(60_455.0);
+            sym.ask = Some(60_460.0);
+            sym.bid_at = Some(end);
+            sym.ask_at = Some(end);
+        }
+        t.session_end(end).await.unwrap();
+        for seconds in 1..=25 {
+            t.on_quote(
+                BTC,
+                Some(60_455.0),
+                Some(60_460.0),
+                end + Duration::seconds(seconds),
+            )
+            .await
+            .unwrap();
+        }
+        assert_eq!(log.lock().unwrap().closes.len(), 1);
+        assert_eq!(
+            end_orders(&pool).await.len(),
+            1,
+            "no new intent during the ten-second retry storm window"
+        );
+        // A quiet interval followed by the first executable quote wakes immediately.
+        t.on_quote(
+            BTC,
+            Some(60_455.0),
+            Some(60_460.0),
+            end + Duration::seconds(40),
+        )
+        .await
+        .unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 2);
+        for seconds in 41..=65 {
+            t.on_quote(
+                BTC,
+                Some(60_455.0),
+                Some(60_460.0),
+                end + Duration::seconds(seconds),
+            )
+            .await
+            .unwrap();
+        }
+        assert_eq!(log.lock().unwrap().closes.len(), 2);
+        t.session_end(end + Duration::seconds(1839)).await.unwrap();
+        assert_eq!(log.lock().unwrap().closes.len(), 2);
+        t.session_end(end + Duration::seconds(1840)).await.unwrap();
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            3,
+            "bounded thirty-minute fallback"
+        );
+        t.on_quote(
+            BTC,
+            Some(60_455.0),
+            Some(60_460.0),
+            end + Duration::seconds(1845),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            3,
+            "floor even on pre-open quotes"
+        );
+        t.on_quote(
+            BTC,
+            Some(60_455.0),
+            Some(60_460.0),
+            end + Duration::seconds(1850),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            4,
+            "fresh quote closes immediately at floor"
+        );
+        assert!(f.positions.lock().unwrap().is_empty());
+    });
+}
+
+/// Reconnect restores the latest closed-market refusal and its future probe;
+/// the original position and deadline survive until a fresh quote wakes it.
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn market_closed_session_end_deferral_survives_restart(pool: PgPool) {
     loaded(&pool).await;
     let f = FakeBroker {
         reject_closes: Arc::new(std::sync::atomic::AtomicUsize::new(1)),
@@ -2382,11 +2496,43 @@ async fn a_restart_after_a_rejected_session_end_close_retries_it(pool: PgPool) {
         t.session_end(at(24 * 60) + Duration::seconds(1))
             .await
             .unwrap();
-        assert_eq!(log.lock().unwrap().closes.len(), 1, "retried at once");
+        assert!(
+            log.lock().unwrap().closes.is_empty(),
+            "restart preserves closed-market deferral"
+        );
+        t.session_end(at(24 * 60) + Duration::seconds(11))
+            .await
+            .unwrap();
+        assert!(log.lock().unwrap().closes.is_empty());
+        t.on_quote(
+            BTC,
+            Some(60_455.0),
+            Some(60_460.0),
+            at(24 * 60) + Duration::seconds(11),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            log.lock().unwrap().closes.len(),
+            1,
+            "first fresh quote wakes carried position"
+        );
     });
     let e = end_orders(&pool).await;
     assert_eq!(e.len(), 2, "{e:?}");
     assert!(e[1].0.ends_with(":2") && e[1].1 == "filled", "{e:?}");
+    let pid: i64 = sqlx::query_scalar(
+        "SELECT position_id FROM strategy3_orders WHERE kind='session_end' LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        store::strategy3::last_session_end_market_closed(&pool, DEMO, pid)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 /// Codex P1 on #15: the live rule is account-wide. A Strategy 1 position

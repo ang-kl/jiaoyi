@@ -9,7 +9,9 @@
 mod exposure_fx;
 mod fast_entry;
 pub mod preopen;
+mod session_end;
 mod trigger_outcome;
+pub use session_end::MarketClosedRetry;
 use trigger_outcome::TriggerOutcome;
 
 /// Read/monitor universe: retain configured names and resolve all eight S3
@@ -712,7 +714,18 @@ fn recorded_session_close(
         // describes its original preparation, not the later execution window.
         let close: DateTime<Utc> = detail["exit_deadline"].as_str()?.parse().ok()?;
         let entered: DateTime<Utc> = detail["decided_at"].as_str()?.parse().ok()?;
-        return (close > entered).then_some(close);
+        if close > entered {
+            return Some(close);
+        }
+        // Entry eligibility is unchanged. An entry accepted after the new
+        // pre-close deadline is immediately due, not given an invented later
+        // deadline. Only the exact versioned execution helper authorises this.
+        if detail["exit_deadline_policy"].as_str() == Some(prod::EXIT_DEADLINE_POLICY) {
+            let rule = prod::rule_for(symbol, class)?;
+            let window = sessions::session_at(&rule, entered)?;
+            return (close == prod::exit_deadline(symbol, &window)).then_some(close);
+        }
+        return None;
     }
     let close = detail["session"]
         .get("close")
@@ -1188,6 +1201,8 @@ pub struct Own {
     /// retried, never given up).
     pub end_attempts: i64,
     pub end_next_try: Option<DateTime<Utc>>,
+    /// Restored from the latest terminal closed-market receipt on reconnect.
+    pub end_market_closed: Option<MarketClosedRetry>,
     /// Best executable price since the position was seen (highest bid for a
     /// long, lowest ask for a short). The Chandelier hangs from this.
     pub best: Option<f64>,
@@ -1618,6 +1633,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                                 if let Some(a)=q.event.ask {sym.ask=Some(a as f64/100_000.0);sym.ask_at=Some(at);}
                             }
                             self.protected_through.insert(id,at);
+                            self.session_end_for(Some(id), Utc::now()+self.event_offset).await?;
                             self.check_exits(Utc::now()+self.event_offset).await?;
                             crate::fast_monitor::quote_processed(&self.live,self.account_id(),q.received_at);
                         }
@@ -1873,6 +1889,34 @@ impl<'a, 'c> Trader<'a, 'c> {
                 let symbol = self.syms.get(&p.trade_data.symbol_id)?;
                 recorded_session_close(&x.detail, &symbol.name, symbol.class)
             });
+            let restored_end_retry = if !self.own.contains_key(&p.position_id) {
+                let rejected =
+                    s3s::last_session_end_market_closed(self.pool, account_id, p.position_id)
+                        .await?;
+                rejected.and_then(|at| {
+                    self.syms
+                        .get(&p.trade_data.symbol_id)
+                        .map(|sym| MarketClosedRetry::new(&sym.name, at, None))
+                })
+            } else {
+                None
+            };
+            if let Some(retry) = restored_end_retry {
+                let name = self
+                    .syms
+                    .get(&p.trade_data.symbol_id)
+                    .map(|s| s.name.clone());
+                self.d
+                    .note(
+                        name.as_deref(),
+                        "session_end_deferred",
+                        "restored MARKET_CLOSED deferral",
+                        json!({"position_id":p.position_id,"recorded_deadline":session_close,
+                        "rejected_at":retry.rejected_at,"next_probe_at":retry.next_probe_at,
+                        "restored":true,"retry_policy":session_end::POLICY}),
+                    )
+                    .await;
+            }
             let e = self.own.entry(p.position_id).or_insert_with(|| Own {
                 position_id: p.position_id,
                 symbol_id: p.trade_data.symbol_id,
@@ -1897,7 +1941,8 @@ impl<'a, 'c> Trader<'a, 'c> {
                 tp1_sent,
                 tp1_next_try: None,
                 end_attempts,
-                end_next_try: None,
+                end_next_try: restored_end_retry.map(|retry| retry.next_probe_at),
+                end_market_closed: restored_end_retry,
                 best: None,
                 mae: 0.0,
                 mfe: 0.0,
@@ -2280,6 +2325,9 @@ impl<'a, 'c> Trader<'a, 'c> {
             sym.ask_at = Some(now);
         }
         let (bid, ask) = (sym.bid, sym.ask);
+        // Quotes can wake a deferred exit immediately, without waiting for
+        // the one-second timer. This path never admits a new entry.
+        self.session_end_for(Some(symbol_id), now).await?;
         let reacted = self.react(symbol_id, bid, ask, now).await;
         // Claude · № 17,116 25-Oct (ordered: owner "continue"; C3 per №17,115):
         // the distance to the trigger, after the quote is acted on (so a
@@ -2613,28 +2661,51 @@ impl<'a, 'c> Trader<'a, 'c> {
     /// Close at the opening ledger's deadline. New entry windows must not
     /// shorten or extend an existing position's recorded exit calendar.
     pub async fn session_end(&mut self, now: DateTime<Utc>) -> anyhow::Result<()> {
-        let owns: Vec<Own> = self.own.values().cloned().collect();
+        self.session_end_for(None, now).await
+    }
+
+    async fn session_end_for(
+        &mut self,
+        symbol_id: Option<i64>,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        let owns: Vec<Own> = self
+            .own
+            .values()
+            .filter(|o| {
+                symbol_id.is_none_or(|id| id == o.symbol_id && o.end_market_closed.is_some())
+            })
+            .cloned()
+            .collect();
         for o in owns {
-            if o.end_next_try.is_some_and(|t| now < t) {
-                continue;
-            }
             let Some(sym) = self.syms.get(&o.symbol_id) else {
                 continue;
             };
             if o.recorded_session_close.is_none_or(|close| now < close) {
                 continue;
             }
-            let (bid, ask) = (sym.bid, sym.ask);
-            // Claude · № 17,020 25-Oct (Codex P1 on #15): every attempt is its
-            // own intent; a refusal or rejection is tried again after
-            // END_RETRY, a sent close after one reconcile interval if the
-            // broker still shows the position.
+            let (bid, ask, name) = (sym.bid, sym.ask, sym.name.clone());
+            let fresh_times = fresh_s3_quote(sym, now).and_then(|_| sym.bid_at.zip(sym.ask_at));
+            if let Some(retry) = self
+                .own
+                .get_mut(&o.position_id)
+                .and_then(|x| x.end_market_closed.as_mut())
+            {
+                if !retry.due(now, fresh_times) {
+                    continue;
+                }
+            } else if o.end_next_try.is_some_and(|t| now < t) {
+                continue;
+            }
             let attempt = o.end_attempts + 1;
             let sent = self
                 .close(&o, o.volume, "session_end", attempt, bid, ask, now)
                 .await?;
             let r = rules(self.pool, self.account_id(), self.env).await?;
-            let wait = match sent.map(|s| s.outcome) {
+            let rejected_closed = matches!(sent.as_ref().map(|s| &s.outcome),
+                Some(Outcome::Rejected { code: Some(code), .. }) if code == "MARKET_CLOSED");
+            let retry = rejected_closed.then(|| MarketClosedRetry::new(&name, now, fresh_times));
+            let wait = match sent.as_ref().map(|s| &s.outcome) {
                 Some(Outcome::Filled { .. }) | Some(Outcome::Unconfirmed) => {
                     chrono::Duration::seconds(r.reconcile_secs as i64)
                 }
@@ -2642,7 +2713,13 @@ impl<'a, 'c> Trader<'a, 'c> {
             };
             if let Some(x) = self.own.get_mut(&o.position_id) {
                 x.end_attempts = attempt;
-                x.end_next_try = Some(now + wait);
+                x.end_next_try = Some(retry.map_or(now + wait, |r| r.next_probe_at));
+                x.end_market_closed = retry;
+            }
+            if let Some(retry) = retry {
+                self.d.note(Some(&name), "session_end_deferred", "MARKET_CLOSED: wait for fresh reopening quotes or scheduled/slow probe",
+                    json!({"position_id":o.position_id,"attempt":attempt,"recorded_deadline":o.recorded_session_close,
+                        "rejected_at":now,"next_probe_at":retry.next_probe_at,"retry_policy":session_end::POLICY})).await;
             }
         }
         Ok(())
@@ -3556,7 +3633,8 @@ impl<'a, 'c> Trader<'a, 'c> {
         let r_price = armed.impulse_range;
         let mut detail = json!({"production_policy":mp::POLICY,"model":mp::MODEL,"armed":armed,
             "session_date":s.date,"session":s,"decided_at":now,"bid":bid,"ask":ask,"mid":(bid+ask)/2.0,
-            "exit_deadline":sym.rule.and_then(|r|sessions::session_at(&r,now)).map(|active|active.close),
+            "exit_deadline":sym.rule.and_then(|r|sessions::session_at(&r,now)).map(|active|prod::exit_deadline(&sym.name, &active)),
+            "exit_deadline_policy":prod::EXIT_DEADLINE_POLICY,
             "side":side,"band":b,"open":armed.origin,"macro_context":armed.macro_context,"volume_limits":limits,
             "cost":cost,"geometry":geometry,"opening_quote":day.opening_quote,"at_ms":now.timestamp_millis()});
         let (_, peer_check) = self.peer_evidence(&name, now);
@@ -4712,6 +4790,37 @@ mod tests {
         assert_eq!(
             recorded_session_close(&invalid, "BTCUSD", AssetClass::Crypto),
             None
+        );
+    }
+
+    #[test]
+    fn execution_buffer_is_versioned_and_does_not_rewrite_existing_deadlines() {
+        let entered: DateTime<Utc> = "2026-11-13T21:54:00Z".parse().unwrap();
+        let rule = prod::rule_for("XAUUSD", AssetClass::Metal).unwrap();
+        let session = sessions::session_at(&rule, entered).unwrap();
+        let mut plan = json!({"production_policy":mp::POLICY,"decided_at":entered,"session":session,"exit_deadline":session.close});
+        assert_eq!(
+            recorded_session_close(&plan, "XAUUSD", AssetClass::Metal),
+            Some(session.close),
+            "existing plans keep their stored close"
+        );
+        plan["exit_deadline"] = json!(prod::exit_deadline("XAUUSD", &session));
+        assert_eq!(
+            recorded_session_close(&plan, "XAUUSD", AssetClass::Metal),
+            None,
+            "old policies cannot invent a past deadline"
+        );
+        plan["exit_deadline_policy"] = json!(prod::EXIT_DEADLINE_POLICY);
+        assert_eq!(
+            recorded_session_close(&plan, "XAUUSD", AssetClass::Metal),
+            Some("2026-11-13T21:53:00Z".parse().unwrap()),
+            "a late entry is immediately due under the exact execution-only policy"
+        );
+        plan["exit_deadline"] = json!(entered - chrono::Duration::hours(1));
+        assert_eq!(
+            recorded_session_close(&plan, "XAUUSD", AssetClass::Metal),
+            None,
+            "reject a forged buffered deadline"
         );
     }
 

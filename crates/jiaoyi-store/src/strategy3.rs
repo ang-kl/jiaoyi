@@ -340,6 +340,32 @@ pub async fn cost_skipped_in_window(
         .bind(prereg_hash).fetch_one(pool).await
 }
 
+/// Restore a closed-market deferral only if the latest session-end intent
+/// has that terminal rejection. A later filled/unconfirmed/refused intent
+/// must never be hidden by selecting an older MARKET_CLOSED receipt.
+pub async fn last_session_end_market_closed(
+    pool: &PgPool,
+    account_id: i64,
+    position_id: i64,
+) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT latest.decided_at FROM (
+            SELECT entry_key,decided_at FROM strategy3_orders
+            WHERE account_id=$1 AND position_id=$2 AND kind='session_end' AND label='jiaoyi-s3'
+            ORDER BY id DESC LIMIT 1
+         ) latest JOIN LATERAL (
+            SELECT outcome,detail FROM strategy3_fills
+            WHERE account_id=$1 AND position_id=$2 AND entry_key=latest.entry_key
+              AND kind='session_end' AND label='jiaoyi-s3'
+            ORDER BY id DESC LIMIT 1
+         ) f ON true WHERE f.outcome='rejected' AND f.detail->'outcome'->>'code'='MARKET_CLOSED'",
+    )
+    .bind(account_id)
+    .bind(position_id)
+    .fetch_optional(pool)
+    .await
+}
+
 /// How many recorded quotes the median spread reads, at most.
 pub const SPREAD_QUOTES: i64 = 50_000;
 

@@ -1,0 +1,957 @@
+{
+  "trace": "\u211618,455",
+  "status": "implementation_and_local_verification_before_pr",
+  "generated_at": "2026-11-13T23:19:49.381533+00:00",
+  "production_policy_unchanged": "s3_macro_pullback_owner_18409_v1",
+  "exit_deadline_policy": "native_preclose_v18455_120s",
+  "retry_policy": "market_closed_reopen_v18455",
+  "base_main": "9a2137a40af6afdc647c02f6a70df40169ce7f84",
+  "production_before": {
+    "id": "c0fedaca-0370-4cec-9234-f59f8c7cafce",
+    "status": "SUCCESS",
+    "createdAt": "2026-11-11T00:54:06.396Z",
+    "commit": "aebf404dedf89dbcdb8cee78c95a582eea042d51",
+    "message": null,
+    "image_digest": "sha256:631e668c1ca138d5810f22fdab1ba27f3b7f4f34c6a28fa544c7ad09c2a9fad3"
+  },
+  "checks": [
+    {
+      "name": "check",
+      "command": [
+        "cargo",
+        "check",
+        "--workspace",
+        "--all-targets"
+      ],
+      "exit_code": 0,
+      "seconds": 15.63
+    },
+    {
+      "name": "test",
+      "command": [
+        "cargo",
+        "test",
+        "--workspace"
+      ],
+      "exit_code": 0,
+      "seconds": 312.09
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 15.65
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 0.89
+    }
+  ],
+  "workspace_test_totals": {
+    "passed": 805,
+    "failed": 0,
+    "ignored": 1
+  },
+  "calendar_evidence": {
+    "captured_at": "2026-11-13T22:57:54.201222+00:00",
+    "contracts": [
+      {
+        "name": "NAS100",
+        "read_at": "2026-11-13T01:05:12.04403+00:00",
+        "symbol_id": 10014,
+        "account_id": 43002148,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "4db765ca5ea681502b335797cb8f6654058e3f71edc876577c3d9b55c26fe903"
+      },
+      {
+        "name": "SpotBrent",
+        "read_at": "2026-11-13T01:01:59.90011+00:00",
+        "symbol_id": 10053,
+        "account_id": 49236051,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 158400,
+            "4": 233940
+          },
+          {
+            "3": 244800,
+            "4": 320340
+          },
+          {
+            "3": 331200,
+            "4": 406740
+          },
+          {
+            "3": 417600,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "9ee62112aca2b00571c7c0229fdbe452199faf9820c07d707a2bb895882e0caa"
+      },
+      {
+        "name": "XAUUSD",
+        "read_at": "2026-11-13T01:05:12.04403+00:00",
+        "symbol_id": 41,
+        "account_id": 43002148,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "00c93ec779f1f1c525ccfede9a2d9a468533752886c5b8877b59cd236a590e09"
+      },
+      {
+        "name": "XAGUSD",
+        "read_at": "2026-11-13T01:05:12.04403+00:00",
+        "symbol_id": 42,
+        "account_id": 43002148,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "d7a64d1fe7ae105ab56696d513e76003ba6407fb71fc0f2fe297b50d4e1d101e"
+      },
+      {
+        "name": "US500",
+        "read_at": "2026-11-13T01:05:12.04403+00:00",
+        "symbol_id": 10013,
+        "account_id": 43002148,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "e77002eb94b5c4e46da59dd41366a08d9a1a00d92a1cc48c6aad925a337ea446"
+      },
+      {
+        "name": "NAS100",
+        "read_at": "2026-11-13T01:01:59.90011+00:00",
+        "symbol_id": 10014,
+        "account_id": 49236051,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "9b15ff68e2ffbf7c3bdf39d215f069ce86983e5cab18e271f7fe2f589c7d20bd"
+      },
+      {
+        "name": "US500",
+        "read_at": "2026-11-13T01:01:59.90011+00:00",
+        "symbol_id": 10013,
+        "account_id": 49236051,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "50ebc6bc3c0120acc21d7e1e7ede3429e54e2fba7993a02efdfedea3c0896193"
+      },
+      {
+        "name": "XAGUSD",
+        "read_at": "2026-11-13T01:01:59.90011+00:00",
+        "symbol_id": 42,
+        "account_id": 49236051,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "400e19c2a4da342eddcb05a59d43c8df640e07d9966e2b3b923bb17b4021847b"
+      },
+      {
+        "name": "SpotCrude",
+        "read_at": "2026-11-13T01:01:59.90011+00:00",
+        "symbol_id": 10054,
+        "account_id": 49236051,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "979074b159ec4ab94b66b1d023f72e8a8e1ffaa8fa82d246d9dcc33c98d08ec3"
+      },
+      {
+        "name": "SpotCrude",
+        "read_at": "2026-11-13T01:05:12.04403+00:00",
+        "symbol_id": 10053,
+        "account_id": 43002148,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "e2fa378f8ea78eea3e26021e5205029dfacf06ded6e6b5fabd6d7a3ed2bcaf69"
+      },
+      {
+        "name": "SpotBrent",
+        "read_at": "2026-11-13T01:05:12.04403+00:00",
+        "symbol_id": 10052,
+        "account_id": 43002148,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 158400,
+            "4": 233940
+          },
+          {
+            "3": 244800,
+            "4": 320340
+          },
+          {
+            "3": 331200,
+            "4": 406740
+          },
+          {
+            "3": 417600,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "5d0d5115c9f9172853add6df3d8f8ba0fc19b243991755a465ebca9864cfdbb9"
+      },
+      {
+        "name": "NAS100",
+        "read_at": "2026-11-13T01:08:15.577804+00:00",
+        "symbol_id": 10014,
+        "account_id": 46130058,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "9b15ff68e2ffbf7c3bdf39d215f069ce86983e5cab18e271f7fe2f589c7d20bd"
+      },
+      {
+        "name": "XAUUSD",
+        "read_at": "2026-11-13T01:01:59.90011+00:00",
+        "symbol_id": 41,
+        "account_id": 49236051,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "16653bb444248682493d2f20632bc918ef8a07d7ebc34c51dd97ec04a866455c"
+      },
+      {
+        "name": "US500",
+        "read_at": "2026-11-13T01:08:15.577804+00:00",
+        "symbol_id": 10013,
+        "account_id": 46130058,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "50ebc6bc3c0120acc21d7e1e7ede3429e54e2fba7993a02efdfedea3c0896193"
+      },
+      {
+        "name": "XAUUSD",
+        "read_at": "2026-11-13T01:08:15.577804+00:00",
+        "symbol_id": 41,
+        "account_id": 46130058,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "1afaf6abbe5c77844bfca0ce21794ccfbb25c6e48424359539123f430e089031"
+      },
+      {
+        "name": "SpotBrent",
+        "read_at": "2026-11-13T01:08:15.577804+00:00",
+        "symbol_id": 10053,
+        "account_id": 46130058,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 158400,
+            "4": 233940
+          },
+          {
+            "3": 244800,
+            "4": 320340
+          },
+          {
+            "3": 331200,
+            "4": 406740
+          },
+          {
+            "3": 417600,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "9ee62112aca2b00571c7c0229fdbe452199faf9820c07d707a2bb895882e0caa"
+      },
+      {
+        "name": "XAUUSD",
+        "read_at": "2026-11-13T01:11:21.861897+00:00",
+        "symbol_id": 41,
+        "account_id": 47790949,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "16653bb444248682493d2f20632bc918ef8a07d7ebc34c51dd97ec04a866455c"
+      },
+      {
+        "name": "XAGUSD",
+        "read_at": "2026-11-13T01:11:21.861897+00:00",
+        "symbol_id": 42,
+        "account_id": 47790949,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "400e19c2a4da342eddcb05a59d43c8df640e07d9966e2b3b923bb17b4021847b"
+      },
+      {
+        "name": "US500",
+        "read_at": "2026-11-13T01:11:21.861897+00:00",
+        "symbol_id": 10013,
+        "account_id": 47790949,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "50ebc6bc3c0120acc21d7e1e7ede3429e54e2fba7993a02efdfedea3c0896193"
+      },
+      {
+        "name": "SpotCrude",
+        "read_at": "2026-11-13T01:11:21.861897+00:00",
+        "symbol_id": 10054,
+        "account_id": 47790949,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "979074b159ec4ab94b66b1d023f72e8a8e1ffaa8fa82d246d9dcc33c98d08ec3"
+      },
+      {
+        "name": "SpotCrude",
+        "read_at": "2026-11-13T01:08:15.577804+00:00",
+        "symbol_id": 10054,
+        "account_id": 46130058,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "979074b159ec4ab94b66b1d023f72e8a8e1ffaa8fa82d246d9dcc33c98d08ec3"
+      },
+      {
+        "name": "NAS100",
+        "read_at": "2026-11-13T01:11:21.861897+00:00",
+        "symbol_id": 10014,
+        "account_id": 47790949,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 151200,
+            "4": 233940
+          },
+          {
+            "3": 237600,
+            "4": 320340
+          },
+          {
+            "3": 324000,
+            "4": 406740
+          },
+          {
+            "3": 410400,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "9b15ff68e2ffbf7c3bdf39d215f069ce86983e5cab18e271f7fe2f589c7d20bd"
+      },
+      {
+        "name": "SpotBrent",
+        "read_at": "2026-11-13T01:11:21.861897+00:00",
+        "symbol_id": 10053,
+        "account_id": 47790949,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64800,
+            "4": 147540
+          },
+          {
+            "3": 158400,
+            "4": 233940
+          },
+          {
+            "3": 244800,
+            "4": 320340
+          },
+          {
+            "3": 331200,
+            "4": 406740
+          },
+          {
+            "3": 417600,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "9ee62112aca2b00571c7c0229fdbe452199faf9820c07d707a2bb895882e0caa"
+      },
+      {
+        "name": "XAGUSD",
+        "read_at": "2026-11-13T01:08:15.577804+00:00",
+        "symbol_id": 42,
+        "account_id": 46130058,
+        "schedule_time_zone": "America/New_York",
+        "intervals": [
+          {
+            "3": 64860,
+            "4": 147540
+          },
+          {
+            "3": 151260,
+            "4": 233940
+          },
+          {
+            "3": 237660,
+            "4": 320340
+          },
+          {
+            "3": 324060,
+            "4": 406740
+          },
+          {
+            "3": 410460,
+            "4": 492900
+          }
+        ],
+        "raw_sha256": "400e19c2a4da342eddcb05a59d43c8df640e07d9966e2b3b923bb17b4021847b"
+      }
+    ],
+    "normal_daily_close_ny": "16:59",
+    "friday_close_ny": "16:55",
+    "new_position_exit_deadline_normal_ny": "16:57",
+    "new_position_exit_deadline_friday_ny": "16:53",
+    "near_close_deals_found": 5,
+    "limitation": "Local stored deals do not establish each symbol last executable minute. Buffer uses recorded broker schedule; holiday execution is not guaranteed."
+  },
+  "rejection_evidence": {
+    "XAUUSD": {
+      "market_closed_rejections": 707,
+      "first_sent_at": "2026-11-13T21:55:00.847529+00:00",
+      "last_sent_at": "2026-11-13T22:57:52.866998+00:00"
+    },
+    "XAGUSD": {
+      "market_closed_rejections": 700,
+      "first_sent_at": "2026-11-12T21:59:00.827447+00:00",
+      "last_sent_at": "2026-11-12T23:00:55.859806+00:00"
+    }
+  },
+  "baseline_snapshot_at": "2026-11-13T23:15:04.658783+00:00",
+  "baseline_accounts": [
+    {
+      "account_id": 43002148,
+      "connected": true,
+      "paused": false,
+      "production_policy": "s3_macro_pullback_owner_18409_v1",
+      "open_positions": []
+    },
+    {
+      "account_id": 46130058,
+      "connected": true,
+      "paused": false,
+      "production_policy": "s3_macro_pullback_owner_18409_v1",
+      "open_positions": [
+        {
+          "entry": 3878.12,
+          "position_id": 262583980,
+          "side": "sell",
+          "stop": 3893.62,
+          "symbol": "XAUUSD",
+          "take_profit": 3856.73,
+          "tp1_sent": false,
+          "volume": 1000
+        }
+      ]
+    },
+    {
+      "account_id": 47790949,
+      "connected": true,
+      "paused": false,
+      "production_policy": "s3_macro_pullback_owner_18409_v1",
+      "open_positions": [
+        {
+          "entry": 3877.19,
+          "position_id": 262583136,
+          "side": "sell",
+          "stop": 3892.65,
+          "symbol": "XAUUSD",
+          "take_profit": 3855.85,
+          "tp1_sent": false,
+          "volume": 900
+        }
+      ]
+    },
+    {
+      "account_id": 49236051,
+      "connected": true,
+      "paused": false,
+      "production_policy": "s3_macro_pullback_owner_18409_v1",
+      "open_positions": []
+    }
+  ],
+  "new_deadline_scope": "New traditional final-session opening plans only; existing position deadlines, Session.close, entry window, sigma_table and crypto unchanged. Entries still permitted after the buffered deadline are immediately due for exit.",
+  "retry_semantics": {
+    "minimum_rejection_spacing_seconds": 10,
+    "unknown_or_mid_session_probe_seconds": 1800,
+    "fresh_reopen_quote_wake": "Both sides fresh and newer than rejection, after quote feed has become stale/quiet; immediate actor quote path subject to ten-second floor. Continuous quotes alone cannot prove broker executability and do not bypass scheduled/slow retry.",
+    "restart": "Restore latest account/position/label-scoped terminal MARKET_CLOSED receipt; do not select old refusal behind newer intent."
+  },
+  "source_artifact_sha256": {
+    "calendar-evidence.json": "bf1af0d2f99ddb28e7ca3ee11595f3331b06ccb61404e3f37633673d8d53730c",
+    "calendar-decoded.json": "5edac6c2a3dcaa16af75d89e457b3ee25782049222111f8cd9a02f297363a33d",
+    "baseline-health.json": "8720f01b46cd92d6acc8e4c965da508be6868b5f7761ea1d0dd7dd983f154117",
+    "baseline-runtime.json": "de0b9eb2b5ef20093480d3f60dd7d110dc1c3f7cfbe8ae8d00a5b88b74b1b37a",
+    "baseline-ledger.json": "dc0e45d3915194efd181ec9c01295b68ae8d1283158d712252d005556c073382",
+    "baseline-deployment.json": "6cab90a4e75ee1ed9ad74d89b5cb42a8c91d062e0a39cbe9e231c04b4049604a",
+    "pre-change-manifest.json": "c052252d4db0bbf79e7ca13417c7437022a48b93800968c46f290b2d753013ff",
+    "cargo-check.log": "4659f3164ea7af6c6f077827c9987bc0c1822a9c23e97884b815c832fa56c304",
+    "cargo-test.log": "17d60e6a949d74c7dd6282c5b0d0aa30527529d6589258e899a2c449c938e0c1",
+    "cargo-clippy.log": "d219c9071c60875f56bdcbfafed56efbbea72a555abcc518999f0ff6623515de",
+    "cargo-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "prechange_backup_manifest": [
+    {
+      "path": "crates/jiaoyi/src/strategy3.rs",
+      "bytes": 204915,
+      "sha256": "ee2c0e61b5107b2aaa9c59f2659f8aea4d5387275c4fffce4321a82c3ff58f4f"
+    },
+    {
+      "path": "crates/jiaoyi/src/strategy3/diagnostics.rs",
+      "bytes": 12546,
+      "sha256": "c54762ec01db4374bb0148b31744df44d05de70ecebaa4bd6a75ebf6c0f78933"
+    },
+    {
+      "path": "crates/jiaoyi/src/strategy3/trigger_outcome.rs",
+      "bytes": 7832,
+      "sha256": "e4486b57124091aca44e1bd4b4cff752e892149f0ac94af68fc2814035a90347"
+    },
+    {
+      "path": "crates/jiaoyi/src/strategy3/exposure_fx.rs",
+      "bytes": 3031,
+      "sha256": "ed90613d8b910ed0ed3093dbb9ad8fd66079a08a5798e52110de4a4f2c50fda8"
+    },
+    {
+      "path": "crates/jiaoyi/src/strategy3/preopen.rs",
+      "bytes": 34581,
+      "sha256": "44a70e8a61b71d25addecdac4e329d520e196269aebfbc68f6a9d3e33726e582"
+    },
+    {
+      "path": "crates/jiaoyi/src/strategy3/fast_entry.rs",
+      "bytes": 27521,
+      "sha256": "0d3ae4cb38999e51424ff22efe3a113b30d25fc327d9b1dc3ae1ce98ee9671f8"
+    },
+    {
+      "path": "crates/jiaoyi-core/src/strategy3/targets.rs",
+      "bytes": 14407,
+      "sha256": "e373c96e321c9349522408249c4a545572756eb8431c10185e4948208d680c44"
+    },
+    {
+      "path": "crates/jiaoyi-core/src/strategy3/sessions.rs",
+      "bytes": 14373,
+      "sha256": "35baf7180e256d3d1b2b32ed6bb2b681415f53cbc98f2ab0bbb1870723bead58"
+    },
+    {
+      "path": "crates/jiaoyi-core/src/strategy3/production_sessions.rs",
+      "bytes": 21268,
+      "sha256": "58335312453e0e10dfffb66c34b77213f78ab64f8674dde78157103a7dbd43c5"
+    },
+    {
+      "path": "crates/jiaoyi-core/src/strategy3/mod.rs",
+      "bytes": 3036,
+      "sha256": "8cf08123dd4b41b9fd11d62cb986fdf18aeb9121e18a9a1b44d7778b7f06c465"
+    },
+    {
+      "path": "crates/jiaoyi-core/src/strategy3/macro_pullback.rs",
+      "bytes": 56117,
+      "sha256": "ccd74e457d84d7074947355164840a7fc8a484475f1ba295e1c22ed51bae70db"
+    },
+    {
+      "path": "crates/jiaoyi-core/src/strategy3/band.rs",
+      "bytes": 18169,
+      "sha256": "483998e9e3a4206e1249b92d2804111c253f1a60db8f7902f00dc7a11a00f70c"
+    },
+    {
+      "path": "crates/jiaoyi-core/src/strategy3/kelly.rs",
+      "bytes": 4182,
+      "sha256": "786a799a6bdca2861e2dcb16ba4ad931f55a516c47bf9aec821fdb8109f10c40"
+    }
+  ],
+  "deployment_verification": {
+    "status": "pending_merge_and_deployment",
+    "publication": "Post-merge verification will be published on the release pull request, with actual commit, deployment ID and timed observation receipts."
+  },
+  "financial_pass": false
+}
