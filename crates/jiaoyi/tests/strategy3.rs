@@ -6049,6 +6049,11 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
     use jiaoyi_core::strategy3::{band, macro_pullback as mp, production_sessions as prod};
     loaded(&pool).await;
     let london = london_fixture();
+    // On Sunday this fixture is Friday, outside loaded()'s yesterday/tomorrow
+    // partitions. Create the actual fixture day instead of depending on today.
+    store::ticks::ensure_partitions(&pool, london.open.date_naive(), 1)
+        .await
+        .unwrap();
     let now = london.open + Duration::seconds(5);
     let crypto = prod::session_at(prod::Market::Crypto, now).unwrap();
     let fixture = fake((OPEN, OPEN + 5.0));
@@ -6251,3 +6256,44 @@ mod carry_context_18425;
 
 #[path = "strategy3/trigger_outcomes.rs"]
 mod trigger_outcomes;
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn cold_usd_gold_stop_risk_needs_no_gold_quote_and_keeps_three_percent_cap(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        |t, _log| {
+            t.legacy_position(BTC, Some(60_455.0), Some(60_460.0), at(30))
+                .await
+                .unwrap();
+            let sym = t.syms.get_mut(&BTC).unwrap();
+            sym.name = "XAUUSD".into();
+            sym.quote = Some("USD".into());
+            sym.bid = None;
+            sym.ask = None;
+            sym.bid_at = None;
+            sym.ask_at = None;
+            for (entry, stop, volume, expected) in [
+                (3878.12, 3893.62, 1000, 155.0),
+                (3877.19, 3892.65, 900, 139.14),
+            ] {
+                for own in t.own.values_mut() {
+                    own.entry = Some(entry);
+                    own.stop = Some(stop);
+                    own.volume = volume;
+                    own.side = jiaoyi_ctrader::trading::Side::Sell;
+                }
+                let risk = t.open_risk().unwrap();
+                assert!((risk - expected).abs() < 1e-7);
+                assert!(strategy3::within_budget(risk, 6.0, 10_000.0, 3.0).is_ok());
+                assert!(strategy3::within_budget(risk, 6.0, 100.0, 3.0).is_err());
+            }
+            for own in t.own.values_mut() {
+                own.stop = None;
+            }
+            assert!(t.open_risk().is_err());
+        }
+    );
+}

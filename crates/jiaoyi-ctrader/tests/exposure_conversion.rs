@@ -31,6 +31,15 @@ async fn foreign_manual_position_warms_broker_chain_once_and_margin_check_accept
         account_id: ACCOUNT,
         trader: Some(trader.clone()),
         light_symbols: vec![symbol(10, 10, 2), symbol(20, 20, 1), symbol(30, 1, 2)],
+        symbols: vec![pb::ProtoOaSymbol {
+            symbol_id: 30,
+            schedule_time_zone: Some("UTC".into()),
+            schedule: vec![pb::ProtoOaInterval {
+                start_second: 0,
+                end_second: 604800,
+            }],
+            ..Default::default()
+        }],
         quotes: HashMap::from([(30, vec![(Some(15_000_000), Some(15_100_000))])]),
         ..Default::default()
     };
@@ -100,12 +109,16 @@ async fn foreign_manual_position_warms_broker_chain_once_and_margin_check_accept
         .await
         .unwrap();
     let proof = receipt.fx_guard.unwrap();
-    assert_eq!(proof.foreign_exposures.len(), 1);
-    assert_eq!(proof.foreign_exposures[0].stop_cash_quote, -150.0);
+    assert_eq!(proof.existing_book_exposures.len(), 1);
+    assert_eq!(proof.existing_book_exposures[0].stop_cash_quote, -150.0);
     let q = conn.quote_snapshot(ACCOUNT, 30).unwrap();
     assert!(
-        (margin::foreign_reserve(&proof.foreign_exposures, chrono::Utc::now(), |_| Some(&q))
-            .unwrap()
+        (margin::foreign_reserve(
+            &proof.existing_book_exposures,
+            chrono::Utc::now(),
+            |_| Some(&q)
+        )
+        .unwrap()
             - 1.0)
             .abs()
             < 1e-9

@@ -152,3 +152,66 @@ pub async fn resolved_symbol_ids(
     .fetch_all(pool)
     .await
 }
+
+/// Existing-book accounting only: both sides from one recorded account/session,
+/// strictly before this closure. Never republish these as executable spot quotes.
+#[derive(Debug, Clone)]
+pub struct PrecloseQuote {
+    pub bid: f64,
+    pub ask: f64,
+    pub bid_at: DateTime<Utc>,
+    pub ask_at: DateTime<Utc>,
+    pub source: String,
+}
+pub async fn preclose_quote(
+    pool: &PgPool,
+    account: i64,
+    symbol: i64,
+    close: DateTime<Utc>,
+) -> Result<Option<PrecloseQuote>, sqlx::Error> {
+    let from = close - chrono::Duration::milliseconds(5000);
+    let rows=sqlx::query("SELECT session_id,seq,received_at,broker_timestamp,bid_e5,ask_e5 FROM ticks WHERE account_id=$1 AND broker_symbol_id=$2 AND received_at >= $3 AND received_at < $4 ORDER BY received_at DESC,seq DESC LIMIT 2000")
+        .bind(account).bind(symbol).bind(from).bind(close).fetch_all(pool).await?;
+    if rows.len() == 2000 {
+        return Ok(None);
+    }
+    let mut session = None;
+    let (mut bid, mut ask) = (None, None);
+    for row in rows {
+        let sid: String = row.get("session_id");
+        if session.as_ref().is_some_and(|s| s != &sid) {
+            continue;
+        }
+        let received: DateTime<Utc> = row.get("received_at");
+        let at = match row.get::<Option<i64>, _>("broker_timestamp") {
+            Some(t) => match DateTime::from_timestamp_millis(t) {
+                Some(t) => t,
+                None => continue,
+            },
+            None => received,
+        };
+        if at < from || at >= close || at > received {
+            continue;
+        }
+        let seq: i64 = row.get("seq");
+        let b = row.get::<Option<i64>, _>("bid_e5").filter(|v| *v > 0);
+        let a = row.get::<Option<i64>, _>("ask_e5").filter(|v| *v > 0);
+        if b.is_none() && a.is_none() {
+            continue;
+        }
+        session = Some(sid);
+        if bid.is_none() {
+            bid = b.map(|v| (v as f64 / 100000.0, at, seq));
+        }
+        if ask.is_none() {
+            ask = a.map(|v| (v as f64 / 100000.0, at, seq));
+        }
+        if bid.is_some() && ask.is_some() {
+            break;
+        }
+    }
+    Ok(match(bid,ask,session){
+        (Some((bid,bid_at,bs)),Some((ask,ask_at,asq)),Some(sid)) if bid<=ask=>Some(PrecloseQuote{bid,ask,bid_at,ask_at,source:format!("ticks/account={account}/symbol={symbol}/session={sid}/bid_seq={bs}/ask_seq={asq}")}),
+        _=>None
+    })
+}

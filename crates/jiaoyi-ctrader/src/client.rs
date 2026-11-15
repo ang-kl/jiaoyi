@@ -144,6 +144,7 @@ type Writer = Box<dyn AsyncWrite + Send + Unpin>;
 struct EntryState {
     generation: u64,
     quotes: HashMap<(i64, i64), Quote>,
+    broker_dated_quotes: HashMap<(i64, i64), Quote>,
     revisions: HashMap<i64, u64>,
     conversion_paths: HashMap<(i64, i64, i64), Vec<crate::margin::ConversionLeg>>,
     spot_subscriptions: HashSet<(i64, i64)>,
@@ -240,6 +241,8 @@ impl EntryState {
 
     fn invalidate(&mut self, accounts: &[i64]) {
         self.quotes
+            .retain(|(id, _), _| !accounts.is_empty() && !accounts.contains(id));
+        self.broker_dated_quotes
             .retain(|(id, _), _| !accounts.is_empty() && !accounts.contains(id));
         self.conversion_paths
             .retain(|(id, _, _), _| !accounts.is_empty() && !accounts.contains(id));
@@ -619,6 +622,17 @@ impl Connection {
             .cloned()
     }
 
+    /// Original broker quote timestamps for existing-book accounting only.
+    /// A weekend subscription response must not become a fresh pre-close quote.
+    pub fn broker_dated_quote_snapshot(&self, account: i64, symbol: i64) -> Option<Quote> {
+        self.entry_state
+            .lock()
+            .unwrap()
+            .broker_dated_quotes
+            .get(&(account, symbol))
+            .cloned()
+    }
+
     pub fn conversion_status(&self, account: i64) -> serde_json::Value {
         let state = self.entry_state.lock().unwrap();
         let now = Utc::now();
@@ -935,6 +949,9 @@ fn route(
                 state
                     .conversion_paths
                     .retain(|(id, _, _), _| *id != account);
+                state
+                    .broker_dated_quotes
+                    .retain(|(id, _), _| *id != account);
                 state.symbol_cache.remove(&account);
                 let revision = state.revisions.entry(account).or_default();
                 *revision = revision.saturating_add(1);
@@ -955,6 +972,17 @@ fn route(
                     }
                     if let Some(ask) = event.ask {
                         quote.ask = Some((ask as f64 / 100_000.0, received_at));
+                    }
+                    let dated = state.broker_dated_quotes.entry(key).or_default();
+                    let at = event
+                        .timestamp
+                        .and_then(DateTime::<Utc>::from_timestamp_millis)
+                        .filter(|t| *t <= received_at);
+                    if let Some(bid) = event.bid {
+                        dated.bid = at.map(|t| (bid as f64 / 100_000.0, t));
+                    }
+                    if let Some(ask) = event.ask {
+                        dated.ask = at.map(|t| (ask as f64 / 100_000.0, t));
                     }
                 }
             }
@@ -1881,6 +1909,60 @@ impl AccountSession<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn broker_dated_accounting_quotes_preserve_time_and_clear_on_invalidation() {
+        let (client, mut server) = tokio::io::duplex(4096);
+        let conn = Connection::from_stream(client, Duration::from_secs(1));
+        let mut spots = conn.spot_events();
+        let original = Utc::now() - chrono::Duration::days(2);
+        let event = pb::ProtoOaSpotEvent {
+            ctid_trader_account_id: 49236051,
+            symbol_id: 5,
+            bid: Some(67741),
+            ask: Some(67754),
+            timestamp: Some(original.timestamp_millis()),
+            ..Default::default()
+        };
+        for timestamp in [event.timestamp, None] {
+            let mut update = event.clone();
+            update.timestamp = timestamp;
+            write_frame(
+                &mut server,
+                &ProtoMessage {
+                    payload_type: Oa::ProtoOaSpotEvent as u32,
+                    payload: Some(update.encode_to_vec()),
+                    client_msg_id: None,
+                },
+            )
+            .await
+            .unwrap();
+            let received = tokio::time::timeout(Duration::from_secs(1), spots.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            let dated = conn.broker_dated_quote_snapshot(49236051, 5).unwrap();
+            if timestamp.is_some() {
+                assert_eq!(
+                    dated.bid.unwrap().1.timestamp_millis(),
+                    original.timestamp_millis()
+                );
+                assert_eq!(
+                    dated.ask.unwrap().1.timestamp_millis(),
+                    original.timestamp_millis()
+                );
+                assert!(dated.ask.unwrap().1 < received.received_at - chrono::Duration::days(1));
+            } else {
+                assert!(
+                    dated.bid.is_none() && dated.ask.is_none(),
+                    "missing broker time must not renew historical evidence"
+                );
+            }
+            assert!(conn.broker_dated_quote_snapshot(46130058, 5).is_none());
+        }
+        conn.entry_state.lock().unwrap().invalidate(&[49236051]);
+        assert!(conn.broker_dated_quote_snapshot(49236051, 5).is_none());
+    }
 
     #[test]
     fn median_odd_even_and_empty() {
