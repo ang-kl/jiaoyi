@@ -38,6 +38,7 @@ pub(super) struct Prepared {
 pub(super) struct Cache {
     pub plans: HashMap<i64, Prepared>,
     pub errors: HashMap<i64, String>,
+    pub attempts: HashMap<i64, Value>,
 }
 
 fn same_number(a: f64, b: f64) -> bool {
@@ -589,13 +590,23 @@ pub(super) async fn run(
             match q {
                 Some(q) => {
                     let id = q.id;
-                    Some((id, prepare(pool, allowlist, env, session, &hash, q).await))
+                    let started = tokio::time::Instant::now();
+                    let source_age_ms = started.duration_since(q.source_at).as_millis();
+                    let result = prepare(pool, allowlist, env, session, &hash, q).await;
+                    let detail = json!({"completed_at":Utc::now(),
+                        "source_age_at_start_ms":source_age_ms,
+                        "preparation_duration_ms":started.elapsed().as_millis(),
+                        "prepared_successfully":result.is_ok(),
+                        "failure":result.as_ref().err(),
+                        "evidence_scope":"last completed read-only preparation; final writer guards still apply"});
+                    Some((id, result, detail))
                 }
                 None => None,
             }
         };
         let results = tokio::select! {_=shutdown.wait()=>return Ok(()),r=async{tokio::join!(run(jobs.next()),run(jobs.next()))}=>r};
-        for (id, result) in [results.0, results.1].into_iter().flatten() {
+        for (id, result, detail) in [results.0, results.1].into_iter().flatten() {
+            cache.attempts.insert(id, detail);
             match result {
                 Ok(p) => {
                     cache.plans.insert(id, p);

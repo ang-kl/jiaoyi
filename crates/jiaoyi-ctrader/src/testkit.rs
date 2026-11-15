@@ -82,6 +82,8 @@ pub struct FakeBroker {
     pub trader: Option<pb::ProtoOaTrader>,
     /// Explicit margin replies; None gives a well-funded synthetic account.
     pub margin_reply: Option<pb::ProtoOaExpectedMarginRes>,
+    /// Test-only gate for independently delayed expected-margin replies.
+    pub margin_reply_gate: Option<Arc<tokio::sync::Semaphore>>,
     pub margin_calls_reply: Option<pb::ProtoOaMarginCallListRes>,
     /// Ordered account-read replies; empty queues use the normal fake state.
     pub scripted_traders: Arc<Mutex<VecDeque<pb::ProtoOaTrader>>>,
@@ -769,7 +771,7 @@ impl FakeBroker {
                             .unwrap()
                             .margin_requests
                             .push((request.symbol_id, request.volume.clone()));
-                        out.push(reply(
+                        let message = reply(
                             id,
                             Oa::ProtoOaExpectedMarginRes as i32,
                             self.margin_reply
@@ -789,7 +791,18 @@ impl FakeBroker {
                                         .collect(),
                                 })
                                 .encode_to_vec(),
-                        ));
+                        );
+                        if let Some(gate) = self.margin_reply_gate.clone() {
+                            let writer = wr.clone();
+                            tokio::spawn(async move {
+                                if let Ok(permit) = gate.acquire().await {
+                                    permit.forget();
+                                    let _ = write_frame(&mut *writer.lock().await, &message).await;
+                                }
+                            });
+                        } else {
+                            out.push(message);
+                        }
                     } else if pt == Oa::ProtoOaMarginCallListReq as i32 {
                         out.push(reply(
                             id,

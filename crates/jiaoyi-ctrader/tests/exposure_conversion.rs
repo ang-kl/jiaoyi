@@ -140,3 +140,96 @@ async fn foreign_manual_position_warms_broker_chain_once_and_margin_check_accept
     );
     assert!(log.orders.is_empty());
 }
+
+#[tokio::test]
+async fn margin_reads_are_bounded_parallel_and_preserve_exact_reserves() {
+    let trader = pb::ProtoOaTrader {
+        ctid_trader_account_id: ACCOUNT,
+        balance: 100_000,
+        deposit_asset_id: 1,
+        money_digits: Some(2),
+        ..Default::default()
+    };
+    let gate = std::sync::Arc::new(tokio::sync::Semaphore::new(0));
+    let fake = FakeBroker {
+        account_id: ACCOUNT,
+        trader: Some(trader.clone()),
+        light_symbols: (10..14).map(|id| symbol(id, id, 1)).collect(),
+        margin_reply_gate: Some(gate.clone()),
+        ..Default::default()
+    };
+    for id in 10..13 {
+        fake.positions.lock().unwrap().push(pb::ProtoOaPosition {
+            position_id: id,
+            position_status: 1,
+            price: Some(100.0),
+            stop_loss: Some(99.0),
+            used_margin: Some(100),
+            money_digits: Some(2),
+            trade_data: pb::ProtoOaTradeData {
+                symbol_id: id,
+                volume: 100,
+                trade_side: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+    }
+    let (conn, log) = fake.spawn();
+    conn.application_auth("id", &Secret::new("secret"))
+        .await
+        .unwrap();
+    let allow = Allowlist::parse(Some("49236051")).unwrap();
+    let session = conn
+        .account_auth(&allow.permit(ACCOUNT).unwrap(), &Secret::new("token"))
+        .await
+        .unwrap();
+    let book = session.margin_book().await.unwrap();
+    let command = Command::Open {
+        symbol_id: 13,
+        side: Side::Buy,
+        volume: 100,
+        relative_stop: 100_000,
+        relative_take_profit: None,
+        limits: VolumeLimits {
+            min: 1,
+            step: 1,
+            max: None,
+            digits: 2,
+        },
+        quote_to_deposit: Some(1.0),
+        label: "jiaoyi-s3".into(),
+    };
+    let release_batches = async {
+        for expected in [2, 4] {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let seen = log.lock().unwrap().margin_requests.len();
+                    if seen >= expected {
+                        assert_eq!(seen, expected, "at most two estimates may be in flight");
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+            })
+            .await
+            .expect("independent estimates must not wait for one another's reply");
+            gate.add_permits(2);
+        }
+    };
+    let (receipt, ()) = tokio::join!(
+        margin::check(&session, &trader, &book, &command, 250.0),
+        release_batches
+    );
+    let receipt = receipt.unwrap();
+    assert_eq!(receipt.projected_level_pct, Some(25_000.0));
+    assert_eq!(receipt.stressed_level_pct, Some(24_900.0));
+    let proof = receipt.fx_guard.unwrap();
+    assert_eq!(proof.base_loss_reserve, 4.0);
+    assert_eq!(proof.projected_margin, 4.0);
+    let log = log.lock().unwrap();
+    assert_eq!(log.margin_requests.len(), 4);
+    assert!(log.orders.is_empty());
+    assert!(log.amends.is_empty());
+    assert!(log.closes.is_empty());
+}
