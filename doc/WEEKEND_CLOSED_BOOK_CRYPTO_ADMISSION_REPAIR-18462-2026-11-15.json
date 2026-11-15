@@ -1,7 +1,7 @@
 {
-  "trace": "\u211618,462",
-  "status": "deployed_with_admission_publication_followup_in_progress",
-  "generated_at_utc": "2026-11-15T00:37:09.983876+00:00",
+  "trace": "№18,462",
+  "status": "implemented_merged_deployed_and_verified",
+  "generated_at_utc": "2026-11-15T02:05:00.224404+00:00",
   "repository": "ang-kl/jiaoyi",
   "base_commit": "e4dc700a87989e03e811e44daeeab01727c891b3",
   "production_policy": "s3_macro_pullback_owner_18409_v1",
@@ -341,11 +341,1212 @@
         "seconds": 18.29
       }
     ],
-    "workspace_tests_passed": 810,
+    "workspace_tests_passed": 812,
     "workspace_tests_ignored": 1,
-    "test_environment_note": "Local PostgreSQL initially stopped; started the owned local development container. Sunday restart fixture corrected to create its selected Friday tick partition; S1 FX-conversion fixture now supplies an explicitly open broker calendar. No production calendar changes."
+    "test_environment_note": "Local PostgreSQL initially stopped; started the owned local development container. Sunday restart fixture corrected to create its selected Friday tick partition; S1 FX-conversion fixture now supplies an explicitly open broker calendar. No production calendar changes.",
+    "initial_rollout_workspace_tests_passed": 810,
+    "final_release_commands": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--all-targets"
+        ],
+        "exit_code": 0,
+        "seconds": 11.5
+      },
+      {
+        "name": "test",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "seconds": 309.34
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 13.21
+      },
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 0.88
+      }
+    ]
   },
-  "release": {
+  "additional_diagnostic": "Commission evidence expiry is now visible in per-symbol entry preparation. No commission TTL or commission amounts changed.",
+  "evidence_hashes": {
+    "refusal-evidence.json": "6afbdc549fbc1ece42e0313329dd6cd6e8eba86e4660253f89de6ea326c64442",
+    "exact-windows.json": "48f7b3c8f1bb9b51fa8f7dcc4a6b46c295940527654108591ede22f6cfa9ec25",
+    "fx-calendars.json": "26249a84dbddc6a08482a20955e64722a7c7ab7fca6daaa8a5acba71314d4f2f",
+    "preclose-evidence.json": "bd7c8878545f8f7365dacc5fbc57c854ac7fa9cb8e02330bb28ea164d73c40c1",
+    "eur-evidence.json": "c4c24b373f16555f109735fed666a209a0ca82399ca40a14f974432809ccfe60",
+    "last-eur-evidence.json": "6367b5869e5f6c163f7028fa106c22be21405387c42a709c49158a472df4d93f",
+    "baseline-health.json": "cf0fa5e62fea3ccca25121aaa2367b45118fc0555276b3b046d01bb6bbecd24e",
+    "baseline-runtime.json": "9174d443c58c3b70167a1300bd7b3cd058149f58d06d59e646d41f2188eb9d65",
+    "baseline-ledger.json": "facd7233474b580990035b87cb5e77a4f9983f81b47713ab4c18bc01174904b1",
+    "baseline-deployment.json": "b8c09d251ed4e369b0eab01e04653ac692d3c5530c0a5ef8ba0cc6496854dd5e",
+    "history-post2-health.json": "9247ff8aee2d1b66926c32a538cb2107c26b2e2016bb3c4cc11d9f79ea5f9163",
+    "history-post2-runtime.json": "79a6ab3c0dbfe135ef125209391815a7e27f9c915ba918b7c5b55aa8341cd49c",
+    "history-post2-ledger.json": "7cf4512702f97e724f345ea205aa29c0eae96bf3817f9b74beff2de34d82516e",
+    "history-post2-deployment.json": "d54198b58431a0420a7644b2193e5882685a159c3bb08e674d4bfa78aa937d1b",
+    "history-health3.json": "865158a9c69347cd6ef1f95ad3029a820b6339e9846c08cda9722874ecb7f78b",
+    "crypto-stored-origins.json": "00d97826e50165a89c5d29c22191d7a599e90572931e4b9793dc3ce0b2414ed5",
+    "kelly-counts.json": "d9246f66c807a2d83e130e1da24b180da40ca2ddaf123434d7ff14b09debc2f9",
+    "history-checks/checks.json": "58c9b88090c88b05dd3f2aa05face3ef7c559767ffd55e1afd1cbdcdddeb5e4d",
+    "history-release/ci-green.json": "b8bb10c46904e518f3cd13a403c5615be454b09ae77454bc673f5fa889a4150a",
+    "history-release/readiness-observations.json": "7d9821a6fac879809d3fab6ffe6fa660b0c4db13cb8c435317994c8729b44a85",
+    "history-release/whole-task-verification.json": "eec98ea4ddc781dea023356249a947eca13dbcbf4cbeccdce82d06b4f6ebf61b"
+  },
+  "protected_trading_rs_sha256": "b1c6f9951a7e8e74e81a9edb345ba8d251fef37e81aa949a5930ef722be80cd3",
+  "financial_pass": false,
+  "peer_context_followup": {
+    "scope": "current opening/context restoration only; retain invalidation, consumed mark, source-arm context and all entry/exit/ownership gates",
+    "regression": "owner18409_restart_restores_london_and_crypto_from_postgres now exercises quote-driven restart with no arm and an already-evaluated mark; original tick origin restored and no rearm/order/amend/close",
+    "focused_test_passed": true,
+    "checks": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--all-targets"
+        ],
+        "exit_code": 0,
+        "seconds": 3.45
+      },
+      {
+        "name": "test",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "seconds": 294.72
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 9.52
+      },
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 1.09
+      }
+    ],
+    "tests": {
+      "passed": 810,
+      "failed": 0,
+      "ignored": 1
+    },
+    "release": {
+      "pr": 231,
+      "merge_commit": "b47cac922725377d4a1191a7d48e2f2ed13a2ded",
+      "deployment": {
+        "id": "b24e0244-9c8c-4187-ad98-51f1cf69ee09",
+        "status": "SUCCESS",
+        "createdAt": "2026-11-15T01:12:22.640Z",
+        "commit": "b47cac922725377d4a1191a7d48e2f2ed13a2ded",
+        "message": null,
+        "image_digest": "sha256:bf1426d63a22242324e26f329789e58ef6d7c2036565de27f58e2fb5aedb79e2"
+      },
+      "accounts_connected_and_unpaused": 4,
+      "observed_at": "2026-11-15T01:17:29.716822+00:00",
+      "current_0800_references": 7,
+      "original_available_references_preserved": 6,
+      "s1_locked_reference_cells": 1,
+      "quiet_observation_seconds": 130.863855,
+      "quiet_session_end_attempts": 0,
+      "quiet_market_closed_rejections": 0,
+      "startup_market_closed_rejections": 2,
+      "gold_deadlines_unchanged": [
+        {
+          "position_id": 262583136,
+          "account_id": 47790949,
+          "entry_key": "s3:47790949:41:1794580200:1",
+          "deadline_before": "2026-11-13T21:55:00Z",
+          "deadline_after": "2026-11-13T21:55:00Z",
+          "entire_opening_record_unchanged": true
+        },
+        {
+          "position_id": 262583980,
+          "account_id": 46130058,
+          "entry_key": "s3:46130058:41:1794580200:1",
+          "deadline_before": "2026-11-13T21:55:00Z",
+          "deadline_after": "2026-11-13T21:55:00Z",
+          "entire_opening_record_unchanged": true
+        }
+      ],
+      "live_book_unchanged": true,
+      "recorded_live_interference": 0
+    }
+  },
+  "latency_followup": {
+    "reason": "Six snapshots after successful FX hydration still showed unavailable/expired prepared admissions. No full-ready claim is made.",
+    "observations": [
+      {
+        "at": "2026-11-15T01:17:33.546751+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:18:05.362472+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:18:36.378454+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:19:06.500837+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:19:43.696165+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:20:17.135844+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch recorded; later turn required",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch recorded; later turn required",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "change": "Read expected margins in batches of at most two, preserving accumulation order and final account recheck; add last-attempt timing to health.",
+    "freshness_limits_unchanged": true,
+    "focused_bounded_concurrency_and_exact_reserve_test_passed": true,
+    "full_required_local_checks": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--all-targets"
+        ],
+        "exit_code": 0,
+        "seconds": 0.33
+      },
+      {
+        "name": "test",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "seconds": 324.63
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 16.78
+      },
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 0.97
+      }
+    ],
+    "production_effect_on_preparation_expiry": "BTC succeeds in 3.159–3.365s, but publication still waits for 7.641–7.905s ETH failure",
+    "release": {
+      "pr": 232,
+      "merge_commit": "08c8eb09b55de77dbee2ce6d3184814dacc2a4b6",
+      "deployment": {
+        "id": "d8df695c-6af7-4727-90ce-8a9dcff8661d",
+        "status": "SUCCESS",
+        "createdAt": "2026-11-15T01:32:16.569Z",
+        "commit": "08c8eb09b55de77dbee2ce6d3184814dacc2a4b6",
+        "message": null,
+        "image_digest": "sha256:7d5203025cf3f2f092aa0152f53f63d1210f6f7a564419ab40cf5521afc5922b"
+      },
+      "observed_at": "2026-11-15T01:37:30.016435+00:00",
+      "quiet_observation_seconds": 130.661309,
+      "quiet_session_end_attempts": 0,
+      "quiet_market_closed_rejections": 0
+    }
+  },
+  "admission_history_and_publication_followup": {
+    "counts": {
+      "rows": [
+        {
+          "symbol": "BTCUSD",
+          "account_id": 46130058,
+          "filled_positions": 6,
+          "opening_attempt_keys": 18
+        },
+        {
+          "symbol": "ETHUSD",
+          "account_id": 46130058,
+          "filled_positions": 11,
+          "opening_attempt_keys": 20
+        },
+        {
+          "symbol": "BTCUSD",
+          "account_id": 47790949,
+          "filled_positions": 7,
+          "opening_attempt_keys": 17
+        },
+        {
+          "symbol": "ETHUSD",
+          "account_id": 47790949,
+          "filled_positions": 12,
+          "opening_attempt_keys": 20
+        }
+      ],
+      "captured_at": "2026-11-15T01:39:30.435543+00:00"
+    },
+    "timing": [
+      {
+        "account_id": 46130058,
+        "attempts": {
+          "BTCUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:36:58.099625759Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3365,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 76
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "ETHUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:37:02.640011726Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": "prepared admission expired; background refresh required",
+              "preparation_duration_ms": 7905,
+              "prepared_successfully": false,
+              "source_age_at_start_ms": 77
+            },
+            "last_refusal": "prepared admission expired; background refresh required",
+            "prepared_now": false,
+            "source_refusal": null
+          }
+        }
+      },
+      {
+        "account_id": 47790949,
+        "attempts": {
+          "BTCUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:37:01.605508737Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3159,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 162
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "ETHUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:37:06.086982700Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": "prepared admission expired; background refresh required",
+              "preparation_duration_ms": 7641,
+              "prepared_successfully": false,
+              "source_age_at_start_ms": 160
+            },
+            "last_refusal": "prepared admission expired; background refresh required",
+            "prepared_now": false,
+            "source_refusal": null
+          }
+        }
+      }
+    ],
+    "fix": "Always apply the existing distinct filled-position upper bound before full Kelly history; publish either completed read-only result immediately instead of waiting for its sibling.",
+    "policy_unchanged": "Kelly still begins at 20 closed positions; negative eligible Kelly still refuses; size and all freshness limits unchanged.",
+    "focused_tests_passed": [
+      "20 attempt keys with 11 distinct positions skips full-history query; one key with 20 positions still queries",
+      "fast result visible while sibling is deliberately blocked"
+    ],
+    "full_checks": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--all-targets"
+        ],
+        "exit_code": 0,
+        "seconds": 11.5
+      },
+      {
+        "name": "test",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "seconds": 309.34
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 13.21
+      },
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 0.88
+      }
+    ],
+    "stack_regression": {
+      "first_full_suite": "caught stack overflow before deployment",
+      "fix": "heap-pin both read-only jobs before async composition",
+      "normal_stack_actor_regression_passed": true,
+      "full_suite_rerun_required": true
+    },
+    "status": "merged_deployed_verified",
+    "release": {
+      "pr": 233,
+      "merge_commit": "65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2",
+      "ci": {
+        "headRefOid": "5b0449463ecf297a4b4ff37397072228e78bba22",
+        "mergeStateStatus": "CLEAN",
+        "mergeable": "MERGEABLE",
+        "state": "OPEN",
+        "statusCheckRollup": [
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-11-15T01:54:08Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/ang-kl/jiaoyi/actions/runs/43664674669/job/132661304863",
+            "name": "check",
+            "startedAt": "2026-11-15T01:46:49Z",
+            "status": "COMPLETED",
+            "workflowName": "ci"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-11-15T01:49:30Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/ang-kl/jiaoyi/actions/runs/43664674669/job/132661304838",
+            "name": "docker",
+            "startedAt": "2026-11-15T01:46:49Z",
+            "status": "COMPLETED",
+            "workflowName": "ci"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-11-15T01:48:09Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/ang-kl/jiaoyi/actions/runs/43664674669/job/132661304552",
+            "name": "engineering",
+            "startedAt": "2026-11-15T01:46:49Z",
+            "status": "COMPLETED",
+            "workflowName": "ci"
+          }
+        ]
+      },
+      "prepared_now_observed_cells": [
+        {
+          "response_received_at": "2026-11-15T02:01:51.016051+00:00",
+          "account_id": 47790949,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:01:33.478702730Z",
+          "entry_preparation": {
+            "commission_age_seconds": 259,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:01:32.698872257Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3504,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 27
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63054.85, extreme: 61982.07); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "response_received_at": "2026-11-15T02:01:51.016051+00:00",
+          "account_id": 47790949,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:01:33.478702730Z",
+          "entry_preparation": {
+            "commission_age_seconds": 259,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:01:32.480724960Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3286,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 168
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1739.26, extreme: 1709.67); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "response_received_at": "2026-11-15T02:03:39.640798+00:00",
+          "account_id": 46130058,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:03:21.054369587Z",
+          "entry_preparation": {
+            "commission_age_seconds": 366,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:03:20.090264766Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3647,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 61
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63054.85, extreme: 61982.07); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "response_received_at": "2026-11-15T02:03:39.640798+00:00",
+          "account_id": 46130058,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:03:21.054369587Z",
+          "entry_preparation": {
+            "commission_age_seconds": 366,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:03:20.267681032Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3824,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 105
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1739.26, extreme: 1709.67); touch not yet recorded",
+            "state": "armed"
+          }
+        }
+      ]
+    }
+  },
+  "first_rollout": {
     "pr": 230,
     "merge_commit": "72276a2624de1f835d1dcc90c857b20332e4b184",
     "deployment_status": "SUCCESS",
@@ -1320,98 +2521,1552 @@
     },
     "followup": "Restore current peer context even when the durable arm was invalidated or its decision mark already evaluated. Post-followup verification will be published on the follow-up PR."
   },
-  "additional_diagnostic": "Commission evidence expiry is now visible in per-symbol entry preparation. No commission TTL or commission amounts changed.",
-  "evidence_hashes": {
-    "refusal-evidence.json": "6afbdc549fbc1ece42e0313329dd6cd6e8eba86e4660253f89de6ea326c64442",
-    "exact-windows.json": "48f7b3c8f1bb9b51fa8f7dcc4a6b46c295940527654108591ede22f6cfa9ec25",
-    "fx-calendars.json": "26249a84dbddc6a08482a20955e64722a7c7ab7fca6daaa8a5acba71314d4f2f",
-    "preclose-evidence.json": "bd7c8878545f8f7365dacc5fbc57c854ac7fa9cb8e02330bb28ea164d73c40c1",
-    "eur-evidence.json": "c4c24b373f16555f109735fed666a209a0ca82399ca40a14f974432809ccfe60",
-    "last-eur-evidence.json": "6367b5869e5f6c163f7028fa106c22be21405387c42a709c49158a472df4d93f",
-    "baseline-health.json": "cf0fa5e62fea3ccca25121aaa2367b45118fc0555276b3b046d01bb6bbecd24e",
-    "baseline-runtime.json": "9174d443c58c3b70167a1300bd7b3cd058149f58d06d59e646d41f2188eb9d65",
-    "baseline-ledger.json": "facd7233474b580990035b87cb5e77a4f9983f81b47713ab4c18bc01174904b1",
-    "baseline-deployment.json": "b8c09d251ed4e369b0eab01e04653ac692d3c5530c0a5ef8ba0cc6496854dd5e"
-  },
-  "protected_trading_rs_sha256": "b1c6f9951a7e8e74e81a9edb345ba8d251fef37e81aa949a5930ef722be80cd3",
-  "financial_pass": false,
-  "peer_context_followup": {
-    "scope": "current opening/context restoration only; retain invalidation, consumed mark, source-arm context and all entry/exit/ownership gates",
-    "regression": "owner18409_restart_restores_london_and_crypto_from_postgres now exercises quote-driven restart with no arm and an already-evaluated mark; original tick origin restored and no rearm/order/amend/close",
-    "focused_test_passed": true,
-    "checks": [
+  "release": {
+    "pr": 233,
+    "url": "https://github.com/ang-kl/jiaoyi/pull/233",
+    "merge_commit": "65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2",
+    "merged_at": "2026-11-15T01:55:05Z",
+    "deployment": {
+      "id": "3d8b18d5-4d9f-4007-8fff-22eb25d5ea73",
+      "status": "SUCCESS",
+      "createdAt": "2026-11-15T01:55:07.273Z",
+      "commit": "65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2",
+      "message": null,
+      "image_digest": "sha256:42609036a809db4674fdc007804d6a73ce15369fbf1e6f356981ba47ddd86d6c"
+    },
+    "ci_head": "5b0449463ecf297a4b4ff37397072228e78bba22",
+    "ci_checks": [
       {
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-15T01:54:08Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/ang-kl/jiaoyi/actions/runs/43664674669/job/132661304863",
         "name": "check",
-        "command": [
-          "cargo",
-          "check",
-          "--workspace",
-          "--all-targets"
-        ],
-        "exit_code": 0,
-        "seconds": 3.45
+        "startedAt": "2026-11-15T01:46:49Z",
+        "status": "COMPLETED",
+        "workflowName": "ci"
       },
       {
-        "name": "test",
-        "command": [
-          "cargo",
-          "test",
-          "--workspace"
-        ],
-        "exit_code": 0,
-        "seconds": 294.72
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-15T01:49:30Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/ang-kl/jiaoyi/actions/runs/43664674669/job/132661304838",
+        "name": "docker",
+        "startedAt": "2026-11-15T01:46:49Z",
+        "status": "COMPLETED",
+        "workflowName": "ci"
       },
       {
-        "name": "clippy",
-        "command": [
-          "cargo",
-          "clippy",
-          "--workspace",
-          "--",
-          "-D",
-          "warnings"
-        ],
-        "exit_code": 0,
-        "seconds": 9.52
-      },
-      {
-        "name": "fmt",
-        "command": [
-          "cargo",
-          "fmt",
-          "--all",
-          "--check"
-        ],
-        "exit_code": 0,
-        "seconds": 1.09
+        "__typename": "CheckRun",
+        "completedAt": "2026-11-15T01:48:09Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/ang-kl/jiaoyi/actions/runs/43664674669/job/132661304552",
+        "name": "engineering",
+        "startedAt": "2026-11-15T01:46:49Z",
+        "status": "COMPLETED",
+        "workflowName": "ci"
       }
     ],
-    "tests": {
-      "passed": 810,
-      "failed": 0,
-      "ignored": 1
-    },
-    "release": {
-      "pr": 231,
-      "merge_commit": "b47cac922725377d4a1191a7d48e2f2ed13a2ded",
-      "deployment": {
-        "id": "b24e0244-9c8c-4187-ad98-51f1cf69ee09",
-        "status": "SUCCESS",
-        "createdAt": "2026-11-15T01:12:22.640Z",
-        "commit": "b47cac922725377d4a1191a7d48e2f2ed13a2ded",
-        "message": null,
-        "image_digest": "sha256:bf1426d63a22242324e26f329789e58ef6d7c2036565de27f58e2fb5aedb79e2"
+    "postdeployment_health_response_at": "2026-11-15T02:00:30.526791+00:00",
+    "accounts_connected_and_unpaused": 4,
+    "affected_demo_crypto_preparations_verified": true,
+    "prepared_now_observed_cells": [
+      {
+        "response_received_at": "2026-11-15T02:01:51.016051+00:00",
+        "account_id": 47790949,
+        "symbol": "BTCUSD",
+        "actor_last_quote_at": "2026-11-15T02:01:33.478702730Z",
+        "entry_preparation": {
+          "commission_age_seconds": 259,
+          "commission_error": null,
+          "commission_expired": false,
+          "evidence_scope": "background admission; final writer checks remain mandatory",
+          "last_completed_attempt": {
+            "completed_at": "2026-11-15T02:01:32.698872257Z",
+            "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+            "failure": null,
+            "preparation_duration_ms": 3504,
+            "prepared_successfully": true,
+            "source_age_at_start_ms": 27
+          },
+          "last_refusal": null,
+          "prepared_now": true,
+          "source_refusal": null
+        },
+        "entry_gate": {
+          "code": "armed_pullback",
+          "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63054.85, extreme: 61982.07); touch not yet recorded",
+          "state": "armed"
+        }
       },
-      "accounts_connected_and_unpaused": 4,
-      "observed_at": "2026-11-15T01:17:29.716822+00:00",
-      "current_0800_references": 7,
-      "original_available_references_preserved": 6,
-      "s1_locked_reference_cells": 1,
-      "quiet_observation_seconds": 130.863855,
-      "quiet_session_end_attempts": 0,
-      "quiet_market_closed_rejections": 0,
-      "startup_market_closed_rejections": 2,
-      "gold_deadlines_unchanged": [
+      {
+        "response_received_at": "2026-11-15T02:01:51.016051+00:00",
+        "account_id": 47790949,
+        "symbol": "ETHUSD",
+        "actor_last_quote_at": "2026-11-15T02:01:33.478702730Z",
+        "entry_preparation": {
+          "commission_age_seconds": 259,
+          "commission_error": null,
+          "commission_expired": false,
+          "evidence_scope": "background admission; final writer checks remain mandatory",
+          "last_completed_attempt": {
+            "completed_at": "2026-11-15T02:01:32.480724960Z",
+            "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+            "failure": null,
+            "preparation_duration_ms": 3286,
+            "prepared_successfully": true,
+            "source_age_at_start_ms": 168
+          },
+          "last_refusal": null,
+          "prepared_now": true,
+          "source_refusal": null
+        },
+        "entry_gate": {
+          "code": "armed_pullback",
+          "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1739.26, extreme: 1709.67); touch not yet recorded",
+          "state": "armed"
+        }
+      },
+      {
+        "response_received_at": "2026-11-15T02:03:39.640798+00:00",
+        "account_id": 46130058,
+        "symbol": "BTCUSD",
+        "actor_last_quote_at": "2026-11-15T02:03:21.054369587Z",
+        "entry_preparation": {
+          "commission_age_seconds": 366,
+          "commission_error": null,
+          "commission_expired": false,
+          "evidence_scope": "background admission; final writer checks remain mandatory",
+          "last_completed_attempt": {
+            "completed_at": "2026-11-15T02:03:20.090264766Z",
+            "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+            "failure": null,
+            "preparation_duration_ms": 3647,
+            "prepared_successfully": true,
+            "source_age_at_start_ms": 61
+          },
+          "last_refusal": null,
+          "prepared_now": true,
+          "source_refusal": null
+        },
+        "entry_gate": {
+          "code": "armed_pullback",
+          "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63054.85, extreme: 61982.07); touch not yet recorded",
+          "state": "armed"
+        }
+      },
+      {
+        "response_received_at": "2026-11-15T02:03:39.640798+00:00",
+        "account_id": 46130058,
+        "symbol": "ETHUSD",
+        "actor_last_quote_at": "2026-11-15T02:03:21.054369587Z",
+        "entry_preparation": {
+          "commission_age_seconds": 366,
+          "commission_error": null,
+          "commission_expired": false,
+          "evidence_scope": "background admission; final writer checks remain mandatory",
+          "last_completed_attempt": {
+            "completed_at": "2026-11-15T02:03:20.267681032Z",
+            "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+            "failure": null,
+            "preparation_duration_ms": 3824,
+            "prepared_successfully": true,
+            "source_age_at_start_ms": 105
+          },
+          "last_refusal": null,
+          "prepared_now": true,
+          "source_refusal": null
+        },
+        "entry_gate": {
+          "code": "armed_pullback",
+          "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1739.26, extreme: 1709.67); touch not yet recorded",
+          "state": "armed"
+        }
+      }
+    ],
+    "all_four_prepared_simultaneously_claimed": false,
+    "readiness_scope": "Observed valid background proofs for each affected demo/symbol. Proofs expire and refresh; final writer, current quote, touch/turn, peer, ownership, risk and margin guards still apply. No test order was submitted.",
+    "health_timing_scope": "HTTP health clones actor trigger state at request start, then performs database reads. Response receipt time is not the instant of every embedded observation; actor quote and preparation completion times are retained.",
+    "snapshot_accounts": [
+      {
+        "account_id": 43002148,
+        "connected": true,
+        "paused": false,
+        "production_policy": "s3_macro_pullback_owner_18409_v1",
+        "crypto": {
+          "BTCUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": {
+                "completed_at": "2026-11-15T02:00:09.946186081Z",
+                "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+                "failure": "margin buffer: conversion quote stale/incomplete/crossed for broker symbol 4",
+                "preparation_duration_ms": 3780,
+                "prepared_successfully": false,
+                "source_age_at_start_ms": 120
+              },
+              "last_refusal": "margin buffer: conversion quote stale/incomplete/crossed for broker symbol 4",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "prepared_admission_unavailable",
+              "message": "Blocked: prepared admission unavailable; last refusal: margin buffer: conversion quote stale/incomplete/crossed for broker symbol 4",
+              "state": "blocked"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": -0.0,
+              "refusal": null
+            },
+            "opening_reference": {
+              "macro_context": {
+                "Ok": {
+                  "drift_20": -0.16729771243670744,
+                  "drift_5": -0.11422838050575557,
+                  "latest_bar_end": "2026-11-14T04:00:00Z"
+                }
+              },
+              "mid": 64127.63,
+              "prepared_at": "2026-11-15T01:57:17.112012111Z",
+              "quote": {
+                "ask": 64135.13,
+                "ask_at": "2026-11-15T00:00:00.080662Z",
+                "bid": 64120.13,
+                "bid_at": "2026-11-15T00:00:00.080662Z",
+                "mid": 64127.63,
+                "observed_at": "2026-11-15T00:00:00.080662Z",
+                "source": "recorded_ticks_native_open_6s"
+              },
+              "session_close": "2026-11-15T04:00:00Z",
+              "session_open": "2026-11-15T00:00:00Z"
+            }
+          },
+          "ETHUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": {
+                "completed_at": "2026-11-15T02:00:09.778658126Z",
+                "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+                "failure": "margin buffer: conversion quote stale/incomplete/crossed for broker symbol 4",
+                "preparation_duration_ms": 3613,
+                "prepared_successfully": false,
+                "source_age_at_start_ms": 120
+              },
+              "last_refusal": "margin buffer: conversion quote stale/incomplete/crossed for broker symbol 4",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "prepared_admission_unavailable",
+              "message": "Blocked: prepared admission unavailable; last refusal: margin buffer: conversion quote stale/incomplete/crossed for broker symbol 4",
+              "state": "blocked"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": -0.0,
+              "refusal": null
+            },
+            "opening_reference": {
+              "macro_context": {
+                "Ok": {
+                  "drift_20": -0.19061095460312694,
+                  "drift_5": -0.11741697659258155,
+                  "latest_bar_end": "2026-11-14T04:00:00Z"
+                }
+              },
+              "mid": 1768.85,
+              "prepared_at": "2026-11-15T01:57:17.112014171Z",
+              "quote": {
+                "ask": 1769.85,
+                "ask_at": "2026-11-15T00:00:00.080669Z",
+                "bid": 1767.85,
+                "bid_at": "2026-11-15T00:00:00.080669Z",
+                "mid": 1768.85,
+                "observed_at": "2026-11-15T00:00:00.080669Z",
+                "source": "recorded_ticks_native_open_6s"
+              },
+              "session_close": "2026-11-15T04:00:00Z",
+              "session_open": "2026-11-15T00:00:00Z"
+            }
+          }
+        },
+        "closed_book_provenance": {
+          "account_id": 43002148,
+          "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+          "closed_book_quotes": [
+            {
+              "account_id": 43002148,
+              "ask": 1.10215,
+              "ask_at": "2026-11-13T21:54:59.796Z",
+              "bid": 1.10212,
+              "bid_at": "2026-11-13T21:54:59.796Z",
+              "calendar": {
+                "holidays": [
+                  {
+                    "date": "2025-12-24",
+                    "end_second": 86399,
+                    "id": 4499,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-31",
+                    "end_second": 86399,
+                    "id": 4468,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-25",
+                    "end_second": 86400,
+                    "id": 4462,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2026-01-01",
+                    "end_second": 86400,
+                    "id": 4463,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  }
+                ],
+                "short_selling_enabled": true,
+                "symbol_id": 1,
+                "timezone": "America/New_York",
+                "trading_mode": 0,
+                "weekly_intervals": [
+                  [
+                    61260,
+                    147540
+                  ],
+                  [
+                    147660,
+                    233940
+                  ],
+                  [
+                    234060,
+                    320340
+                  ],
+                  [
+                    320460,
+                    406740
+                  ],
+                  [
+                    406860,
+                    492900
+                  ]
+                ]
+              },
+              "source": "connection_broker_timestamp_preclose_quote",
+              "verified_at": "2026-11-15T01:57:19.778953218Z"
+            },
+            {
+              "account_id": 43002148,
+              "ask": 159.725,
+              "ask_at": "2026-11-13T21:54:59.953Z",
+              "bid": 159.715,
+              "bid_at": "2026-11-13T21:54:59.953Z",
+              "calendar": {
+                "holidays": [
+                  {
+                    "date": "2025-12-24",
+                    "end_second": 86399,
+                    "id": 4499,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-31",
+                    "end_second": 86399,
+                    "id": 4468,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-25",
+                    "end_second": 86400,
+                    "id": 4462,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2026-01-01",
+                    "end_second": 86400,
+                    "id": 4463,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  }
+                ],
+                "short_selling_enabled": true,
+                "symbol_id": 4,
+                "timezone": "America/New_York",
+                "trading_mode": 0,
+                "weekly_intervals": [
+                  [
+                    61260,
+                    147540
+                  ],
+                  [
+                    147660,
+                    233940
+                  ],
+                  [
+                    234060,
+                    320340
+                  ],
+                  [
+                    320460,
+                    406740
+                  ],
+                  [
+                    406860,
+                    492900
+                  ]
+                ]
+              },
+              "source": "connection_broker_timestamp_preclose_quote",
+              "verified_at": "2026-11-15T01:57:19.778953218Z"
+            },
+            {
+              "account_id": 43002148,
+              "ask": 0.67757,
+              "ask_at": "2026-11-13T21:54:59.596Z",
+              "bid": 0.67746,
+              "bid_at": "2026-11-13T21:54:59.596Z",
+              "calendar": {
+                "holidays": [
+                  {
+                    "date": "2025-12-24",
+                    "end_second": 86399,
+                    "id": 4499,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-31",
+                    "end_second": 86399,
+                    "id": 4468,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-25",
+                    "end_second": 86400,
+                    "id": 4462,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2026-01-01",
+                    "end_second": 86400,
+                    "id": 4463,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  }
+                ],
+                "short_selling_enabled": true,
+                "symbol_id": 5,
+                "timezone": "America/New_York",
+                "trading_mode": 0,
+                "weekly_intervals": [
+                  [
+                    61260,
+                    147540
+                  ],
+                  [
+                    147660,
+                    233940
+                  ],
+                  [
+                    234060,
+                    320340
+                  ],
+                  [
+                    320460,
+                    406740
+                  ],
+                  [
+                    406860,
+                    492900
+                  ]
+                ]
+              },
+              "source": "connection_broker_timestamp_preclose_quote",
+              "verified_at": "2026-11-15T01:57:19.778953218Z"
+            }
+          ],
+          "generation": 14,
+          "label": "jiaoyi-s3",
+          "observed_at": "2026-11-15T01:57:23.308242424Z",
+          "paths": [
+            {
+              "bounds": null,
+              "deposit_asset": 15,
+              "from_asset": 1,
+              "legs": [
+                {
+                  "from_asset": 1,
+                  "inverse": false,
+                  "symbol_id": 5,
+                  "to_asset": 15
+                }
+              ],
+              "max_quote_age_ms": 5000,
+              "reason": "conversion quote stale/incomplete/crossed for broker symbol 5",
+              "state": "unavailable",
+              "subscribed": true
+            },
+            {
+              "bounds": null,
+              "deposit_asset": 15,
+              "from_asset": 5,
+              "legs": [
+                {
+                  "from_asset": 5,
+                  "inverse": false,
+                  "symbol_id": 1,
+                  "to_asset": 15
+                }
+              ],
+              "max_quote_age_ms": 5000,
+              "reason": "conversion quote stale/incomplete/crossed for broker symbol 1",
+              "state": "unavailable",
+              "subscribed": true
+            },
+            {
+              "bounds": null,
+              "deposit_asset": 15,
+              "from_asset": 8,
+              "legs": [
+                {
+                  "from_asset": 8,
+                  "inverse": true,
+                  "symbol_id": 4,
+                  "to_asset": 15
+                }
+              ],
+              "max_quote_age_ms": 5000,
+              "reason": "conversion quote stale/incomplete/crossed for broker symbol 4",
+              "state": "unavailable",
+              "subscribed": true
+            }
+          ],
+          "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+          "strategy": "Strategy 3: macro pullback",
+          "warmup_error": null
+        }
+      },
+      {
+        "account_id": 46130058,
+        "connected": true,
+        "paused": false,
+        "production_policy": "s3_macro_pullback_owner_18409_v1",
+        "crypto": {
+          "BTCUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": {
+                "completed_at": "2026-11-15T02:00:06.693927689Z",
+                "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+                "failure": null,
+                "preparation_duration_ms": 3817,
+                "prepared_successfully": true,
+                "source_age_at_start_ms": 48
+              },
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "prepared_admission_unavailable",
+              "message": "Preparing: background entry admission is not ready yet",
+              "state": "preparing"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": 155.0,
+              "refusal": null
+            },
+            "opening_reference": {
+              "macro_context": {
+                "Ok": {
+                  "drift_20": -0.16729771243670744,
+                  "drift_5": -0.11422838050575557,
+                  "latest_bar_end": "2026-11-14T04:00:00Z"
+                }
+              },
+              "mid": 64127.63,
+              "prepared_at": "2026-11-15T01:57:17.727648792Z",
+              "quote": {
+                "ask": 64135.13,
+                "ask_at": "2026-11-15T00:00:00.066887Z",
+                "bid": 64120.13,
+                "bid_at": "2026-11-15T00:00:00.066887Z",
+                "mid": 64127.63,
+                "observed_at": "2026-11-15T00:00:00.066887Z",
+                "source": "recorded_ticks_native_open_6s"
+              },
+              "session_close": "2026-11-15T04:00:00Z",
+              "session_open": "2026-11-15T00:00:00Z"
+            }
+          },
+          "ETHUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": {
+                "completed_at": "2026-11-15T02:00:06.474110369Z",
+                "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+                "failure": null,
+                "preparation_duration_ms": 3598,
+                "prepared_successfully": true,
+                "source_age_at_start_ms": 49
+              },
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "prepared_admission_unavailable",
+              "message": "Preparing: background entry admission is not ready yet",
+              "state": "preparing"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": 155.0,
+              "refusal": null
+            },
+            "opening_reference": {
+              "macro_context": {
+                "Ok": {
+                  "drift_20": -0.19061095460312694,
+                  "drift_5": -0.11741697659258155,
+                  "latest_bar_end": "2026-11-14T04:00:00Z"
+                }
+              },
+              "mid": 1768.85,
+              "prepared_at": "2026-11-15T01:57:17.904810954Z",
+              "quote": {
+                "ask": 1769.85,
+                "ask_at": "2026-11-15T00:00:00.067065Z",
+                "bid": 1767.85,
+                "bid_at": "2026-11-15T00:00:00.067065Z",
+                "mid": 1768.85,
+                "observed_at": "2026-11-15T00:00:00.067065Z",
+                "source": "recorded_ticks_native_open_6s"
+              },
+              "session_close": "2026-11-15T04:00:00Z",
+              "session_open": "2026-11-15T00:00:00Z"
+            }
+          }
+        },
+        "closed_book_provenance": {
+          "account_id": 46130058,
+          "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+          "closed_book_quotes": [
+            {
+              "account_id": 46130058,
+              "ask": 1.1022,
+              "ask_at": "2026-11-13T21:54:59.744Z",
+              "bid": 1.10207,
+              "bid_at": "2026-11-13T21:54:59.744Z",
+              "calendar": {
+                "holidays": [
+                  {
+                    "date": "2025-12-25",
+                    "end_second": 86400,
+                    "id": 4004,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2026-01-01",
+                    "end_second": 86400,
+                    "id": 4005,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-24",
+                    "end_second": 86399,
+                    "id": 4041,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-31",
+                    "end_second": 86399,
+                    "id": 4010,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  }
+                ],
+                "short_selling_enabled": true,
+                "symbol_id": 1,
+                "timezone": "America/New_York",
+                "trading_mode": 0,
+                "weekly_intervals": [
+                  [
+                    61260,
+                    147540
+                  ],
+                  [
+                    147660,
+                    233940
+                  ],
+                  [
+                    234060,
+                    320340
+                  ],
+                  [
+                    320460,
+                    406740
+                  ],
+                  [
+                    406860,
+                    492900
+                  ]
+                ]
+              },
+              "source": "connection_broker_timestamp_preclose_quote",
+              "verified_at": "2026-11-15T01:57:20.062539204Z"
+            },
+            {
+              "account_id": 46130058,
+              "ask": 0.67762,
+              "ask_at": "2026-11-13T21:54:59.660Z",
+              "bid": 0.67741,
+              "bid_at": "2026-11-13T21:54:59.660Z",
+              "calendar": {
+                "holidays": [
+                  {
+                    "date": "2025-12-25",
+                    "end_second": 86400,
+                    "id": 4004,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2026-01-01",
+                    "end_second": 86400,
+                    "id": 4005,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-24",
+                    "end_second": 86399,
+                    "id": 4041,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-31",
+                    "end_second": 86399,
+                    "id": 4010,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  }
+                ],
+                "short_selling_enabled": true,
+                "symbol_id": 5,
+                "timezone": "America/New_York",
+                "trading_mode": 0,
+                "weekly_intervals": [
+                  [
+                    61260,
+                    147540
+                  ],
+                  [
+                    147660,
+                    233940
+                  ],
+                  [
+                    234060,
+                    320340
+                  ],
+                  [
+                    320460,
+                    406740
+                  ],
+                  [
+                    406860,
+                    492900
+                  ]
+                ]
+              },
+              "source": "connection_broker_timestamp_preclose_quote",
+              "verified_at": "2026-11-15T01:57:20.062539204Z"
+            }
+          ],
+          "generation": 16,
+          "label": "jiaoyi-s3",
+          "observed_at": "2026-11-15T01:57:23.925550896Z",
+          "paths": [
+            {
+              "bounds": null,
+              "deposit_asset": 15,
+              "from_asset": 1,
+              "legs": [
+                {
+                  "from_asset": 1,
+                  "inverse": false,
+                  "symbol_id": 5,
+                  "to_asset": 15
+                }
+              ],
+              "max_quote_age_ms": 5000,
+              "reason": "conversion quote stale/incomplete/crossed for broker symbol 5",
+              "state": "unavailable",
+              "subscribed": true
+            },
+            {
+              "bounds": null,
+              "deposit_asset": 15,
+              "from_asset": 5,
+              "legs": [
+                {
+                  "from_asset": 5,
+                  "inverse": false,
+                  "symbol_id": 1,
+                  "to_asset": 15
+                }
+              ],
+              "max_quote_age_ms": 5000,
+              "reason": "conversion quote stale/incomplete/crossed for broker symbol 1",
+              "state": "unavailable",
+              "subscribed": true
+            }
+          ],
+          "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+          "strategy": "Strategy 3: macro pullback",
+          "warmup_error": null
+        }
+      },
+      {
+        "account_id": 47790949,
+        "connected": true,
+        "paused": false,
+        "production_policy": "s3_macro_pullback_owner_18409_v1",
+        "crypto": {
+          "BTCUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": {
+                "completed_at": "2026-11-15T02:00:08.362757543Z",
+                "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+                "failure": null,
+                "preparation_duration_ms": 3632,
+                "prepared_successfully": true,
+                "source_age_at_start_ms": 86
+              },
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "prepared_admission_unavailable",
+              "message": "Preparing: background entry admission is not ready yet",
+              "state": "preparing"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": 139.14000000000033,
+              "refusal": null
+            },
+            "opening_reference": {
+              "macro_context": {
+                "Ok": {
+                  "drift_20": -0.16729771243670744,
+                  "drift_5": -0.11422838050575557,
+                  "latest_bar_end": "2026-11-14T04:00:00Z"
+                }
+              },
+              "mid": 64127.63,
+              "prepared_at": "2026-11-15T01:57:17.695794618Z",
+              "quote": {
+                "ask": 64135.13,
+                "ask_at": "2026-11-15T00:00:00.067400Z",
+                "bid": 64120.13,
+                "bid_at": "2026-11-15T00:00:00.067400Z",
+                "mid": 64127.63,
+                "observed_at": "2026-11-15T00:00:00.067400Z",
+                "source": "recorded_ticks_native_open_6s"
+              },
+              "session_close": "2026-11-15T04:00:00Z",
+              "session_open": "2026-11-15T00:00:00Z"
+            }
+          },
+          "ETHUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": {
+                "completed_at": "2026-11-15T02:00:08.025342411Z",
+                "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+                "failure": null,
+                "preparation_duration_ms": 3295,
+                "prepared_successfully": true,
+                "source_age_at_start_ms": 86
+              },
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "prepared_admission_unavailable",
+              "message": "Preparing: background entry admission is not ready yet",
+              "state": "preparing"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": 139.14000000000033,
+              "refusal": null
+            },
+            "opening_reference": {
+              "macro_context": {
+                "Ok": {
+                  "drift_20": -0.19061095460312696,
+                  "drift_5": -0.11741697659258156,
+                  "latest_bar_end": "2026-11-14T04:00:00Z"
+                }
+              },
+              "mid": 1768.85,
+              "prepared_at": "2026-11-15T01:57:17.695918806Z",
+              "quote": {
+                "ask": 1769.85,
+                "ask_at": "2026-11-15T00:00:00.067403Z",
+                "bid": 1767.85,
+                "bid_at": "2026-11-15T00:00:00.067403Z",
+                "mid": 1768.85,
+                "observed_at": "2026-11-15T00:00:00.067403Z",
+                "source": "recorded_ticks_native_open_6s"
+              },
+              "session_close": "2026-11-15T04:00:00Z",
+              "session_open": "2026-11-15T00:00:00Z"
+            }
+          }
+        },
+        "closed_book_provenance": {
+          "account_id": 47790949,
+          "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+          "closed_book_quotes": [
+            {
+              "account_id": 47790949,
+              "ask": 1.10215,
+              "ask_at": "2026-11-13T21:54:59.744Z",
+              "bid": 1.10212,
+              "bid_at": "2026-11-13T21:54:59.744Z",
+              "calendar": {
+                "holidays": [
+                  {
+                    "date": "2025-12-25",
+                    "end_second": 86400,
+                    "id": 4004,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2026-01-01",
+                    "end_second": 86400,
+                    "id": 4005,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-24",
+                    "end_second": 86399,
+                    "id": 4041,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-31",
+                    "end_second": 86399,
+                    "id": 4010,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  }
+                ],
+                "short_selling_enabled": true,
+                "symbol_id": 1,
+                "timezone": "America/New_York",
+                "trading_mode": 0,
+                "weekly_intervals": [
+                  [
+                    61260,
+                    147540
+                  ],
+                  [
+                    147660,
+                    233940
+                  ],
+                  [
+                    234060,
+                    320340
+                  ],
+                  [
+                    320460,
+                    406740
+                  ],
+                  [
+                    406860,
+                    492900
+                  ]
+                ]
+              },
+              "source": "connection_broker_timestamp_preclose_quote",
+              "verified_at": "2026-11-15T01:57:19.933400839Z"
+            },
+            {
+              "account_id": 47790949,
+              "ask": 0.67757,
+              "ask_at": "2026-11-13T21:54:59.660Z",
+              "bid": 0.67746,
+              "bid_at": "2026-11-13T21:54:59.660Z",
+              "calendar": {
+                "holidays": [
+                  {
+                    "date": "2025-12-25",
+                    "end_second": 86400,
+                    "id": 4004,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2026-01-01",
+                    "end_second": 86400,
+                    "id": 4005,
+                    "recurring": false,
+                    "start_second": 0,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-24",
+                    "end_second": 86399,
+                    "id": 4041,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  },
+                  {
+                    "date": "2025-12-31",
+                    "end_second": 86399,
+                    "id": 4010,
+                    "recurring": false,
+                    "start_second": 78900,
+                    "timezone": "Europe/Bucharest"
+                  }
+                ],
+                "short_selling_enabled": true,
+                "symbol_id": 5,
+                "timezone": "America/New_York",
+                "trading_mode": 0,
+                "weekly_intervals": [
+                  [
+                    61260,
+                    147540
+                  ],
+                  [
+                    147660,
+                    233940
+                  ],
+                  [
+                    234060,
+                    320340
+                  ],
+                  [
+                    320460,
+                    406740
+                  ],
+                  [
+                    406860,
+                    492900
+                  ]
+                ]
+              },
+              "source": "connection_broker_timestamp_preclose_quote",
+              "verified_at": "2026-11-15T01:57:19.933400839Z"
+            }
+          ],
+          "generation": 13,
+          "label": "jiaoyi-s3",
+          "observed_at": "2026-11-15T01:57:23.879363228Z",
+          "paths": [
+            {
+              "bounds": null,
+              "deposit_asset": 15,
+              "from_asset": 1,
+              "legs": [
+                {
+                  "from_asset": 1,
+                  "inverse": false,
+                  "symbol_id": 5,
+                  "to_asset": 15
+                }
+              ],
+              "max_quote_age_ms": 5000,
+              "reason": "conversion quote stale/incomplete/crossed for broker symbol 5",
+              "state": "unavailable",
+              "subscribed": true
+            },
+            {
+              "bounds": null,
+              "deposit_asset": 15,
+              "from_asset": 5,
+              "legs": [
+                {
+                  "from_asset": 5,
+                  "inverse": false,
+                  "symbol_id": 1,
+                  "to_asset": 15
+                }
+              ],
+              "max_quote_age_ms": 5000,
+              "reason": "conversion quote stale/incomplete/crossed for broker symbol 1",
+              "state": "unavailable",
+              "subscribed": true
+            }
+          ],
+          "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+          "strategy": "Strategy 3: macro pullback",
+          "warmup_error": null
+        }
+      },
+      {
+        "account_id": 49236051,
+        "connected": true,
+        "paused": false,
+        "production_policy": "s3_macro_pullback_owner_18409_v1",
+        "crypto": {
+          "BTCUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": null,
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "pair_risk_reservation_active",
+              "message": "Blocked: pair reservation held by sibling symbol ETHUSD",
+              "state": "blocked"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": -0.0,
+              "refusal": null
+            },
+            "opening_reference": {
+              "macro_context": {
+                "Ok": {
+                  "drift_20": -0.16729771243670744,
+                  "drift_5": -0.11422838050575557,
+                  "latest_bar_end": "2026-11-14T04:00:00Z"
+                }
+              },
+              "mid": 64127.63,
+              "prepared_at": "2026-11-15T01:57:20.620542333Z",
+              "quote": {
+                "ask": 64135.13,
+                "ask_at": "2026-11-15T00:00:00.066838Z",
+                "bid": 64120.13,
+                "bid_at": "2026-11-15T00:00:00.066838Z",
+                "mid": 64127.63,
+                "observed_at": "2026-11-15T00:00:00.066838Z",
+                "source": "recorded_ticks_native_open_6s"
+              },
+              "session_close": "2026-11-15T04:00:00Z",
+              "session_open": "2026-11-15T00:00:00Z"
+            }
+          },
+          "ETHUSD": {
+            "entry_preparation": {
+              "commission_age_seconds": 175,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_completed_attempt": null,
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "entry_gate": {
+              "code": "yield_to_human_position_or_order",
+              "message": "Blocked: yield_to_human_position_or_order",
+              "state": "blocked"
+            },
+            "existing_s3_stop_risk": {
+              "known_usd": -0.0,
+              "refusal": null
+            },
+            "opening_reference": null
+          }
+        },
+        "closed_book_provenance": {
+          "account_id": 49236051,
+          "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+          "closed_book_quotes": [],
+          "generation": 11,
+          "label": "jiaoyi-s3",
+          "observed_at": "2026-11-15T01:57:21.887214009Z",
+          "paths": [],
+          "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+          "strategy": "Strategy 3: macro pullback",
+          "warmup_error": null
+        }
+      }
+    ],
+    "opening_references": {
+      "stored_0800_two_sided_quotes": 8,
+      "stored_quote_rows": {
+        "rows": [
+          {
+            "ask_at": "2026-11-15T00:00:00.080662+00:00",
+            "ask_e5": 6413513000,
+            "bid_at": "2026-11-15T00:00:00.080662+00:00",
+            "bid_e5": 6412013000,
+            "symbol": "BTCUSD",
+            "symbol_id": 10026,
+            "account_id": 43002148,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "43002148-1-1794612555364059891",
+            "bid_tick_session": "43002148-1-1794612555364059891"
+          },
+          {
+            "ask_at": "2026-11-15T00:00:00.080669+00:00",
+            "ask_e5": 176985000,
+            "bid_at": "2026-11-15T00:00:00.080669+00:00",
+            "bid_e5": 176785000,
+            "symbol": "ETHUSD",
+            "symbol_id": 10027,
+            "account_id": 43002148,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "43002148-1-1794612555364059891",
+            "bid_tick_session": "43002148-1-1794612555364059891"
+          },
+          {
+            "ask_at": "2026-11-15T00:00:00.066887+00:00",
+            "ask_e5": 6413513000,
+            "bid_at": "2026-11-15T00:00:00.066887+00:00",
+            "bid_e5": 6412013000,
+            "symbol": "BTCUSD",
+            "symbol_id": 10028,
+            "account_id": 46130058,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "46130058-1-1794612555346872104",
+            "bid_tick_session": "46130058-1-1794612555346872104"
+          },
+          {
+            "ask_at": "2026-11-15T00:00:00.067065+00:00",
+            "ask_e5": 176985000,
+            "bid_at": "2026-11-15T00:00:00.067065+00:00",
+            "bid_e5": 176785000,
+            "symbol": "ETHUSD",
+            "symbol_id": 10029,
+            "account_id": 46130058,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "46130058-1-1794612555346872104",
+            "bid_tick_session": "46130058-1-1794612555346872104"
+          },
+          {
+            "ask_at": "2026-11-15T00:00:00.0674+00:00",
+            "ask_e5": 6413513000,
+            "bid_at": "2026-11-15T00:00:00.0674+00:00",
+            "bid_e5": 6412013000,
+            "symbol": "BTCUSD",
+            "symbol_id": 10028,
+            "account_id": 47790949,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "47790949-1-1794612555294749457",
+            "bid_tick_session": "47790949-1-1794612555294749457"
+          },
+          {
+            "ask_at": "2026-11-15T00:00:00.067403+00:00",
+            "ask_e5": 176985000,
+            "bid_at": "2026-11-15T00:00:00.067403+00:00",
+            "bid_e5": 176785000,
+            "symbol": "ETHUSD",
+            "symbol_id": 10029,
+            "account_id": 47790949,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "47790949-1-1794612555294749457",
+            "bid_tick_session": "47790949-1-1794612555294749457"
+          },
+          {
+            "ask_at": "2026-11-15T00:00:00.066838+00:00",
+            "ask_e5": 6413513000,
+            "bid_at": "2026-11-15T00:00:00.066838+00:00",
+            "bid_e5": 6412013000,
+            "symbol": "BTCUSD",
+            "symbol_id": 10028,
+            "account_id": 49236051,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "49236051-1-1794612555375029572",
+            "bid_tick_session": "49236051-1-1794612555375029572"
+          },
+          {
+            "ask_at": "2026-11-15T00:00:00.066849+00:00",
+            "ask_e5": 176985000,
+            "bid_at": "2026-11-15T00:00:00.066849+00:00",
+            "bid_e5": 176785000,
+            "symbol": "ETHUSD",
+            "symbol_id": 10029,
+            "account_id": 49236051,
+            "ask_broker_ms": 1794700799952,
+            "bid_broker_ms": 1794700799952,
+            "ask_tick_session": "49236051-1-1794612555375029572",
+            "bid_tick_session": "49236051-1-1794612555375029572"
+          }
+        ],
+        "window_utc": "2026-11-15T00:00:00Z..2026-11-15T00:00:06Z",
+        "captured_at": "2026-11-15T01:56:40.388034+00:00"
+      },
+      "current_actor_references_loaded": 7,
+      "valid_references_preserved_across_final_deploy": 7,
+      "original_active_references_preserved_across_all_deploys": 6,
+      "withheld_cell": {
+        "account_id": 49236051,
+        "symbol": "ETHUSD",
+        "reason": "S1 ownership lock; original quote remains stored"
+      },
+      "1200_base_prepared": 8,
+      "1200_base_evidence": [
+        {
+          "account_id": 43002148,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:20.016989879Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:18.156435767Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "BTCUSD"
+        },
+        {
+          "account_id": 43002148,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:21.980463904Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:20.124423143Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "ETHUSD"
+        },
+        {
+          "account_id": 46130058,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:20.539919140Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:18.699801220Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "BTCUSD"
+        },
+        {
+          "account_id": 46130058,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:22.501790037Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:20.659135850Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "ETHUSD"
+        },
+        {
+          "account_id": 47790949,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:21.013058070Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:19.070879490Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "BTCUSD"
+        },
+        {
+          "account_id": 47790949,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:23.052226675Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:21.118247877Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "ETHUSD"
+        },
+        {
+          "account_id": 49236051,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:23.576237870Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:21.759609089Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "BTCUSD"
+        },
+        {
+          "account_id": 49236051,
+          "all_window_coefficients_ready": true,
+          "base_preparation_ready": true,
+          "commission_ready": true,
+          "completed_at": "2026-11-15T00:00:25.647029891Z",
+          "deadline_at": "2026-11-15T03:50:00Z",
+          "deadline_met": true,
+          "history_ready": true,
+          "macro_context_error": null,
+          "macro_context_ready": true,
+          "metadata_ready": true,
+          "missing_marks": 0,
+          "preparation_starts_at": "2026-11-15T03:40:00Z",
+          "session_close": "2026-11-15T08:00:00Z",
+          "session_open": "2026-11-15T04:00:00Z",
+          "session_relation": "upcoming",
+          "source_cutoff_at": "2026-11-15T00:00:23.658335075Z",
+          "spread_ready": true,
+          "state": "prepared_on_time",
+          "symbol": "ETHUSD"
+        }
+      ],
+      "1200_actual_opening_observed": false
+    },
+    "live_protection": {
+      "human_positions": 5,
+      "human_pending_entries": 5,
+      "s1_positions": 2,
+      "all_preexisting_geometry_preserved": true,
+      "recorded_s3_interference": 0,
+      "scope": "Before/after book comparison and recorded intents, not a guarantee about unobserved external activity"
+    },
+    "gold_retry_verification": {
+      "opening_records": [
         {
           "position_id": 262583136,
           "account_id": 47790949,
@@ -1429,648 +4084,102 @@
           "entire_opening_record_unchanged": true
         }
       ],
-      "live_book_unchanged": true,
-      "recorded_live_interference": 0
-    }
-  },
-  "latency_followup": {
-    "reason": "Six snapshots after successful FX hydration still showed unavailable/expired prepared admissions. No full-ready claim is made.",
-    "observations": [
-      {
-        "at": "2026-11-15T01:17:33.546751+00:00",
-        "rows": [
-          {
-            "account": 46130058,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 164,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
+      "startup_market_closed_rejections": 2,
+      "startup_receipts": [
+        {
+          "id": 3024,
+          "kind": "session_end",
+          "side": "sell",
+          "label": "jiaoyi-s3",
+          "detail": {
+            "outcome": {
+              "code": "MARKET_CLOSED",
+              "outcome": "rejected",
+              "description": "Trading is not available: Market is closed."
             },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
+            "fill_at_ms": null,
+            "sent_at_ms": 1794707840826,
+            "client_msg_id": "t20",
+            "decision_quote": {
+              "at": "2026-11-15T01:57:20.528473214Z",
+              "ask": 3880.61,
+              "bid": 3880.42,
+              "mid": 3880.5150000000003,
+              "at_ms": 1794707840528
+            },
+            "production_policy": null,
+            "dispatch_quote_source": "trading_events.ENTRY_VALIDATED_BEFORE_SEND keyed by entry_key; decision quote is not dispatch quote"
           },
-          {
-            "account": 46130058,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 164,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
+          "spread": 0.19000000000005457,
+          "symbol": "XAUUSD",
+          "volume": null,
+          "outcome": "rejected",
+          "sent_at": "2026-11-15T01:57:20.826242+00:00",
+          "slippage": null,
+          "entry_key": "s3-end:47790949:262583136:533",
+          "account_id": 47790949,
+          "fill_price": null,
+          "latency_ms": null,
+          "answered_at": null,
+          "position_id": 262583136,
+          "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+          "recorded_at": "2026-11-15T01:57:21.091825+00:00",
+          "decision_price": 3880.61
+        },
+        {
+          "id": 3025,
+          "kind": "session_end",
+          "side": "sell",
+          "label": "jiaoyi-s3",
+          "detail": {
+            "outcome": {
+              "code": "MARKET_CLOSED",
+              "outcome": "rejected",
+              "description": "Trading is not available: Market is closed."
             },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
+            "fill_at_ms": null,
+            "sent_at_ms": 1794707841105,
+            "client_msg_id": "t20",
+            "decision_quote": {
+              "at": "2026-11-15T01:57:20.656684654Z",
+              "ask": 3880.64,
+              "bid": 3880.38,
+              "mid": 3880.51,
+              "at_ms": 1794707840656
+            },
+            "production_policy": null,
+            "dispatch_quote_source": "trading_events.ENTRY_VALIDATED_BEFORE_SEND keyed by entry_key; decision quote is not dispatch quote"
           },
-          {
-            "account": 47790949,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 164,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 164,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "at": "2026-11-15T01:18:05.362472+00:00",
-        "rows": [
-          {
-            "account": 46130058,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 194,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 46130058,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 194,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 194,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 194,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "at": "2026-11-15T01:18:36.378454+00:00",
-        "rows": [
-          {
-            "account": 46130058,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 226,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 46130058,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 226,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 226,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 226,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "at": "2026-11-15T01:19:06.500837+00:00",
-        "rows": [
-          {
-            "account": 46130058,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 257,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 46130058,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 257,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 257,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 257,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "at": "2026-11-15T01:19:43.696165+00:00",
-        "rows": [
-          {
-            "account": 46130058,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 288,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 46130058,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 288,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 288,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 288,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "at": "2026-11-15T01:20:17.135844+00:00",
-        "rows": [
-          {
-            "account": 46130058,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 324,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 46130058,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 324,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch recorded; later turn required",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "BTCUSD",
-            "preparation": {
-              "commission_age_seconds": 324,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": null,
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Preparing: background entry admission is not ready yet",
-                "state": "preparing"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
-                "state": "armed"
-              }
-            ]
-          },
-          {
-            "account": 47790949,
-            "symbol": "ETHUSD",
-            "preparation": {
-              "commission_age_seconds": 324,
-              "commission_error": null,
-              "commission_expired": false,
-              "evidence_scope": "background admission; final writer checks remain mandatory",
-              "last_refusal": "prepared admission expired; background refresh required",
-              "prepared_now": false,
-              "source_refusal": null
-            },
-            "gates": [
-              {
-                "code": "prepared_admission_unavailable",
-                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
-                "state": "blocked"
-              },
-              {
-                "code": "armed_pullback",
-                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch recorded; later turn required",
-                "state": "armed"
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "change": "Read expected margins in batches of at most two, preserving accumulation order and final account recheck; add last-attempt timing to health.",
-    "freshness_limits_unchanged": true,
-    "focused_bounded_concurrency_and_exact_reserve_test_passed": true,
-    "full_required_local_checks": [
+          "spread": 0.25999999999976353,
+          "symbol": "XAUUSD",
+          "volume": null,
+          "outcome": "rejected",
+          "sent_at": "2026-11-15T01:57:21.105742+00:00",
+          "slippage": null,
+          "entry_key": "s3-end:46130058:262583980:536",
+          "account_id": 46130058,
+          "fill_price": null,
+          "latency_ms": null,
+          "answered_at": null,
+          "position_id": 262583980,
+          "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+          "recorded_at": "2026-11-15T01:57:21.366399+00:00",
+          "decision_price": 3880.64
+        }
+      ],
+      "quiet_start_utc": "2026-11-15T01:58:00Z",
+      "quiet_end_utc": "2026-11-15T02:00:10.907798+00:00",
+      "quiet_seconds": 130.907798,
+      "session_end_attempts_in_quiet_interval": 0,
+      "market_closed_rejections_in_quiet_interval": 0,
+      "next_scheduled_probe_utc": "2026-11-15T23:01:00Z",
+      "next_scheduled_probe_sgt": "2026-11-16T07:01:00+08:00"
+    },
+    "risk_settings_unchanged": true,
+    "policy_and_cost_settings_unchanged": true,
+    "engineering_deployment_unchanged": true,
+    "protected_trading_rs_sha256": "b1c6f9951a7e8e74e81a9edb345ba8d251fef37e81aa949a5930ef722be80cd3",
+    "local_checks": [
       {
         "name": "check",
         "command": [
@@ -2080,7 +4189,7 @@
           "--all-targets"
         ],
         "exit_code": 0,
-        "seconds": 0.33
+        "seconds": 11.5
       },
       {
         "name": "test",
@@ -2090,7 +4199,7 @@
           "--workspace"
         ],
         "exit_code": 0,
-        "seconds": 324.63
+        "seconds": 309.34
       },
       {
         "name": "clippy",
@@ -2103,7 +4212,7 @@
           "warnings"
         ],
         "exit_code": 0,
-        "seconds": 16.78
+        "seconds": 13.21
       },
       {
         "name": "fmt",
@@ -2114,149 +4223,591 @@
           "--check"
         ],
         "exit_code": 0,
-        "seconds": 0.97
+        "seconds": 0.88
       }
     ],
-    "production_effect_on_preparation_expiry": "BTC succeeds in 3.159\u20133.365s, but publication still waits for 7.641\u20137.905s ETH failure",
-    "release": {
-      "pr": 232,
-      "merge_commit": "08c8eb09b55de77dbee2ce6d3184814dacc2a4b6",
-      "deployment": {
-        "id": "d8df695c-6af7-4727-90ce-8a9dcff8661d",
-        "status": "SUCCESS",
-        "createdAt": "2026-11-15T01:32:16.569Z",
-        "commit": "08c8eb09b55de77dbee2ce6d3184814dacc2a4b6",
-        "message": null,
-        "image_digest": "sha256:7d5203025cf3f2f092aa0152f53f63d1210f6f7a564419ab40cf5521afc5922b"
-      },
-      "observed_at": "2026-11-15T01:37:30.016435+00:00",
-      "quiet_observation_seconds": 130.661309,
-      "quiet_session_end_attempts": 0,
-      "quiet_market_closed_rejections": 0
-    }
+    "workspace_tests": {
+      "passed": 812,
+      "failed": 0,
+      "ignored": 1
+    },
+    "financial_pass": false
   },
-  "admission_history_and_publication_followup": {
-    "counts": {
-      "rows": [
+  "readiness_observations": [
+    {
+      "response_received_at": "2026-11-15T02:01:51.016051+00:00",
+      "accounts": [
         {
-          "symbol": "BTCUSD",
           "account_id": 46130058,
-          "filled_positions": 6,
-          "opening_attempt_keys": 18
-        },
-        {
-          "symbol": "ETHUSD",
-          "account_id": 46130058,
-          "filled_positions": 11,
-          "opening_attempt_keys": 20
-        },
-        {
           "symbol": "BTCUSD",
-          "account_id": 47790949,
-          "filled_positions": 7,
-          "opening_attempt_keys": 17
+          "actor_last_quote_at": "2026-11-15T02:01:33.478834108Z",
+          "entry_preparation": {
+            "commission_age_seconds": 258,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:01:32.104340356Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3914,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 43
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
         },
         {
+          "account_id": 46130058,
           "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:01:33.478834108Z",
+          "entry_preparation": {
+            "commission_age_seconds": 259,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:01:31.900389894Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3710,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 165
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
           "account_id": 47790949,
-          "filled_positions": 12,
-          "opening_attempt_keys": 20
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:01:33.478702730Z",
+          "entry_preparation": {
+            "commission_age_seconds": 259,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:01:32.698872257Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3504,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 27
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63054.85, extreme: 61982.07); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:01:33.478702730Z",
+          "entry_preparation": {
+            "commission_age_seconds": 259,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:01:32.480724960Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3286,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 168
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1739.26, extreme: 1709.67); touch not yet recorded",
+            "state": "armed"
+          }
         }
       ],
-      "captured_at": "2026-11-15T01:39:30.435543+00:00"
+      "request_started_at": null,
+      "server_timing": null
     },
-    "timing": [
-      {
-        "account_id": 46130058,
-        "attempts": {
-          "BTCUSD": {
-            "commission_age_seconds": 166,
+    {
+      "request_started_at": "2026-11-15T02:02:13.349854+00:00",
+      "response_received_at": "2026-11-15T02:02:34.871743+00:00",
+      "server_timing": "base_health;dur=20639.440,supervision;dur=361.710,fast_attach;dur=0.120,recent_signals;dur=89.745,projection;dur=2.460",
+      "accounts": [
+        {
+          "account_id": 46130058,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:13.536029280Z",
+          "entry_preparation": {
+            "commission_age_seconds": 299,
             "commission_error": null,
             "commission_expired": false,
             "evidence_scope": "background admission; final writer checks remain mandatory",
             "last_completed_attempt": {
-              "completed_at": "2026-11-15T01:36:58.099625759Z",
+              "completed_at": "2026-11-15T02:02:11.353865274Z",
               "evidence_scope": "last completed read-only preparation; final writer guards still apply",
               "failure": null,
-              "preparation_duration_ms": 3365,
+              "preparation_duration_ms": 3918,
               "prepared_successfully": true,
-              "source_age_at_start_ms": 76
+              "source_age_at_start_ms": 153
             },
             "last_refusal": null,
             "prepared_now": false,
             "source_refusal": null
           },
-          "ETHUSD": {
-            "commission_age_seconds": 166,
-            "commission_error": null,
-            "commission_expired": false,
-            "evidence_scope": "background admission; final writer checks remain mandatory",
-            "last_completed_attempt": {
-              "completed_at": "2026-11-15T01:37:02.640011726Z",
-              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
-              "failure": "prepared admission expired; background refresh required",
-              "preparation_duration_ms": 7905,
-              "prepared_successfully": false,
-              "source_age_at_start_ms": 77
-            },
-            "last_refusal": "prepared admission expired; background refresh required",
-            "prepared_now": false,
-            "source_refusal": null
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
           }
-        }
-      },
-      {
-        "account_id": 47790949,
-        "attempts": {
-          "BTCUSD": {
-            "commission_age_seconds": 166,
+        },
+        {
+          "account_id": 46130058,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:13.536029280Z",
+          "entry_preparation": {
+            "commission_age_seconds": 299,
             "commission_error": null,
             "commission_expired": false,
             "evidence_scope": "background admission; final writer checks remain mandatory",
             "last_completed_attempt": {
-              "completed_at": "2026-11-15T01:37:01.605508737Z",
+              "completed_at": "2026-11-15T02:02:11.178508062Z",
               "evidence_scope": "last completed read-only preparation; final writer guards still apply",
               "failure": null,
-              "preparation_duration_ms": 3159,
+              "preparation_duration_ms": 3743,
               "prepared_successfully": true,
-              "source_age_at_start_ms": 162
+              "source_age_at_start_ms": 11
             },
             "last_refusal": null,
             "prepared_now": false,
             "source_refusal": null
           },
-          "ETHUSD": {
-            "commission_age_seconds": 166,
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:13.535682087Z",
+          "entry_preparation": {
+            "commission_age_seconds": 299,
             "commission_error": null,
             "commission_expired": false,
             "evidence_scope": "background admission; final writer checks remain mandatory",
             "last_completed_attempt": {
-              "completed_at": "2026-11-15T01:37:06.086982700Z",
+              "completed_at": "2026-11-15T02:02:11.355173152Z",
               "evidence_scope": "last completed read-only preparation; final writer guards still apply",
-              "failure": "prepared admission expired; background refresh required",
-              "preparation_duration_ms": 7641,
-              "prepared_successfully": false,
-              "source_age_at_start_ms": 160
+              "failure": null,
+              "preparation_duration_ms": 3541,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 105
             },
-            "last_refusal": "prepared admission expired; background refresh required",
+            "last_refusal": null,
             "prepared_now": false,
             "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:13.535682087Z",
+          "entry_preparation": {
+            "commission_age_seconds": 299,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:11.233427660Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3420,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 15
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
           }
         }
-      }
-    ],
-    "fix": "Always apply the existing distinct filled-position upper bound before full Kelly history; publish either completed read-only result immediately instead of waiting for its sibling.",
-    "policy_unchanged": "Kelly still begins at 20 closed positions; negative eligible Kelly still refuses; size and all freshness limits unchanged.",
-    "focused_tests_passed": [
-      "20 attempt keys with 11 distinct positions skips full-history query; one key with 20 positions still queries",
-      "fast result visible while sibling is deliberately blocked"
-    ],
-    "full_checks": "running; must pass before merge",
-    "stack_regression": {
-      "first_full_suite": "caught stack overflow before deployment",
-      "fix": "heap-pin both read-only jobs before async composition",
-      "normal_stack_actor_regression_passed": true,
-      "full_suite_rerun_required": true
+      ]
+    },
+    {
+      "request_started_at": "2026-11-15T02:02:37.873478+00:00",
+      "response_received_at": "2026-11-15T02:02:56.124857+00:00",
+      "server_timing": "base_health;dur=17520.113,supervision;dur=337.578,fast_attach;dur=0.057,recent_signals;dur=80.716,projection;dur=1.343",
+      "accounts": [
+        {
+          "account_id": 46130058,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:37.984661920Z",
+          "entry_preparation": {
+            "commission_age_seconds": 323,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:37.399747554Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3894,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 177
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63054.85, extreme: 61982.07); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "account_id": 46130058,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:37.984661920Z",
+          "entry_preparation": {
+            "commission_age_seconds": 323,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:37.181746763Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3676,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 247
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1739.26, extreme: 1709.67); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:37.985017663Z",
+          "entry_preparation": {
+            "commission_age_seconds": 323,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:36.430500860Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3463,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 18
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:37.985017663Z",
+          "entry_preparation": {
+            "commission_age_seconds": 323,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:36.258048269Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3291,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 114
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        }
+      ]
+    },
+    {
+      "request_started_at": "2026-11-15T02:02:59.125692+00:00",
+      "response_received_at": "2026-11-15T02:03:18.061392+00:00",
+      "server_timing": "base_health;dur=18058.524,supervision;dur=382.828,fast_attach;dur=0.195,recent_signals;dur=98.584,projection;dur=2.259",
+      "accounts": [
+        {
+          "account_id": 46130058,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:59.203091788Z",
+          "entry_preparation": {
+            "commission_age_seconds": 344,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:56.740870356Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3818,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 193
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
+          "account_id": 46130058,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:59.203091788Z",
+          "entry_preparation": {
+            "commission_age_seconds": 344,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:56.947310255Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 4025,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 62
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:59.203421282Z",
+          "entry_preparation": {
+            "commission_age_seconds": 344,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:57.352772529Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3570,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 65
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:02:59.203421282Z",
+          "entry_preparation": {
+            "commission_age_seconds": 344,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:02:57.148062411Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3366,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 114
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        }
+      ]
+    },
+    {
+      "request_started_at": "2026-11-15T02:03:21.062214+00:00",
+      "response_received_at": "2026-11-15T02:03:39.640798+00:00",
+      "server_timing": "base_health;dur=17702.686,supervision;dur=355.748,fast_attach;dur=0.062,recent_signals;dur=103.363,projection;dur=1.591",
+      "accounts": [
+        {
+          "account_id": 46130058,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:03:21.054369587Z",
+          "entry_preparation": {
+            "commission_age_seconds": 366,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:03:20.090264766Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3647,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 61
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 63054.85, extreme: 61982.07); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "account_id": 46130058,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:03:21.054369587Z",
+          "entry_preparation": {
+            "commission_age_seconds": 366,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:03:20.267681032Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3824,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 105
+            },
+            "last_refusal": null,
+            "prepared_now": true,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "armed_pullback",
+            "message": "Armed: waiting 50%–61.8% pullback + 8% turn (ref: 1739.26, extreme: 1709.67); touch not yet recorded",
+            "state": "armed"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "BTCUSD",
+          "actor_last_quote_at": "2026-11-15T02:03:21.056732536Z",
+          "entry_preparation": {
+            "commission_age_seconds": 366,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:03:18.608608263Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3375,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 58
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        },
+        {
+          "account_id": 47790949,
+          "symbol": "ETHUSD",
+          "actor_last_quote_at": "2026-11-15T02:03:21.056732536Z",
+          "entry_preparation": {
+            "commission_age_seconds": 366,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T02:03:18.788371189Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3555,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 67
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "entry_gate": {
+            "code": "prepared_admission_unavailable",
+            "message": "Preparing: background entry admission is not ready yet",
+            "state": "preparing"
+          }
+        }
+      ]
     }
-  }
+  ]
 }
