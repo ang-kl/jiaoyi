@@ -98,3 +98,24 @@ Live human/S1 geometry and both Gold opening records/deadlines were unchanged. E
 The stale AUD/EUR conversion error cleared on both affected demos, but six snapshots from **09:17:33 through 09:20:17 SGT** did not observe a valid prepared admission: ETH reported `prepared admission expired; background refresh required`, while BTC was preparing or expired. Therefore full entry readiness is **not yet signed off**. The live account's pending JPY exposure still correctly requires fresh FX; account 49236051 remains subject to its S1 pair/ownership guards.
 
 The additional infrastructure change batches independent expected-margin reads **two at a time**, preserving sorted-symbol/buy/sell accumulation, all numerical checks and the final book/balance comparison. It does not extend the five-second admission lifetime or quote freshness. A semaphore-controlled broker regression proves both concurrent progress and the two-request bound, with exact projected margin and stop-reserve parity and zero orders/amends/closes. Health now reports each last completed preparation's source age, duration, success/failure and completion time, so stale-source and slow-read explanations can be assessed separately. This is a measured-expiry follow-up, not a claim that transport batching alone has already solved it. Full checks and production verification remain required for this follow-up.
+
+## §11. Timing identified the remaining history/publication defect
+
+PR #232 passed all CI jobs and deployed **08c8eb09b55de77dbee2ce6d3184814dacc2a4b6**. Its new timings made the remaining failure attributable: at the **09:37:30 SGT** snapshot, BTC had successfully prepared in **3.365s** on 46130058 and **3.159s** on 47790949, with original source ages **76ms** and **162ms**. ETH took **7.905s** and **7.641s** and expired. The worker used `join!` and published neither result until both finished, so a successful BTC preparation could expire before publication.
+
+A read-only PostgreSQL audit at **09:39:30 SGT** found:
+
+| Account | Symbol | Opening-attempt keys | Distinct filled positions |
+|---|---|---:|---:|
+| 46130058 | BTCUSD | 18 | 6 |
+| 46130058 | ETHUSD | 20 | 11 |
+| 47790949 | BTCUSD | 17 | 7 |
+| 47790949 | ETHUSD | 20 | 12 |
+
+The existing Kelly shortcut checked actual position count only below 20 attempt keys. Rejected attempts brought ETH to 20 keys, triggering the full account history read even though 11/12 filled positions cannot contain 20 closed positions. This is unnecessary accounting work before a fresh admission, not a reason to disable Kelly or change its threshold.
+
+The follow-up always applies the existing distinct-position upper-bound query. Below 20 positions, Kelly remains non-operative exactly as before; at 20 or more positions the full history calculation remains mandatory, including when one entry key identifies multiple positions. Each background result is published immediately on completion, with at most the existing two jobs active. The final writer still rejects stale or changed proofs.
+
+Focused regressions pass: 20 attempt keys with 11 distinct positions cannot force the expensive history read (the full-history table is deliberately unavailable in the fixture); duplicate receipts do not inflate the count; one key with 20 positions still invokes full history. A held sibling future also cannot delay publication of the completed result. Required full checks and measured deployment verification remain pending for this follow-up.
+
+The first full-suite run caught excessive stack use in the async publication composition. The two read-only jobs are now heap-pinned before composition, retaining the same concurrency bound. The previously failing actor test passes at the normal test-thread stack size; required full checks are rerun on this exact revision before merge. This failure was caught before production deployment.

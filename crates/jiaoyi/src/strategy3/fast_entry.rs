@@ -604,8 +604,10 @@ pub(super) async fn run(
                 None => None,
             }
         };
-        let results = tokio::select! {_=shutdown.wait()=>return Ok(()),r=async{tokio::join!(run(jobs.next()),run(jobs.next()))}=>r};
-        for (id, result, detail) in [results.0, results.1].into_iter().flatten() {
+        let publish = |row: Option<(i64, Result<Prepared, String>, Value)>| {
+            let Some((id, result, detail)) = row else {
+                return;
+            };
             cache.attempts.insert(id, detail);
             match result {
                 Ok(p) => {
@@ -617,14 +619,54 @@ pub(super) async fn run(
                     cache.errors.insert(id, e);
                 }
             }
+            output.send_replace(cache.clone());
+        };
+        tokio::select! {
+            _=shutdown.wait()=>return Ok(()),
+            _=publish_independently(Box::pin(run(jobs.next())), Box::pin(run(jobs.next())), publish)=>{}
         }
-        output.send_replace(cache.clone());
+    }
+}
+
+// A slower sibling must not hold a fresh five-second admission until expiry.
+// There are still at most two read-only jobs; neither receives order authority.
+async fn publish_independently<T>(
+    first: impl std::future::Future<Output = T>,
+    second: impl std::future::Future<Output = T>,
+    mut publish: impl FnMut(T),
+) {
+    tokio::pin!(first, second);
+    tokio::select! {
+        value = &mut first => { publish(value); publish(second.await); }
+        value = &mut second => { publish(value); publish(first.await); }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn faster_admission_is_published_before_slow_sibling_finishes() {
+        let (release, delayed) = tokio::sync::oneshot::channel();
+        let (output, mut received) = tokio::sync::mpsc::unbounded_channel();
+        let work =
+            publish_independently(async { "ready" }, async { delayed.await.unwrap() }, |v| {
+                output.send(v).unwrap();
+            });
+        let observe = async {
+            assert_eq!(
+                tokio::time::timeout(Duration::from_secs(2), received.recv())
+                    .await
+                    .unwrap(),
+                Some("ready")
+            );
+            assert!(received.try_recv().is_err());
+            release.send("slow_result").unwrap();
+            assert_eq!(received.recv().await, Some("slow_result"));
+        };
+        tokio::join!(work, observe);
+    }
+
     #[test]
     fn restored_source_requires_original_quote_and_causal_matching_macro() {
         let open = DateTime::parse_from_rfc3339("2026-11-09T00:00:00Z")
