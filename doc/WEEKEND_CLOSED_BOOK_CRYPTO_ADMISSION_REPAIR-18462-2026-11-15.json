@@ -236,7 +236,9 @@
   "predeployment_snapshot": {
     "at": "2026-11-15T00:04:39.075079+00:00",
     "accounts_connected_and_unpaused": 4,
-    "crypto_opening_refs_available": 8
+    "crypto_opening_refs_available": 8,
+    "current_0800_opening_references": 6,
+    "older_0400_references_on_s1_locked_account": 2
   },
   "verification": {
     "commands": [
@@ -344,11 +346,979 @@
     "test_environment_note": "Local PostgreSQL initially stopped; started the owned local development container. Sunday restart fixture corrected to create its selected Friday tick partition; S1 FX-conversion fixture now supplies an explicitly open broker calendar. No production calendar changes."
   },
   "release": {
-    "pr": null,
-    "merge_commit": null,
-    "deployment_status": "not_yet_attempted",
-    "postdeployment_readiness_verified": false,
-    "followup": "Post-deployment measured attestation will be published on the release PR, with original timestamps and explicit blockers."
+    "pr": 230,
+    "merge_commit": "72276a2624de1f835d1dcc90c857b20332e4b184",
+    "deployment_status": "SUCCESS",
+    "deployment_id": "89de05fc-15b8-481a-ba3f-c3c5b1da5c53",
+    "postdeployment_fx_accounting_verified": true,
+    "postdeployment_full_readiness_verified": false,
+    "postdeployment_observation": {
+      "at": "2026-11-15T00:50:18.477540+00:00",
+      "accounts_connected_and_unpaused": 4,
+      "gold_opening_records_unchanged": [
+        {
+          "position_id": 262583136,
+          "account_id": 47790949,
+          "entry_key": "s3:47790949:41:1794580200:1",
+          "deadline_before": "2026-11-13T21:55:00Z",
+          "deadline_after": "2026-11-13T21:55:00Z",
+          "entire_opening_record_unchanged": true
+        },
+        {
+          "position_id": 262583980,
+          "account_id": 46130058,
+          "entry_key": "s3:46130058:41:1794580200:1",
+          "deadline_before": "2026-11-13T21:55:00Z",
+          "deadline_after": "2026-11-13T21:55:00Z",
+          "entire_opening_record_unchanged": true
+        }
+      ],
+      "protected_live_inventory_unchanged": true,
+      "recorded_live_s3_interference": 0,
+      "quiet_interval_seconds": 118.73326,
+      "session_end_attempts_in_interval": 0,
+      "market_closed_rejections_in_interval": 0,
+      "accounts": [
+        {
+          "account_id": 43002148,
+          "exposure_fx": {
+            "freshness_policy": "Candidate FX stays live (5s). Existing positions may use verified scheduled-closure pre-close evidence with a 5% adverse reserve; the writer revalidates the closure. This record is not an executable quote.",
+            "last_state_change_at": "2026-11-15T00:47:20.384374Z",
+            "recorded_provenance": {
+              "account_id": 43002148,
+              "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+              "closed_book_quotes": [
+                {
+                  "account_id": 43002148,
+                  "ask": 1.10215,
+                  "ask_at": "2026-11-13T21:54:59.796Z",
+                  "bid": 1.10212,
+                  "bid_at": "2026-11-13T21:54:59.796Z",
+                  "calendar": {
+                    "holidays": [
+                      {
+                        "date": "2025-12-24",
+                        "end_second": 86399,
+                        "id": 4499,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-31",
+                        "end_second": 86399,
+                        "id": 4468,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-25",
+                        "end_second": 86400,
+                        "id": 4462,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2026-01-01",
+                        "end_second": 86400,
+                        "id": 4463,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      }
+                    ],
+                    "short_selling_enabled": true,
+                    "symbol_id": 1,
+                    "timezone": "America/New_York",
+                    "trading_mode": 0,
+                    "weekly_intervals": [
+                      [
+                        61260,
+                        147540
+                      ],
+                      [
+                        147660,
+                        233940
+                      ],
+                      [
+                        234060,
+                        320340
+                      ],
+                      [
+                        320460,
+                        406740
+                      ],
+                      [
+                        406860,
+                        492900
+                      ]
+                    ]
+                  },
+                  "source": "connection_broker_timestamp_preclose_quote",
+                  "verified_at": "2026-11-15T00:47:16.872433222Z"
+                },
+                {
+                  "account_id": 43002148,
+                  "ask": 159.725,
+                  "ask_at": "2026-11-13T21:54:59.953Z",
+                  "bid": 159.715,
+                  "bid_at": "2026-11-13T21:54:59.953Z",
+                  "calendar": {
+                    "holidays": [
+                      {
+                        "date": "2025-12-24",
+                        "end_second": 86399,
+                        "id": 4499,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-31",
+                        "end_second": 86399,
+                        "id": 4468,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-25",
+                        "end_second": 86400,
+                        "id": 4462,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2026-01-01",
+                        "end_second": 86400,
+                        "id": 4463,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      }
+                    ],
+                    "short_selling_enabled": true,
+                    "symbol_id": 4,
+                    "timezone": "America/New_York",
+                    "trading_mode": 0,
+                    "weekly_intervals": [
+                      [
+                        61260,
+                        147540
+                      ],
+                      [
+                        147660,
+                        233940
+                      ],
+                      [
+                        234060,
+                        320340
+                      ],
+                      [
+                        320460,
+                        406740
+                      ],
+                      [
+                        406860,
+                        492900
+                      ]
+                    ]
+                  },
+                  "source": "connection_broker_timestamp_preclose_quote",
+                  "verified_at": "2026-11-15T00:47:16.872433222Z"
+                },
+                {
+                  "account_id": 43002148,
+                  "ask": 0.67757,
+                  "ask_at": "2026-11-13T21:54:59.596Z",
+                  "bid": 0.67746,
+                  "bid_at": "2026-11-13T21:54:59.596Z",
+                  "calendar": {
+                    "holidays": [
+                      {
+                        "date": "2025-12-24",
+                        "end_second": 86399,
+                        "id": 4499,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-31",
+                        "end_second": 86399,
+                        "id": 4468,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-25",
+                        "end_second": 86400,
+                        "id": 4462,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2026-01-01",
+                        "end_second": 86400,
+                        "id": 4463,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      }
+                    ],
+                    "short_selling_enabled": true,
+                    "symbol_id": 5,
+                    "timezone": "America/New_York",
+                    "trading_mode": 0,
+                    "weekly_intervals": [
+                      [
+                        61260,
+                        147540
+                      ],
+                      [
+                        147660,
+                        233940
+                      ],
+                      [
+                        234060,
+                        320340
+                      ],
+                      [
+                        320460,
+                        406740
+                      ],
+                      [
+                        406860,
+                        492900
+                      ]
+                    ]
+                  },
+                  "source": "connection_broker_timestamp_preclose_quote",
+                  "verified_at": "2026-11-15T00:47:16.872433222Z"
+                }
+              ],
+              "generation": 12,
+              "label": "jiaoyi-s3",
+              "observed_at": "2026-11-15T00:47:20.380089763Z",
+              "paths": [
+                {
+                  "bounds": null,
+                  "deposit_asset": 15,
+                  "from_asset": 1,
+                  "legs": [
+                    {
+                      "from_asset": 1,
+                      "inverse": false,
+                      "symbol_id": 5,
+                      "to_asset": 15
+                    }
+                  ],
+                  "max_quote_age_ms": 5000,
+                  "reason": "conversion quote stale/incomplete/crossed for broker symbol 5",
+                  "state": "unavailable",
+                  "subscribed": true
+                },
+                {
+                  "bounds": null,
+                  "deposit_asset": 15,
+                  "from_asset": 5,
+                  "legs": [
+                    {
+                      "from_asset": 5,
+                      "inverse": false,
+                      "symbol_id": 1,
+                      "to_asset": 15
+                    }
+                  ],
+                  "max_quote_age_ms": 5000,
+                  "reason": "conversion quote stale/incomplete/crossed for broker symbol 1",
+                  "state": "unavailable",
+                  "subscribed": true
+                },
+                {
+                  "bounds": null,
+                  "deposit_asset": 15,
+                  "from_asset": 8,
+                  "legs": [
+                    {
+                      "from_asset": 8,
+                      "inverse": true,
+                      "symbol_id": 4,
+                      "to_asset": 15
+                    }
+                  ],
+                  "max_quote_age_ms": 5000,
+                  "reason": "conversion quote stale/incomplete/crossed for broker symbol 4",
+                  "state": "unavailable",
+                  "subscribed": true
+                }
+              ],
+              "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+              "strategy": "Strategy 3: macro pullback",
+              "warmup_error": null
+            }
+          },
+          "crypto": {
+            "BTCUSD": {
+              "entry_gate": {
+                "code": "peer_hold_below_24bps_or_opposing",
+                "message": "Vetoed: peer ETHUSD < 24 bps or opposing (missing or stale quote/preparation); mandatory at dispatch",
+                "state": "vetoed"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": "margin buffer: conversion quote stale/incomplete/crossed for broker symbol 4",
+                "prepared_now": false,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": -0.0,
+                "refusal": null
+              },
+              "opening_reference": {
+                "macro_context": {
+                  "Ok": {
+                    "drift_20": -0.16729771243670744,
+                    "drift_5": -0.11422838050575557,
+                    "latest_bar_end": "2026-11-14T04:00:00Z"
+                  }
+                },
+                "mid": 64127.63,
+                "prepared_at": "2026-11-15T00:47:14.137900329Z",
+                "quote": {
+                  "ask": 64135.13,
+                  "ask_at": "2026-11-15T00:00:00.080662Z",
+                  "bid": 64120.13,
+                  "bid_at": "2026-11-15T00:00:00.080662Z",
+                  "mid": 64127.63,
+                  "observed_at": "2026-11-15T00:00:00.080662Z",
+                  "source": "recorded_ticks_native_open_6s"
+                },
+                "session_close": "2026-11-15T04:00:00Z",
+                "session_open": "2026-11-15T00:00:00Z"
+              }
+            },
+            "ETHUSD": {
+              "entry_gate": {
+                "code": "invalidated_deep_retracement_gt_61_8pct",
+                "message": "Invalidated: retraced > 61.8% without turn confirmation",
+                "state": "invalidated"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": null,
+                "prepared_now": false,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": -0.0,
+                "refusal": null
+              },
+              "opening_reference": null
+            }
+          }
+        },
+        {
+          "account_id": 46130058,
+          "exposure_fx": {
+            "freshness_policy": "Candidate FX stays live (5s). Existing positions may use verified scheduled-closure pre-close evidence with a 5% adverse reserve; the writer revalidates the closure. This record is not an executable quote.",
+            "last_state_change_at": "2026-11-15T00:47:21.196750Z",
+            "recorded_provenance": {
+              "account_id": 46130058,
+              "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+              "closed_book_quotes": [
+                {
+                  "account_id": 46130058,
+                  "ask": 1.1022,
+                  "ask_at": "2026-11-13T21:54:59.744Z",
+                  "bid": 1.10207,
+                  "bid_at": "2026-11-13T21:54:59.744Z",
+                  "calendar": {
+                    "holidays": [
+                      {
+                        "date": "2025-12-25",
+                        "end_second": 86400,
+                        "id": 4004,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2026-01-01",
+                        "end_second": 86400,
+                        "id": 4005,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-24",
+                        "end_second": 86399,
+                        "id": 4041,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-31",
+                        "end_second": 86399,
+                        "id": 4010,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      }
+                    ],
+                    "short_selling_enabled": true,
+                    "symbol_id": 1,
+                    "timezone": "America/New_York",
+                    "trading_mode": 0,
+                    "weekly_intervals": [
+                      [
+                        61260,
+                        147540
+                      ],
+                      [
+                        147660,
+                        233940
+                      ],
+                      [
+                        234060,
+                        320340
+                      ],
+                      [
+                        320460,
+                        406740
+                      ],
+                      [
+                        406860,
+                        492900
+                      ]
+                    ]
+                  },
+                  "source": "connection_broker_timestamp_preclose_quote",
+                  "verified_at": "2026-11-15T00:47:17.205054863Z"
+                },
+                {
+                  "account_id": 46130058,
+                  "ask": 0.67762,
+                  "ask_at": "2026-11-13T21:54:59.660Z",
+                  "bid": 0.67741,
+                  "bid_at": "2026-11-13T21:54:59.660Z",
+                  "calendar": {
+                    "holidays": [
+                      {
+                        "date": "2025-12-25",
+                        "end_second": 86400,
+                        "id": 4004,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2026-01-01",
+                        "end_second": 86400,
+                        "id": 4005,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-24",
+                        "end_second": 86399,
+                        "id": 4041,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-31",
+                        "end_second": 86399,
+                        "id": 4010,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      }
+                    ],
+                    "short_selling_enabled": true,
+                    "symbol_id": 5,
+                    "timezone": "America/New_York",
+                    "trading_mode": 0,
+                    "weekly_intervals": [
+                      [
+                        61260,
+                        147540
+                      ],
+                      [
+                        147660,
+                        233940
+                      ],
+                      [
+                        234060,
+                        320340
+                      ],
+                      [
+                        320460,
+                        406740
+                      ],
+                      [
+                        406860,
+                        492900
+                      ]
+                    ]
+                  },
+                  "source": "connection_broker_timestamp_preclose_quote",
+                  "verified_at": "2026-11-15T00:47:17.205054863Z"
+                }
+              ],
+              "generation": 11,
+              "label": "jiaoyi-s3",
+              "observed_at": "2026-11-15T00:47:21.192883420Z",
+              "paths": [
+                {
+                  "bounds": null,
+                  "deposit_asset": 15,
+                  "from_asset": 1,
+                  "legs": [
+                    {
+                      "from_asset": 1,
+                      "inverse": false,
+                      "symbol_id": 5,
+                      "to_asset": 15
+                    }
+                  ],
+                  "max_quote_age_ms": 5000,
+                  "reason": "conversion quote stale/incomplete/crossed for broker symbol 5",
+                  "state": "unavailable",
+                  "subscribed": true
+                },
+                {
+                  "bounds": null,
+                  "deposit_asset": 15,
+                  "from_asset": 5,
+                  "legs": [
+                    {
+                      "from_asset": 5,
+                      "inverse": false,
+                      "symbol_id": 1,
+                      "to_asset": 15
+                    }
+                  ],
+                  "max_quote_age_ms": 5000,
+                  "reason": "conversion quote stale/incomplete/crossed for broker symbol 1",
+                  "state": "unavailable",
+                  "subscribed": true
+                }
+              ],
+              "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+              "strategy": "Strategy 3: macro pullback",
+              "warmup_error": null
+            }
+          },
+          "crypto": {
+            "BTCUSD": {
+              "entry_gate": {
+                "code": "peer_hold_below_24bps_or_opposing",
+                "message": "Vetoed: peer ETHUSD < 24 bps or opposing (missing or stale quote/preparation); mandatory at dispatch",
+                "state": "vetoed"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": null,
+                "prepared_now": true,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": 155.0,
+                "refusal": null
+              },
+              "opening_reference": {
+                "macro_context": {
+                  "Ok": {
+                    "drift_20": -0.16729771243670744,
+                    "drift_5": -0.11422838050575557,
+                    "latest_bar_end": "2026-11-14T04:00:00Z"
+                  }
+                },
+                "mid": 64127.63,
+                "prepared_at": "2026-11-15T00:47:15.148142040Z",
+                "quote": {
+                  "ask": 64135.13,
+                  "ask_at": "2026-11-15T00:00:00.066887Z",
+                  "bid": 64120.13,
+                  "bid_at": "2026-11-15T00:00:00.066887Z",
+                  "mid": 64127.63,
+                  "observed_at": "2026-11-15T00:00:00.066887Z",
+                  "source": "recorded_ticks_native_open_6s"
+                },
+                "session_close": "2026-11-15T04:00:00Z",
+                "session_open": "2026-11-15T00:00:00Z"
+              }
+            },
+            "ETHUSD": {
+              "entry_gate": {
+                "code": "invalidated_deep_retracement_gt_61_8pct",
+                "message": "Invalidated: retraced > 61.8% without turn confirmation",
+                "state": "invalidated"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": null,
+                "prepared_now": false,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": 155.0,
+                "refusal": null
+              },
+              "opening_reference": null
+            }
+          }
+        },
+        {
+          "account_id": 47790949,
+          "exposure_fx": {
+            "freshness_policy": "Candidate FX stays live (5s). Existing positions may use verified scheduled-closure pre-close evidence with a 5% adverse reserve; the writer revalidates the closure. This record is not an executable quote.",
+            "last_state_change_at": "2026-11-15T00:47:21.189979Z",
+            "recorded_provenance": {
+              "account_id": 47790949,
+              "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+              "closed_book_quotes": [
+                {
+                  "account_id": 47790949,
+                  "ask": 1.10215,
+                  "ask_at": "2026-11-13T21:54:59.744Z",
+                  "bid": 1.10212,
+                  "bid_at": "2026-11-13T21:54:59.744Z",
+                  "calendar": {
+                    "holidays": [
+                      {
+                        "date": "2025-12-25",
+                        "end_second": 86400,
+                        "id": 4004,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2026-01-01",
+                        "end_second": 86400,
+                        "id": 4005,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-24",
+                        "end_second": 86399,
+                        "id": 4041,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-31",
+                        "end_second": 86399,
+                        "id": 4010,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      }
+                    ],
+                    "short_selling_enabled": true,
+                    "symbol_id": 1,
+                    "timezone": "America/New_York",
+                    "trading_mode": 0,
+                    "weekly_intervals": [
+                      [
+                        61260,
+                        147540
+                      ],
+                      [
+                        147660,
+                        233940
+                      ],
+                      [
+                        234060,
+                        320340
+                      ],
+                      [
+                        320460,
+                        406740
+                      ],
+                      [
+                        406860,
+                        492900
+                      ]
+                    ]
+                  },
+                  "source": "connection_broker_timestamp_preclose_quote",
+                  "verified_at": "2026-11-15T00:47:17.205481515Z"
+                },
+                {
+                  "account_id": 47790949,
+                  "ask": 0.67757,
+                  "ask_at": "2026-11-13T21:54:59.660Z",
+                  "bid": 0.67746,
+                  "bid_at": "2026-11-13T21:54:59.660Z",
+                  "calendar": {
+                    "holidays": [
+                      {
+                        "date": "2025-12-25",
+                        "end_second": 86400,
+                        "id": 4004,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2026-01-01",
+                        "end_second": 86400,
+                        "id": 4005,
+                        "recurring": false,
+                        "start_second": 0,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-24",
+                        "end_second": 86399,
+                        "id": 4041,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      },
+                      {
+                        "date": "2025-12-31",
+                        "end_second": 86399,
+                        "id": 4010,
+                        "recurring": false,
+                        "start_second": 78900,
+                        "timezone": "Europe/Bucharest"
+                      }
+                    ],
+                    "short_selling_enabled": true,
+                    "symbol_id": 5,
+                    "timezone": "America/New_York",
+                    "trading_mode": 0,
+                    "weekly_intervals": [
+                      [
+                        61260,
+                        147540
+                      ],
+                      [
+                        147660,
+                        233940
+                      ],
+                      [
+                        234060,
+                        320340
+                      ],
+                      [
+                        320460,
+                        406740
+                      ],
+                      [
+                        406860,
+                        492900
+                      ]
+                    ]
+                  },
+                  "source": "connection_broker_timestamp_preclose_quote",
+                  "verified_at": "2026-11-15T00:47:17.205481515Z"
+                }
+              ],
+              "generation": 3,
+              "label": "jiaoyi-s3",
+              "observed_at": "2026-11-15T00:47:21.185238055Z",
+              "paths": [
+                {
+                  "bounds": null,
+                  "deposit_asset": 15,
+                  "from_asset": 1,
+                  "legs": [
+                    {
+                      "from_asset": 1,
+                      "inverse": false,
+                      "symbol_id": 5,
+                      "to_asset": 15
+                    }
+                  ],
+                  "max_quote_age_ms": 5000,
+                  "reason": "conversion quote stale/incomplete/crossed for broker symbol 5",
+                  "state": "unavailable",
+                  "subscribed": true
+                },
+                {
+                  "bounds": null,
+                  "deposit_asset": 15,
+                  "from_asset": 5,
+                  "legs": [
+                    {
+                      "from_asset": 5,
+                      "inverse": false,
+                      "symbol_id": 1,
+                      "to_asset": 15
+                    }
+                  ],
+                  "max_quote_age_ms": 5000,
+                  "reason": "conversion quote stale/incomplete/crossed for broker symbol 1",
+                  "state": "unavailable",
+                  "subscribed": true
+                }
+              ],
+              "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+              "strategy": "Strategy 3: macro pullback",
+              "warmup_error": null
+            }
+          },
+          "crypto": {
+            "BTCUSD": {
+              "entry_gate": {
+                "code": "peer_hold_below_24bps_or_opposing",
+                "message": "Vetoed: peer ETHUSD < 24 bps or opposing (missing or stale quote/preparation); mandatory at dispatch",
+                "state": "vetoed"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": null,
+                "prepared_now": false,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": 139.14000000000033,
+                "refusal": null
+              },
+              "opening_reference": {
+                "macro_context": {
+                  "Ok": {
+                    "drift_20": -0.16729771243670744,
+                    "drift_5": -0.11422838050575557,
+                    "latest_bar_end": "2026-11-14T04:00:00Z"
+                  }
+                },
+                "mid": 64127.63,
+                "prepared_at": "2026-11-15T00:47:15.133798843Z",
+                "quote": {
+                  "ask": 64135.13,
+                  "ask_at": "2026-11-15T00:00:00.067400Z",
+                  "bid": 64120.13,
+                  "bid_at": "2026-11-15T00:00:00.067400Z",
+                  "mid": 64127.63,
+                  "observed_at": "2026-11-15T00:00:00.067400Z",
+                  "source": "recorded_ticks_native_open_6s"
+                },
+                "session_close": "2026-11-15T04:00:00Z",
+                "session_open": "2026-11-15T00:00:00Z"
+              }
+            },
+            "ETHUSD": {
+              "entry_gate": {
+                "code": "invalidated_deep_retracement_gt_61_8pct",
+                "message": "Invalidated: retraced > 61.8% without turn confirmation",
+                "state": "invalidated"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": null,
+                "prepared_now": false,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": 139.14000000000033,
+                "refusal": null
+              },
+              "opening_reference": null
+            }
+          }
+        },
+        {
+          "account_id": 49236051,
+          "exposure_fx": {
+            "freshness_policy": "Candidate FX stays live (5s). Existing positions may use verified scheduled-closure pre-close evidence with a 5% adverse reserve; the writer revalidates the closure. This record is not an executable quote.",
+            "last_state_change_at": "2026-11-15T00:47:19.035291Z",
+            "recorded_provenance": {
+              "account_id": 49236051,
+              "closed_book_policy": "closed_book_fx_gap_5pct_v18462",
+              "closed_book_quotes": [],
+              "generation": 10,
+              "label": "jiaoyi-s3",
+              "observed_at": "2026-11-15T00:47:19.030076426Z",
+              "paths": [],
+              "prereg_hash": "0444a4c326c391638f3b2e90c9eb5790e15cbeb42e943dfb7735aeed1287534c",
+              "strategy": "Strategy 3: macro pullback",
+              "warmup_error": null
+            }
+          },
+          "crypto": {
+            "BTCUSD": {
+              "entry_gate": {
+                "code": "pair_risk_reservation_active",
+                "message": "Blocked: pair reservation held by sibling symbol ETHUSD",
+                "state": "blocked"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": null,
+                "prepared_now": false,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": -0.0,
+                "refusal": null
+              },
+              "opening_reference": null
+            },
+            "ETHUSD": {
+              "entry_gate": {
+                "code": "yield_to_human_position_or_order",
+                "message": "Blocked: yield_to_human_position_or_order",
+                "state": "blocked"
+              },
+              "entry_preparation": {
+                "commission_age_seconds": 166,
+                "commission_error": null,
+                "commission_expired": false,
+                "evidence_scope": "background admission; final writer checks remain mandatory",
+                "last_refusal": null,
+                "prepared_now": false,
+                "source_refusal": null
+              },
+              "existing_s3_stop_risk": {
+                "known_usd": -0.0,
+                "refusal": null
+              },
+              "opening_reference": null
+            }
+          }
+        }
+      ]
+    },
+    "followup": "Restore current peer context even when the durable arm was invalidated or its decision mark already evaluated. Post-followup verification will be published on the follow-up PR."
   },
   "additional_diagnostic": "Commission evidence expiry is now visible in per-symbol entry preparation. No commission TTL or commission amounts changed.",
   "evidence_hashes": {
@@ -364,5 +1334,62 @@
     "baseline-deployment.json": "b8c09d251ed4e369b0eab01e04653ac692d3c5530c0a5ef8ba0cc6496854dd5e"
   },
   "protected_trading_rs_sha256": "b1c6f9951a7e8e74e81a9edb345ba8d251fef37e81aa949a5930ef722be80cd3",
-  "financial_pass": false
+  "financial_pass": false,
+  "peer_context_followup": {
+    "scope": "current opening/context restoration only; retain invalidation, consumed mark, source-arm context and all entry/exit/ownership gates",
+    "regression": "owner18409_restart_restores_london_and_crypto_from_postgres now exercises quote-driven restart with no arm and an already-evaluated mark; original tick origin restored and no rearm/order/amend/close",
+    "focused_test_passed": true,
+    "checks": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--all-targets"
+        ],
+        "exit_code": 0,
+        "seconds": 3.45
+      },
+      {
+        "name": "test",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "seconds": 294.72
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 9.52
+      },
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 1.09
+      }
+    ],
+    "tests": {
+      "passed": 810,
+      "failed": 0,
+      "ignored": 1
+    }
+  }
 }
