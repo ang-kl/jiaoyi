@@ -3099,8 +3099,12 @@ impl<'a, 'c> Trader<'a, 'c> {
         }
         if let Some(a) = arm {
             self.restore_pullback_source(id, a, now).await?;
-            self.prepare(id, s, now).await?;
         }
+        // Current context is also evidence for the sibling's peer guard.
+        // A consumed/invalidated arm or an already-evaluated mark must not
+        // suppress restoration of the original opening quote after restart.
+        // prepare() retains the human lock and bounded original-quote rules.
+        self.prepare(id, s, now).await?;
         Ok(())
     }
 

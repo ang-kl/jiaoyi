@@ -4,7 +4,7 @@
 
 The shared margin gate previously required a live FX conversion quote for every existing foreign position. Consequently a healthy USD crypto candidate could be refused solely because an existing S1 AUS200/GER40 position needed AUD/USD or EUR/USD while FX was closed. This release separates existing-position accounting from candidate and pending-entry valuation. Existing stop liabilities may use broker-calendar-verified pre-close evidence with a 5% adverse FX reserve; candidate quotes and conversion legs remain live and executable.
 
-This is an execution/accounting repair, not strategy qualification or a change in entry/exit rules. The pre-deployment report does not claim a successful deployment or successful future 12:00 SGT opening. The release PR will carry the timestamped post-deployment attestation and any remaining evidence or legitimate risk blockers.
+This is an execution/accounting repair, not strategy qualification or a change in entry/exit rules. PR #230 is merged and deployed; §9 records measured accounting and ownership verification. The restart verification also found a peer-context restoration defect, addressed by the follow-up in this report. Its deployment attestation will be published on the follow-up PR. Future 12:00 SGT opening prices are not claimed before that time.
 
 ## §2. Recorded refusals and comparison fills
 
@@ -68,3 +68,23 @@ CI must pass `check`, `docker`, and `engineering` on the exact PR head before sq
 ## §8. Inspectable evidence
 
 The companion JSON includes exact refusal groups, comparison fill identifiers, Gold geometry, available pre-close quotes, command results, protected-file hash, and SHA256 hashes of the read-only source snapshots. Raw authenticated health and database captures remain private; no tokens or passwords are published. Post-deployment evidence will be linked on the PR so another reviewer can read it on GitHub.
+
+## §9. First rollout verification and required context follow-up
+
+PR #230 passed all three CI jobs and deployed **72276a2624de1f835d1dcc90c857b20332e4b184** on Railway deployment `89de05fc-15b8-481a-ba3f-c3c5b1da5c53`. At 15 November **08:50:18 SGT**, all four accounts were connected and unpaused. The affected demos had authentic broker-dated AUDUSD and EURUSD quotes from **13 November 21:54:59 UTC**, with no closed-book hydration error. EURUSD was absent from the initial Friday tick query but was supplied by the authenticated subscription with its original pre-close timestamp; it was not invented, borrowed across accounts, or relabelled with Sunday's arrival time.
+
+The S3 stop-risk diagnostics showed **$155.00** on 46130058 and **$139.14** on 47790949. Account 46130058 had a currently prepared BTC admission at the second snapshot, demonstrating that the repaired existing-book reserve can pass the actual background admission path. This is preparation, not a fill or a bypass of the final peer/risk/quote guards. Live 43002148 still had a strict USDJPY refusal for pending foreign exposure, which is outside the existing-position exception. Account 49236051's S1 ETHUSD position continued to hold its crypto pair.
+
+All five live human positions, five pending entries and two live S1 positions retained their geometry. Both Gold opening records, stops, targets, quantities and original deadlines were identical. The measured **118.733-second** interval starting 08:48:00 SGT contained zero new session-end attempts and zero MARKET_CLOSED rejections. Engineering deployment and risk settings were unchanged.
+
+### The restart check found a separate context defect
+
+Before deployment, six eligible cells had current 08:00 references. The two displayed references on 49236051 were older 04:00 references under its S1 ownership/pair locks; they were never eight current, entry-ready cells.
+
+After restart, ETH's durable invalidation and the already-evaluated decision mark suppressed the path that restored its current opening reference. The actor restored a current `Day` only when an arm still existed. BTC consequently lacked its sibling's origin despite the original ETH quote remaining in PostgreSQL. This is a cache-restoration defect, not an economic peer disagreement, and it prevented sign-off of full restart readiness.
+
+The follow-up moves current-session `prepare()` outside the optional-arm branch of `restore_pullback()`. It still runs through the existing human lock and bounded original-quote loader. It does not clear invalidation, consume/reset marks, rearm the trade, substitute a current price for the opening price, or change entry/exit thresholds. The original carried-arm source remains independent of the current peer context.
+
+The existing restart regression now uses the real quote-driven path with no arm and an already-evaluated mark, instead of manually calling preparation after restart. It verifies the original tick midpoint and causal macro context, retained invalidation, no rearm, and no orders/amends/closes. The focused restart and durable-cost-veto regressions pass. An old test assertion expected the current cache to remain empty after a cost veto; it now checks that the veto still prevents orders while context is available to the sibling. A separate missing-preparation fixture explicitly clears its cache. The follow-up check results are in the companion JSON. Its required CI must pass before another deployment; measured verification will be published on that PR.
+
+Follow-up local verification: **cargo check --workspace --all-targets**, **cargo test --workspace**, **cargo clippy --workspace -- -D warnings**, and **cargo fmt --all --check** all pass. The full workspace has **810 passed, 0 failed, 1 existing ignored** test.

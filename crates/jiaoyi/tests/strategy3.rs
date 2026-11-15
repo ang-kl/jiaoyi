@@ -1598,7 +1598,11 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
                 "a tighter quote cannot reopen the session"
             );
             assert_eq!(restarted.syms[&BTC].cost_skip_session, Some(today().open));
-            assert!(restarted.syms[&BTC].day.is_none());
+            // The cost veto still blocks this symbol, while its current
+            // opening context remains available to the sibling peer check.
+            let day = restarted.syms[&BTC].day.as_ref().unwrap().as_ref().unwrap();
+            assert_eq!(day.session, today());
+            assert_eq!(day.open, Ok(OPEN));
             let x = assert_blocker(&restarted.syms[&BTC], at(60));
             let live = restarted.live.lock().unwrap().clone();
             let h = strategy3::health(&pool, &live).await.unwrap();
@@ -1643,6 +1647,7 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
             let mut other = restarted.syms[&BTC].clone();
             other.name = "ETHUSD".into();
             other.cost_skip_session = None;
+            other.day = None; // explicitly model missing preparation
             let unprepared = strategy3::trigger_distance(&other, at(60));
             assert_eq!(unprepared["reason"], "today's session is not prepared yet");
             assert!(unprepared["reason_code"].is_null());
@@ -6211,7 +6216,28 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
                 } else {
                     now
                 };
-                t.prepare(*id, *s, prepare_at).await.unwrap();
+                if restart == 0 {
+                    t.prepare(*id, *s, prepare_at).await.unwrap();
+                } else {
+                    // No arm remains and this mark is already evaluated.
+                    // Quote-driven restart must restore context before that
+                    // entry skip; otherwise its sibling loses peer evidence.
+                    let sym = t.syms.get_mut(id).unwrap();
+                    sym.last_decision_mark = Some(now);
+                    sym.last_assessment =
+                        Some((*s, now, "invalidated_deep_retracement_gt_61_8pct".into()));
+                    t.on_quote(*id, Some(OPEN - 2.5), Some(OPEN + 2.5), prepare_at)
+                        .await
+                        .unwrap();
+                    assert!(
+                        t.syms[id].pullback.is_none(),
+                        "restoration must not rearm {symbol}"
+                    );
+                    assert_eq!(
+                        t.syms[id].last_assessment.as_ref().unwrap().2,
+                        "invalidated_deep_retracement_gt_61_8pct"
+                    );
+                }
                 let d = t.syms[id].day.as_ref().unwrap().as_ref().unwrap();
                 assert_eq!(
                     d.open,
