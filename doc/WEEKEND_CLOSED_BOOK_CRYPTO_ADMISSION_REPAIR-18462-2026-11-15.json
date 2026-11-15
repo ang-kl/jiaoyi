@@ -2251,6 +2251,12 @@
       "20 attempt keys with 11 distinct positions skips full-history query; one key with 20 positions still queries",
       "fast result visible while sibling is deliberately blocked"
     ],
-    "full_checks": "running; must pass before merge"
+    "full_checks": "running; must pass before merge",
+    "stack_regression": {
+      "first_full_suite": "caught stack overflow before deployment",
+      "fix": "heap-pin both read-only jobs before async composition",
+      "normal_stack_actor_regression_passed": true,
+      "full_suite_rerun_required": true
+    }
   }
 }

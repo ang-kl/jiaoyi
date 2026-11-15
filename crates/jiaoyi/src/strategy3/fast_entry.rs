@@ -623,7 +623,7 @@ pub(super) async fn run(
         };
         tokio::select! {
             _=shutdown.wait()=>return Ok(()),
-            _=publish_independently(run(jobs.next()), run(jobs.next()), publish)=>{}
+            _=publish_independently(Box::pin(run(jobs.next())), Box::pin(run(jobs.next())), publish)=>{}
         }
     }
 }
