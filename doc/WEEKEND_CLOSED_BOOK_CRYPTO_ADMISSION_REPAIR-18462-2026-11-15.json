@@ -1,6 +1,6 @@
 {
   "trace": "\u211618,462",
-  "status": "implementation_and_predeployment_evidence",
+  "status": "deployed_with_admission_publication_followup_in_progress",
   "generated_at_utc": "2026-11-15T00:37:09.983876+00:00",
   "repository": "ang-kl/jiaoyi",
   "base_commit": "e4dc700a87989e03e811e44daeeab01727c891b3",
@@ -2070,7 +2070,187 @@
     "change": "Read expected margins in batches of at most two, preserving accumulation order and final account recheck; add last-attempt timing to health.",
     "freshness_limits_unchanged": true,
     "focused_bounded_concurrency_and_exact_reserve_test_passed": true,
-    "full_required_local_checks": "running; must pass before merge",
-    "production_effect_on_preparation_expiry": "not_yet_measured"
+    "full_required_local_checks": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--all-targets"
+        ],
+        "exit_code": 0,
+        "seconds": 0.33
+      },
+      {
+        "name": "test",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "seconds": 324.63
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 16.78
+      },
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 0.97
+      }
+    ],
+    "production_effect_on_preparation_expiry": "BTC succeeds in 3.159\u20133.365s, but publication still waits for 7.641\u20137.905s ETH failure",
+    "release": {
+      "pr": 232,
+      "merge_commit": "08c8eb09b55de77dbee2ce6d3184814dacc2a4b6",
+      "deployment": {
+        "id": "d8df695c-6af7-4727-90ce-8a9dcff8661d",
+        "status": "SUCCESS",
+        "createdAt": "2026-11-15T01:32:16.569Z",
+        "commit": "08c8eb09b55de77dbee2ce6d3184814dacc2a4b6",
+        "message": null,
+        "image_digest": "sha256:7d5203025cf3f2f092aa0152f53f63d1210f6f7a564419ab40cf5521afc5922b"
+      },
+      "observed_at": "2026-11-15T01:37:30.016435+00:00",
+      "quiet_observation_seconds": 130.661309,
+      "quiet_session_end_attempts": 0,
+      "quiet_market_closed_rejections": 0
+    }
+  },
+  "admission_history_and_publication_followup": {
+    "counts": {
+      "rows": [
+        {
+          "symbol": "BTCUSD",
+          "account_id": 46130058,
+          "filled_positions": 6,
+          "opening_attempt_keys": 18
+        },
+        {
+          "symbol": "ETHUSD",
+          "account_id": 46130058,
+          "filled_positions": 11,
+          "opening_attempt_keys": 20
+        },
+        {
+          "symbol": "BTCUSD",
+          "account_id": 47790949,
+          "filled_positions": 7,
+          "opening_attempt_keys": 17
+        },
+        {
+          "symbol": "ETHUSD",
+          "account_id": 47790949,
+          "filled_positions": 12,
+          "opening_attempt_keys": 20
+        }
+      ],
+      "captured_at": "2026-11-15T01:39:30.435543+00:00"
+    },
+    "timing": [
+      {
+        "account_id": 46130058,
+        "attempts": {
+          "BTCUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:36:58.099625759Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3365,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 76
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "ETHUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:37:02.640011726Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": "prepared admission expired; background refresh required",
+              "preparation_duration_ms": 7905,
+              "prepared_successfully": false,
+              "source_age_at_start_ms": 77
+            },
+            "last_refusal": "prepared admission expired; background refresh required",
+            "prepared_now": false,
+            "source_refusal": null
+          }
+        }
+      },
+      {
+        "account_id": 47790949,
+        "attempts": {
+          "BTCUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:37:01.605508737Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": null,
+              "preparation_duration_ms": 3159,
+              "prepared_successfully": true,
+              "source_age_at_start_ms": 162
+            },
+            "last_refusal": null,
+            "prepared_now": false,
+            "source_refusal": null
+          },
+          "ETHUSD": {
+            "commission_age_seconds": 166,
+            "commission_error": null,
+            "commission_expired": false,
+            "evidence_scope": "background admission; final writer checks remain mandatory",
+            "last_completed_attempt": {
+              "completed_at": "2026-11-15T01:37:06.086982700Z",
+              "evidence_scope": "last completed read-only preparation; final writer guards still apply",
+              "failure": "prepared admission expired; background refresh required",
+              "preparation_duration_ms": 7641,
+              "prepared_successfully": false,
+              "source_age_at_start_ms": 160
+            },
+            "last_refusal": "prepared admission expired; background refresh required",
+            "prepared_now": false,
+            "source_refusal": null
+          }
+        }
+      }
+    ],
+    "fix": "Always apply the existing distinct filled-position upper bound before full Kelly history; publish either completed read-only result immediately instead of waiting for its sibling.",
+    "policy_unchanged": "Kelly still begins at 20 closed positions; negative eligible Kelly still refuses; size and all freshness limits unchanged.",
+    "focused_tests_passed": [
+      "20 attempt keys with 11 distinct positions skips full-history query; one key with 20 positions still queries",
+      "fast result visible while sibling is deliberately blocked"
+    ],
+    "full_checks": "running; must pass before merge"
   }
 }

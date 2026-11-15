@@ -367,25 +367,24 @@ async fn kelly_sample(
     if keys.is_empty() {
         return Ok(None);
     }
-    if !should_query_closed_trades_for_kelly(keys.len()) {
-        // Outcomes are per position, not per entry key. Check a cheap upper
-        // bound so split/multiple position receipts cannot bypass active Kelly.
-        let positions: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM (
-                SELECT DISTINCT position_id FROM trading_events
-                WHERE account_id=$1 AND entry_key=ANY($2) AND kind=ANY($3)
-                  AND position_id IS NOT NULL LIMIT $4
-             ) possible",
-        )
-        .bind(account_id)
-        .bind(keys)
-        .bind(ts::FILL_KINDS)
-        .bind(jiaoyi_core::strategy3::kelly::MIN_CLOSES as i64)
-        .fetch_one(pool)
-        .await?;
-        if !should_query_closed_trades_for_kelly(positions as usize) {
-            return Ok(None);
-        }
+    // Opening attempts are not closes. Always check the distinct-position
+    // upper bound, including when rejected attempts have reached 20 keys.
+    // One key can still identify many positions; active Kelly is never skipped.
+    let positions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM (
+            SELECT DISTINCT position_id FROM trading_events
+            WHERE account_id=$1 AND entry_key=ANY($2) AND kind=ANY($3)
+              AND position_id IS NOT NULL LIMIT $4
+         ) possible",
+    )
+    .bind(account_id)
+    .bind(keys)
+    .bind(ts::FILL_KINDS)
+    .bind(jiaoyi_core::strategy3::kelly::MIN_CLOSES as i64)
+    .fetch_one(pool)
+    .await?;
+    if !should_query_closed_trades_for_kelly(positions as usize) {
+        return Ok(None);
     }
     let (closed, _) = ts::closed_trades(pool, account_id, "s3:").await?;
     let key_set: HashSet<&str> = keys.iter().map(String::as_str).collect();
@@ -4722,15 +4721,22 @@ mod tests {
             .unwrap();
         assert_eq!(kelly_sample(&pool, 9, &[]).await.unwrap(), None);
         assert_eq!(kelly_sample(&pool, 9, &keys[..19]).await.unwrap(), None);
+        assert_eq!(kelly_sample(&pool, 9, &keys).await.unwrap(), None);
+        // Twenty attempts with eleven filled positions still cannot contain
+        // twenty closes. Duplicate fill receipts do not increase that bound.
+        sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,position_id,raw,received_at)
+            SELECT 9,'s3:9:0',2126,'ORDER_FILLED',n,''::bytea,now() FROM generate_series(1,11) n, generate_series(1,2) copy")
+            .execute(&pool).await.unwrap();
+        assert_eq!(kelly_sample(&pool, 9, &keys).await.unwrap(), None);
         sqlx::query("ALTER TABLE hidden_deals RENAME TO deals")
             .execute(&pool)
             .await
             .unwrap();
-        assert_eq!(kelly_sample(&pool, 9, &keys).await.unwrap(), Some(vec![]));
+        assert_eq!(kelly_sample(&pool, 9, &keys).await.unwrap(), None);
         // One entry key can identify many position receipts in the outcome
         // schema: never infer an upper bound from key count alone.
         sqlx::query("INSERT INTO trading_events(account_id,entry_key,payload_type,kind,position_id,raw,received_at)
-            SELECT 9,'s3:9:0',2126,'ORDER_FILLED',n,''::bytea,now() FROM generate_series(1,20) n")
+            SELECT 9,'s3:9:0',2126,'ORDER_FILLED',n,''::bytea,now() FROM generate_series(12,20) n")
             .execute(&pool).await.unwrap();
         assert_eq!(
             kelly_sample(&pool, 9, &keys[..1]).await.unwrap(),
