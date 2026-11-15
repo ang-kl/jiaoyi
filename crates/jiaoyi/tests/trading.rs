@@ -896,6 +896,17 @@ async fn a_conversion_quote_arriving_later_lets_the_signal_through(pool: PgPool)
     )
     .await;
     let mut f = fake_on(&[JP225], 2_000);
+    // Candidate FX must be executable as well as fresh. This fixture models
+    // an open FX market independently of the test runner's weekday.
+    f.symbols.push(ProtoOaSymbol {
+        symbol_id: USDJPY,
+        schedule_time_zone: Some("UTC".into()),
+        schedule: vec![jiaoyi_ctrader::messages::ProtoOaInterval {
+            start_second: 0,
+            end_second: 604800,
+        }],
+        ..Default::default()
+    });
     // Margin uses the broker's asset-ID conversion chain, not merely the
     // stored display name or an arriving quote. The real USDJPY contract
     // connects deposit USD (1) to the index's quote currency JPY (3).

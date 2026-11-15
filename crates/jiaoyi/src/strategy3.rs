@@ -2268,7 +2268,7 @@ impl<'a, 'c> Trader<'a, 'c> {
         Ok(())
     }
 
-    fn open_risk(&self) -> Result<f64, String> {
+    pub fn open_risk(&self) -> Result<f64, String> {
         if self.authority_pending_count > 0 {
             return Err(format!(
                 "{} Strategy 3 position(s) await management authority: open risk is unknown",
@@ -2283,7 +2283,17 @@ impl<'a, 'c> Trader<'a, 'c> {
                     o.position_id
                 ));
             };
-            let Some(rate) = self.rate(o.symbol_id) else {
+            // Existing USD/USD stop liabilities are price-independent. Missing
+            // gold ticks must not turn a known stop reserve into unknown risk.
+            // Other conversions retain their existing path; account-wide margin
+            // reserves independently use the typed broker-identity FX proof.
+            let rate = self.syms.get(&o.symbol_id).and_then(|s| {
+                match (s.quote.as_deref(), self.deposit.as_deref()) {
+                    (Some(q), Some(d)) if q == d && !q.is_empty() => Some(1.0),
+                    _ => self.rate(o.symbol_id),
+                }
+            });
+            let Some(rate) = rate else {
                 return Err(format!(
                     "position {} has no quote→deposit rate: its open risk is unknown",
                     o.position_id

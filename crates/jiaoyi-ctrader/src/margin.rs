@@ -8,8 +8,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 mod fx;
 pub use fx::{
-    conversion_bounds, conversion_path, foreign_reserve, validate_cached_fx, CachedGuard,
-    ConversionLeg, FxExposure,
+    closed_book_quotes, conversion_bounds, conversion_path, existing_book_reserve, foreign_reserve,
+    install_closed_book_quote, validate_cached_fx, CachedGuard, ClosedBookQuote, ConversionLeg,
+    FxExposure, CLOSED_BOOK_POLICY,
 };
 
 type Locks = Mutex<HashMap<(String, i64), Arc<AsyncMutex<()>>>>;
@@ -273,6 +274,7 @@ pub async fn check(
         paths.insert(asset, path);
     }
     let mut foreign_exposures = Vec::new();
+    let mut existing_book_exposures = Vec::new();
     let mut marks = HashMap::new();
     for p in &pnl.position_unrealized_pn_l {
         if p.position_id <= 0 || marks.insert(p.position_id, p).is_some() {
@@ -353,7 +355,7 @@ pub async fn check(
             sgn * (stop - entry) * p.trade_data.volume as f64 / 100.0,
             &paths,
             &mut reserve,
-            &mut foreign_exposures,
+            &mut existing_book_exposures,
         )?;
     }
     // Some brokers allocate a future position ID while an entry is pending.
@@ -487,6 +489,30 @@ pub async fn check(
         return Err("margin estimate falls as gross exposure increases".into());
     }
     let projected = final_margin.max(used + (final_margin - initial_margin));
+    let leg_ids: BTreeSet<i64> = paths.values().flatten().map(|l| l.symbol_id).collect();
+    let conversion_calendars = if leg_ids.is_empty() {
+        vec![]
+    } else {
+        let contracts = session
+            .symbols_by_id(&leg_ids.iter().copied().collect::<Vec<_>>())
+            .await
+            .map_err(|e| format!("conversion calendar unavailable: {e}"))?;
+        leg_ids
+            .iter()
+            .map(|id| {
+                let matches: Vec<_> = contracts
+                    .symbol
+                    .iter()
+                    .filter(|s| s.symbol_id == *id)
+                    .collect();
+                if matches.len() != 1 {
+                    return Err("conversion calendar identity missing/ambiguous".to_string());
+                }
+                crate::market_hours::ContractCalendar::from_symbol(matches[0])
+                    .map_err(|e| e.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    };
     let (after, balance) = tokio::join!(session.margin_book(), session.trader());
     let after = after.map_err(|e| format!("margin final book unreadable: {e}"))?;
     let balance = balance.map_err(|e| format!("margin final balance unreadable: {e}"))?;
@@ -501,6 +527,9 @@ pub async fn check(
         floor_pct: floor,
         warning_pct: warning,
         foreign_exposures,
+        existing_book_exposures,
+        closed_book_quotes: closed_book_quotes(session),
+        conversion_calendars,
         candidate_exposure: FxExposure {
             quote_asset: candidate_quote,
             deposit_asset: trader.deposit_asset_id,
@@ -513,6 +542,8 @@ pub async fn check(
     let quotes: HashMap<_, _> = guard
         .foreign_exposures
         .iter()
+        .chain(guard.existing_book_exposures.iter())
+        .chain(std::iter::once(&guard.candidate_exposure))
         .flat_map(|x| x.chain.iter())
         .filter_map(|leg| {
             session

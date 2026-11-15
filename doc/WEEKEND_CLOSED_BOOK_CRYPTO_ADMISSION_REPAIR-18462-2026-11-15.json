@@ -1,0 +1,368 @@
+{
+  "trace": "\u211618,462",
+  "status": "implementation_and_predeployment_evidence",
+  "generated_at_utc": "2026-11-15T00:37:09.983876+00:00",
+  "repository": "ang-kl/jiaoyi",
+  "base_commit": "e4dc700a87989e03e811e44daeeab01727c891b3",
+  "production_policy": "s3_macro_pullback_owner_18409_v1",
+  "refusal_audit": {
+    "start_inclusive_sgt": "2026-11-14T05:35:00+08:00",
+    "end_exclusive_sgt": "2026-11-15T08:00:00+08:00",
+    "conversion_refusal_groups": [
+      {
+        "n": 1,
+        "kind": "margin_admission",
+        "reason": "conversion quote stale/incomplete for broker symbol 5",
+        "last_at": "2026-11-14T22:36:45.456075+00:00",
+        "first_at": "2026-11-14T22:36:45.456075+00:00",
+        "account_id": 46130058
+      },
+      {
+        "n": 1,
+        "kind": "refused",
+        "reason": "margin buffer: conversion quote stale/incomplete for broker symbol 5",
+        "last_at": "2026-11-14T22:36:45.462814+00:00",
+        "first_at": "2026-11-14T22:36:45.462814+00:00",
+        "account_id": 46130058
+      },
+      {
+        "n": 1,
+        "kind": "margin_admission",
+        "reason": "conversion quote stale/incomplete for broker symbol 5",
+        "last_at": "2026-11-14T22:36:45.184144+00:00",
+        "first_at": "2026-11-14T22:36:45.184144+00:00",
+        "account_id": 47790949
+      },
+      {
+        "n": 1,
+        "kind": "refused",
+        "reason": "margin buffer: conversion quote stale/incomplete for broker symbol 5",
+        "last_at": "2026-11-14T22:36:45.191739+00:00",
+        "first_at": "2026-11-14T22:36:45.191739+00:00",
+        "account_id": 47790949
+      }
+    ],
+    "actual_open_fills": [
+      {
+        "account_id": 49236051,
+        "position_id": 262686344,
+        "symbol": "ETHUSD",
+        "side": "sell",
+        "volume": 14,
+        "price": null,
+        "sent_at": "2026-11-14T02:41:08.541766+00:00",
+        "entry_key": "s3:49236051:10029:1794614400:2",
+        "strategy": "s3"
+      },
+      {
+        "account_id": 49236051,
+        "position_id": 262794107,
+        "symbol": "BTCUSD",
+        "side": "sell",
+        "volume": 1,
+        "price": null,
+        "sent_at": "2026-11-14T19:25:53.941688+00:00",
+        "entry_key": "s3:49236051:10028:1794672000:1",
+        "strategy": "s3"
+      },
+      {
+        "account_id": 49236051,
+        "position_id": 262794771,
+        "symbol": "BTCUSD",
+        "side": "sell",
+        "volume": 1,
+        "price": null,
+        "sent_at": "2026-11-14T20:21:31.346761+00:00",
+        "entry_key": "s3:49236051:10028:1794686400:1",
+        "strategy": "s3"
+      },
+      {
+        "account_id": 49236051,
+        "position_id": 262796763,
+        "symbol": "ETHUSD",
+        "side": "sell",
+        "volume": 1,
+        "price": null,
+        "sent_at": "2026-11-14T22:37:45.785618+00:00",
+        "entry_key": "s1:49236051:10029:2026-11-13:retry:2",
+        "strategy": "s1"
+      }
+    ],
+    "causal_limit": "Exact S1 AUDUSD margin refusals verified on both affected demos. No persisted S3 terminal margin refusal at the three comparison entry times; those missed S3 fills cannot all be attributed to FX from stored receipts alone."
+  },
+  "existing_gold_reserves": [
+    {
+      "account_id": 46130058,
+      "entry": 3878.12,
+      "position_id": 262583980,
+      "side": "sell",
+      "stop": 3893.62,
+      "symbol": "XAUUSD",
+      "take_profit": 3856.73,
+      "tp1_sent": false,
+      "volume": 1000,
+      "stop_loss_usd_from_entry": 155.0
+    },
+    {
+      "account_id": 47790949,
+      "entry": 3877.19,
+      "position_id": 262583136,
+      "side": "sell",
+      "stop": 3892.65,
+      "symbol": "XAUUSD",
+      "take_profit": 3855.85,
+      "tp1_sent": false,
+      "volume": 900,
+      "stop_loss_usd_from_entry": 139.14
+    }
+  ],
+  "implementation": {
+    "existing_book_only": true,
+    "haircut_factor": 1.05,
+    "max_live_fx_age_ms": 5000,
+    "candidate_own_quote_age_bounds_unchanged": true,
+    "preclose_quote_max_age_at_close_ms": 5000,
+    "historical_evidence_verification_ttl_ms": 300000,
+    "calendar": "actual account broker ContractCalendar; scheduled closure required; DST and holiday aware; reject trading-disabled or ambiguous metadata",
+    "source_order": [
+      "original broker-dated in-memory quote",
+      "account/session-scoped stored ticks"
+    ],
+    "quote_provenance": "original side timestamps retained; never copied into executable caches",
+    "usd_identity": "rate=1 without a mark; already supported by prior quote_to_deposit and now explicit and regression-tested",
+    "final_writer": "revalidates candidate calendars/live FX and existing-book closure/evidence using existing guarded writer",
+    "protected_trading_rs_unchanged": true
+  },
+  "invariants": {
+    "s3_risk_pct": 0.6,
+    "s3_open_risk_cap_pct": 3.0,
+    "projected_margin_floor_pct": 250.0,
+    "stressed_margin_rule": "unchanged: strictly above actual broker margin-call/stop-out warning; not relabelled as a 250% stressed floor",
+    "breakeven_trigger_r": 1.0,
+    "target_r": 1.38,
+    "entry_and_exit_rules_unchanged": true,
+    "three_human_laws_unchanged": true,
+    "market_closed_retry_code_unchanged": true,
+    "no_forced_test_orders": true
+  },
+  "predeployment_evidence_availability": {
+    "recorded_preclose_quotes": [
+      {
+        "seq": 8326595,
+        "ask_e5": 15972500,
+        "bid_e5": 15971900,
+        "account_id": 43002148,
+        "session_id": "43002148-1-1794358551174881068",
+        "received_at": "2026-11-13T21:54:55.868526+00:00",
+        "broker_symbol_id": 4,
+        "broker_timestamp": 1794606895743
+      },
+      {
+        "seq": 8326697,
+        "ask_e5": 67749,
+        "bid_e5": 67746,
+        "account_id": 43002148,
+        "session_id": "43002148-1-1794358551174881068",
+        "received_at": "2026-11-13T21:54:59.347462+00:00",
+        "broker_symbol_id": 5,
+        "broker_timestamp": 1794606899191
+      },
+      {
+        "seq": 8032889,
+        "ask_e5": 15973000,
+        "bid_e5": 15971500,
+        "account_id": 46130058,
+        "session_id": "46130058-1-1794358551256197973",
+        "received_at": "2026-11-13T21:54:55.717515+00:00",
+        "broker_symbol_id": 4,
+        "broker_timestamp": 1794606895572
+      },
+      {
+        "seq": 8033000,
+        "ask_e5": 67754,
+        "bid_e5": 67741,
+        "account_id": 46130058,
+        "session_id": "46130058-1-1794358551256197973",
+        "received_at": "2026-11-13T21:54:59.473831+00:00",
+        "broker_symbol_id": 5,
+        "broker_timestamp": 1794606899355
+      },
+      {
+        "seq": 8034236,
+        "ask_e5": 15972500,
+        "bid_e5": 15972000,
+        "account_id": 47790949,
+        "session_id": "47790949-1-1794358551528085957",
+        "received_at": "2026-11-13T21:54:55.705213+00:00",
+        "broker_symbol_id": 4,
+        "broker_timestamp": 1794606895572
+      },
+      {
+        "seq": 8034347,
+        "ask_e5": 67749,
+        "bid_e5": 67746,
+        "account_id": 47790949,
+        "session_id": "47790949-1-1794358551528085957",
+        "received_at": "2026-11-13T21:54:59.533641+00:00",
+        "broker_symbol_id": 5,
+        "broker_timestamp": 1794606899355
+      },
+      {
+        "seq": 8033184,
+        "ask_e5": 15972500,
+        "bid_e5": 15972000,
+        "account_id": 49236051,
+        "session_id": "49236051-1-1794358551206718018",
+        "received_at": "2026-11-13T21:54:55.727569+00:00",
+        "broker_symbol_id": 4,
+        "broker_timestamp": 1794606895572
+      },
+      {
+        "seq": 8033295,
+        "ask_e5": 67749,
+        "bid_e5": 67746,
+        "account_id": 49236051,
+        "session_id": "49236051-1-1794358551206718018",
+        "received_at": "2026-11-13T21:54:59.553922+00:00",
+        "broker_symbol_id": 5,
+        "broker_timestamp": 1794606899355
+      }
+    ],
+    "eurusd_friday_recorded_tick_query": {
+      "rows": null
+    },
+    "eurusd_status": "No EURUSD ticks found in bounded Friday audit. Broker-dated initial subscription evidence may be available after restart; do not assert it before verification. Missing valid evidence remains a refusal."
+  },
+  "predeployment_snapshot": {
+    "at": "2026-11-15T00:04:39.075079+00:00",
+    "accounts_connected_and_unpaused": 4,
+    "crypto_opening_refs_available": 8
+  },
+  "verification": {
+    "commands": [
+      {
+        "name": "check",
+        "command": [
+          "cargo",
+          "check",
+          "--workspace",
+          "--all-targets"
+        ],
+        "exit_code": 0,
+        "seconds": 14.04
+      },
+      {
+        "name": "test",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace"
+        ],
+        "exit_code": 0,
+        "seconds": 322.99
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 13.43
+      },
+      {
+        "name": "fmt",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "exit_code": 0,
+        "seconds": 1.13
+      }
+    ],
+    "final_focused_checks": [
+      {
+        "name": "cold-start-final",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "jiaoyi",
+          "--lib",
+          "cold_start_hydrates_only_existing_book"
+        ],
+        "exit_code": 0,
+        "seconds": 0.94
+      },
+      {
+        "name": "calendar-final",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "jiaoyi-ctrader",
+          "market_hours::tests"
+        ],
+        "exit_code": 0,
+        "seconds": 10.06
+      },
+      {
+        "name": "broker-timestamp-final",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "jiaoyi-ctrader",
+          "broker_dated_accounting_quotes"
+        ],
+        "exit_code": 0,
+        "seconds": 0.14
+      },
+      {
+        "name": "clippy-all-targets",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "seconds": 18.29
+      }
+    ],
+    "workspace_tests_passed": 810,
+    "workspace_tests_ignored": 1,
+    "test_environment_note": "Local PostgreSQL initially stopped; started the owned local development container. Sunday restart fixture corrected to create its selected Friday tick partition; S1 FX-conversion fixture now supplies an explicitly open broker calendar. No production calendar changes."
+  },
+  "release": {
+    "pr": null,
+    "merge_commit": null,
+    "deployment_status": "not_yet_attempted",
+    "postdeployment_readiness_verified": false,
+    "followup": "Post-deployment measured attestation will be published on the release PR, with original timestamps and explicit blockers."
+  },
+  "additional_diagnostic": "Commission evidence expiry is now visible in per-symbol entry preparation. No commission TTL or commission amounts changed.",
+  "evidence_hashes": {
+    "refusal-evidence.json": "6afbdc549fbc1ece42e0313329dd6cd6e8eba86e4660253f89de6ea326c64442",
+    "exact-windows.json": "48f7b3c8f1bb9b51fa8f7dcc4a6b46c295940527654108591ede22f6cfa9ec25",
+    "fx-calendars.json": "26249a84dbddc6a08482a20955e64722a7c7ab7fca6daaa8a5acba71314d4f2f",
+    "preclose-evidence.json": "bd7c8878545f8f7365dacc5fbc57c854ac7fa9cb8e02330bb28ea164d73c40c1",
+    "eur-evidence.json": "c4c24b373f16555f109735fed666a209a0ca82399ca40a14f974432809ccfe60",
+    "last-eur-evidence.json": "6367b5869e5f6c163f7028fa106c22be21405387c42a709c49158a472df4d93f",
+    "baseline-health.json": "cf0fa5e62fea3ccca25121aaa2367b45118fc0555276b3b046d01bb6bbecd24e",
+    "baseline-runtime.json": "9174d443c58c3b70167a1300bd7b3cd058149f58d06d59e646d41f2188eb9d65",
+    "baseline-ledger.json": "facd7233474b580990035b87cb5e77a4f9983f81b47713ab4c18bc01174904b1",
+    "baseline-deployment.json": "b8c09d251ed4e369b0eab01e04653ac692d3c5530c0a5ef8ba0cc6496854dd5e"
+  },
+  "protected_trading_rs_sha256": "b1c6f9951a7e8e74e81a9edb345ba8d251fef37e81aa949a5930ef722be80cd3",
+  "financial_pass": false
+}

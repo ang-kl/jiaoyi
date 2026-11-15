@@ -4,7 +4,7 @@
 //! The writer checks its current wall clock against these intervals without I/O.
 //! Strategy evaluation windows never imply that the broker is open.
 use crate::{messages::ProtoOaSymbol, trading::Side};
-use chrono::{DateTime, Datelike, Duration, NaiveDate, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Timelike, Utc};
 use chrono_tz::Tz;
 use serde::{Serialize, Serializer};
 
@@ -121,6 +121,71 @@ impl ContractCalendar {
         })
     }
 
+    /// Exact surrounding scheduled closure. Never infer closure from stale prices.
+    /// Missing/ambiguous DST metadata or an unbounded closure refuses fallback.
+    pub fn closed_window(&self, at: DateTime<Utc>) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
+        let closed = |t| {
+            self.validate(t, Side::Buy).is_err_and(|e| {
+                matches!(
+                    e.code,
+                    "ENTRY_BROKER_MARKET_CLOSED" | "ENTRY_BROKER_HOLIDAY_CLOSED"
+                )
+            })
+        };
+        if !closed(at) {
+            return None;
+        }
+        let local = at.with_timezone(&self.timezone).date_naive();
+        let sunday = local - Duration::days(local.weekday().num_days_from_sunday().into());
+        let mut boundaries = std::collections::BTreeSet::new();
+        for week in -2..=2 {
+            let origin = (sunday + Duration::weeks(week)).and_hms_opt(0, 0, 0)?;
+            for (start, end) in &self.weekly_intervals {
+                for seconds in [start, end] {
+                    boundaries.insert(
+                        self.timezone
+                            .from_local_datetime(&(origin + Duration::seconds((*seconds).into())))
+                            .single()?
+                            .with_timezone(&Utc),
+                    );
+                }
+            }
+        }
+        for h in &self.holidays {
+            for year in (local.year() - 1)..=(local.year() + 1) {
+                let date = if h.recurring {
+                    NaiveDate::from_ymd_opt(year, h.date.month(), h.date.day())?
+                } else {
+                    h.date
+                };
+                let midnight = date.and_hms_opt(0, 0, 0)?;
+                for seconds in [
+                    i64::from(h.start_second),
+                    i64::from(h.end_second).min(86399) + 1,
+                ] {
+                    boundaries.insert(
+                        h.timezone
+                            .from_local_datetime(&(midnight + Duration::seconds(seconds)))
+                            .single()?
+                            .with_timezone(&Utc),
+                    );
+                }
+            }
+        }
+        let start = boundaries.iter().rev().copied().find(|t| {
+            *t <= at
+                && closed(*t)
+                && self
+                    .validate(*t - Duration::nanoseconds(1), Side::Buy)
+                    .is_ok()
+        })?;
+        let end = boundaries
+            .iter()
+            .copied()
+            .find(|t| *t > at && self.validate(*t, Side::Buy).is_ok())?;
+        Some((start, end))
+    }
+
     pub fn validate(&self, at: DateTime<Utc>, side: Side) -> Result<(), CalendarRefusal> {
         if self.trading_mode != 0 {
             return Err(refusal(
@@ -214,6 +279,10 @@ mod tests {
             .validate(at("2026-11-09T22:00:00Z"), Side::Buy)
             .is_err());
         assert!(live.validate(at("2026-11-09T22:01:00Z"), Side::Buy).is_ok());
+        assert_eq!(
+            live.closed_window(at("2026-11-09T22:00:00Z")),
+            Some((at("2026-11-09T21:59:00Z"), at("2026-11-09T22:01:00Z")))
+        );
         assert!(live
             .validate(at("2026-11-06T21:55:00Z"), Side::Buy)
             .is_err());
@@ -244,6 +313,10 @@ mod tests {
             ..Default::default()
         });
         let calendar = ContractCalendar::from_symbol(&symbol).unwrap();
+        assert_eq!(
+            calendar.closed_window(at("2026-11-09T12:00:00Z")),
+            Some((at("2026-11-08T21:00:00Z"), at("2026-11-09T21:00:00Z")))
+        );
         assert!(calendar
             .validate(at("2026-11-08T20:59:59Z"), Side::Buy)
             .is_ok());

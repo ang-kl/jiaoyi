@@ -37,7 +37,12 @@ impl Trader<'_, '_> {
         let sym = &self.syms[&id];
         let mut result = trigger_distance(sym, now);
         result["production_policy"] = json!(mp::POLICY);
+        result["existing_s3_stop_risk"] =
+            json!({"known_usd":self.open_risk().ok(),"refusal":self.open_risk().err()});
         result["entry_preparation"] = json!({
+            "commission_age_seconds":self.commission_read.map(|at|at.elapsed().as_secs()),
+            "commission_error":self.commission.as_ref().err(),
+            "commission_expired":self.commission_read.is_none_or(|at|at.elapsed()>=COMMISSION_REFRESH),
             "prepared_now":sym.pullback.is_some_and(|arm|self.fast_plan(id,arm).is_some()),
             "last_refusal":self.fast_cache.errors.get(&id),
             "source_refusal":fast_entry::source_refusal(sym),
