@@ -449,17 +449,18 @@ pub async fn check(
         if *side == Side::Buy { 0 } else { 1 },
         *volume,
     )?;
-    let mut initial_margin = 0.0;
-    let mut final_margin = 0.0;
-    for (id, amounts) in &future {
-        let before = current.get(id).copied().unwrap_or_default();
+    // Two independent broker reads at a time. Preserve sorted-symbol and
+    // buy/sell accumulation order; only transport waiting is concurrent.
+    let current = &current;
+    let estimate = |(id, amounts): (i64, [i64; 2])| async move {
+        let before = current.get(&id).copied().unwrap_or_default();
         let volumes: BTreeSet<i64> = before
             .into_iter()
-            .chain(*amounts)
+            .chain(amounts)
             .filter(|v| *v > 0)
             .collect();
         let res = session
-            .expected_margin(*id, volumes.iter().copied().collect())
+            .expected_margin(id, volumes.iter().copied().collect())
             .await
             .map_err(|e| format!("broker margin estimate unreadable: {e}"))?;
         let value = |v: i64, index: usize| -> Result<f64, String> {
@@ -480,9 +481,28 @@ pub async fn check(
             }
             money(raw, res.money_digits)
         };
-        for index in 0..2 {
-            initial_margin += value(before[index], index)?;
-            final_margin += value(amounts[index], index)?;
+        let values = [
+            [value(before[0], 0)?, value(amounts[0], 0)?],
+            [value(before[1], 1)?, value(amounts[1], 1)?],
+        ];
+        Ok::<_, String>(values)
+    };
+    let mut estimates = future.iter().map(|(&id, &amounts)| (id, amounts));
+    let mut initial_margin = 0.0;
+    let mut final_margin = 0.0;
+    while let Some(first) = estimates.next() {
+        let second = estimates.next();
+        let (a, b) = tokio::join!(estimate(first), async {
+            match second {
+                Some(next) => Some(estimate(next).await),
+                None => None,
+            }
+        });
+        for result in std::iter::once(a).chain(b) {
+            for [before, after] in result? {
+                initial_margin += before;
+                final_margin += after;
+            }
         }
     }
     if final_margin < initial_margin {

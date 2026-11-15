@@ -45,6 +45,7 @@ impl Trader<'_, '_> {
             "commission_expired":self.commission_read.is_none_or(|at|at.elapsed()>=COMMISSION_REFRESH),
             "prepared_now":sym.pullback.is_some_and(|arm|self.fast_plan(id,arm).is_some()),
             "last_refusal":self.fast_cache.errors.get(&id),
+            "last_completed_attempt":self.fast_cache.attempts.get(&id),
             "source_refusal":fast_entry::source_refusal(sym),
             "evidence_scope":"background admission; final writer checks remain mandatory"
         });

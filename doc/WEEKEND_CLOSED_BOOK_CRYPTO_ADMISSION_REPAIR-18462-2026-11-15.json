@@ -1390,6 +1390,687 @@
       "passed": 810,
       "failed": 0,
       "ignored": 1
+    },
+    "release": {
+      "pr": 231,
+      "merge_commit": "b47cac922725377d4a1191a7d48e2f2ed13a2ded",
+      "deployment": {
+        "id": "b24e0244-9c8c-4187-ad98-51f1cf69ee09",
+        "status": "SUCCESS",
+        "createdAt": "2026-11-15T01:12:22.640Z",
+        "commit": "b47cac922725377d4a1191a7d48e2f2ed13a2ded",
+        "message": null,
+        "image_digest": "sha256:bf1426d63a22242324e26f329789e58ef6d7c2036565de27f58e2fb5aedb79e2"
+      },
+      "accounts_connected_and_unpaused": 4,
+      "observed_at": "2026-11-15T01:17:29.716822+00:00",
+      "current_0800_references": 7,
+      "original_available_references_preserved": 6,
+      "s1_locked_reference_cells": 1,
+      "quiet_observation_seconds": 130.863855,
+      "quiet_session_end_attempts": 0,
+      "quiet_market_closed_rejections": 0,
+      "startup_market_closed_rejections": 2,
+      "gold_deadlines_unchanged": [
+        {
+          "position_id": 262583136,
+          "account_id": 47790949,
+          "entry_key": "s3:47790949:41:1794580200:1",
+          "deadline_before": "2026-11-13T21:55:00Z",
+          "deadline_after": "2026-11-13T21:55:00Z",
+          "entire_opening_record_unchanged": true
+        },
+        {
+          "position_id": 262583980,
+          "account_id": 46130058,
+          "entry_key": "s3:46130058:41:1794580200:1",
+          "deadline_before": "2026-11-13T21:55:00Z",
+          "deadline_after": "2026-11-13T21:55:00Z",
+          "entire_opening_record_unchanged": true
+        }
+      ],
+      "live_book_unchanged": true,
+      "recorded_live_interference": 0
     }
+  },
+  "latency_followup": {
+    "reason": "Six snapshots after successful FX hydration still showed unavailable/expired prepared admissions. No full-ready claim is made.",
+    "observations": [
+      {
+        "at": "2026-11-15T01:17:33.546751+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 164,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:18:05.362472+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 194,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:18:36.378454+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 226,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:19:06.500837+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 257,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:19:43.696165+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 288,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "at": "2026-11-15T01:20:17.135844+00:00",
+        "rows": [
+          {
+            "account": 46130058,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 46130058,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch recorded; later turn required",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "BTCUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": null,
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Preparing: background entry admission is not ready yet",
+                "state": "preparing"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 63323.087499999994, extreme: 62518.545); touch not yet recorded",
+                "state": "armed"
+              }
+            ]
+          },
+          {
+            "account": 47790949,
+            "symbol": "ETHUSD",
+            "preparation": {
+              "commission_age_seconds": 324,
+              "commission_error": null,
+              "commission_expired": false,
+              "evidence_scope": "background admission; final writer checks remain mandatory",
+              "last_refusal": "prepared admission expired; background refresh required",
+              "prepared_now": false,
+              "source_refusal": null
+            },
+            "gates": [
+              {
+                "code": "prepared_admission_unavailable",
+                "message": "Blocked: prepared admission unavailable; last refusal: prepared admission expired; background refresh required",
+                "state": "blocked"
+              },
+              {
+                "code": "armed_pullback",
+                "message": "Armed: waiting 50%\u201361.8% pullback + 8% turn (ref: 1740.415, extreme: 1711.98); touch recorded; later turn required",
+                "state": "armed"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "change": "Read expected margins in batches of at most two, preserving accumulation order and final account recheck; add last-attempt timing to health.",
+    "freshness_limits_unchanged": true,
+    "focused_bounded_concurrency_and_exact_reserve_test_passed": true,
+    "full_required_local_checks": "running; must pass before merge",
+    "production_effect_on_preparation_expiry": "not_yet_measured"
   }
 }
