@@ -4,7 +4,7 @@
 
 The shared margin gate previously required a live FX conversion quote for every existing foreign position. Consequently a healthy USD crypto candidate could be refused solely because an existing S1 AUS200/GER40 position needed AUD/USD or EUR/USD while FX was closed. This release separates existing-position accounting from candidate and pending-entry valuation. Existing stop liabilities may use broker-calendar-verified pre-close evidence with a 5% adverse FX reserve; candidate quotes and conversion legs remain live and executable.
 
-This is an execution/accounting repair, not strategy qualification or a change in entry/exit rules. PR #230 is merged and deployed; §9 records measured accounting and ownership verification. The restart verification also found a peer-context restoration defect, addressed by the follow-up in this report. Its deployment attestation will be published on the follow-up PR. Future 12:00 SGT opening prices are not claimed before that time.
+**Implemented, merged and deployed.** The final production commit is `65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2` from [PR #233](https://github.com/ang-kl/jiaoyi/pull/233), following PRs #230–232. Both affected demos now have observed valid BTC and ETH background admissions; the stale existing-book FX blocker is cleared. All four accounts are connected and unpaused. Eight original 08:00 SGT opening quotes remain stored; seven actor references are loaded and the remaining ETH cell is S1-locked. See §12 for the final measurements and limitations. This is an execution/accounting repair; financial qualification is not asserted. Future 12:00 SGT opening prices are not claimed before that time.
 
 ## §2. Recorded refusals and comparison fills
 
@@ -34,7 +34,7 @@ The account-wide margin reserve continues to account for broker-reported gross f
 5. For a conversion interval `[low, high]`, apply `low / 1.05` and `high * 1.05` once to the closed conversion chain. Losses use high, profits use low. Missing stops or pre-close evidence refuse; there is no unit-rate substitute for foreign currency.
 6. The final guarded writer rechecks these conditions. `crates/jiaoyi-ctrader/src/trading.rs` is byte-identical to the pre-change file.
 
-Stored Friday pre-close evidence was found for AUDUSD and USDJPY across all four accounts. **EURUSD was absent from the bounded Friday tick query.** A broker-dated last quote may be available from the existing subscription on restart; it must satisfy the same provenance checks. If it does not, GER40 exposure correctly remains an admission blocker. This report does not fill that gap with a guessed rate or another account's spread.
+At the initial pre-deployment audit, stored Friday pre-close evidence was found for AUDUSD and USDJPY across all four accounts. **EURUSD was absent from the bounded Friday tick query.** A broker-dated last quote may be available from the existing subscription on restart; it must satisfy the same provenance checks. If it does not, GER40 exposure correctly remains an admission blocker. This report does not fill that gap with a guessed rate or another account's spread.
 
 ## §5. Preserved risk and ownership rules
 
@@ -44,7 +44,7 @@ Live minimum-volume sizing and all S1 trading rules remain intact. No verificati
 
 The prior MARKET_CLOSED deferral implementation is untouched, including its quote-triggered reopen path and retry limits. Regression coverage retains carried Gold deadlines and verifies human/S1 isolation.
 
-## §6. Verification
+## §6. Initial accounting-release verification
 
 - `cargo check --workspace --all-targets`: PASS (14.04 seconds).
 - `cargo test --workspace`: PASS (322.99 seconds).
@@ -59,7 +59,7 @@ Workspace test result: **810 passed**, **1 ignored**. Focused cases cover cold-s
 
 The initial test environment had a stopped local development PostgreSQL container. Once started, an existing Sunday-only fixture error appeared: the restart test used Friday but only created Saturday-onward tick partitions. Its fixture now creates the actual selected session date. The S1 conversion test also now supplies the open FX contract required by candidate admission, rather than relying on missing calendar metadata. Production session definitions are unchanged.
 
-## §7. Release verification required
+## §7. Release verification protocol (completed in §12)
 
 CI must pass `check`, `docker`, and `engineering` on the exact PR head before squash merge. After Railway deploys the merge commit, verify four connected/unpaused account loops, the exact 08:00 crypto opening references, known Gold reserves, closed-book quote provenance and per-symbol preparation/refusal diagnostics. Compare live human/S1 inventory and Gold deadlines against the pre-release snapshot; distinguish ordinary autonomous market activity from release interference. Observe the closed-market retry lane over a measured interval, not just a single log line.
 
@@ -67,7 +67,7 @@ CI must pass `check`, `docker`, and `engineering` on the exact PR head before sq
 
 ## §8. Inspectable evidence
 
-The companion JSON includes exact refusal groups, comparison fill identifiers, Gold geometry, available pre-close quotes, command results, protected-file hash, and SHA256 hashes of the read-only source snapshots. Raw authenticated health and database captures remain private; no tokens or passwords are published. Post-deployment evidence will be linked on the PR so another reviewer can read it on GitHub.
+The companion JSON includes exact refusal groups, comparison fill identifiers, Gold geometry, available pre-close quotes, command results, protected-file hash, and SHA256 hashes of the read-only source snapshots. Raw authenticated health and database captures remain private; no tokens or passwords are published. The final post-deployment evidence and timings are summarized in §12 and embedded in the companion JSON for GitHub review.
 
 ## §9. First rollout verification and required context follow-up
 
@@ -119,3 +119,48 @@ The follow-up always applies the existing distinct-position upper-bound query. B
 Focused regressions pass: 20 attempt keys with 11 distinct positions cannot force the expensive history read (the full-history table is deliberately unavailable in the fixture); duplicate receipts do not inflate the count; one key with 20 positions still invokes full history. A held sibling future also cannot delay publication of the completed result. Required full checks and measured deployment verification remain pending for this follow-up.
 
 The first full-suite run caught excessive stack use in the async publication composition. The two read-only jobs are now heap-pinned before composition, retaining the same concurrency bound. The previously failing actor test passes at the normal test-thread stack size; required full checks are rerun on this exact revision before merge. This failure was caught before production deployment.
+
+
+## §12. Final deployed verification and Gemini review
+
+The final deployment is **`3d8b18d5-4d9f-4007-8fff-22eb25d5ea73`**, Railway **SUCCESS**, running **`65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2`**. The 10:00:30 SGT health response shows **4/4 accounts connected and unpaused**, with the original production policy. This completes the accounting repair plus the restart-context and admission-latency defects discovered during required deployment verification.
+
+| Release | Change | Merge commit | Required CI |
+|---|---|---|---|
+| [#230](https://github.com/ang-kl/jiaoyi/pull/230) | Account-scoped closed-book FX evidence and reserve | `72276a2624de1f835d1dcc90c857b20332e4b184` | check/docker/engineering passed |
+| [#231](https://github.com/ang-kl/jiaoyi/pull/231) | Restore current peer context independently of optional arm | `b47cac922725377d4a1191a7d48e2f2ed13a2ded` | check/docker/engineering passed |
+| [#232](https://github.com/ang-kl/jiaoyi/pull/232) | Bounded margin reads and attributable preparation timing | `08c8eb09b55de77dbee2ce6d3184814dacc2a4b6` | check/docker/engineering passed |
+| [#233](https://github.com/ang-kl/jiaoyi/pull/233) | Avoid unnecessary history reads; publish each fresh result immediately | `65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2` | check/docker/engineering passed |
+
+### Actual admission evidence
+
+Both demos successfully prepared both crypto symbols under the unchanged risk, margin and freshness rules. Follow-up snapshots also observed `prepared_now=true` for **each of the four affected account/symbol cells**, with the strategy waiting for its existing pullback/turn condition. These were separate observations, not a claim that all four were simultaneously ready.
+
+| Account | Candidate | Source age when preparation began | Preparation duration | Preparation completed | Actor observation |
+|---|---|---:|---:|---|---|
+| 46130058 | BTCUSD | 61 ms | 3647 ms | 10:03:20.090 SGT | valid; armed_pullback |
+| 46130058 | ETHUSD | 105 ms | 3824 ms | 10:03:20.267 SGT | valid; armed_pullback |
+| 47790949 | BTCUSD | 27 ms | 3504 ms | 10:01:32.698 SGT | valid; armed_pullback |
+| 47790949 | ETHUSD | 168 ms | 3286 ms | 10:01:32.480 SGT | valid; armed_pullback |
+
+These are short-lived background proofs, not fills. `prepared_now=false` between refreshes is not equivalent to a failed preparation; the JSON keeps both values and their timestamps. `/health` clones trigger state before its database reads, so response arrival is later than the embedded actor observation. Final dispatch must still validate the current quote, unchanged book, risk, margin, ownership, peer hold and touch/turn condition. No verification order was submitted.
+
+The Gold stop-risk diagnostics remain **$155.00** and **$139.14**. The two-sided Friday AUDUSD/EURUSD quotes retain their original timestamps and broker schedules; only existing-position conversion bounds receive the 5% adverse reserve. The stale live-conversion path remains explicitly unavailable and has not been relabelled as executable.
+
+Live 43002148 correctly retains its strict USDJPY refusal for a pending foreign-currency entry. That pending exposure is outside the existing-open-position exception. Account 49236051 correctly retains the S1 ETH ownership lock and its sibling BTC pair reservation. Neither is silently waived to make a readiness count green.
+
+### Opening data and preserved positions
+
+- **8/8** original 08:00 SGT two-sided crypto quotes are present in the bounded PostgreSQL opening window. The JSON includes original prices, side timestamps, broker timestamps and recording-session provenance.
+- **7/8** current actor references are loaded and were exactly preserved across the final redeploy. The eighth, ETH on 49236051, is withheld by the S1 ownership lock; its original quote is still stored. Across the complete release sequence, all six original eligible active references retained their exact prices/timestamps.
+- **8/8** 12:00 SGT base preparations are available. The actual 12:00 opening quotes and future admission outcomes are **not yet observed** at this report cutoff.
+- All five live human positions, five pending entries and two S1 positions retained their before/after geometry. There were **zero recorded S3 interventions** on that protected inventory in the verification interval. Both Gold opening records and their original `2026-11-13T21:55:00Z` deadlines are unchanged.
+- Each Gold position produced one reconnect-time MARKET_CLOSED rejection, then returned to its **Monday 16 November 07:01 SGT** scheduled probe. The final **130.908-second** quiet observation, **09:58:00–10:00:10.908 SGT**, contained **zero** session-end attempts and **zero** MARKET_CLOSED rejections. The report does not erase those two startup rejections or claim Monday's future execution has been observed.
+
+### Final checks and remaining scope
+
+On the exact final code revision: `cargo check --workspace --all-targets` passed; `cargo test --workspace` passed with **812 passed, 0 failed, 1 existing ignored**; `cargo clippy --workspace -- -D warnings` and formatting passed. [CI run 43664674669](https://github.com/ang-kl/jiaoyi/actions/runs/43664674669) passed `check`, `docker`, and `engineering` on head `5b0449463ecf297a4b4ff37397072228e78bba22` before merge. The earlier stack-composition failure was caught and corrected before deployment; the full suite then passed at the normal thread-stack setting.
+
+Protected `crates/jiaoyi-ctrader/src/trading.rs` retains SHA256 `b1c6f9951a7e8e74e81a9edb345ba8d251fef37e81aa949a5930ef722be80cd3`. Risk settings, policy, entry/exit thresholds, Three Human Laws and the Engineering deployment are unchanged. This final publication changes only the two files in `doc/`; that directory is outside Trading's Railway deployment watch patterns.
+
+For independent review, read §1, §4–5 and this §12 first, then the companion JSON's `release`, `readiness_observations`, `invariants` and `evidence_hashes`. Sections §9–11 preserve the earlier verification findings and explain why follow-ups were needed; their then-pending language is historical. No profit/win-rate claim follows from this infrastructure repair: `financial_pass=false`.
