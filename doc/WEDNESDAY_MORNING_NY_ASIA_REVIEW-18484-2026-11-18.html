@@ -1,0 +1,2198 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jiaoyi №18,484 — Wednesday NY and Asia audit</title><style>body{overflow-wrap:anywhere;margin:0;background:#f3f6fa;color:#172b41;font:16px/1.6 system-ui}main{max-width:1180px;margin:auto;padding:28px;background:white}h1{font-size:2rem;line-height:1.25}h2{margin-top:2.5rem;border-top:2px solid #dbe5ef;padding-top:1rem}table{display:block;width:100%;overflow:auto;border-collapse:collapse;font-size:14px;margin:20px 0}th,td{padding:10px;border:1px solid #d6e0ed;text-align:left;vertical-align:top;min-width:85px}th{background:#eaf2fa}tr:nth-child(even){background:#f8fafc}code{overflow-wrap:anywhere;background:#eff3f8}a{color:#0066ad}nav{padding:15px;background:#edf4fc;display:flex;gap:20px;flex-wrap:wrap}p,li{max-width:95ch}@media(max-width:600px){main{padding:16px}h1{font-size:1.6rem}}</style></head><body><main><nav><a href="WEDNESDAY_MORNING_NY_ASIA_REVIEW-18484-2026-11-18.md">Markdown</a><a href="WEDNESDAY_MORNING_NY_ASIA_REVIEW-18484-2026-11-18.json">Measured JSON and evidence</a></nav><h1 id="wednesday-morning-ny-asia-review-no18484">Wednesday Morning NY &amp; Asia Review — №18,484</h1>
+<p><strong>Activity:</strong> [17 November 2026 18:00:00, 18 November 2026 07:48:00) Asia/Singapore. <strong>Read-only production/database/broker audit.</strong></p>
+<p><a href="WEDNESDAY_MORNING_NY_ASIA_REVIEW-18484-2026-11-18.json">Measured JSON and evidence</a> · <a href="WEDNESDAY_MORNING_NY_ASIA_REVIEW-18484-2026-11-18.html">Standalone HTML</a></p>
+<h2 id="1-assessment">§1. Assessment</h2>
+<ul>
+<li><strong>Window S3 cash: −$446.46 from seven closes, zero positive-net wins.</strong> Two BTC initial stops lost $313.84; two ETH entry-price breakeven stops lost $5.53 after execution; two NAS100 and one Silver scheduled exits lost $127.09. No S3 position was open at the cutoff or in the separately timed owner snapshot. [1,3]</li>
+<li><strong>Full Tuesday S3 cash: −$1,333.75. Wednesday 00:00→07:48: −$132.62. Post-PR #214 cumulative closing cash: +$1,268.20.</strong> The latest-20 counts are live <strong>3/20</strong>, demos <strong>5/20, 6/20, 12/20</strong>. None meets <strong>15/20 (75%)</strong>. Financial pass remains false. [3]</li>
+<li><strong>The 120-second pre-close buffer executed on all three remaining traditional positions:</strong> NAS100 filled at <strong>05:57:01.559 / 05:57:01.582</strong>, Silver at <strong>05:57:02.600 SGT</strong>. There were zero recorded rejection/error events or repeated S3 close attempts during <strong>[05:59,07:05)</strong>. No Gold S3 position required a Wednesday deadline close. [2]</li>
+<li><strong>Live cash is −$76.17</strong>, exactly <strong>$227.43 − $280.50 external NatGas close − $23.10 S1 AUS200 close</strong>, with no deposit/withdrawal in the interval. Live net floating P&amp;L is <strong>+$2,490.72</strong>, giving <strong>$2,414.55 equity</strong> at <strong>07:50:54.699491 SGT</strong>. Negative cash is not negative equity. [4]</li>
+<li>Live assessed current margin is <strong>255.40%</strong>, pending projection <strong>73.48%</strong>, and stressed projection <strong>unverified</strong>. A pending external NatGas order has no stop; that incomplete liability is not treated as zero. These distinct checks do not establish a blanket new-entry pass. <strong>Zero recorded S3 interference on human inventory.</strong> [4]</li>
+<li><strong>66 arms → 24 consumed triggers/intents/outcomes → 7 fills + 17 terminal refusals</strong>: twelve peer-below-24 bp and five opposing-peer refusals. Missing individual outcomes and unknown entry-guard receipts are zero. Maximum confirmation-to-guard latency is <strong>24.173 ms</strong>. [5]</li>
+<li><strong>Nine excursion rows: six complete and three partial.</strong> Both carried ETH tracks from №18,483 reached their original TP prices around <strong>17 Nov 18:07:20 SGT</strong>, after that report's price horizon. The two new ETH BE exits did not reach their original TPs. This updates observed paths, not realised profit. [6]</li>
+<li>Wednesday <strong>07:00 Asian: 20 source quotes, 18 exact operational references, two human/pair-withheld live metals</strong>. <strong>08:00 Crypto 8/8</strong> and <strong>09:00 Brent 4/4</strong> base/full preparation are present. <strong>12:00 Crypto has no retained preparation yet</strong>. <strong>15:00 London has 20/24 base preparations and 0/24 complete sigma tables</strong>: four Brent receipts are absent, while the other symbols lack late 420/450-minute coefficients. [7]</li>
+</ul>
+<h2 id="2-frozen-clock-anchor-and-cash-continuity">§2. Frozen clock, anchor and cash continuity</h2>
+<p>The mandatory first clock read was <strong>17 Nov 23:48:46.120250638 UTC / 18 Nov 07:48:46.120250638 SGT</strong>. The directive therefore freezes the activity cutoff to the current floored minute, <strong>07:48:00 SGT</strong>. Its optional 08:05 cutoff does not apply. Later workflow completion does not extend this window or turn 08:00 preparation into a captured opening.</p>
+<p>The exact handoff anchor is <a href="TUESDAY_ASIA_LONDON_REVIEW-18483-2026-11-17.json">№18,483 JSON</a>, merged in <strong>PR #239</strong>, commit <code>5de6d9a75ac4839309d8f302ee71eaa945f65e1f</code>, SHA256 <code>77c9b3329a1cbd58574bb6ab21f22992e4192b241138dc48103dec76489dee50</code>. Its cutoff was <strong>17 Nov 18:00:00 SGT</strong>, cumulative S3 cash <strong>+$1,714.66</strong>, Tuesday-to-cutoff S3 cash <strong>−$1,019.91</strong>, live balance <strong>$227.43</strong>, and no open S3 positions. Its two incomplete ETH excursion rows are <strong>263516658 / 263516659</strong>; their old closing cash is excluded from this window.</p>
+<p>The <strong>post-close price horizon is 18 Nov 07:48:47 SGT</strong>. Owner book/margin response capture is <strong>18 Nov 07:49:11.848926 SGT</strong> and health capture <strong>18 Nov 07:49:41.372807 SGT</strong>. Account money timestamps appear in §4. These current observations are not an atomic historical mark at 07:48. All cash inclusion uses broker execution timestamps and half-open intervals. [3,4]</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Window closes</th>
+<th>Window S3 USD</th>
+<th>Full Tuesday S3 USD</th>
+<th>Wednesday 00:00→07:48 S3 USD</th>
+<th>Post-PR214 S3 USD</th>
+<th>Open S3 at cutoff</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>0</td>
+<td>0.00</td>
+<td>0.00</td>
+<td>0.00</td>
+<td>-0.01</td>
+<td>0</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>3</td>
+<td>-206.51</td>
+<td>-676.93</td>
+<td>-47.55</td>
+<td>533.32</td>
+<td>0</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>4</td>
+<td>-239.95</td>
+<td>-656.82</td>
+<td>-85.07</td>
+<td>708.45</td>
+<td>0</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>0</td>
+<td>0.00</td>
+<td>0.00</td>
+<td>0.00</td>
+<td>26.44</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>The bridges reconcile exactly:</p>
+<ul>
+<li><strong>Cumulative:</strong> $1,714.66 − $446.46 = <strong>$1,268.20</strong>.</li>
+<li><strong>Two-day split:</strong> prior Tuesday −$1,019.91 plus this window −$446.46 = full Tuesday −$1,333.75 plus Wednesday −$132.62 = <strong>−$1,466.37</strong>.</li>
+<li>The new Tuesday evening BTC pair accounts for <strong>−$313.84</strong>. Wednesday contributes the remaining <strong>−$132.62</strong>.</li>
+</ul>
+<p>Cash is broker gross plus signed swap minus absolute allocated closing commission and conversion fee, using recorded money digits and decimal arithmetic. Closing deals are unique by account/deal ID. Opening commission is not charged twice. All account cash totals were reconciled independently through retained broker closing deals and the existing account monitor.</p>
+<p>The cumulative interval remains <strong>[10 Nov 09:42, 18 Nov 07:48) SGT</strong>. It includes <strong>+$412.88</strong> from three positions entered before its start; it is a mixed-entry closing-cash cohort, not an isolated return attributable to PR #214. The repeated window query produced identical parsed evidence. Successful retained history fetches extend past cutoff on all four accounts, while the history worker's rolling <code>complete=false</code> flag remains disclosed. [3]</p>
+<h2 id="3-wednesday-0557-exits-and-daily-rollover">§3. Wednesday 05:57 exits and daily rollover</h2>
+<p>The three positions below retained policy <code>native_preclose_v18455_120s</code>, original <strong>Session.close 05:59</strong>, and exit-only deadline <strong>05:57</strong>. The inspected helper matches production commit <code>65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2</code>. No original session close, entry band or risk setting was changed. [2]</p>
+<table>
+<thead>
+<tr>
+<th>Account / position</th>
+<th>Symbol</th>
+<th>Close trigger SGT</th>
+<th>Send SGT</th>
+<th>Broker fill SGT</th>
+<th>Fill</th>
+<th>05:57 ask / age seconds</th>
+<th>Fill minus deadline ask</th>
+<th>Net USD / R</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>46130058 / 263762252</td>
+<td>NAS100</td>
+<td>18 Nov 05:57:00.906268</td>
+<td>18 Nov 05:57:01.184664</td>
+<td>18 Nov 05:57:01.559000</td>
+<td>27,019.200</td>
+<td>27,025.300 / 0.060173</td>
+<td>-6.100</td>
+<td>-44.13 / -0.343050</td>
+</tr>
+<tr>
+<td>47790949 / 263762285</td>
+<td>NAS100</td>
+<td>18 Nov 05:57:00.873792</td>
+<td>18 Nov 05:57:01.166300</td>
+<td>18 Nov 05:57:01.582000</td>
+<td>27,019.200</td>
+<td>27,025.300 / 0.055587</td>
+<td>-6.100</td>
+<td>-43.41 / -0.337453</td>
+</tr>
+<tr>
+<td>47790949 / 264006264</td>
+<td>XAGUSD</td>
+<td>18 Nov 05:57:00.873792</td>
+<td>18 Nov 05:57:02.034739</td>
+<td>18 Nov 05:57:02.600000</td>
+<td>47.406</td>
+<td>47.408 / 0.276480</td>
+<td>-0.002</td>
+<td>-39.55 / -0.266509</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Send→broker fill ms</th>
+<th>Send→local receipt ms</th>
+<th>Local receipt SGT</th>
+<th>Stored deadline / session close SGT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>263762252</td>
+<td>374.336</td>
+<td>499</td>
+<td>18 Nov 05:57:01.684656</td>
+<td>18 Nov 05:57:00.000000 / 18 Nov 05:59:00.000000</td>
+</tr>
+<tr>
+<td>263762285</td>
+<td>415.700</td>
+<td>545</td>
+<td>18 Nov 05:57:01.711462</td>
+<td>18 Nov 05:57:00.000000 / 18 Nov 05:59:00.000000</td>
+</tr>
+<tr>
+<td>264006264</td>
+<td>565.261</td>
+<td>699</td>
+<td>18 Nov 05:57:02.733858</td>
+<td>18 Nov 05:57:00.000000 / 18 Nov 05:59:00.000000</td>
+</tr>
+</tbody>
+</table>
+<p>All three were short, so the deadline comparison uses the last recorded <strong>ask at or before 05:57:00</strong>, not a later substituted price. NAS100 asks were 27,025.3, aged 60.173/55.587 ms; fills at 27,019.2 were 6.1 points lower. Silver's 47.408 ask was aged 276.480 ms; its 47.406 fill was 0.002 lower. These comparisons include price movement between deadline and fill; they are not a pure slippage estimate.</p>
+<p>Across <strong>[18 Nov 05:59,07:05) SGT</strong>, the read-only query found <strong>zero rejection/error or explicit MARKET_CLOSED events, zero S3 intents, and zero S3 session-end attempts</strong>. All three positions were already closed. This verifies the execution-hygiene repair on NAS100 and Silver. The two Tuesday Gold exits were already covered by the anchor and are not counted again. Human Gold on Live remains external and protected.</p>
+<h2 id="4-four-account-money-margin-and-inventory">§4. Four-account money, margin and inventory</h2>
+<p>All four account actors were connected and unpaused on the expected production commit. The demo money observations are around <strong>07:50:16 SGT</strong>. Live money below uses a dedicated bounded, read-only broker P&amp;L snapshot at <strong>07:50:54.699491</strong>, bracketed by identical position/order books and stable balances. Margin values are from the earlier, independently timed owner assessment; they are not recomputed by summing position margins under the broker's MAX aggregation. [4]</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Money snapshot SGT</th>
+<th>Balance USD</th>
+<th>Net floating USD</th>
+<th>Equity USD</th>
+<th>Assessed margin %</th>
+<th>Pending projected %</th>
+<th>Pending stressed %</th>
+<th>S3 / S1 / S2 / external</th>
+<th>Pending</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>18 Nov 07:50:54.699491</td>
+<td>-76.17</td>
+<td>2,490.72</td>
+<td>2,414.55</td>
+<td>255.40</td>
+<td>73.48</td>
+<td>Unverified / N/A</td>
+<td>0 / 0 / 0 / 4</td>
+<td>5</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>18 Nov 07:50:16.034000</td>
+<td>24,924.26</td>
+<td>138.10</td>
+<td>25,062.36</td>
+<td>14,995.89</td>
+<td>Unverified / N/A</td>
+<td>Unverified / N/A</td>
+<td>0 / 5 / 0 / 0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>18 Nov 07:50:16.093000</td>
+<td>24,774.92</td>
+<td>132.31</td>
+<td>24,907.23</td>
+<td>1,863.34</td>
+<td>Unverified / N/A</td>
+<td>Unverified / N/A</td>
+<td>0 / 5 / 0 / 0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>18 Nov 07:50:16.077000</td>
+<td>821.21</td>
+<td>-0.78</td>
+<td>820.43</td>
+<td>94,303.45</td>
+<td>Unverified / N/A</td>
+<td>Unverified / N/A</td>
+<td>0 / 1 / 0 / 0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>Live's assessed current margin <strong>255.40%</strong> passes the 250% floor at that snapshot, unlike the earlier 115.82% reading. Pending projected margin <strong>73.48%</strong> breaches it. The stressed result is <strong>unknown</strong>, not zero and not a pass: the external NatGas pending order <strong>402420853</strong> has no recorded stop, and the observer requires complete marks/stops/conversion to qualify stress. Current policy and ownership gates remain separate. Demo pending projections are N/A because they have no observed pending entries.</p>
+<table>
+<thead>
+<tr>
+<th>Account / ID</th>
+<th>Symbol</th>
+<th>Ownership / kind</th>
+<th>Side</th>
+<th>Native volume / lots</th>
+<th>Entry or trigger</th>
+<th>Current SL</th>
+<th>TP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148 / 649992251</td>
+<td>JPN225</td>
+<td>human_external / position</td>
+<td>buy</td>
+<td>4000 / 0.4000</td>
+<td>57,126.25000</td>
+<td>56,284.20000</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>43002148 / 649772867</td>
+<td>JPN225</td>
+<td>human_external / position</td>
+<td>buy</td>
+<td>12000 / 1.2000</td>
+<td>57,372.70000</td>
+<td>56,323.40000</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>43002148 / 657180931</td>
+<td>NVDA.US</td>
+<td>human_external / position</td>
+<td>buy</td>
+<td>400 / 4.0000</td>
+<td>160.82500</td>
+<td>149.66000</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>43002148 / 658574004</td>
+<td>XAUUSD</td>
+<td>human_external / position</td>
+<td>buy</td>
+<td>3000 / 0.3000</td>
+<td>3,841.86000</td>
+<td>3,824.00000</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>43002148 / 402440509</td>
+<td>NatGas</td>
+<td>human_external / pending_entry</td>
+<td>buy</td>
+<td>500000 / 0.5000</td>
+<td>2.94200</td>
+<td>2.86700</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>43002148 / 400083120</td>
+<td>JPN225</td>
+<td>human_external / pending_entry</td>
+<td>buy</td>
+<td>15000 / 1.5000</td>
+<td>56,232.60000</td>
+<td>55,679.50000</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>43002148 / 402420853</td>
+<td>NatGas</td>
+<td>human_external / pending_entry</td>
+<td>buy</td>
+<td>500000 / 0.5000</td>
+<td>2.85600</td>
+<td>Unverified / N/A</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>43002148 / 401496419</td>
+<td>Cocoa</td>
+<td>human_external / pending_entry</td>
+<td>buy</td>
+<td>300 / 3.0000</td>
+<td>3,653.70000</td>
+<td>3,057.70000</td>
+<td>5,904.00000</td>
+</tr>
+<tr>
+<td>43002148 / 402061476</td>
+<td>NatGas</td>
+<td>human_external / pending_entry</td>
+<td>buy</td>
+<td>200000 / 0.2000</td>
+<td>2.46700</td>
+<td>2.38100</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>46130058 / 261231902</td>
+<td>AUDUSD</td>
+<td>s1 / position</td>
+<td>sell</td>
+<td>900000 / 0.0900</td>
+<td>0.68521</td>
+<td>0.68733</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>46130058 / 261754023</td>
+<td>EURUSD</td>
+<td>s1 / position</td>
+<td>sell</td>
+<td>700000 / 0.0700</td>
+<td>1.11005</td>
+<td>1.11656</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>46130058 / 261813392</td>
+<td>GER40</td>
+<td>s1 / position</td>
+<td>buy</td>
+<td>10 / 0.1000</td>
+<td>26,714.90000</td>
+<td>25,806.60000</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>46130058 / 262578251</td>
+<td>NZDUSD</td>
+<td>s1 / position</td>
+<td>sell</td>
+<td>1000000 / 0.1000</td>
+<td>0.55271</td>
+<td>0.56234</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>46130058 / 263178401</td>
+<td>USDCAD</td>
+<td>s1 / position</td>
+<td>buy</td>
+<td>1100000 / 0.1100</td>
+<td>1.43006</td>
+<td>1.41242</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>47790949 / 261231903</td>
+<td>AUDUSD</td>
+<td>s1 / position</td>
+<td>sell</td>
+<td>900000 / 0.0900</td>
+<td>0.68526</td>
+<td>0.68728</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>47790949 / 261754015</td>
+<td>EURUSD</td>
+<td>s1 / position</td>
+<td>sell</td>
+<td>700000 / 0.0700</td>
+<td>1.11010</td>
+<td>1.11651</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>47790949 / 261813391</td>
+<td>GER40</td>
+<td>s1 / position</td>
+<td>buy</td>
+<td>10 / 0.1000</td>
+<td>26,714.90000</td>
+<td>25,806.60000</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>47790949 / 262976216</td>
+<td>NZDUSD</td>
+<td>s1 / position</td>
+<td>sell</td>
+<td>1000000 / 0.1000</td>
+<td>0.55202</td>
+<td>0.56229</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>47790949 / 263178410</td>
+<td>USDCAD</td>
+<td>s1 / position</td>
+<td>buy</td>
+<td>1100000 / 0.1100</td>
+<td>1.43006</td>
+<td>1.41247</td>
+<td>Unverified / N/A</td>
+</tr>
+<tr>
+<td>49236051 / 262796763</td>
+<td>ETHUSD</td>
+<td>s1 / position</td>
+<td>sell</td>
+<td>1 / 0.0100</td>
+<td>1,746.87000</td>
+<td>2,026.76000</td>
+<td>Unverified / N/A</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-live-cash-bridge-per-position-pl-and-human-protection">§5. Live cash bridge, per-position P&amp;L and human protection</h2>
+<p><strong>Live cash bridge: $227.43 − $280.50 external NatGas − $23.10 S1 AUS200 = −$76.17.</strong> No deposit, withdrawal or dividend balance operation was recorded within this activity interval. The preceding $200 deposit and $0.04 dividend were already included in the anchor and are not added again. [4]</p>
+<table>
+<thead>
+<tr>
+<th>Ownership</th>
+<th>Position</th>
+<th>Symbol</th>
+<th>Broker close SGT</th>
+<th>Fill</th>
+<th>Gross USD</th>
+<th>Swap USD</th>
+<th>Commission / conversion USD</th>
+<th>Net USD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>External</td>
+<td>658793840</td>
+<td>NatGas</td>
+<td>17 Nov 21:51:47.245000</td>
+<td>2.95300</td>
+<td>-210.00</td>
+<td>-70.50</td>
+<td>0.00</td>
+<td>-280.50</td>
+</tr>
+<tr>
+<td>S1</td>
+<td>656795267</td>
+<td>AUS200</td>
+<td>18 Nov 03:57:36.813000</td>
+<td>8,831.20000</td>
+<td>-22.50</td>
+<td>-0.60</td>
+<td>0.00</td>
+<td>-23.10</td>
+</tr>
+</tbody>
+</table>
+<p>NatGas <strong>658793840</strong> closed externally at <strong>17 Nov 21:51:47.245</strong>, 2.953: −$210.00 gross and −$70.50 swap. The retained S3/bot intent audit contains no command against it. Live S1 AUS200 <strong>656795267</strong> closed at <strong>18 Nov 03:57:36.813</strong>, 8,831.2: −$22.50 gross and −$0.60 swap. Its broker fill is a <strong>closing protective order, type 4</strong>, with stored stop <strong>8,831.6</strong>, labelled <code>jiaoyi-s1</code>. This was not an S3 trade or a new S3 instruction.</p>
+<p>The four remaining live positions match the owner book and all are human/external. The broker supplied five additional zero P&amp;L rows linked to unfilled pending entries; those relationships were verified and excluded from the open-position total. No nonzero or unexplained mark was discarded.</p>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Symbol / owner</th>
+<th>Gross floating USD</th>
+<th>Recorded swap USD</th>
+<th>Recorded commission USD</th>
+<th>Net floating USD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>649992251</td>
+<td>JPN225 / human_external</td>
+<td>645.19</td>
+<td>-18.49</td>
+<td>0.00</td>
+<td>626.70</td>
+</tr>
+<tr>
+<td>649772867</td>
+<td>JPN225 / human_external</td>
+<td>1,750.11</td>
+<td>-55.44</td>
+<td>0.00</td>
+<td>1,694.67</td>
+</tr>
+<tr>
+<td>657180931</td>
+<td>NVDA.US / human_external</td>
+<td>-23.86</td>
+<td>-0.45</td>
+<td>-0.08</td>
+<td>-24.39</td>
+</tr>
+<tr>
+<td>658574004</td>
+<td>XAUUSD / human_external</td>
+<td>240.60</td>
+<td>-45.81</td>
+<td>-1.05</td>
+<td>193.74</td>
+</tr>
+</tbody>
+</table>
+<p>The live net marks sum to <strong>+$2,490.72</strong>. Adding cash <strong>−$76.17</strong> gives <strong>$2,414.55 equity</strong>, excluding unverified credit and prospective closing commission. The two JPN225 positions supply <strong>+$2,321.37</strong> of net floating P&amp;L. Gold's <strong>+$240.60</strong> gross is reduced by <strong>−$45.81 swap and −$1.05 commission</strong> to <strong>+$193.74 net</strong>. These are recorded broker amounts.</p>
+<p><strong>Zero recorded human interference:</strong> there were <strong>zero live program intents</strong> in the activity window. Current human Gold remains label-isolated; XAUUSD yields to the human and XAGUSD is blocked by the sibling reservation. NatGas/JPN225 remain reserved. The human Gold SL changed from 3,830.0 to 3,824.0 without a retained bot instruction; it is not attributed to the bot. No S1 or S3 position is currently open on Live.</p>
+<p>S1 is kept separate on the demos too. Their AUS200 positions closed for <strong>−$130.66</strong> and <strong>−$124.81</strong>, explaining the difference between each balance change and its S3 cash loss. Five S1 positions remain on each large demo. Demo 49236051 retains S1 ETH short <strong>262796763</strong>, with stop <strong>2,026.76</strong> after the recorded 06:27:29.075843 amendment; this remains external to S3 and constrains its crypto pair.</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>S1 closed position IDs</th>
+<th>S1 closing cash USD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>656795267</td>
+<td>-23.10</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>260823431</td>
+<td>-130.66</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>260743517</td>
+<td>-124.81</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>None</td>
+<td>0.00</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-complete-overnight-s3-ledger-and-latest-20-assessment">§6. Complete overnight S3 ledger and latest-20 assessment</h2>
+<p>Seven new S3 positions opened and all seven closed before cutoff. There was no carried-in open S3 position. Entry labels, native volumes, original protection, broker deals and exit receipts reconcile. Original R is the actual fill-to-initial-SL distance; cash-based net R uses that original risk and recorded conversion. [1]</p>
+<table>
+<thead>
+<tr>
+<th>Account / position</th>
+<th>Symbol / dir</th>
+<th>Native volume / lots</th>
+<th>Entry SGT / price</th>
+<th>Exit SGT / price</th>
+<th>Initial SL / TP</th>
+<th>Exit reason</th>
+<th>Net USD / R</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>47790949 / 263599092</td>
+<td>BTCUSD / sell</td>
+<td>38 / 0.3800</td>
+<td>17 Nov 19:18:23.464000 / 64,384.59000</td>
+<td>17 Nov 19:41:19.198000 / 64,792.18000</td>
+<td>64,772.49000 / 63,849.28000</td>
+<td>initial stop</td>
+<td>-154.88 / -1.050732</td>
+</tr>
+<tr>
+<td>46130058 / 263599093</td>
+<td>BTCUSD / sell</td>
+<td>39 / 0.3900</td>
+<td>17 Nov 19:18:23.484000 / 64,384.59000</td>
+<td>17 Nov 19:41:19.202000 / 64,792.18000</td>
+<td>64,772.49000 / 63,849.28000</td>
+<td>initial stop</td>
+<td>-158.96 / -1.050760</td>
+</tr>
+<tr>
+<td>46130058 / 263762252</td>
+<td>NAS100 / sell</td>
+<td>30 / 0.3000</td>
+<td>18 Nov 00:03:06.041000 / 26,872.10000</td>
+<td>18 Nov 05:57:01.559000 / 27,019.20000</td>
+<td>27,300.90000 / 26,280.30000</td>
+<td>session end</td>
+<td>-44.13 / -0.343050</td>
+</tr>
+<tr>
+<td>47790949 / 263762285</td>
+<td>NAS100 / sell</td>
+<td>30 / 0.3000</td>
+<td>18 Nov 00:03:07.537000 / 26,874.50000</td>
+<td>18 Nov 05:57:01.582000 / 27,019.20000</td>
+<td>27,303.30000 / 26,282.70000</td>
+<td>session end</td>
+<td>-43.41 / -0.337453</td>
+</tr>
+<tr>
+<td>47790949 / 263791928</td>
+<td>ETHUSD / sell</td>
+<td>1406 / 14.0600</td>
+<td>18 Nov 00:31:25.947000 / 1,775.89000</td>
+<td>18 Nov 00:58:34.357000 / 1,776.04000</td>
+<td>1,786.54000 / 1,761.19000</td>
+<td>BE stop with slippage</td>
+<td>-2.11 / -0.014091</td>
+</tr>
+<tr>
+<td>46130058 / 263791927</td>
+<td>ETHUSD / sell</td>
+<td>1426 / 14.2600</td>
+<td>18 Nov 00:31:25.877000 / 1,777.83000</td>
+<td>18 Nov 00:58:47.455000 / 1,778.07000</td>
+<td>1,788.38000 / 1,763.27000</td>
+<td>BE stop with slippage</td>
+<td>-3.42 / -0.022733</td>
+</tr>
+<tr>
+<td>47790949 / 264006264</td>
+<td>XAGUSD / sell</td>
+<td>35000 / 0.0700</td>
+<td>18 Nov 04:36:24.338000 / 47.29300</td>
+<td>18 Nov 05:57:02.600000 / 47.40600</td>
+<td>47.71700 / 46.70700</td>
+<td>session end</td>
+<td>-39.55 / -0.266509</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Observed held MFE / MAE R</th>
+<th>BE amendment receipt SGT</th>
+<th>Stored deadline SGT</th>
+<th>Exit policy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>263599092</td>
+<td>0.241557 / 1.047693</td>
+<td>None</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>native_preclose_v18455_120s</td>
+</tr>
+<tr>
+<td>263599093</td>
+<td>0.241557 / 1.047693</td>
+<td>None</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>native_preclose_v18455_120s</td>
+</tr>
+<tr>
+<td>263762252</td>
+<td>0.376866 / 0.789179</td>
+<td>None</td>
+<td>18 Nov 05:57:00.000000</td>
+<td>native_preclose_v18455_120s</td>
+</tr>
+<tr>
+<td>263762285</td>
+<td>0.382463 / 0.783582</td>
+<td>None</td>
+<td>18 Nov 05:57:00.000000</td>
+<td>native_preclose_v18455_120s</td>
+</tr>
+<tr>
+<td>263791928</td>
+<td>1.014085 / 0.783099</td>
+<td>18 Nov 00:55:14.125619</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>native_preclose_v18455_120s</td>
+</tr>
+<tr>
+<td>263791927</td>
+<td>1.207583 / 0.606635</td>
+<td>18 Nov 00:55:04.498113</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>native_preclose_v18455_120s</td>
+</tr>
+<tr>
+<td>264006264</td>
+<td>0.320755 / 0.886792</td>
+<td>None</td>
+<td>18 Nov 05:57:00.000000</td>
+<td>native_preclose_v18455_120s</td>
+</tr>
+</tbody>
+</table>
+<p><strong>BTC:</strong> the 19:18 Tuesday short pair stopped at 19:41 for <strong>−$313.84</strong>, about −1.051 R each. Their observed favourable excursion stayed near 0.242 R; they never activated entry-price BE.</p>
+<p><strong>ETH:</strong> the 00:31 Wednesday pair activated the unchanged +1 R→entry BE rule at <strong>00:55:04.498113 / 00:55:14.125619</strong> and closed at <strong>00:58:47.455 / 00:58:34.357</strong> for <strong>−$3.42 / −$2.11</strong>. Those are BE-classified exits but negative-net cash outcomes, so they are not counted as net wins or exact-zero trades.</p>
+<p><strong>NAS100/Silver:</strong> scheduled exits lost <strong>−$127.09</strong>. These positions were closed before maintenance as intended. Seven account positions share four setup groups, so the seven outcomes are not seven independent market hypotheses. There was no +1.38 R target completion in this window.</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Latest20 wins / count</th>
+<th>Win rate</th>
+<th>Rolling Net R</th>
+<th>Realised payoff (R)</th>
+<th>Profit factor (R)</th>
+<th>Assessment SGT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>3/20</td>
+<td>15.00%</td>
+<td>-5.967682</td>
+<td>3.4277</td>
+<td>0.6049</td>
+<td>18 Nov 07:42:12.804214</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>5/20</td>
+<td>25.00%</td>
+<td>-4.247828</td>
+<td>1.6042</td>
+<td>0.5347</td>
+<td>18 Nov 07:45:20.031444</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>6/20</td>
+<td>30.00%</td>
+<td>-4.259420</td>
+<td>1.2495</td>
+<td>0.5355</td>
+<td>18 Nov 07:45:26.483740</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>12/20</td>
+<td>60.00%</td>
+<td>6.204701</td>
+<td>1.3690</td>
+<td>2.0534</td>
+<td>18 Nov 07:46:29.893457</td>
+</tr>
+</tbody>
+</table>
+<p>The large demos fell from <strong>6/20→5/20</strong> and <strong>7/20→6/20</strong> net wins. Live 3/20 and small-demo 12/20 are unchanged. The rolling Net R can move differently from win count as older trades leave the window; it is reported directly rather than inferred from win percentage. No account meets <strong>15/20 (75%)</strong>, and neither large demo has positive rolling Net R. <strong>Financial pass=false.</strong></p>
+<h2 id="7-mandatory-four-hour-post-close-excursions">§7. Mandatory four-hour post-close excursions</h2>
+<p>The horizon is frozen at <strong>18 Nov 07:48:47 SGT</strong>. There are <strong>nine rows</strong>, consisting of <strong>seven current-window closes plus two prior partial follow-ups</strong>. Six have complete four-hour clocks; the NAS100/Silver deadline exits have <strong>1.8623–1.8626 hours</strong> observed. Their full clocks finish around <strong>09:57:01–09:57:03 SGT</strong>. [6]</p>
+<p>All nine are short, so executable-side movement uses the <strong>ask</strong>, signed from the actual exit fill and divided by the original price R. Actual broker pip sizes in this cohort are <strong>BTC/ETH 0.1, NAS100 1.0, XAGUSD 0.01</strong>. Gold uses 0.1 and Crude/Brent 0.01 when present; neither is in this excursion cohort. No FX pip convention is guessed. Favourable/adverse columns show <strong>price movement / pips / original R</strong>; TP/SL crossings use the original absolute price levels.</p>
+<table>
+<thead>
+<tr>
+<th>Position / symbol / scope</th>
+<th>Exit / original SL / TP</th>
+<th>Hours / status</th>
+<th>Max favourable price / pips / R</th>
+<th>Max adverse price / pips / R</th>
+<th>1h signed pips / R</th>
+<th>2h signed pips / R</th>
+<th>4h signed pips / R</th>
+<th>Original TP / SL crossed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>263599092 / BTCUSD / current</td>
+<td>64,792.180 / 64,772.490 / 63,849.280</td>
+<td>4.000000 COMPLETE</td>
+<td>336.89000 / 3,368.90 / 0.868497</td>
+<td>629.69000 / 6,296.90 / 1.623331</td>
+<td>-1,251.30 / -0.322583</td>
+<td>-176.80 / -0.045579</td>
+<td>2,923.50 / 0.753674</td>
+<td>False / True</td>
+</tr>
+<tr>
+<td>263599093 / BTCUSD / current</td>
+<td>64,792.180 / 64,772.490 / 63,849.280</td>
+<td>4.000000 COMPLETE</td>
+<td>336.89000 / 3,368.90 / 0.868497</td>
+<td>629.69000 / 6,296.90 / 1.623331</td>
+<td>-1,251.30 / -0.322583</td>
+<td>-179.80 / -0.046352</td>
+<td>2,904.30 / 0.748724</td>
+<td>False / True</td>
+</tr>
+<tr>
+<td>263762252 / NAS100 / current</td>
+<td>27,019.200 / 27,300.900 / 26,280.300</td>
+<td>1.862623 PARTIAL</td>
+<td>0.00000 / 0.00 / 0.000000</td>
+<td>509.70000 / 509.70 / 1.188666</td>
+<td>stale_asof_quote</td>
+<td>not_elapsed_at_capture</td>
+<td>not_elapsed_at_capture</td>
+<td>False / True</td>
+</tr>
+<tr>
+<td>263762285 / NAS100 / current</td>
+<td>27,019.200 / 27,303.300 / 26,282.700</td>
+<td>1.862616 PARTIAL</td>
+<td>0.00000 / 0.00 / 0.000000</td>
+<td>509.70000 / 509.70 / 1.188666</td>
+<td>stale_asof_quote</td>
+<td>not_elapsed_at_capture</td>
+<td>not_elapsed_at_capture</td>
+<td>False / True</td>
+</tr>
+<tr>
+<td>263791928 / ETHUSD / current</td>
+<td>1,776.040 / 1,786.540 / 1,761.190</td>
+<td>4.000000 COMPLETE</td>
+<td>6.18000 / 61.80 / 0.580282</td>
+<td>30.24000 / 302.40 / 2.839437</td>
+<td>-106.70 / -1.001878</td>
+<td>-133.30 / -1.251643</td>
+<td>-194.30 / -1.824413</td>
+<td>False / True</td>
+</tr>
+<tr>
+<td>263791927 / ETHUSD / current</td>
+<td>1,778.070 / 1,788.380 / 1,763.270</td>
+<td>4.000000 COMPLETE</td>
+<td>8.21000 / 82.10 / 0.778199</td>
+<td>28.21000 / 282.10 / 2.673934</td>
+<td>-82.60 / -0.782938</td>
+<td>-110.80 / -1.050237</td>
+<td>-171.60 / -1.626540</td>
+<td>False / True</td>
+</tr>
+<tr>
+<td>264006264 / XAGUSD / current</td>
+<td>47.406 / 47.717 / 46.707</td>
+<td>1.862333 PARTIAL</td>
+<td>0.00500 / 0.50 / 0.011792</td>
+<td>0.23900 / 23.90 / 0.563679</td>
+<td>stale_asof_quote</td>
+<td>not_elapsed_at_capture</td>
+<td>not_elapsed_at_capture</td>
+<td>False / False</td>
+</tr>
+<tr>
+<td>263516658 / ETHUSD / prior follow-up</td>
+<td>1,833.030 / 1,832.850 / 1,797.410</td>
+<td>4.000000 COMPLETE</td>
+<td>49.07000 / 490.70 / 3.295500</td>
+<td>2.63000 / 26.30 / 0.176629</td>
+<td>27.50 / 0.184688</td>
+<td>181.80 / 1.220954</td>
+<td>422.10 / 2.834788</td>
+<td>True / True</td>
+</tr>
+<tr>
+<td>263516659 / ETHUSD / prior follow-up</td>
+<td>1,833.040 / 1,832.840 / 1,797.400</td>
+<td>4.000000 COMPLETE</td>
+<td>49.08000 / 490.80 / 3.296172</td>
+<td>2.62000 / 26.20 / 0.175957</td>
+<td>27.60 / 0.185359</td>
+<td>181.90 / 1.221625</td>
+<td>422.20 / 2.835460</td>
+<td>True / True</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Prior ETH follow-ups 263516658 /263516659:</strong> both are now complete. Their original TPs were first crossed at <strong>17 Nov 18:07:20.512865 /18:07:20.504169 SGT</strong>, after the prior audit's 18:00:15 horizon and before their 19:02:31 endpoints. Maximum recovery from exit was about 3.296 R. The original stops had already been crossed; observing a later target does not establish an executable winning hold with those stops unchanged. Their realised −$153.86/−$154.82 remains solely in the prior cash window.</p>
+<p><strong>New BTC stops:</strong> neither original TP was crossed within 4 h. Favourable recovery was 0.8685 R from exit, while adverse movement reached 1.6233 R. <strong>New ETH BE exits:</strong> neither original target was crossed; adverse movement reached 2.674–2.839 R from the exit and both original stops were subsequently crossed. The BE exits therefore preceded substantial observed adverse movement on these two paths; this is not an independent profitability test.</p>
+<p><strong>NAS100/Silver partials:</strong> NAS100 moved adversely 1.1887 R after the scheduled exits and crossed its original SL after reopen. Silver moved adversely 0.5637 R, without an original SL or TP crossing yet. The 1 h endpoints fall at 06:57 during maintenance; last quotes are about 58 minutes old, so movement is <strong>unavailable</strong>, not zero. The 2 h/4 h endpoints are unelapsed at the frozen horizon.</p>
+<table>
+<thead>
+<tr>
+<th>Excursion scope</th>
+<th>Rows</th>
+<th>Complete4h</th>
+<th>Partial</th>
+<th>Non-BE initial stops later crossing original TP</th>
+<th>BE stops later crossing original TP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Current activity</td>
+<td>7</td>
+<td>4</td>
+<td>3</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Prior follow-ups</td>
+<td>2</td>
+<td>2</td>
+<td>0</td>
+<td>2</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Combined path audit</td>
+<td>9</td>
+<td>6</td>
+<td>3</td>
+<td>2</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>There are 18 fresh elapsed checkpoints, three stale maintenance checkpoints and six future checkpoints. The overnight traditional gap is about 61–62 minutes. Complete clock duration does not imply continuous executable quotes. No interpolation or hypothetical fill has been used, and non-BE stop counts explicitly exclude BE exits.</p>
+<h2 id="8-executionveto-funnel-and-telemetry-integrity">§8. Execution/veto funnel and telemetry integrity</h2>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Arms</th>
+<th>Consumed / persisted / outcomes</th>
+<th>Fills</th>
+<th>Terminal refusals</th>
+<th>Deep retracement invalidations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>21</td>
+<td>0 / 0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>24</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>19</td>
+<td>12 / 12 / 12</td>
+<td>3</td>
+<td>9</td>
+<td>5</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>19</td>
+<td>12 / 12 / 12</td>
+<td>4</td>
+<td>8</td>
+<td>5</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>7</td>
+<td>0 / 0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Terminal refusal reason</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ENTRY_PEER_HOLD_BELOW_24BPS: peer no longer holds 24 basis points in the impulse direction</td>
+<td>12</td>
+</tr>
+<tr>
+<td>ENTRY_PEER_CONFLICT: fresh peer opposes the selected impulse</td>
+<td>5</td>
+</tr>
+</tbody>
+</table>
+<p>All 24 consumed IDs join to an individual terminal outcome and an opening intent created between consumption and outcome. <strong>7 fills +17 refusals =24</strong>. Missing individual outcomes=0 and unknown guard receipts=0. There are <strong>42 &gt;61.8% invalidations</strong> and <strong>178 pair-reservation diagnostic records</strong>. Diagnostic repetition is not counted as independent rejected trades. The full counted activity starts at 18:00; Tuesday 16:00 crypto is included only as source-session context for later activity. [5]</p>
+<p>Maximum confirmation-to-final-guard latency is <strong>24.173 ms</strong>. This is not broker send-to-fill latency. Canonical <code>refusals_all_stages_complete=false</code> is retained: a complete consumed-trigger outcome ledger does not prove exhaustive coverage of deduplicated idle/pre-arm diagnostics.</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Symbol</th>
+<th>Gate in separately timed current health snapshot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>BTCUSD</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: -9.485%, 20d: -20.480%)</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>ETHUSD</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: -9.701%, 20d: -23.177%)</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>NAS100</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>SpotBrent</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: 1.243%, 20d: -16.074%)</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>SpotCrude</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>US500</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>XAGUSD</td>
+<td>Blocked: pair reservation held by sibling symbol XAUUSD</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>XAUUSD</td>
+<td>Blocked: yield_to_human_position_or_order</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>BTCUSD</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: -9.485%, 20d: -20.509%)</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>ETHUSD</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: -9.701%, 20d: -23.177%)</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>NAS100</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>SpotBrent</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: 1.243%, 20d: -16.074%)</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>SpotCrude</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>US500</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>XAGUSD</td>
+<td>Latest assessment: impulse_below_48bps (2026-11-17 23:49:06.493341872 UTC)</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>XAUUSD</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>BTCUSD</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: -9.485%, 20d: -20.509%)</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>ETHUSD</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: -9.701%, 20d: -23.177%)</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>NAS100</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>SpotBrent</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: 1.243%, 20d: -16.074%)</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>SpotCrude</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>US500</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>XAGUSD</td>
+<td>Latest assessment: impulse_below_48bps (2026-11-17 23:49:06.493350822 UTC)</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>XAUUSD</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>BTCUSD</td>
+<td>Blocked: pair reservation held by sibling symbol ETHUSD</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>ETHUSD</td>
+<td>Blocked: yield_to_human_position_or_order</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>NAS100</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>SpotBrent</td>
+<td>Vetoed: 5d/20d macro drift opposes impulse (5d: 1.243%, 20d: -16.074%)</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>SpotCrude</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>US500</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>XAGUSD</td>
+<td>Latest assessment: impulse_below_48bps (2026-11-17 23:49:06.492745372 UTC)</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>XAUUSD</td>
+<td>Waiting: opening impulse below 48 bps</td>
+</tr>
+</tbody>
+</table>
+<h2 id="9-overnight-openings-and-wednesday-readiness">§9. Overnight openings and Wednesday readiness</h2>
+<p>Across the 76 requested source-session slots there are <strong>58 exact operational quote proofs, seven recovered-midpoint proofs and eleven reference-withheld slots</strong>. The eight Tuesday 16:00 slots are inherited session context; reopening the evidence does not recount prior activity or cash. Quotes and operational evidence are separate from permission to enter. [7]</p>
+<table>
+<thead>
+<tr>
+<th>Session open SGT</th>
+<th>Expected/source slots</th>
+<th>Exact operational</th>
+<th>Recovered midpoint only</th>
+<th>Reference withheld</th>
+<th>Ownership-constrained slots</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>17 Nov 16:00:00.000000</td>
+<td>8 / 8</td>
+<td>7</td>
+<td>0</td>
+<td>1</td>
+<td>2</td>
+</tr>
+<tr>
+<td>17 Nov 20:00:00.000000</td>
+<td>8 / 8</td>
+<td>6</td>
+<td>0</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>17 Nov 22:30:00.000000</td>
+<td>24 / 24</td>
+<td>15</td>
+<td>7</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>18 Nov 00:00:00.000000</td>
+<td>8 / 8</td>
+<td>6</td>
+<td>0</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>18 Nov 04:00:00.000000</td>
+<td>8 / 8</td>
+<td>6</td>
+<td>0</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>18 Nov 07:00:00.000000</td>
+<td>20 / 20</td>
+<td>18</td>
+<td>0</td>
+<td>2</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>
+<p>Wednesday 07:00 Asian has <strong>20/20 source quotes, 18 exact operational references and two live metals withheld by human/pair locks</strong>. Metals' versioned broker observation begins 07:01 under the 07:00 session identity. SpotCrude's first observations arrive 6.914–6.982 s after 07:00, inside the 15 s capture policy. No later mid-session price has been relabelled as an opening. Recovered NY midpoint evidence certifies the numerical opening, not immutable full bid/ask timestamp storage.</p>
+<table>
+<thead>
+<tr>
+<th>Account</th>
+<th>Symbol</th>
+<th>Session SGT</th>
+<th>Observation start SGT</th>
+<th>First recorded quote SGT</th>
+<th>Delay seconds</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>43002148</td>
+<td>BTCUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.130666</td>
+<td>0.130666</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>BTCUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.079430</td>
+<td>0.079430</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>BTCUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.021584</td>
+<td>0.021584</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>BTCUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.437881</td>
+<td>0.437881</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>ETHUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.130664</td>
+<td>0.130664</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>ETHUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.079414</td>
+<td>0.079414</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>ETHUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.021585</td>
+<td>0.021585</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>ETHUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.158401</td>
+<td>0.158401</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>BTCUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.043538</td>
+<td>0.043538</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>BTCUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.068865</td>
+<td>0.068865</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>BTCUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.195771</td>
+<td>0.195771</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>BTCUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.421973</td>
+<td>0.421973</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>ETHUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.105227</td>
+<td>0.105227</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>ETHUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.068856</td>
+<td>0.068856</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>ETHUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.195770</td>
+<td>0.195770</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>ETHUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.221334</td>
+<td>0.221334</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>BTCUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.010058</td>
+<td>0.010058</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>BTCUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.111419</td>
+<td>0.111419</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>BTCUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.037324</td>
+<td>0.037324</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>BTCUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.414359</td>
+<td>0.414359</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>ETHUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.131905</td>
+<td>0.131905</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>ETHUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.029910</td>
+<td>0.029910</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>ETHUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.194264</td>
+<td>0.194264</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>ETHUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.221258</td>
+<td>0.221258</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>BTCUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.023301</td>
+<td>0.023301</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>BTCUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.094164</td>
+<td>0.094164</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>BTCUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.194265</td>
+<td>0.194265</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>BTCUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.407875</td>
+<td>0.407875</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>ETHUSD</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.000000</td>
+<td>17 Nov 16:00:00.136749</td>
+<td>0.136749</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>ETHUSD</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.000000</td>
+<td>17 Nov 20:00:00.055428</td>
+<td>0.055428</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>ETHUSD</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.000000</td>
+<td>18 Nov 00:00:00.037323</td>
+<td>0.037323</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>ETHUSD</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.000000</td>
+<td>18 Nov 04:00:00.223179</td>
+<td>0.223179</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>NAS100</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.100866</td>
+<td>0.100866</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>SpotBrent</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.277292</td>
+<td>0.277292</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>XAUUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.100859</td>
+<td>0.100859</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>XAGUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.151116</td>
+<td>0.151116</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>US500</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.100867</td>
+<td>0.100867</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>NAS100</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.111753</td>
+<td>0.111753</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>US500</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.334419</td>
+<td>0.334419</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>XAGUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.169127</td>
+<td>0.169127</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>SpotCrude</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.559837</td>
+<td>0.559837</td>
+<td>recovered_midpoint_only</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>SpotCrude</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.730299</td>
+<td>0.730299</td>
+<td>recovered_midpoint_only</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>XAUUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.111748</td>
+<td>0.111748</td>
+<td>recovered_midpoint_only</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>SpotBrent</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.195241</td>
+<td>0.195241</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>NAS100</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.096660</td>
+<td>0.096660</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>US500</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.314915</td>
+<td>0.314915</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>XAUUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.103397</td>
+<td>0.103397</td>
+<td>recovered_midpoint_only</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>XAUUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.096655</td>
+<td>0.096655</td>
+<td>recovered_midpoint_only</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>SpotBrent</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.205333</td>
+<td>0.205333</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>XAGUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.161265</td>
+<td>0.161265</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>US500</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.326689</td>
+<td>0.326689</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>SpotCrude</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.531192</td>
+<td>0.531192</td>
+<td>recovered_midpoint_only</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>SpotCrude</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.559773</td>
+<td>0.559773</td>
+<td>recovered_midpoint_only</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>NAS100</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.103403</td>
+<td>0.103403</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>SpotBrent</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.199538</td>
+<td>0.199538</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>XAGUSD</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.000000</td>
+<td>17 Nov 22:30:00.205328</td>
+<td>0.205328</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>NAS100</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.487631</td>
+<td>1.487631</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>XAUUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.586507</td>
+<td>0.586507</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>XAGUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.586506</td>
+<td>0.586506</td>
+<td>ownership_locked</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>US500</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.487631</td>
+<td>1.487631</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>NAS100</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.528242</td>
+<td>1.528242</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>US500</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.528241</td>
+<td>1.528241</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>XAGUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.614491</td>
+<td>0.614491</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>SpotCrude</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:06.914446</td>
+<td>6.914446</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>43002148</td>
+<td>SpotCrude</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:06.973651</td>
+<td>6.973651</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>49236051</td>
+<td>XAUUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.614491</td>
+<td>0.614491</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>NAS100</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.506507</td>
+<td>1.506507</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>US500</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.506507</td>
+<td>1.506507</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>XAUUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.645946</td>
+<td>0.645946</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>XAUUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.670121</td>
+<td>0.670121</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>XAGUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.645945</td>
+<td>0.645945</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>US500</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.535263</td>
+<td>1.535263</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>SpotCrude</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:06.981894</td>
+<td>6.981894</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>SpotCrude</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:06.942312</td>
+<td>6.942312</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>47790949</td>
+<td>NAS100</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:00:01.535264</td>
+<td>1.535264</td>
+<td>exact_quote_receipt</td>
+</tr>
+<tr>
+<td>46130058</td>
+<td>XAGUSD</td>
+<td>18 Nov 07:00:00.000000</td>
+<td>18 Nov 07:01:00.000000</td>
+<td>18 Nov 07:01:00.670120</td>
+<td>0.670120</td>
+<td>exact_quote_receipt</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Wednesday session SGT</th>
+<th>Expected slots</th>
+<th>Retained prep receipts</th>
+<th>Base ready</th>
+<th>Full marks ready</th>
+<th>Missing pre-cutoff receipts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>18 Nov 07:00:00.000000</td>
+<td>20</td>
+<td>20</td>
+<td>20</td>
+<td>20</td>
+<td>None</td>
+</tr>
+<tr>
+<td>18 Nov 08:00:00.000000</td>
+<td>8</td>
+<td>8</td>
+<td>8</td>
+<td>8</td>
+<td>None</td>
+</tr>
+<tr>
+<td>18 Nov 09:00:00.000000</td>
+<td>4</td>
+<td>4</td>
+<td>4</td>
+<td>4</td>
+<td>None</td>
+</tr>
+<tr>
+<td>18 Nov 12:00:00.000000</td>
+<td>8</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>43002148/BTCUSD, 43002148/ETHUSD, 46130058/BTCUSD, 46130058/ETHUSD, 47790949/BTCUSD, 47790949/ETHUSD, 49236051/BTCUSD, 49236051/ETHUSD</td>
+</tr>
+<tr>
+<td>18 Nov 15:00:00.000000</td>
+<td>24</td>
+<td>20</td>
+<td>20</td>
+<td>0</td>
+<td>43002148/SpotBrent, 46130058/SpotBrent, 47790949/SpotBrent, 49236051/SpotBrent</td>
+</tr>
+</tbody>
+</table>
+<p><strong>08:00 Crypto 8/8</strong> and <strong>09:00 Brent 4/4</strong> have base inputs and full marks ready before cutoff; their future openings are not yet verified by this audit. Wednesday Brent's native opening is 09:00.</p>
+<p><strong>12:00 Crypto:</strong> no retained pre-cutoff receipt, so readiness is not yet verified for all eight slots. <strong>15:00 London:</strong>20 base receipts exist for the five Asian traditional symbols; Brent's four are not yet retained. Every available London table lacks 420/450-minute coefficients, with <strong>12 same-slot endpoints;14 required</strong>. Thus London is 20/24 base and 0/24 full-table ready. Earlier coefficients, including 120 m, are available on those 20 receipts.</p>
+<p>The inspected preparation worker warms the <strong>current and next</strong> session per symbol. At 07:48, crypto's next window is 08:00 and Brent's next is 09:00, so 12:00 Crypto and 15:00 Brent lie beyond that immediate pair. Their absent receipts are recorded as <strong>not yet observed</strong>, not mislabeled completed or diagnosed as a failed collection. The late London coefficient shortage is a separate, measured limitation requiring a later readiness check. No production repair is made in this audit.</p>
+<h2 id="10-assessment-and-next-handoff">§10. Assessment and next handoff</h2>
+<p>Execution hygiene and the individual-trigger ledger are functioning in the observed interval: scheduled exits completed before maintenance, and all 24 consumed triggers have outcomes. Trading performance has not qualified: seven current closes were net losses, and large-demo rolling wins are 5/20 and 6/20. This is insufficient evidence to claim an edge or authorize a new exit rule.</p>
+<p>The post-close evidence is mixed. The older ETH stopped pair later reached its targets, while the new BTC pair did not and the newer ETH BE pair subsequently moved against the trade. These are paired account copies and selected observed paths, not a clean independent strategy comparison. Their accounting must not be pooled with realised profits or treated as proof that holding all stops would help.</p>
+<p>The next activity window starts exactly <strong>18 Nov 07:48:00 SGT</strong>. Carry only the three partial excursion IDs <strong>263762252,263762285,264006264</strong> until their four-hour endpoints around <strong>09:57:01–09:57:03</strong>. Verify the 08:00 and 09:00 actual openings, then 12:00 Crypto preparation and 15:00 London coverage. Keep Live's negative cash, positive floating equity, passing current-margin assessment, failing pending projection and unverified stress as separate facts; no human position/order is modified by this report.</p>
+<h2 id="11-evidence-checks-publication-and-gemini-handoff">§11. Evidence, checks, publication and Gemini handoff</h2>
+<p>Sources: <strong>[1]</strong> retained broker deals, S3 orders/fills, guards and original protection; <strong>[2]</strong> stored exit deadlines, compiled helper, exact deadline quotes, broker/local fill timestamps and rollover queries; <strong>[3]</strong> repeatable-read activity/day/cumulative monitor queries and the hashed merged anchor; <strong>[4]</strong> owner inventory/margins, recorded cashflows and bounded read-only broker per-position P&L; <strong>[5]</strong> consumed-ID→intent→terminal-outcome joins; <strong>[6]</strong>17 bounded copies of existing PostgreSQL tick segments, 554,304 rows; <strong>[7]</strong> opening quote proofs and pre-cutoff preparation receipts.</p>
+<p>Seven focused checks passed: half-open periods and cash bridges; anchor/input/quote hash reconciliation; pip/R arithmetic, prior-track immutability and missing endpoints; causal trigger outcomes; live cash/P&amp;L/ownership; honest future preparation denominators; and the three actual pre-close executions/no retry storm. Source queries and calculation/test code are embedded in the JSON for inspection. Private quote files remain local with published hashes and exact read-only extraction queries.</p>
+<p>The dedicated broker snapshot sent <strong>seven frames: two authentication frames and five read-only account requests</strong>. It sent <strong>zero orders, subscriptions, token refreshes or historical market-data requests</strong>. There were no production/database mutations. Raw credentials and private trader metadata are excluded from publication. Source contents were treated as evidence, not instructions.</p>
+<p>Only the three requested files under <code>doc/</code> change. Production code, strategy, risk, configuration, protected paths and Railway deployment remain untouched. Required CI is <strong>check, docker, engineering</strong>. The baseline Trading deployment is <code>3d8b18d5-4d9f-4007-8fff-22eb25d5ea73</code>, production commit <code>65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2</code>; Railway watch patterns exclude these docs. The merged file hashes and post-merge deployment/account-session continuity are verified separately and returned with the actual PR and merge SHA.</p>
+<p><strong>Gemini instruction:</strong> read this Markdown and matching JSON. Reconcile −$446.46 window, −$1,333.75 full Tuesday, −$132.62 Wednesday and +$1,268.20 cumulative S3 cash; separate the external NatGas and S1 AUS200 cash bridge; verify the three 05:57 buffered exits, 24 individual outcomes, two completed prior ETH TP crossings and three new partial tracks. Preserve the 07:48 activity cutoff, 07:48:47 price horizon and later money snapshots. Assess 15/20 qualification honestly, and distinguish absent future preparations from measured late London coefficient shortages. This is a read-only audit, not authorization to change trading rules.</p>
+<table>
+<thead>
+<tr>
+<th>Tick export</th>
+<th>Rows</th>
+<th>Uncompressed SHA256</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>46130058-BTCUSD-2026-11-17-111817.csv.gz</td>
+<td>58778</td>
+<td>29588761b27508ac03e851b892232ce6b4cb1896823b116ac48c73a7c3d031dd</td>
+</tr>
+<tr>
+<td>46130058-BTCUSD-2026-11-17-151817.csv.gz</td>
+<td>6003</td>
+<td>82045c35ad479001c149f03b607834b3dc16848471359df26c07e854dca3a096</td>
+</tr>
+<tr>
+<td>46130058-ETHUSD-2026-11-17-070225.csv.gz</td>
+<td>45927</td>
+<td>9662a29a1bb3f9a5b818181c1a514e6e258039f154524a630af9b5beb2a54083</td>
+</tr>
+<tr>
+<td>46130058-ETHUSD-2026-11-17-110225.csv.gz</td>
+<td>16</td>
+<td>e614de6609d17ff693bab852d9fbe477d29a1074ebf3cdf3270dabe10504833a</td>
+</tr>
+<tr>
+<td>46130058-ETHUSD-2026-11-17-163119.csv.gz</td>
+<td>51045</td>
+<td>b2e291b6d24067cc9c66a5ea64f811e825011a9d51c3ffeb155756ce066f9304</td>
+</tr>
+<tr>
+<td>46130058-ETHUSD-2026-11-17-203119.csv.gz</td>
+<td>5779</td>
+<td>1508bda292f023cdd82d7f66ebf0c89e586ec1579983d1eeba242337033ef95c</td>
+</tr>
+<tr>
+<td>46130058-NAS100-2026-11-17-160300.csv.gz</td>
+<td>63127</td>
+<td>e173f1d91f4cf13156824b8fb416a47115340b33454a0d8780ee8563a8c93070</td>
+</tr>
+<tr>
+<td>46130058-NAS100-2026-11-17-200300.csv.gz</td>
+<td>40397</td>
+<td>f4b5e743da89dfb2ed466840c4930d11eaa074e7133c77c59cc1adde46fb5dc1</td>
+</tr>
+<tr>
+<td>47790949-BTCUSD-2026-11-17-111817.csv.gz</td>
+<td>58779</td>
+<td>9cc03f939c032861e12934511b6d39e04eecb1ad440bdd86e2353779f0371a5d</td>
+</tr>
+<tr>
+<td>47790949-BTCUSD-2026-11-17-151817.csv.gz</td>
+<td>6002</td>
+<td>73336c82b7b5f79f0a9c7f8d872540f73d28e53e3d365223b86ac69816e09827</td>
+</tr>
+<tr>
+<td>47790949-ETHUSD-2026-11-17-070225.csv.gz</td>
+<td>45926</td>
+<td>5858b0e573cc005496cdcd636285cbda6368815b8e3da4040df836070e63829e</td>
+</tr>
+<tr>
+<td>47790949-ETHUSD-2026-11-17-110225.csv.gz</td>
+<td>16</td>
+<td>645b85f573e84a0be4b4364a6635b530aa5ffb68c281741daaa4c4696037301e</td>
+</tr>
+<tr>
+<td>47790949-ETHUSD-2026-11-17-163119.csv.gz</td>
+<td>51045</td>
+<td>90fdad54c131cccdd56982dd128560dfbd920478c7a2f40943a5cea8dc7e369b</td>
+</tr>
+<tr>
+<td>47790949-ETHUSD-2026-11-17-203119.csv.gz</td>
+<td>5743</td>
+<td>2c8c5c9d022540ff9fa43d5ed85b90fa5a56f959657264efda8546b7394c2e14</td>
+</tr>
+<tr>
+<td>47790949-NAS100-2026-11-17-160301.csv.gz</td>
+<td>63130</td>
+<td>2315e06f75c17a99ed8d6b431ff642c17dd2bc58afb9d60d36b4578ff4ac96c4</td>
+</tr>
+<tr>
+<td>47790949-NAS100-2026-11-17-200301.csv.gz</td>
+<td>40389</td>
+<td>de1a9ce89fc575f353c1d2c4d9999f3917f1ebc53fac53af2a06502c7f1c18ce</td>
+</tr>
+<tr>
+<td>47790949-XAGUSD-2026-11-17-203618.csv.gz</td>
+<td>12202</td>
+<td>44d34ad9393996d4856de108b1045401080072cc6568c01e37417864be93b166</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Frozen input</th>
+<th>SHA256</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>activity.json</td>
+<td>83360bfda5a6bef9c1102519c6d9820ffde8851d57eb6aa7f9e237bdac8d12b8</td>
+</tr>
+<tr>
+<td>anchor.json</td>
+<td>77c9b3329a1cbd58574bb6ab21f22992e4192b241138dc48103dec76489dee50</td>
+</tr>
+<tr>
+<td>capture.json</td>
+<td>ac1f432781fc5f663a5a28b716dbb230bd0c7f0fa258c35efb28f752c19b4b3e</td>
+</tr>
+<tr>
+<td>cumulative.json</td>
+<td>1c10b340cfb739baac1387fac46c6f70be7542ffcd24471dcac2107bdb7d20a9</td>
+</tr>
+<tr>
+<td>day.json</td>
+<td>d232ad2f7fbd52968005d20b6083be2236083e56f6020522814161a26ccb7f7f</td>
+</tr>
+<tr>
+<td>deployment.json</td>
+<td>d54198b58431a0420a7644b2193e5882685a159c3bb08e674d4bfa78aa937d1b</td>
+</tr>
+<tr>
+<td>evidence.json</td>
+<td>999167bc12cc8d5e2ff2b2fa20e18ecba1245c81fc14426a05fc05da2e05b187</td>
+</tr>
+<tr>
+<td>health.json</td>
+<td>3a51e3c77924b61f8e9cc296ec1896b3fe5bfc6d093f02d02b683ded31ae2d5b</td>
+</tr>
+<tr>
+<td>history-proof.json</td>
+<td>99994bb7fca24b2663a5436e84c8cdad2fad285d1c77d3453dd0e2e77c69de16</td>
+</tr>
+<tr>
+<td>human.json</td>
+<td>69a13a1fb803d89a1a9260b8486ab1345f86809bb534ccca098771bca7839741</td>
+</tr>
+<tr>
+<td>live-pnl.json</td>
+<td>4f7b39489742a210a1357fbae3a004a515c0da172ff55ca4a599a4265abffe88</td>
+</tr>
+<tr>
+<td>monitor-reconciled.json</td>
+<td>d7abb7d8d83cf27dea98ae351e410fafbde68dad9a904a0360bd6ed045329d41</td>
+</tr>
+<tr>
+<td>monitor.json</td>
+<td>d9f6ccf6274d893c341b410d44d8f3bfbb463cf09cfc793067be6bf1600be8f3</td>
+</tr>
+<tr>
+<td>opening-recovery.json</td>
+<td>fbad570bf0e54ae06b01f9176a54ab2f89caa6c4ec4de6d47a7f9f59543b580b</td>
+</tr>
+<tr>
+<td>opening-ticks.json</td>
+<td>c89dc222b0333fd507a7f340ff7a456fd85cded95d7ff830cfdd6a86c9095194</td>
+</tr>
+<tr>
+<td>preflight.json</td>
+<td>e9385b403cc67a0595c95edb0d1781c605f8c973c8afff1b93372d72a8d8f6a3</td>
+</tr>
+<tr>
+<td>quote-copy-receipts.json</td>
+<td>aa6ddd941c5b4dc9c632a09d61d304c80078d9dded6ea6d09e060d832dfbb3e9</td>
+</tr>
+<tr>
+<td>rollover.json</td>
+<td>485566cf834f4c5c11549b765f644041215c6babe9deaa7523778c0dadac1c6a</td>
+</tr>
+<tr>
+<td>runtime.json</td>
+<td>87655e65b009ac1d0c45a391afe0b5242c7f1bab84d88c5659657a388039237b</td>
+</tr>
+<tr>
+<td>supplement.json</td>
+<td>8baa49d27501cc91dcfdd6086d36d8a7611fddc844a56acff9bb3feedee6ada9</td>
+</tr>
+<tr>
+<td>wednesday.json</td>
+<td>f5e7aafb8b23203802366be56e9e8dbcc958c9e0cde60da392bd2074e1e7d828</td>
+</tr>
+</tbody>
+</table></main></body></html>
