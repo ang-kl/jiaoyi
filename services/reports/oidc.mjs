@@ -8,12 +8,23 @@ function httpsUrl(value, originOnly = false) {
 }
 
 export function readSettings(env) {
+  const google = ['REPORTS_GOOGLE_CLIENT_ID','REPORTS_GOOGLE_CLIENT_SECRET','REPORTS_OWNER_GMAIL','REPORTS_TOTP_SECRET']
+    .some(key => env[key] !== undefined);
+  const origin = env.REPORTS_PUBLIC_ORIGIN || ('https://' + (env.RAILWAY_PUBLIC_DOMAIN || ''));
+  if (google) {
+    const clientId = env.REPORTS_GOOGLE_CLIENT_ID, secret = env.REPORTS_GOOGLE_CLIENT_SECRET;
+    const ownerEmail = env.REPORTS_OWNER_GMAIL?.trim().toLowerCase();
+    const otpSecret = env.REPORTS_TOTP_SECRET?.toUpperCase();
+    if (!clientId || !secret || !/^[a-z0-9.]+@gmail\.com$/.test(ownerEmail ?? '') ||
+        !/^[A-Z2-7]{32}$/.test(otpSecret ?? '')) return null;
+    return {google, issuer:new URL('https://accounts.google.com'), origin:httpsUrl(origin,true).origin,
+      clientId, secret, ownerEmail, otpSecret};
+  }
   const issuer = env.REPORTS_OIDC_ISSUER;
   const clientId = env.REPORTS_OIDC_CLIENT_ID;
   const secret = env.REPORTS_OIDC_CLIENT_SECRET;
   const owner = env.REPORTS_OWNER_SUB;
   if (![issuer, clientId, secret, owner].every(s => s && s.trim() === s)) return null;
-  const origin = env.REPORTS_PUBLIC_ORIGIN || ('https://' + (env.RAILWAY_PUBLIC_DOMAIN || ''));
   return {issuer: httpsUrl(issuer), origin: httpsUrl(origin, true).origin, clientId, secret, owner};
 }
 
@@ -32,7 +43,7 @@ export function createIdentity(settings, fetchOptions = {}) {
       const nonce = oidc.randomNonce();
       const verifier = oidc.randomPKCECodeVerifier();
       const url = oidc.buildAuthorizationUrl(cfg, {
-        redirect_uri: settings.origin + '/auth/callback', scope: 'openid',
+        redirect_uri: settings.origin + '/auth/callback', scope: settings.google ? 'openid email' : 'openid',
         code_challenge_method: 'S256', code_challenge: await oidc.calculatePKCECodeChallenge(verifier),
         nonce, state
       });
@@ -44,6 +55,10 @@ export function createIdentity(settings, fetchOptions = {}) {
         idTokenExpected: true
       });
       const claims = tokens.claims();
+      if (settings.google) {
+        return Boolean(claims?.sub) && claims.email_verified === true &&
+          typeof claims.email === 'string' && claims.email.toLowerCase() === settings.ownerEmail;
+      }
       return claims?.sub === settings.owner && Array.isArray(claims.amr) && claims.amr.includes('mfa');
     }
   };

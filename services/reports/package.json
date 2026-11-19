@@ -3,7 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=24"},
-  "scripts": {"start": "node server.mjs", "test": "node --test test/*.test.mjs"},
-  "dependencies": {"openid-client": "6.9.0"}
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "openid-client": "6.9.0",
+    "otpauth": "9.6.0"
+  }
 }
