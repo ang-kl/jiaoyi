@@ -17,6 +17,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import trading_http
+
 MAX_BYTES = 5 * 1024 * 1024
 DEFAULT_TIMEOUT = 4.2
 MAX_TIMEOUT = 12.0
@@ -59,16 +61,8 @@ def _iso(value):
 
 
 def _base(env):
-    value = env.get("TRADING_BASE_URL") or env.get("JIAOYI_BASE_URL") or DEFAULT_BASE
     try:
-        parsed = urllib.parse.urlsplit(value)
-        # Paths, credentials and queries could turn fixed routes into a secret
-        # sink or leak into receipt URIs; only an HTTPS origin is accepted.
-        if (parsed.scheme != "https" or not parsed.hostname or parsed.username
-                or parsed.password or parsed.query or parsed.fragment
-                or parsed.path not in ("", "/") or parsed.port == 0):
-            return None
-        return urllib.parse.urlunsplit(("https", parsed.netloc, "", "", ""))
+        return trading_http.origin(env=env)
     except (ValueError, TypeError):
         return None
 
@@ -88,8 +82,11 @@ def _http_json(request, deadline):
             return None, {**info, "status": "timeout", "error_code": "deadline"}
         # Default HTTPSHandler preserves platform CA verification and hostname
         # checks. Do not install unverified TLS contexts or credential redirects.
-        opener = urllib.request.build_opener(NoRedirect())
-        with opener.open(request, timeout=remaining) as response:
+        if getattr(request, "_jiaoyi_trading_request", False):
+            response_context = trading_http.open_request(request, timeout=remaining)
+        else:
+            response_context = urllib.request.build_opener(NoRedirect()).open(request, timeout=remaining)
+        with response_context as response:
             status = getattr(response, "status", None)
             info["http_status"] = status if type(status) is int and 100 <= status <= 599 else None
             if status != 200:
@@ -121,6 +118,16 @@ def _http_json(request, deadline):
         return None, {**info, "status": "unavailable", "error_code": "invalid_json"}
     except (OSError, http.client.HTTPException, TypeError):
         return None, {**info, "status": "unavailable", "error_code": "transport"}
+
+
+def _trading_json(request, deadline, route):
+    value, status = _http_json(request, deadline)
+    if value is not None:
+        try:
+            trading_http.ensure_diagnostic(route, value)
+        except ValueError:
+            return None, {**status, "status": "unavailable", "error_code": "invalid_shape"}
+    return value, status
 
 
 def _deployment(request, deadline):
@@ -186,21 +193,21 @@ def collect_sources(env, started_at, observed_at, timeout=DEFAULT_TIMEOUT):
     result = {name: None for name in (*ROUTES, "sql_evidence", "deployment")}
     receipts, jobs = {}, {}
     for name, route in ROUTES.items():
-        uri = (base + route) if base else "unconfigured_https_origin" + route
+        uri = (base + route) if base else "unconfigured_trading_origin" + route
         receipts[name] = _receipt(uri, observed)
         if base is None:
             receipts[name]["error_code"] = "invalid_base_url"
             continue
-        headers = {"Accept": "application/json", "Cache-Control": "no-cache",
-                   "User-Agent": "jiaoyi-live-monitor/18393"}
-        if name == "setup_assessments":
-            password = source_env.get("JIAOYI_UI_PASSWORD")
-            if not password:
-                receipts[name]["error_code"] = "owner_credential_missing"
-                continue
-            headers["Authorization"] = "Bearer " + password
-        request = urllib.request.Request(uri, headers=headers, method="GET")
-        jobs[name] = lambda request=request: _http_json(request, deadline)
+        try:
+            request = trading_http.request(route, base=base, env=source_env)
+        except (ValueError, TypeError):
+            receipts[name]["error_code"] = (
+                "owner_credential_missing" if name == "setup_assessments"
+                and source_env.get("JIAOYI_TRADING_ACCESS_MODE", "legacy") == "legacy"
+                and not source_env.get("JIAOYI_UI_PASSWORD") else "trading_access_unavailable")
+            continue
+        request.add_header("User-Agent", "jiaoyi-live-monitor/18393")
+        jobs[name] = lambda request=request, route=route: _trading_json(request, deadline, route)
 
     receipts["deployment"] = _receipt(RAILWAY_URL, observed, project_id=RAILWAY_PROJECT,
         service_id=RAILWAY_SERVICE, environment_id=RAILWAY_ENVIRONMENT)

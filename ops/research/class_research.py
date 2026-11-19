@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Frozen all-class broker-data research. No model API, orders or live promotion."""
-import argparse, collections, datetime as dt, hashlib, html, json, math, os, re, subprocess, time
+import argparse, collections, datetime as dt, hashlib, html, json, math, re, subprocess, time
 from pathlib import Path
-from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 import broker_backtest as client
 from research_gates import DATA_GAP_REASONS, LCB_METHOD, data_gap_counts, lcb_net_r
@@ -86,7 +85,7 @@ def collect(a,plan,digest):
         if prior['plan_sha256']!=digest:raise RuntimeError('development plan mismatch')
         selection=select(prior)
         if not selection:raise RuntimeError('no class passed development; validation stays unopened')
-    password=os.environ['JIAOYI_UI_PASSWORD'];new=0
+    password=client.research_token();new=0
     for cls,symbols in plan['classes'].items():
         if selection is not None and cls not in selection:continue
         for symbol in symbols:
@@ -157,12 +156,11 @@ def analyse(a,plan,digest):
     (out/'Jiaoyi_Class_Prediction_Report.html').write_text(body)
     print(json.dumps({'complete_jobs':summary['complete_jobs'],'classes':classes,'failed_jobs':failed},indent=2))
 def main():
-    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--stage',choices=['development','validation'],default='development');p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);p.add_argument('--plan',type=Path,default=PLAN);p.add_argument('--max-new-jobs',type=int,default=40);p.add_argument('--base',default='https://jiaoyi.up.railway.app');a=p.parse_args()
-    u=urlsplit(a.base)
-    if u.scheme!='https' or u.username or u.password or u.path not in ('','/') or u.query or u.fragment:raise SystemExit('HTTPS origin without credentials/path required')
+    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--stage',choices=['development','validation'],default='development');p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);p.add_argument('--plan',type=Path,default=PLAN);p.add_argument('--max-new-jobs',type=int,default=40);p.add_argument('--base',default=None);a=p.parse_args()
     if not 1<=a.max_new_jobs<=40:raise SystemExit('one invocation permits1..40jobs')
-    a.base=a.base.rstrip('/');plan=json.loads(a.plan.read_text());digest=hashlib.sha256(a.plan.read_bytes()).hexdigest()
-    if a.action=='collect':collect(a,plan,digest)
+    plan=json.loads(a.plan.read_text());digest=hashlib.sha256(a.plan.read_bytes()).hexdigest()
+    if a.action=='collect':
+        a.base=client.origin(a.base);collect(a,plan,digest)
     else:
         if a.binary is None:raise SystemExit('--binary required for offline parity')
         analyse(a,plan,digest)

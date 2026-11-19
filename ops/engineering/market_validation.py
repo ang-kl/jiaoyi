@@ -9,6 +9,8 @@ import threading
 from pathlib import Path
 import urllib.request
 
+import trading_http
+
 SGT = dt.timezone(dt.timedelta(hours=8))
 ROUTES = ("/health", "/operations/reports", "/operations/trailing-receipts", "/operations/stop-loss-reviews")
 MAX_SEEN = 256
@@ -283,15 +285,13 @@ class MarketValidation:
     def _fetch(self, route):
         if route not in ROUTES:
             raise ValueError("unapproved validation source")
-        request = urllib.request.Request("https://jiaoyi.up.railway.app" + route, headers={"Cache-Control": "no-cache"})
-        with urllib.request.urlopen(request, timeout=8) as response:
+        request = trading_http.request(route, env=self.env)
+        with trading_http.open_request(request, timeout=8) as response:
             raw = response.read(2 * 1024 * 1024 + 1)
         if len(raw) > 2 * 1024 * 1024:
             raise ValueError("validation source too large")
         value = json.loads(raw)
-        if not isinstance(value, dict):
-            raise ValueError("validation source must be an object")
-        return value
+        return trading_http.ensure_diagnostic(route, value)
 
     def _collect(self, clock):
         sources, errors = {}, {}

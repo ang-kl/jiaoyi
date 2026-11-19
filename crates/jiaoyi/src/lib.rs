@@ -10,6 +10,7 @@ pub mod fast_monitor;
 pub mod fills;
 pub mod history;
 pub mod http;
+mod http_access;
 pub mod limits;
 pub mod loader;
 pub mod operations;

@@ -71,7 +71,11 @@ fn router_with_owner_access(
             get(crate::broker_backtest::latest).post(crate::broker_backtest::collect),
         )
         .layer(Extension(crate::broker_backtest::Jobs::default()))
-        .layer(Extension(access))
+        .layer(Extension(access.clone()))
+        .layer(axum::middleware::from_fn_with_state(
+            access,
+            crate::http_access::guard,
+        ))
         .with_state(state)
 }
 
@@ -603,6 +607,13 @@ mod tests {
     }
 
     fn owner_test_router_with_pool(password: Option<&str>, pool: PgPool) -> Router {
+        test_router_with_access(crate::owner_assessments::OwnerAccess::new(password), pool)
+    }
+
+    fn test_router_with_access(
+        access: crate::owner_assessments::OwnerAccess,
+        pool: PgPool,
+    ) -> Router {
         router_with_owner_access(
             AppState {
                 pool,
@@ -613,8 +624,174 @@ mod tests {
                 strategy3_loops: Default::default(),
                 allowed_accounts: Arc::new([900_073].into_iter().collect()),
             },
-            crate::owner_assessments::OwnerAccess::new(password),
+            access,
         )
+    }
+
+    #[tokio::test]
+    async fn private_profile_real_router_short_circuits_liveness_and_denials_without_database() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+
+        let pool = jiaoyi_store::sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://jiaoyi@127.0.0.1:1/unused")
+            .unwrap();
+        let router = test_router_with_access(
+            crate::owner_assessments::OwnerAccess::with_profile(Some("private"), None, None, None),
+            pool.clone(),
+        );
+        for method in ["GET", "HEAD"] {
+            let response = tokio::time::timeout(
+                std::time::Duration::from_millis(250),
+                router.clone().oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/health")
+                        .body(Body::empty())
+                        .unwrap(),
+                ),
+            )
+            .await
+            .expect("minimal probe must not acquire the database pool")
+            .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()["x-jiaoyi-http-profile"], "private");
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert_eq!(
+                body.as_ref(),
+                if method == "HEAD" {
+                    b"".as_slice()
+                } else {
+                    b"{\"status\":\"ok\"}".as_slice()
+                }
+            );
+            for path in crate::http_access::AUDIT_ROUTES
+                .iter()
+                .chain(crate::http_access::RESEARCH_ROUTES)
+            {
+                if *path == "/health" {
+                    continue;
+                }
+                let response = router
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(method)
+                            .uri(*path)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "{method} {path}"
+                );
+            }
+        }
+        assert_eq!(pool.size(), 0);
+        for path in [
+            "/",
+            "/operations",
+            "/status-page.js",
+            "/owner/assessments",
+            "/owner/assessments.mjs",
+        ] {
+            let response = router
+                .clone()
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        }
+    }
+
+    #[tokio::test]
+    async fn private_profile_research_auth_retains_request_and_account_guards() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+
+        const AUDIT: &str = "audit-test-credential-000000000000000000000001";
+        const RESEARCH: &str = "research-test-credential-000000000000000000002";
+        let pool = jiaoyi_store::sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://jiaoyi@127.0.0.1:1/unused")
+            .unwrap();
+        let router = test_router_with_access(
+            crate::owner_assessments::OwnerAccess::with_profile(
+                Some("private"),
+                Some("old-owner"),
+                Some(AUDIT),
+                Some(RESEARCH),
+            ),
+            pool.clone(),
+        );
+        for path in crate::http_access::RESEARCH_ROUTES {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(*path)
+                        .header("authorization", format!("Bearer {RESEARCH}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response
+                    .into_body()
+                    .collect()
+                    .await
+                    .unwrap()
+                    .to_bytes()
+                    .as_ref(),
+                b"null"
+            );
+
+            // An audit key is refused before JSON decoding or any job creation.
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(*path)
+                        .header("authorization", format!("Bearer {AUDIT}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from("not JSON"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+            let mut body = serde_json::json!({"account":123,"symbol":"BTCUSD","from":"2025-10-06T00:00:00Z","to":"2025-10-07T00:00:00Z"});
+            if *path == "/owner/backtests" {
+                body["spread"] = serde_json::json!(15.0);
+                body["commission_round_trip"] = serde_json::json!(0.0);
+                body["slippage_bps_per_side"] = serde_json::json!(24.0);
+            }
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(*path)
+                        .header("authorization", format!("Bearer {RESEARCH}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+        assert_eq!(pool.size(), 0);
     }
 
     #[jiaoyi_store::sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]

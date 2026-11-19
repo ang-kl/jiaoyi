@@ -54,6 +54,7 @@ class Fixture(unittest.TestCase):
         self.patches = [patch.object(self.c, "gh", side_effect=self.gh),
             patch.object(self.c.releases, "api", side_effect=self.api),
             patch.object(w.urllib.request, "urlopen", side_effect=AssertionError("unmocked network")),
+            patch.object(w.trading_http, "open_request", side_effect=AssertionError("unmocked Trading network")),
             patch.object(w, "bounded_process", side_effect=AssertionError("release must not call a model/build"))]
         for p in self.patches:
             p.start()
@@ -136,7 +137,7 @@ class Fixture(unittest.TestCase):
         return files
 
     def health(self):
-        return patch.object(w.urllib.request, "urlopen", side_effect=lambda *_args, **_kwargs: io.BytesIO(b'{"status":"ok"}'))
+        return patch.object(w.trading_http, "open_request", side_effect=lambda *_args, **_kwargs: io.BytesIO(b'{"status":"ok"}'))
 
 
 class ClassificationTests(Fixture):

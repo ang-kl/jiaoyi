@@ -234,7 +234,12 @@ class WorkerTests(Fixture, unittest.TestCase):
 
     def test_disabled_server_never_starts_model_and_reopens_state(self):
         c = w.Coordinator(self.config(PORT="18947"))
-        with patch.object(c, "prepare", side_effect=AssertionError("model work while disabled")):
+        def diagnostic(request, timeout):
+            value = ({"status": "ok", "broker_accounts": [], "trading": [], "strategy3": []}
+                     if request.full_url.endswith("/health") else {"reports": []})
+            return io.BytesIO(json.dumps(value).encode())
+        with patch.object(c, "prepare", side_effect=AssertionError("model work while disabled")), \
+             patch.object(w.trading_http, "open_request", side_effect=diagnostic):
             t = threading.Thread(target=c.serve)
             t.start()
             time.sleep(0.25)
@@ -252,7 +257,8 @@ class WorkerTests(Fixture, unittest.TestCase):
         class Response:
             def __enter__(self): return self
             def __exit__(self, *_): pass
-            def read(self, _): return b'{}'
+            def read(self, _):
+                return b'{"status":"ok","broker_accounts":[],"trading":[],"strategy3":[],"reports":[]}'
         for passed in (None, False, True):
             with self.subTest(acceptance_passed=passed):
                 jid = self.store.enqueue(w.ACCEPTANCE_TASK)
@@ -269,7 +275,7 @@ class WorkerTests(Fixture, unittest.TestCase):
                     (Path(kwargs["env"]["HOME"]) / "result.json").write_text(json.dumps(report))
                     return "ok"
                 with patch.object(c, "existing_pr", return_value=None), patch.object(c, "login_model", return_value="ok"), \
-                     patch.object(c, "changes", return_value=[]), patch.object(w.urllib.request, "urlopen", return_value=Response()), \
+                     patch.object(c, "changes", return_value=[]), patch.object(w.trading_http, "open_request", return_value=Response()), \
                      patch.object(w, "bounded_process", side_effect=session), contextlib.redirect_stdout(io.StringIO()):
                     c.run_job(job, repo)
                 self.assertEqual(self.store.jobs()[0]["state"], "completed" if passed is True else "owner_blocked")
@@ -404,8 +410,8 @@ class ReleaseTests(Fixture, unittest.TestCase):
                 return self
             def __exit__(self, *_):
                 pass
-            def read(self):
-                return self.data
+            def read(self, size=-1):
+                return self.data if size < 0 else self.data[:size]
         deployed = {"id": "deployment", "status": "SUCCESS", "createdAt": "2026-10-28T00:00:00Z", "meta": {"commitHash": "c" * 40}}
         plan = {"scope": "trading_runtime", "merged_at": "2026-10-29T00:00:00Z", "wait_deadline_at": "2999-01-01T00:00:00Z"}
         with patch.object(c.releases, "plan", return_value=plan), patch.object(c.releases, "deployments", return_value=([deployed], [deployed])):
@@ -413,7 +419,7 @@ class ReleaseTests(Fixture, unittest.TestCase):
         self.assertEqual(self.store.jobs()[0]["state"], "deployment_wait")
         deployed["meta"]["commitHash"] = "b" * 40
         with patch.object(c.releases, "plan", return_value=plan), patch.object(c.releases, "deployments", return_value=([deployed], [deployed])), \
-                patch.object(w.urllib.request, "urlopen", return_value=Response({"status": "ok"})):
+                patch.object(w.trading_http, "open_request", return_value=Response({"status": "ok"})):
             c.release(job)
         self.assertEqual(self.store.jobs()[0]["state"], "verification_queued")
 

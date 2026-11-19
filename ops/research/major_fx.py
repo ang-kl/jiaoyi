@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Frozen major-FX market structure pilot. No signal or model API calls."""
-import argparse, datetime as dt, hashlib, html, json, os, subprocess, time
+import argparse, datetime as dt, hashlib, html, json, subprocess, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import broker_backtest as client
@@ -16,7 +16,7 @@ def requests(plan):
                 yield f"{day}/{symbol}/{window['name'].replace(' ','-')}",req
 
 def collect(a,plan):
-    password=os.environ['JIAOYI_UI_PASSWORD'];count=0
+    password=client.research_token();count=0
     for key,req in requests(plan):
         folder=a.output/key;folder.mkdir(parents=True,exist_ok=True);file=folder/'result.json'
         if file.exists():
@@ -67,13 +67,11 @@ def analyse(a,plan):
     print(json.dumps({k:v for k,v in summary.items() if k!='rows'},indent=2))
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--output',type=Path,required=True);p.add_argument('--max-new-jobs',type=int,default=4);p.add_argument('--binary',type=Path);p.add_argument('--base',default='https://jiaoyi.up.railway.app');a=p.parse_args()
-    from urllib.parse import urlsplit
-    u=urlsplit(a.base)
-    if u.scheme!='https' or u.username or u.password or u.path not in ('','/') or u.query or u.fragment:raise SystemExit('Use an HTTPS origin without credentials/path/query')
+    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--output',type=Path,required=True);p.add_argument('--max-new-jobs',type=int,default=4);p.add_argument('--binary',type=Path);p.add_argument('--base',default=None);a=p.parse_args()
     if not 1<=a.max_new_jobs<=42:raise SystemExit('max-new-jobs must be 1..42')
-    a.base=a.base.rstrip('/');plan=json.loads(PLAN.read_text())
-    if a.action=='collect':collect(a,plan)
+    plan=json.loads(PLAN.read_text())
+    if a.action=='collect':
+        a.base=client.origin(a.base);collect(a,plan)
     else:
         if a.binary is None:raise SystemExit('--binary is required for verified analysis')
         analyse(a,plan)

@@ -79,7 +79,7 @@ pub async fn latest(
     Extension(jobs): Extension<Jobs>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(s) = access.authorise(&headers) {
+    if let Err(s) = access.authorise_research(&headers) {
         return refusal(s);
     }
     response(StatusCode::OK, jobs.0.lock().unwrap().clone())
@@ -91,7 +91,7 @@ pub async fn submit(
     headers: HeaderMap,
     Json(req): Json<Request>,
 ) -> Response {
-    if let Err(s) = access.authorise(&headers) {
+    if let Err(s) = access.authorise_research(&headers) {
         return refusal(s);
     }
     if !state.allowed_accounts.contains(&req.account) {
@@ -125,7 +125,7 @@ pub async fn collect(
     headers: HeaderMap,
     Json(collection): Json<CollectionRequest>,
 ) -> Response {
-    if let Err(s) = access.authorise(&headers) {
+    if let Err(s) = access.authorise_research(&headers) {
         return refusal(s);
     }
     if !state.allowed_accounts.contains(&collection.account) {

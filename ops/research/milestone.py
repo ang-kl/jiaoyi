@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Bounded preregistered collection + honest per-symbol milestone scoring. No model API."""
-import argparse,datetime as dt,hashlib,html,json,math,os,subprocess,time,urllib.error
+import argparse,datetime as dt,hashlib,html,json,math,subprocess,time,urllib.error
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import broker_backtest as client
@@ -49,8 +49,7 @@ def normalise(req):
     return copy
 
 def collect(a,plan):
-    password=os.environ.get('JIAOYI_UI_PASSWORD')
-    if not password:raise SystemExit('JIAOYI_UI_PASSWORD required; never put it in a file')
+    password=client.research_token()
     symbols=list(SYMBOLS)
     if a.stage=='validation':
         summary=json.loads((a.output/'development'/'summary.json').read_text())
@@ -121,13 +120,11 @@ def analyse(a,plan):
     print(json.dumps(scores,indent=2))
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--stage',choices=['development','validation'],required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);p.add_argument('--legacy-fetch',action='store_true');p.add_argument('--max-new-jobs',type=int,default=100);p.add_argument('--base',default='https://jiaoyi.up.railway.app');a=p.parse_args()
-    from urllib.parse import urlsplit
-    u=urlsplit(a.base)
-    if u.scheme!='https' or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):raise SystemExit('Use an HTTPS origin without credentials/path/query')
+    p=argparse.ArgumentParser();p.add_argument('action',choices=['collect','analyse']);p.add_argument('--stage',choices=['development','validation'],required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--binary',type=Path);p.add_argument('--legacy-fetch',action='store_true');p.add_argument('--max-new-jobs',type=int,default=100);p.add_argument('--base',default=None);a=p.parse_args()
     if not 1<=a.max_new_jobs<=100:raise SystemExit('max-new-jobs must be1..100')
-    a.base=a.base.rstrip('/');plan=json.loads(PLAN.read_text())
-    if a.action=='collect':collect(a,plan)
+    plan=json.loads(PLAN.read_text())
+    if a.action=='collect':
+        a.base=client.origin(a.base);collect(a,plan)
     else:
         if a.binary is None:raise SystemExit('--binary must name the compiled s3_candidate_study example')
         analyse(a,plan)
