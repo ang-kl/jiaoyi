@@ -49,6 +49,8 @@ export function createReader({settings, identity = settings && createIdentity(se
         const validChallenge = () => totp && challenge && key === challenge.id && now() < challenge.until;
         if (!validChallenge()) return send(403,'Sign in with Google to continue.');
         if (req.method === 'GET') {
+          // Keep the Origin header on same-origin form POSTs, including in Chromium.
+          res.setHeader('Referrer-Policy','same-origin');
           return send(200,page('Authenticator code','<form method="post" action="/verify"><label>6-digit code <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus></label> <button>Verify</button></form>'),'text/html; charset=utf-8');
         }
         if (req.headers.origin !== settings.origin ||
@@ -116,6 +118,8 @@ export function createReader({settings, identity = settings && createIdentity(se
       const stamp = new Date(report.as_of);
       const age = Math.max(0,Math.floor((now()-stamp.getTime())/60000));
       const when = new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',dateStyle:'medium',timeStyle:'short'}).format(stamp);
+      // This HTML contains the sign-out form, which checks the request origin too.
+      res.setHeader('Referrer-Policy','same-origin');
       return send(200,page(esc(report.title),'<time>'+esc(when)+' SGT</time> · '+age+' min ago<p>'+esc(report.summary)+'</p><p><a href="/report.json">Download JSON</a></p><form method="post" action="/logout"><button>Sign out</button></form>'),'text/html; charset=utf-8');
     } catch { return send(503,'Reports temporarily unavailable.'); }
   });

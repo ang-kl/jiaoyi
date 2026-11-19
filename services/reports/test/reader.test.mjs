@@ -74,7 +74,9 @@ test('owner completes verified OIDC flow; download and logout enforce the sessio
   const sid=login.headers.getSetCookie().find(s=>s.startsWith('__Host-reports='));
   assert.match(sid,/HttpOnly; Secure; SameSite=Lax/);
   const auth={cookie:sid.split(';')[0]};
-  assert.match(await (await get('/',{headers:auth})).text(),/Sample session review/);
+  const reader=await get('/',{headers:auth});
+  assert.equal(reader.headers.get('referrer-policy'),'same-origin');
+  assert.match(await reader.text(),/Sample session review/);
   const download=await get('/report.json',{headers:auth});
   assert.equal((await download.json()).title,'Sample session review');
   assert.match(download.headers.get('cache-control'),/no-store/);
@@ -117,6 +119,8 @@ test('Google owner must complete authenticator before reading; used codes cannot
   const cookie=await googleLogin();
   const headers={cookie,origin,'content-type':'application/x-www-form-urlencoded'};
   assert.equal((await get('/report.json',{headers})).status,401);
+  const form=await get('/verify',{headers});
+  assert.equal(form.headers.get('referrer-policy'),'same-origin');
   const token=new TOTP({secret:googleEnv.REPORTS_TOTP_SECRET}).generate({timestamp:now()});
   const post={method:'POST',headers,body:'code='+token};
   assert.equal((await get('/verify',{...post,headers:{...headers,origin:'https://other.example'}})).status,403);
