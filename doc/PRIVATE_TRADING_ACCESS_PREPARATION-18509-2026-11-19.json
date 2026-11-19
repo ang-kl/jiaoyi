@@ -4,7 +4,7 @@
   "base_commit": "92802dc26f35f64d933a83ad0c44fa3334208bf1",
   "backup_source_commit": "91deb19e916f6fb50eec39a0dd88f0df905c1ea1",
   "production_reference_commit": "65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2",
-  "production_reference_verified_live_this_task": false,
+  "production_reference_verified_live_this_task": true,
   "backup_archive_sha256": "0a1db7f7dd27cd6e963d2c3bfb80ad1926446fd61d31dc4a1073b153c5300d88",
   "backup_restore_verified": true,
   "backup_off_machine": false,
@@ -50,8 +50,17 @@
   },
   "external_read_findings": {
     "github_repository_private": false,
-    "railway_metadata_http_status": 403,
-    "railway_private_connectivity_verified": false
+    "railway_metadata_http_status": 200,
+    "railway_private_connectivity_verified": false,
+    "railway_metadata_initial_http_status": 403,
+    "railway_metadata_retry": "explicit read-only API client User-Agent succeeded; no credential change",
+    "railway_metadata_observed_at_sgt": "2026-11-19T18:29:59.415393+08:00",
+    "active_deployment_commit": "65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2",
+    "active_deployment_created_at": "2026-11-15T01:55:07.273Z",
+    "public_service_domains_count": 1,
+    "custom_domains_count": 0,
+    "public_target_port": 8080,
+    "health_and_replica_api_overrides_null": true
   },
   "release_gates": {
     "private_dns_transport_address_family_and_healthcheck": "unverified",
