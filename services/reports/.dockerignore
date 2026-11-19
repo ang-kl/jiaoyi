@@ -1,0 +1,8 @@
+*
+!package.json
+!package-lock.json
+!server.mjs
+!oidc.mjs
+!sample.json
+!test/
+!test/*.test.mjs
