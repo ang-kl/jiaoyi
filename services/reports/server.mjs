@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import {randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
+import {loadSavedReport, renderAudit} from './saved-report.mjs';
 import {createIdentity, readSettings} from './oidc.mjs';
 
 const sid = '__Host-reports', flow = '__Host-reports-login', step = '__Host-reports-factor';
@@ -12,9 +13,9 @@ const cookie = (name, value, seconds) =>
   name + '=' + value + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + seconds;
 const esc = value => String(value).replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
-const page = (title, body) => '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><style>html{background:#f5f4ee;color:#192c29;font:17px/1.6 system-ui,sans-serif}main{max-width:38rem;margin:10vh auto;padding:2rem}h1{font:2.6rem/1.1 Georgia,serif}a,button{color:#135d52}button{font:inherit;cursor:pointer}time,small{color:#495f59}</style><main><h1>' + title + '</h1>' + body + '</main></html>';
+const page = (title, body) => '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><style>html{background:#f5f4ee;color:#192c29;font:17px/1.6 system-ui,sans-serif}main{max-width:62rem;margin:10vh auto;padding:2rem}h1{font:2.6rem/1.1 Georgia,serif}a,button{color:#135d52}button{font:inherit;cursor:pointer}article{overflow-wrap:anywhere}article table{display:block;max-width:100%;overflow:auto;border-collapse:collapse}td,th{text-align:left;padding:.35rem .6rem;border-bottom:1px solid #ccd3ce}pre{overflow:auto}time,small{color:#495f59}</style><main><h1>' + title + '</h1>' + body + '</main></html>';
 
-export function createReader({settings, identity = settings && createIdentity(settings), now = Date.now}) {
+export function createReader({settings, identity = settings && createIdentity(settings), reportDir, now = Date.now}) {
   const attempts = new Map();
   let session, challenge;
   let failures = [], lastCounter = -1;
@@ -109,18 +110,21 @@ export function createReader({settings, identity = settings && createIdentity(se
         return send(200,page('Jiaoyi reports',signIn),'text/html; charset=utf-8');
       }
       session.last = now();
-      const raw = await readFile(sample,'utf8');
+      const saved = reportDir && await loadSavedReport(reportDir,path === '/report.json' ? url.searchParams.get('version') : null);
+      const raw = saved ? saved.raw : await readFile(sample,'utf8');
       if (path === '/report.json') {
-        res.setHeader('Content-Disposition','attachment; filename="sample-report.json"');
+        res.setHeader('Content-Disposition','attachment; filename="'+(saved ? saved.filename : 'sample-report.json')+'"');
         return send(200,raw,'application/json');
       }
-      const report = JSON.parse(raw);
+      const report = saved || JSON.parse(raw);
       const stamp = new Date(report.as_of);
-      const age = Math.max(0,Math.floor((now()-stamp.getTime())/60000));
+      const age = Math.floor((now()-stamp.getTime())/60000);
+      if (age < 0) throw new Error('Future report cutoff');
+      const content = saved ? '<article>'+renderAudit(saved)+'</article>' : '<p>'+esc(report.summary)+'</p>';
       const when = new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',dateStyle:'medium',timeStyle:'short'}).format(stamp);
       // This HTML contains the sign-out form, which checks the request origin too.
       res.setHeader('Referrer-Policy','same-origin');
-      return send(200,page(esc(report.title),'<time>'+esc(when)+' SGT</time> · '+age+' min ago<p>'+esc(report.summary)+'</p><p><a href="/report.json">Download JSON</a></p><form method="post" action="/logout"><button>Sign out</button></form>'),'text/html; charset=utf-8');
+      return send(200,page(esc(report.title),'<time>'+esc(when)+' SGT</time> · '+age+' min ago<p><a href="'+(saved ? saved.downloadUrl : '/report.json')+'">Download JSON</a></p>'+content+'<form method="post" action="/logout"><button>Sign out</button></form>'),'text/html; charset=utf-8');
     } catch { return send(503,'Reports temporarily unavailable.'); }
   });
 }
@@ -128,5 +132,10 @@ export function createReader({settings, identity = settings && createIdentity(se
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   let settings;
   try {settings=readSettings(process.env);} catch {console.error('Invalid reports login configuration');}
-  createReader({settings}).listen(Number(process.env.PORT || 8080),'0.0.0.0');
+  const reportDir = process.env.REPORTS_DIR;
+  if (reportDir) {
+    const ready = await loadSavedReport(reportDir);
+    console.log('Saved report ready: '+ready.filename+' ('+ready.as_of+')');
+  }
+  createReader({settings,reportDir}).listen(Number(process.env.PORT || 8080),'0.0.0.0');
 }

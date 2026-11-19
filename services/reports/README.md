@@ -1,6 +1,6 @@
-# Jiaoyi owner reports preview
+# Jiaoyi owner reports
 
-The reader serves one bundled, fictional report. An authenticated owner can view its Singapore timestamp and age, download JSON, and sign out. It runs as the separate Railway service `jiaoyi-reports`. Its image uses only this directory. The process connects to the identity provider for authentication. It has no Trading, broker, database or Engineering credentials.
+The reader serves the latest saved audit from its private Railway volume. After signing in, the owner can read the complete assessment, see its Singapore cutoff and age, and download the original JSON. The download link stays pinned to that revision. It runs as the separate Railway service `jiaoyi-reports`. Its image uses only this directory. The process connects to the identity provider for authentication. It has no Trading, broker, database or Engineering credentials.
 
 ## Sign in with your personal Gmail account
 
@@ -27,7 +27,7 @@ Use your normal Google account to configure both the owner and a web client. Goo
    | `REPORTS_OWNER_GMAIL` | Exact personal `@gmail.com` address returned by Google |
    | `REPORTS_TOTP_SECRET` | Same 32-character Base32 setup key stored in your authenticator |
 
-5. In a private browser window, [open the reports reader](https://jiaoyi-reports-production.up.railway.app), choose **Sign in with Google**, select the owner account and enter your authenticator code. Open the sample and its download. Sign out and verify the download requires sign-in again.
+5. In a private browser window, [open the reports reader](https://jiaoyi-reports-production.up.railway.app), choose **Sign in with Google**, select the owner account and enter your authenticator code. Open the saved report and its download. Sign out and verify the download requires sign-in again.
 
 Google mode pins Google's issuer. Configuring any Google-mode variable selects this mode and incomplete settings leave the report locked. A successful Google login allows five minutes to complete the authenticator step. Five failed code submissions within five minutes temporarily block further attempts. Use the single-replica preview deployment. To replace a lost authenticator, provision a new key using steps 3–4 and restart only the reports service.
 
@@ -48,10 +48,20 @@ Google mode pins Google's issuer. Configuring any Google-mode variable selects t
 
 4. Apply the variables to this service. Open the viewer in a private browser window, sign in as the owner, open the report, download JSON, then sign out. Confirm the download returns 401 after sign-out. A different identity must receive 403.
 
-The landing page and minimal `/health` are public. Both report views check a server-side session. Sessions expire after 30 idle minutes or eight hours total. An instance restart or a new owner login invalidates the prior session. Use one replica for this sample. Report routes use no-store responses.
+The landing page and minimal `/health` are public. Both report views check a server-side session. Sessions expire after 30 idle minutes or eight hours total. An instance restart or a new owner login invalidates the prior session. Use one replica for this reader. Report routes use no-store responses.
 
 ## Build and deploy this directory
 
 Use Node 24. Run `npm ci` and `npm test`, or build this directory as the Docker context. The container build runs the read/login/download tests with a simulated identity provider and signed tokens. The runtime listens on `PORT` (default 8080).
 
-For a Railway directory upload, use `services/reports --path-as-root` and explicitly select the project, environment, and **reports service ID**. The repo root builds the live Trading application. The reports Dockerfile and Railway configuration are in this directory. Future real-report publication requires private storage, a scoped publisher, freshness checks and an owner sign-in acceptance test. No real-report publisher is connected in this preview.
+For a Railway directory upload, use `services/reports --path-as-root` and explicitly select the project, environment, and **reports service ID**. The repo root builds the live Trading application. The reports Dockerfile and Railway configuration are in this directory. The production image expects the private volume at /reports and checks the newest report before listening. The local sample supports tests without a mounted directory.
+
+## Publish a completed audit
+
+The reports volume is mounted at `/reports`. The runtime uses a non-root user with read access. Publishing is a separate operator action. All report text and data stay outside the source tree and image for new private reports.
+
+1. Cross-check the approved Markdown and JSON from the same audit, including the JSON `as_of_sgt` cutoff. Run `npm ci` in this directory. Run `node pack-report.mjs /private/report.json /private/report.md /private/staging` with an existing private staging directory. This creates one content-addressed file and prints its name. Keep staging private.
+2. Upload that file to a temporary name on the **jiaoyi-reports-volume** using Railway volume file management. Give the file read permission for the service's node user. Verify its SHA256 against the hash in its final filename. Rename it to that exact filename to publish. Do not overwrite an existing revision. Incomplete uploads must use a name ending in `.part`.
+3. Open the reader and download the JSON. Verify its SHA256 against the approved source. Reader selection is by cutoff in UTC. Identical cutoffs with different contents and corrupt files block latest-report reads until the publisher resolves them. A new completed upload becomes visible without a service restart.
+
+The first volume import used the already-published PR #243 audit at commit `92802dc26f35f64d933a83ad0c44fa3334208bf1`. Its JSON SHA256 is `8e5162e3bf5bb66106808774d4d5769557d8f807c1142ba42f25fe59519becba` and its Markdown SHA256 is `c3d496d7ca9f87e606d339f9b5bc2ae6fa241f013f4af6ec4cb4658f8dfc666f`. Both are checked before publication. This import has no effect on the public copies already in Git.

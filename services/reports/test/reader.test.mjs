@@ -38,7 +38,7 @@ async function fixture(t, options={}) {
     if(options.badSignature) sig[0]^=1;
     return json({access_token:'mock',token_type:'Bearer',id_token:value+'.'+sig.toString('base64url')});
   };
-  const server=createReader({settings:options.disabled?null:cfg,identity:options.disabled?null:
+  const server=createReader({reportDir:options.reportDir,settings:options.disabled?null:cfg,identity:options.disabled?null:
     createIdentity(cfg,{[oidc.customFetch]:fetchProvider}),now:()=>clock});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   t.after(()=>new Promise(r=>server.close(r)));
@@ -158,4 +158,37 @@ test('Google rate limits second-factor attempts across new logins',async t=>{
   }
   assert.deepEqual(await tryBatch(5),[403,403,403,403,403]);
   assert.deepEqual(await tryBatch(1),[429]);
+});
+
+
+test('private saved audit renders and downloads the exact viewed revision after a newer publication', async t=>{
+  const {mkdtemp,writeFile,rm}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');
+  const {join}=await import('node:path');
+  const {pack,loadSavedReport}=await import('../saved-report.mjs');
+  const dir=await mkdtemp(join(tmpdir(),'reports-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  async function publish(day) {
+    const raw=JSON.stringify({as_of_sgt:'2025-12-'+day+'T08:00:00+08:00',trace:day},null,2)+'\n';
+    const result=pack(raw,'# Owner audit '+day+'\n\n## Results\n\n<script>hidden</script>','audit.json');
+    await writeFile(join(dir,result.name),result.bytes);
+    return {...result,raw};
+  }
+  const first=await publish('10');
+  await writeFile(join(dir,'unfinished.part'),'incomplete');
+  const {get,start}=await fixture(t,{reportDir:dir});
+  assert.equal((await get('/report.json?version='+first.name)).status,401);
+  assert.doesNotMatch(await (await get('/')).text(),/Owner audit/);
+  const {callback,headers}=await start();
+  const login=await get(callback,{headers});
+  const cookie=login.headers.getSetCookie().find(c=>c.startsWith('__Host-reports=')).split(';')[0];
+  const opts={headers:{cookie}};
+  const html=await (await get('/',opts)).text();
+  assert.ok(html.includes('Owner audit 10') && html.includes(first.name) && html.includes('&lt;script&gt;'));
+  const later=await publish('12');
+  assert.equal(await (await get('/report.json?version='+first.name,opts)).text(),first.raw);
+  assert.equal(await (await get('/report.json',opts)).text(),later.raw);
+  await writeFile(join(dir,later.name),first.bytes);
+  await assert.rejects(loadSavedReport(dir),/integrity/);
+  assert.equal((await get('/report.json',opts)).status,503);
 });
