@@ -8,22 +8,123 @@ use sha2::{Digest, Sha256};
 #[derive(Clone)]
 pub struct OwnerAccess {
     digest: Option<[u8; 32]>,
+    profile: crate::http_access::Profile,
+    audit_digest: Option<[u8; 32]>,
+    research_digest: Option<[u8; 32]>,
 }
 
 impl OwnerAccess {
     pub fn from_env() -> Self {
-        Self::new(std::env::var("JIAOYI_UI_PASSWORD").ok().as_deref())
+        let profile = match std::env::var("JIAOYI_HTTP_PROFILE") {
+            Ok(value) => Some(value),
+            Err(std::env::VarError::NotPresent) => None,
+            // Invalid configuration disables private access, never the process.
+            Err(std::env::VarError::NotUnicode(_)) => Some(String::new()),
+        };
+        Self::with_profile(
+            profile.as_deref(),
+            std::env::var("JIAOYI_UI_PASSWORD").ok().as_deref(),
+            std::env::var("JIAOYI_AUDIT_BEARER_TOKEN").ok().as_deref(),
+            std::env::var("JIAOYI_RESEARCH_BEARER_TOKEN")
+                .ok()
+                .as_deref(),
+        )
     }
 
     pub fn new(password: Option<&str>) -> Self {
+        Self::with_profile(None, password, None, None)
+    }
+
+    pub(crate) fn with_profile(
+        profile: Option<&str>,
+        password: Option<&str>,
+        audit_token: Option<&str>,
+        research_token: Option<&str>,
+    ) -> Self {
+        let profile = match profile {
+            None | Some("legacy") => crate::http_access::Profile::Legacy,
+            Some("private") => crate::http_access::Profile::Private,
+            Some(_) => crate::http_access::Profile::Disabled,
+        };
+        // Machine secrets are opaque, high-entropy bearer tokens. Reject spaces,
+        // control characters and accidentally identical role credentials.
+        let token_digest = |token: Option<&str>| {
+            token
+                .filter(|value| {
+                    (32..=4000).contains(&value.len())
+                        && value.bytes().all(|b| b.is_ascii_graphic())
+                })
+                .map(|value| Sha256::digest(value.as_bytes()).into())
+        };
+        let audit_digest = token_digest(audit_token);
+        let research_digest = token_digest(research_token);
         Self {
             digest: password
                 .filter(|s| !s.trim().is_empty())
                 .map(|s| Sha256::digest(s.as_bytes()).into()),
+            profile,
+            audit_digest,
+            research_digest,
         }
     }
 
+    pub(crate) fn profile(&self) -> crate::http_access::Profile {
+        self.profile
+    }
+
     pub fn authorise(&self, headers: &HeaderMap) -> Result<(), StatusCode> {
+        if self.profile != crate::http_access::Profile::Legacy {
+            return self.machine_authorise(headers, self.audit_digest);
+        }
+        self.legacy_authorise(headers)
+    }
+
+    pub(crate) fn authorise_research(&self, headers: &HeaderMap) -> Result<(), StatusCode> {
+        if self.profile != crate::http_access::Profile::Legacy {
+            return self.machine_authorise(headers, self.research_digest);
+        }
+        self.legacy_authorise(headers)
+    }
+
+    fn machine_authorise(
+        &self,
+        headers: &HeaderMap,
+        expected: Option<[u8; 32]>,
+    ) -> Result<(), StatusCode> {
+        if self.profile != crate::http_access::Profile::Private
+            || self.audit_digest.is_none()
+            || self.research_digest.is_none()
+            || self.audit_digest == self.research_digest
+        {
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+        let expected = expected.ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        // Multiple Authorization headers are ambiguous; do not pick the first.
+        if headers.get_all("authorization").iter().count() != 1 {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        let header = headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| value.len() <= 4096)
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+        let (scheme, token) = header.split_once(' ').ok_or(StatusCode::UNAUTHORIZED)?;
+        if !scheme.eq_ignore_ascii_case("Bearer") {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        let actual: [u8; 32] = Sha256::digest(token.as_bytes()).into();
+        let difference = expected
+            .iter()
+            .zip(actual)
+            .fold(0_u8, |difference, (a, b)| difference | (a ^ b));
+        if difference == 0 {
+            Ok(())
+        } else {
+            Err(StatusCode::UNAUTHORIZED)
+        }
+    }
+
+    fn legacy_authorise(&self, headers: &HeaderMap) -> Result<(), StatusCode> {
         let expected = self.digest.ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
         let header = headers
             .get("authorization")

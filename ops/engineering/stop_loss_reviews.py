@@ -6,6 +6,8 @@ import math
 import re
 import urllib.request
 
+import trading_http
+
 
 PREFIX = "[STOP-LOSS REVIEW]"
 CURSOR = "stop_loss_review_cursor"
@@ -189,13 +191,15 @@ def groups(cases):
     return result
 
 
-def poll(coordinator, origin="https://jiaoyi.up.railway.app", at=None, review_latest=False):
+def poll(coordinator, origin=None, at=None, review_latest=False):
     """Fetch, validate and atomically dedupe/queue; never call a model here."""
     clock = timestamp(at) if at is not None else dt.datetime.now(dt.timezone.utc)
     if clock is None:
         return {"reason": "invalid_clock", "queued_job_ids": []}
     try:
-        with urllib.request.urlopen(origin.rstrip("/") + "/operations/stop-loss-reviews", timeout=8) as response:
+        env = getattr(getattr(coordinator, "config", None), "env", None)
+        request = trading_http.request("/operations/stop-loss-reviews", base=origin, env=env)
+        with trading_http.open_request(request, timeout=8) as response:
             body = response.read(MAX_BODY + 1)
         if len(body) > MAX_BODY:
             return {"reason": "source_too_large", "queued_job_ids": []}

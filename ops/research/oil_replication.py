@@ -21,7 +21,6 @@ from research_gates import DATA_GAP_REASONS
 ROOT = Path(__file__).resolve().parents[2]
 PLAN = ROOT / 'docs/oil-replication-v2-2026-11-06.json'
 PLAN_SHA = 'd35c0ff1b6379d305ee4f6294fe362a3e849121a618280c0ed269cb4d6efedfb'
-BASE = 'https://jiaoyi.up.railway.app'
 
 
 def digest(path):
@@ -107,7 +106,8 @@ def reserve(out, state, request, plan):
     return attempts[-1]
 
 
-def collect(out, plan, password, api=client.call, sleep=time.sleep, clock=time.monotonic):
+def collect(out, plan, password, api=client.call, sleep=time.sleep, clock=time.monotonic, base=None):
+    base = client.origin(base)
     out.mkdir(parents=True, exist_ok=True)
     state = state_at(out)
     expected = plan['collection_requests']
@@ -130,21 +130,21 @@ def collect(out, plan, password, api=client.call, sleep=time.sleep, clock=time.m
     for request in expected[len(attempts):]:
         if count >= plan['limits']['max_new_jobs_per_invocation']:
             break
-        current = api(BASE,password)
+        current = api(base,password)
         if current and current.get('status') == 'running':
             raise ValueError('another job is active; do not replace')
         if sum(p.stat().st_size for p in out.glob('Spot*.json'))+32_000_000 > plan['limits']['max_total_source_bytes']:
             raise ValueError('source storage budget exhausted')
         item = reserve(out,state,request,plan)
         try:
-            initial = api(BASE,password,request)
+            initial = api(base,password,request)
             item.update(job_id=initial['id'], status='submitted')
             save(out/'ledger.json',state)
             print('submitted',filename(request),item['job_id'],flush=True)
             deadline = clock()+plan['limits']['poll_deadline_seconds_per_job']
             while clock() < deadline:
                 sleep(3)
-                job = api(BASE,password)
+                job = api(base,password)
                 if not job or job.get('id') != item['job_id'] or job.get('request') != request:
                     raise ValueError('job replaced/restarted or request mismatch')
                 if job['status'] != 'running':
@@ -342,11 +342,12 @@ def main():
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--verifier',type=Path)
     p.add_argument('--replay',type=Path)
+    p.add_argument('--base',default=None)
     a=p.parse_args();plan=load_plan();a.output.mkdir(parents=True,exist_ok=True)
     with (a.output/'.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         if a.action=='collect':
-            collect(a.output,plan,os.environ['JIAOYI_UI_PASSWORD'])
+            collect(a.output,plan,client.research_token(),base=a.base)
         else:
             if not a.verifier or not a.replay:
                 p.error('native --verifier and --replay binaries required')

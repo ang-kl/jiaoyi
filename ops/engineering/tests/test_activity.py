@@ -144,8 +144,8 @@ class ActivityTests(unittest.TestCase):
             def __enter__(self): return self
             def __exit__(self, *_): pass
             def read(self, _): return json.dumps(self.data).encode()
-        responses = [Response({"status": "ok"}), Response({"as_of": "2026-10-27T01:00:00Z", "reports": []})]
-        with patch.object(w.urllib.request, "urlopen", side_effect=responses):
+        responses = [Response({"status": "ok", "broker_accounts": [], "trading": [], "strategy3": []}), Response({"as_of": "2026-10-27T01:00:00Z", "reports": []})]
+        with patch.object(w.trading_http, "open_request", side_effect=responses):
             queued = self.c.enqueue_automatic_assessment()
         receipt = self.c.status()["activity"]["last_public_assessment"]
         self.assertEqual(receipt["queued_job_id"], queued)

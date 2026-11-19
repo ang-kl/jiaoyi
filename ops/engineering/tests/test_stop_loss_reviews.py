@@ -41,7 +41,7 @@ class StopLossReviewTests(unittest.TestCase):
             def __enter__(self): return self
             def __exit__(self, *_): pass
             def read(self, limit): return json.dumps(data).encode()[:limit]
-        with patch.object(sl.urllib.request, "urlopen", return_value=Response()):
+        with patch.object(sl.trading_http, "open_request", return_value=Response()):
             return sl.poll(self.c, at=at, **kwargs)
 
     def test_startup_only_seeds_recent_episode_and_dedup_survives_restart(self):
@@ -196,14 +196,14 @@ class StopLossReviewTests(unittest.TestCase):
         self.assertEqual(self.c.store.used(), 0)
 
     def test_unavailable_and_oversized_sources_are_safe_and_do_not_write(self):
-        with patch.object(sl.urllib.request, "urlopen", side_effect=RuntimeError("https://secret-token@broker/private")):
+        with patch.object(sl.trading_http, "open_request", side_effect=RuntimeError("https://secret-token@broker/private")):
             result = sl.poll(self.c, at=NOW)
         self.assertEqual(result, {"reason": "source_unavailable", "queued_job_ids": []})
         class Large:
             def __enter__(self): return self
             def __exit__(self, *_): pass
             def read(self, size): return b"x" * size
-        with patch.object(sl.urllib.request, "urlopen", return_value=Large()):
+        with patch.object(sl.trading_http, "open_request", return_value=Large()):
             self.assertEqual(sl.poll(self.c, at=NOW)["reason"], "source_too_large")
         with self.c.store.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM events").fetchone()[0], 0)

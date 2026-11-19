@@ -5,11 +5,13 @@ import io
 import json
 from pathlib import Path
 import threading
+import sys
 import unittest
 import urllib.error
 from unittest.mock import patch
 
 MODULE = Path(__file__).resolve().parents[1] / "source_snapshots.py"
+sys.path.insert(0, str(MODULE.parent))
 spec = importlib.util.spec_from_file_location("source_snapshot_tests", MODULE)
 snapshots = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshots)
@@ -32,8 +34,8 @@ class SourceSnapshotsTests(unittest.TestCase):
             operations_started.set()
             return Reply(b'{"reports":[],"as_of":"2026-10-29T20:00:00Z"}')
 
-        with patch.object(snapshots.urllib.request, "urlopen", side_effect=open_source):
-            health, operations, receipts = snapshots.fetch("https://user:SECRET@example.invalid")
+        with patch.object(snapshots.trading_http, "open_request", side_effect=open_source):
+            health, operations, receipts = snapshots.fetch("https://example.invalid", env={})
         self.assertIsNone(health)
         self.assertEqual(operations["reports"], [])
         self.assertEqual(receipts["/health"]["error_code"], "timeout")
@@ -61,7 +63,7 @@ class SourceSnapshotsTests(unittest.TestCase):
                             raise bad
                         return bad
                     return Reply(b'{"reports":[]}')
-                with patch.object(snapshots.urllib.request, "urlopen", side_effect=open_source):
+                with patch.object(snapshots.trading_http, "open_request", side_effect=open_source):
                     health, operations, receipts = snapshots.fetch("https://example.invalid")
                 self.assertIsNone(health)
                 self.assertEqual(operations, {"reports": []})
@@ -78,12 +80,12 @@ class SourceSnapshotsTests(unittest.TestCase):
                 return super().read(size)
 
         def open_source(request, timeout):
-            return BoundedReply(b"x" * 100) if request.full_url.endswith("/health") else Reply(b"{}")
+            return BoundedReply(b"x" * 100) if request.full_url.endswith("/health") else Reply(b'{"reports":[]}')
 
-        with patch.object(snapshots.urllib.request, "urlopen", side_effect=open_source):
+        with patch.object(snapshots.trading_http, "open_request", side_effect=open_source):
             health, operations, receipts = snapshots.fetch("https://example.invalid", maxbytes=16)
         self.assertIsNone(health)
-        self.assertEqual(operations, {})
+        self.assertEqual(operations, {"reports": []})
         self.assertEqual(sizes, [17])
         self.assertEqual(receipts["/health"]["error_code"], "oversize")
         self.assertEqual(receipts["/health"]["bytes"], 17)

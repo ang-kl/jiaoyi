@@ -14,6 +14,8 @@ import time
 import tomllib
 import urllib.request
 
+import trading_http
+
 WAIT_SECONDS = 1800
 POLL_SECONDS = 30
 REQUIRED_CHECKS = {"check", "docker", "engineering"}
@@ -349,9 +351,13 @@ class Releases:
             # A newer FAILED/building deployment does not replace the active
             # SUCCESS. Ambiguous overlapping successes cannot certify identity.
             if len(active) == 1 and self.deployment_sha(active[0]) == job["merged"]:
-                with urllib.request.urlopen("https://jiaoyi.up.railway.app/health", timeout=20) as response:
-                    health = json.load(response)
-                if not isinstance(health, dict) or not health:
+                request = trading_http.request("/health", purpose="liveness", env=self.c.config.env)
+                with trading_http.open_request(request, timeout=20) as response:
+                    raw = response.read(2 * 1024 * 1024 + 1)
+                if len(raw) > 2 * 1024 * 1024:
+                    raise EvidenceError("deployment_health_unavailable")
+                health = json.loads(raw)
+                if not isinstance(health, dict) or health.get("status") != "ok":
                     raise EvidenceError("deployment_health_unavailable")
                 self.record(job, "exact_deployment", {"deployment": active[0]["id"], "merged": job["merged"]})
                 self.verified.add(job["id"])

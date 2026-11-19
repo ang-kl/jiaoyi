@@ -44,13 +44,17 @@ class IncidentAcceptanceTests(unittest.TestCase):
         self.no_network = patch.object(
             urllib.request, "urlopen", side_effect=AssertionError("unexpected network access"))
         self.no_network.start()
+        self.no_trading_network = patch.object(
+            source_snapshots.trading_http, "open_request", side_effect=AssertionError("unexpected Trading network"))
+        self.no_trading_network.start()
 
     def tearDown(self):
+        self.no_trading_network.stop()
         self.no_network.stop()
         self.temp.cleanup()
 
     def health(self, position=7, symbol="TEST", digest="a" * 64):
-        return {"status": "ok", "strategy3": [{
+        return {"status": "ok", "broker_accounts": [], "trading": [], "strategy3": [{
             "account_id": 49236051, "prereg_hash": digest,
             "liveness": {"state": "alive", "fast_monitor": {
                 "state": "observing", "unresolved_open_count": 0}},
@@ -95,7 +99,7 @@ class IncidentAcceptanceTests(unittest.TestCase):
         def reply(request, **_):
             route = next(route for route in source_snapshots.ROUTES if request.full_url.endswith(route))
             return io.BytesIO(json.dumps(replies[route]).encode())
-        with patch.object(incidents.urllib.request, "urlopen", side_effect=reply), \
+        with patch.object(source_snapshots.trading_http, "open_request", side_effect=reply), \
              patch.object(w, "bounded_process", side_effect=AssertionError("report cannot call a model")), \
              patch.object(reporting, "send_document", side_effect=AssertionError(
                  "slow Telegram transport must not block the observer")) as send:
@@ -324,7 +328,7 @@ class IncidentAcceptanceTests(unittest.TestCase):
         healthy = {"status": "ok", "strategy3": []}
         with patch.object(source_snapshots, "fetch", return_value=(healthy, self.operations(at), self.source_receipts())) as fetch:
             self.c.incidents.poll()
-        fetch.assert_called_once_with("https://jiaoyi.up.railway.app", timeout=12)
+        fetch.assert_called_once_with(timeout=12, env=self.c.config.env)
         failure = self.source_receipts("/operations/reports", at=(at + dt.timedelta(seconds=10)).isoformat())
         with patch.object(source_snapshots, "fetch", return_value=(self.health(), None, failure)):
             state = self.c.incidents.poll()
@@ -600,7 +604,7 @@ class IncidentAcceptanceTests(unittest.TestCase):
         deployment = {"id": "verified-deployment", "status": "SUCCESS", "meta": {"commitHash": merged}}
         with patch.object(self.c.releases, "plan", return_value={"scope": "trading_runtime", "merged_at": "2026-10-28T00:00:00Z"}), \
                 patch.object(self.c.releases, "deployments", return_value=([deployment], [deployment])), \
-                patch.object(w.urllib.request, "urlopen", return_value=io.BytesIO(b'{"status":"ok"}')):
+                patch.object(w.trading_http, "open_request", return_value=io.BytesIO(b'{"status":"ok"}')):
             self.c.release(self.job(repair["id"]))
         self.assertEqual(self.job(repair["id"])["state"], "verification_queued")
         self.c.incidents.tick()

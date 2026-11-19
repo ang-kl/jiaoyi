@@ -708,7 +708,7 @@ class IncidentManager:
         return self.status()
 
     def poll(self):
-        health, operations, receipts = source_snapshots.fetch("https://jiaoyi.up.railway.app", timeout=SOURCE_TIMEOUT_SECONDS)
+        health, operations, receipts = source_snapshots.fetch(timeout=SOURCE_TIMEOUT_SECONDS, env=self.c.config.env)
         return self.observe(health, operations, source_receipts=receipts)
 
     def _repair(self, incident, details):

@@ -16,7 +16,7 @@ spec.loader.exec_module(w)
 
 
 def snapshots():
-    health = {"status": "ok", "ticks": 10, "trading": [
+    health = {"status": "ok", "broker_accounts": [], "ticks": 10, "trading": [
         {"account_id": 1, "strategy": "s1", "liveness": {"state": "alive", "last_quote_at": "old"}}],
         "strategy3": []}
     operations = {"as_of": "old", "recent_events": [], "reports": [
@@ -103,7 +103,7 @@ class AutomaticEvidenceTests(unittest.TestCase):
                 c.store.update(job["id"], "completed", result="evaluated material evidence")
             with patch.object(c.reporter, "run"), patch.object(c, "prepare", return_value=Path(temp)) as prepare, \
                  patch.object(c, "run_job", side_effect=model) as run, patch.object(c.shutdown, "wait", side_effect=wait), \
-                 patch.object(w.urllib.request, "urlopen", return_value=Response()) as fetch:
+                 patch.object(w.trading_http, "open_request", return_value=Response()) as fetch:
                 with patch.object(c, "incident_loop"):
                     c.serve()
             self.assertEqual(fetch.call_count, 6)
@@ -122,7 +122,7 @@ class AutomaticEvidenceTests(unittest.TestCase):
                 if len(iterations) == 2:
                     c.shutdown.set()
             with patch.object(c.reporter, "run"), patch.object(c.shutdown, "wait", side_effect=wait), \
-                 patch.object(w.urllib.request, "urlopen", side_effect=OSError("unavailable")) as fetch, \
+                 patch.object(w.trading_http, "open_request", side_effect=OSError("unavailable")) as fetch, \
                  patch.object(c, "prepare") as prepare, patch.object(c.store, "reserve") as reserve:
                 with patch.object(c, "incident_loop"):
                     c.serve()

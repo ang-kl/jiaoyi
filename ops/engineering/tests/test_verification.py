@@ -30,7 +30,7 @@ class VerificationTests(unittest.TestCase):
             def __enter__(self): return self
             def __exit__(self, *_): pass
             def read(self, _):
-                return json.dumps({"status": "ok", "reports": [{"report": {"last_success_at": "2026-10-27T06:00:00Z"}}]}).encode()
+                return json.dumps({"status": "ok", "broker_accounts": [], "trading": [], "strategy3": [], "reports": [{"report": {"last_success_at": "2026-10-27T06:00:00Z"}}]}).encode()
         def model(args, **kwargs):
             inspect(args, kwargs)
             Path(args[args.index("--output-last-message") + 1]).write_text(json.dumps(report))
@@ -39,7 +39,7 @@ class VerificationTests(unittest.TestCase):
         with patch.object(self.c, "existing_pr", return_value=None), \
              patch.object(self.c.releases, "observe", side_effect=release_observation, return_value=True) as release, \
              patch.object(self.c, "login_model", return_value="ok"), \
-             patch.object(w.urllib.request, "urlopen", return_value=Response()) as fetch, \
+             patch.object(w.trading_http, "open_request", return_value=Response()) as fetch, \
              patch.object(w, "bounded_process", side_effect=model) as run, \
              patch.object(self.c, "gh", side_effect=AssertionError("verification must not publish a PR")), \
              contextlib.redirect_stdout(io.StringIO()):

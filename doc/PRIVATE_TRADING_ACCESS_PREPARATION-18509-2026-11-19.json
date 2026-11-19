@@ -1,0 +1,80 @@
+{
+  "trace": "\u211618,509",
+  "status": "implementation_prepared_not_activated",
+  "base_commit": "92802dc26f35f64d933a83ad0c44fa3334208bf1",
+  "backup_source_commit": "91deb19e916f6fb50eec39a0dd88f0df905c1ea1",
+  "production_reference_commit": "65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2",
+  "production_reference_verified_live_this_task": true,
+  "backup_archive_sha256": "0a1db7f7dd27cd6e963d2c3bfb80ad1926446fd61d31dc4a1073b153c5300d88",
+  "backup_restore_verified": true,
+  "backup_off_machine": false,
+  "default_profile": "legacy",
+  "activation_requires_explicit_private_profile": true,
+  "new_login_service": false,
+  "new_otp_flow": false,
+  "trading_path_authentication_added": false,
+  "server_private_profile": {
+    "anonymous_liveness": "GET/HEAD /health",
+    "audit_json_paths": 17,
+    "research_paths": [
+      "/owner/backtests",
+      "/owner/market-data"
+    ],
+    "ui_paths_disabled": 5,
+    "machine_tokens_must_be_distinct": true
+  },
+  "client_migrations": {
+    "engineering_request_files": 7,
+    "research_scripts": 6,
+    "redirects_refused": true,
+    "private_http_requires_exact_pinned_origin_and_explicit_port": true,
+    "private_transport_disables_ambient_proxy": true,
+    "scoped_mode_has_no_legacy_credential_fallback": true,
+    "minimal_health_rejected_as_diagnostic_evidence": true
+  },
+  "verification": {
+    "rust_profile_and_existing_auth_guard_tests_passed": 9,
+    "cargo_fmt_passed": true,
+    "cargo_check_workspace_all_targets_offline_passed": true,
+    "cargo_clippy_workspace_all_targets_offline_passed": true,
+    "python_research_tests_run": 125,
+    "python_research_tests_skipped": 1,
+    "python_research_suite_passed": true,
+    "python_engineering_suite_status": "passed",
+    "independent_review": "approved_for_unmerged_pr",
+    "python_engineering_tests_run": 238,
+    "python_engineering_tests_skipped": 1,
+    "ci_status": "pending_draft_pr",
+    "protected_policy_and_persisted_task_constants_unchanged": true,
+    "trading_strategy_risk_exit_settings_and_infrastructure_unchanged": true
+  },
+  "external_read_findings": {
+    "github_repository_private": false,
+    "railway_metadata_http_status": 200,
+    "railway_private_connectivity_verified": false,
+    "railway_metadata_initial_http_status": 403,
+    "railway_metadata_retry": "explicit read-only API client User-Agent succeeded; no credential change",
+    "railway_metadata_observed_at_sgt": "2026-11-19T18:29:59.415393+08:00",
+    "active_deployment_commit": "65a3ba7a2594f55cc75b33ccefddfdb3ff87dca2",
+    "active_deployment_created_at": "2026-11-15T01:55:07.273Z",
+    "public_service_domains_count": 1,
+    "custom_domains_count": 0,
+    "public_target_port": 8080,
+    "health_and_replica_api_overrides_null": true
+  },
+  "release_gates": {
+    "private_dns_transport_address_family_and_healthcheck": "unverified",
+    "paired_server_client_activation": "not_performed",
+    "engineering_inbound_exposure": "unchanged_separate_scope",
+    "public_report_repository_access": "unresolved",
+    "operator_access_and_report_delivery": "must_be_verified",
+    "oil_adapter_cached_preflight": "requires_requalification_without_new_collection",
+    "restart_account_position_opening_reference_deadline_reconciliation": "not_performed",
+    "secure_rollback": "must_be_approved"
+  },
+  "production_environment_changes": 0,
+  "production_deployments": 0,
+  "broker_requests": 0,
+  "telegram_messages": 0,
+  "report_file": "doc/PRIVATE_TRADING_ACCESS_PREPARATION-18509-2026-11-19.md"
+}

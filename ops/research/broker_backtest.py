@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Submit/poll a bounded Jiaoyi broker-data study and save JSON + HTML. No model API."""
-import argparse,html,json,os,time,urllib.request,urllib.error
+import argparse,html,json,sys,time,urllib.request,urllib.error
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+# Shared transport ships with Engineering and is also available in repository
+# research checkouts. Importing it performs no configuration or network work.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engineering"))
+import trading_http
+from trading_http import origin, research_token
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):
@@ -15,10 +21,8 @@ def call(base,password,body=None):
         from rebuild_authority import require_collection_authority
         require_collection_authority()
     payload=None if body is None else json.dumps(body).encode()
-    headers={'Authorization':'Bearer '+password,'Cache-Control':'no-cache'}
-    if payload is not None:headers['Content-Type']='application/json'
-    req=urllib.request.Request(base+'/owner/backtests',data=payload,headers=headers)
-    with urllib.request.build_opener(NoRedirect).open(req,timeout=25) as res:raw=res.read(32_000_001)
+    req=trading_http.request('/owner/backtests',purpose='research',base=base,data=payload,token=password)
+    with trading_http.open_request(req,timeout=25) as res:raw=res.read(32_000_001)
     if len(raw)>32_000_000:raise RuntimeError('Response exceeds 32MB')
     return json.loads(raw)
 
@@ -50,14 +54,9 @@ def tick_report(job):
     return f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(req['symbol'])} bounded tick replay</title><style>body{{font:16px/1.6 system-ui;max-width:1100px;margin:30px auto;padding:0 20px}}table{{border-collapse:collapse;width:100%}}td,th{{padding:8px;text-align:left;border-bottom:1px solid #ccc}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}.note{{padding:16px;background:#eef3f8}}.scroll{{overflow:auto;max-height:500px}}</style><h1>{esc(req['symbol'])}: bounded tick replay</h1><p>№18,241 · §1–5 · {datetime.now(ZoneInfo('Asia/Singapore')).strftime('%d-%m-%Y %H:%M SGT')} · by &lt;Codex (GPT-6), effort: not exposed&gt;</p><h2>§1. TLDR</h2><p class="note">{esc(job['status'])}. {'One simulated entry.' if trade else 'No simulated entry.'} This is a bounded development quote-path scenario. Goal: risk:reward 1:1.38 and ≥73% net wins per strategy/account over 20 qualified positions. Goal progress: NOT VERIFIABLE; this run adds zero qualifying account trades.</p><p>Account {esc(req['account'])}; {esc(req['from'])} to {esc(req['to'])}. Failure: {esc(job.get('error','none'))}.</p><h2>§2. Admission and exits</h2><div class="scroll"><table><tr><th>UTC mark</th><th>Reason</th><th>Side</th><th>R distance</th><th>Cost reserve</th></tr>{rows}</table></div><p>Null outcomes mean incomplete or unavailable, never zero profit.</p>{''.join(arms)}<h2>§3. Data quality</h2><pre>{esc(json.dumps(study.get('quality',{}),indent=2))}</pre><p>Even a complete API fetch cannot prove executable fills or cross-side sequencing. Bid/ask spread is included in fills; scenario commission and adverse slippage are deducted separately.</p><h2>§4. Assumptions</h2><pre>{esc(json.dumps(req,indent=2))}</pre><ul>{notes}</ul><h2>§5. Reproducibility</h2><p>Job {esc(job['id'])}; broker symbol {esc(result.get('symbol_id'))}; tick requests {esc(result.get('tick_pages'))}; input SHA-256 {esc(result.get('input_sha256'))}; algorithm SHA-256 {esc(result.get('algorithm_sha256'))}.</p><p>The JSON contains source bars, both tick streams, current contract snapshot and every outcome. No live rule was changed. Draft for review.</p></html>'''
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('request',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--base',default='https://jiaoyi.up.railway.app');a=p.parse_args()
-    from urllib.parse import urlsplit
-    url=urlsplit(a.base)
-    if url.scheme!='https' or url.username or url.password or url.query or url.fragment or url.path not in ('','/'):
-        raise SystemExit('Use an HTTPS origin without credentials, path, query or fragment')
-    password=os.environ.get('JIAOYI_UI_PASSWORD')
-    if not password:raise SystemExit('JIAOYI_UI_PASSWORD is required; never put it in the request file')
-    req=json.loads(a.request.read_text());base=a.base.rstrip('/');start=call(base,password,req);identifier=start['id'];deadline=time.monotonic()+270
+    p=argparse.ArgumentParser();p.add_argument('request',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--base',default=None);a=p.parse_args()
+    base=origin(a.base);password=research_token()
+    req=json.loads(a.request.read_text());start=call(base,password,req);identifier=start['id'];deadline=time.monotonic()+270
     print('Submitted job',identifier,flush=True)
     while time.monotonic()<deadline:
         time.sleep(2);job=call(base,password)

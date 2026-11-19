@@ -7,11 +7,8 @@ import argparse
 import datetime as dt
 import hashlib
 import json
-import os
 import time
-import urllib.request
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import broker_backtest
 import class_research
@@ -21,13 +18,10 @@ def call(base, password, request=None):
     if request is not None:
         from rebuild_authority import require_collection_authority
         require_collection_authority()
-    headers = {"Authorization": "Bearer " + password, "Cache-Control": "no-cache"}
-    data = None
-    if request is not None:
-        headers["Content-Type"] = "application/json"
-        data = json.dumps(request).encode()
-    req = urllib.request.Request(base + "/owner/market-data", data=data, headers=headers)
-    with urllib.request.build_opener(broker_backtest.NoRedirect).open(req, timeout=25) as response:
+    data = None if request is None else json.dumps(request).encode()
+    req = broker_backtest.trading_http.request(
+        "/owner/market-data", purpose="research", base=base, data=data, token=password)
+    with broker_backtest.trading_http.open_request(req, timeout=25) as response:
         raw = response.read(32_000_001)
     if len(raw) > 32_000_000:
         raise RuntimeError("collection response exceeds32MB")
@@ -61,11 +55,9 @@ def main():
     p.add_argument("--date", type=dt.date.fromisoformat, required=True, help="local registered session date")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--account", type=int, default=49236051)
-    p.add_argument("--base", default="https://jiaoyi.up.railway.app")
+    p.add_argument("--base", default=None)
     a = p.parse_args()
-    url = urlsplit(a.base)
-    if url.scheme != "https" or url.username or url.password or url.path not in ("", "/") or url.query or url.fragment:
-        raise SystemExit("HTTPS origin without credentials or path required")
+    a.base = broker_backtest.origin(a.base)
     plan = json.loads(class_research.PLAN.read_text())
     plan["development_dates"] = [a.date.isoformat()]
     requests = []
@@ -85,7 +77,7 @@ def main():
     if manifest_path.exists() and json.loads(manifest_path.read_text()) != json.loads(json.dumps(frozen)):
         raise SystemExit("collection plan differs; use a separate directory")
     manifest_path.write_text(json.dumps(frozen, indent=2))
-    password = os.environ["JIAOYI_UI_PASSWORD"]
+    password = broker_backtest.research_token()
     summary = []
     for cls, req in requests:
         path = a.output / (req["symbol"] + ".json")
