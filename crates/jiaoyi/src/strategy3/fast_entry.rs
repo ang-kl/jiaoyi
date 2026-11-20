@@ -155,7 +155,8 @@ impl Trader<'_, '_> {
         };
         let mut requests = vec![];
         for sym in self.syms.values() {
-            if self.human_entry_refusal(sym.id).is_some()
+            if self.entry_policy.s3_refusal(self.env, &sym.name).is_some()
+                || self.human_entry_refusal(sym.id).is_some()
                 || self.pair_entry_refusal(sym.id).is_some()
                 || sym
                     .rule
@@ -260,7 +261,10 @@ impl Trader<'_, '_> {
         plan: Prepared,
         outcome: &mut TriggerOutcome,
     ) -> anyhow::Result<()> {
-        if let Some(reason) = self.human_entry_refusal(id) {
+        if let Some(reason) = self
+            .human_entry_refusal(id)
+            .or_else(|| self.entry_policy.s3_refusal(self.env, &self.syms[&id].name))
+        {
             outcome.refuse(reason);
             return Ok(());
         }

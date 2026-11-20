@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
-use jiaoyi::config::BrokerConfig;
+use jiaoyi::config::{BrokerConfig, EntryPolicy};
 use jiaoyi::{history, loader, shutdown, strategy3, trading};
 use jiaoyi_core::allowlist::{Allowlist, Environment, PermittedAccount};
 use jiaoyi_core::secret::Secret;
@@ -641,9 +641,27 @@ impl WireTrader<'_, '_> {
     }
 }
 
+// Historical entry/exit fixtures exercise the explicit pre-release opt-in.
+const ALL_ENTRIES: EntryPolicy = EntryPolicy {
+    crypto_4h: true,
+    live_execution: true,
+};
+
+async fn entry_enabled_trader<'a, 'c>(
+    pool: &'a PgPool,
+    list: &'a Allowlist,
+    env: Environment,
+    session: &'a jiaoyi_ctrader::AccountSession<'c>,
+) -> anyhow::Result<strategy3::Trader<'a, 'c>> {
+    strategy3::Trader::with_entry_policy(pool, list, env, session, ALL_ENTRIES).await
+}
+
 /// Drive a trader on `f`: `steps` gets the trader and the fake's log.
 macro_rules! with_trader {
-    ($pool:expr, $f:expr, $env:expr, |$t:ident, $log:ident| $body:block) => {{
+    ($pool:expr, $f:expr, $env:expr, |$t:ident, $log:ident| $body:block) => {
+        with_trader!($pool, $f, $env, ALL_ENTRIES, |$t, $log| $body)
+    };
+    ($pool:expr, $f:expr, $env:expr, $policy:expr, |$t:ident, $log:ident| $body:block) => {{
         let mut fake = $f.clone();
         let quote_sender = fake
             .spot_events
@@ -655,7 +673,7 @@ macro_rules! with_trader {
             .await
             .unwrap();
         let list = allowlist();
-        let inner = strategy3::Trader::new($pool, &list, $env, &session)
+        let inner = strategy3::Trader::with_entry_policy($pool, &list, $env, &session, $policy)
             .await
             .unwrap();
         let mut $t = WireTrader {
@@ -665,6 +683,48 @@ macro_rules! with_trader {
         reconcile_with_scoped_recovery(&mut $t, Utc::now()).await;
         $body
     }};
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn paused_crypto_rejects_entry_and_closes_carried_position(pool: PgPool) {
+    loaded(&pool).await;
+    with_trader!(
+        &pool,
+        fake((60_455.0, 60_462.0)),
+        Environment::Demo,
+        EntryPolicy::default(),
+        |t, log| {
+            t.enter_pullback(BTC, Some(60_455.0), Some(60_462.0), at(30))
+                .await
+                .unwrap();
+            assert!(t.syms[&BTC].pullback.is_none());
+            assert_eq!(
+                t.trigger_status(BTC, at(30))["entry_gate"]["code"],
+                jiaoyi::config::CRYPTO_DISABLED
+            );
+            assert!(log.lock().unwrap().orders.is_empty());
+            let (skips, opens): (i64, i64) = sqlx::query_as(
+                "SELECT
+            (SELECT count(*) FROM trading_decisions WHERE kind='s3_skip' AND reason=$1),
+            (SELECT count(*) FROM trading_intents WHERE kind='open')",
+            )
+            .bind(jiaoyi::config::CRYPTO_DISABLED)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert!(skips > 0);
+            assert_eq!(opens, 0);
+            t.legacy_position(BTC, Some(60_455.0), Some(60_462.0), at(30))
+                .await
+                .unwrap();
+            t.session_end(at(24 * 60)).await.unwrap();
+            assert_eq!(log.lock().unwrap().closes.len(), 1);
+            assert!(end_orders(&pool)
+                .await
+                .iter()
+                .any(|(_, outcome)| outcome == "filled"));
+        }
+    );
 }
 
 /// An order the fake received.
@@ -840,7 +900,7 @@ async fn trail_keeps_original_r(pool: &PgPool, buy: bool) {
             t.reconcile(now).await.unwrap();
         }
         assert_eq!(t.own[&pid].stop, Some(entry));
-        let restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
+        let restarted = entry_enabled_trader(pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
         let mut restarted = WireTrader {
@@ -976,7 +1036,7 @@ async fn fractional_trail_precision(pool: &PgPool, buy: bool) {
             assert_eq!(saved.1["r"], basis.r);
             t.reconcile(at(33)).await.unwrap();
         }
-        let restarted = strategy3::Trader::new(pool, t.allowlist, t.env, t.session)
+        let restarted = entry_enabled_trader(pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
         let mut restarted = WireTrader {
@@ -1355,7 +1415,10 @@ async fn actor_quote_loss_is_visible_when_the_observer_keeps_up(pool: PgPool) {
             result = &mut actor => panic!("actor stopped before loss assertion: {result:?}"),
             () = exercise => {},
         }
-        actor.await.unwrap();
+        // Shutdown can interrupt the actor inside its cancellable history read.
+        if let Err(error) = actor.await {
+            assert_eq!(error.to_string(), "shutdown during historical preparation");
+        }
     })
     .await
     .expect("controlled actor overflow and shutdown must complete");
@@ -1463,10 +1526,9 @@ async fn inside_quote_keeps_slot_available_and_qualified_arm_restores_after_rest
                 .unwrap()
                 .iter()
                 .any(|g| g["code"] == "peer_hold_below_24bps_or_opposing"));
-            let restarted =
-                strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
-                    .await
-                    .unwrap();
+            let restarted = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
+                .await
+                .unwrap();
             let mut restarted = WireTrader {
                 inner: restarted,
                 quote_sender: t.quote_sender.clone(),
@@ -1579,10 +1641,9 @@ async fn durable_cost_veto_survives_restart_and_a_favorable_quote(pool: PgPool) 
             assert_eq!(detail["label"], "jiaoyi-s3");
             assert_eq!(detail["prereg_hash"], strategy3::prereg_hash());
 
-            let restarted =
-                strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
-                    .await
-                    .unwrap();
+            let restarted = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
+                .await
+                .unwrap();
             let mut restarted = WireTrader {
                 inner: restarted,
                 quote_sender: t.quote_sender.clone(),
@@ -1818,7 +1879,7 @@ async fn durable_cost_veto_keeps_one_entry_per_session_after_restart(pool: PgPoo
         // Simulate a broker-flat restart; the durable open receipt, rather
         // than the former in-memory ownership cache, must block re-entry.
         f.positions.lock().unwrap().clear();
-        let restarted = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+        let restarted = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
             .await
             .unwrap();
         let mut restarted = WireTrader {
@@ -1937,7 +1998,7 @@ async fn an_impulse_waits_for_pullback_then_locks_breakeven_and_full_target(pool
             .unwrap();
         assert!(orders(&log).is_empty(), "peak only arms; no market entry");
         assert!(t.syms[&BTC].pullback.is_some());
-        let restarted = strategy3::Trader::new(&pool, t.allowlist, t.env, t.session)
+        let restarted = entry_enabled_trader(&pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
         let mut t = WireTrader {
@@ -4540,7 +4601,7 @@ async fn crypto_four_hour_preopen_is_ready_then_finalises_causally(pool: PgPool)
     // Reconnect after the deadline retains the original receipt and does
     // not repeat the historical download or misreport preparation as late.
     let list2 = allowlist();
-    let restored = strategy3::Trader::new(&pool, &list2, Environment::Demo, &session)
+    let restored = entry_enabled_trader(&pool, &list2, Environment::Demo, &session)
         .await
         .unwrap();
     let mut restored = WireTrader {
@@ -5244,7 +5305,7 @@ async fn consumed_pullback_is_not_replayed_after_rejected_order_and_restart(pool
             .await
             .unwrap();
         assert_eq!(orders(&log).len(), 1, "{:?}", decisions(&pool).await);
-        let inner = strategy3::Trader::new(&pool, t.allowlist, t.env, t.session)
+        let inner = entry_enabled_trader(&pool, t.allowlist, t.env, t.session)
             .await
             .unwrap();
         let mut restarted = WireTrader {
@@ -5516,7 +5577,7 @@ async fn owner18425_native_open_window_first_quote_and_restart_preserve_provenan
                 }
                 // A restart hours later must replay the first bounded quote, not
                 // today's M30 open, the later tick, or a newly stamped observation.
-                t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+                t.inner = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
                     .await
                     .unwrap();
                 t.reconcile(s.open + Duration::hours(3)).await.unwrap();
@@ -5703,7 +5764,7 @@ async fn external_position_cancels_armed_setup_and_release_requires_a_new_impuls
         f.positions.lock().unwrap().push(human);
         // Restart before observing the human: the durable old arm must also
         // be cancelled, even though the new actor has not loaded it yet.
-        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+        t.inner = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
             .await
             .unwrap();
         t.reconcile(at(60) + Duration::seconds(1)).await.unwrap();
@@ -5816,7 +5877,7 @@ async fn peer_position_cancels_durable_arm_and_release_requires_a_new_impulse(po
         sibling.trade_data.symbol_id = ETH;
         sibling.trade_data.label = None; // External sibling exposure also consumes the pair.
         f.positions.lock().unwrap().push(sibling);
-        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+        t.inner = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
             .await
             .unwrap();
         t.reconcile(at(60) + Duration::seconds(1)).await.unwrap();
@@ -5887,7 +5948,7 @@ async fn running_extension_survives_restart_and_deep_retracement_disarms(pool: P
         assert_eq!(extended.extreme, 61_200.0);
         assert_eq!(extended.level, 60_600.0);
         assert_eq!(extended.impulse_range, 1_200.0);
-        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+        t.inner = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
             .await
             .unwrap();
         t.reconcile(at(30) + Duration::seconds(2)).await.unwrap();
@@ -5922,7 +5983,7 @@ async fn running_extension_survives_restart_and_deep_retracement_disarms(pool: P
             .unwrap()
             .iter()
             .any(|g| g["state"] == "invalidated"));
-        t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+        t.inner = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
             .await
             .unwrap();
         t.reconcile(at(30) + Duration::seconds(5)).await.unwrap();
@@ -6193,7 +6254,7 @@ async fn owner18409_restart_restores_london_and_crypto_from_postgres(pool: PgPoo
     with_trader!(&pool, fixture, Environment::Demo, |t, log| {
         for restart in 0..2 {
             if restart == 1 {
-                t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+                t.inner = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
                     .await
                     .unwrap();
                 t.reconcile(now).await.unwrap();

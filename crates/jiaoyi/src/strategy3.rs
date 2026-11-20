@@ -1301,6 +1301,7 @@ impl<'a> Decisions<'a> {
 /// The trader of one account on an authorised session. Its methods take the
 /// time, so the tests drive it quote by quote.
 pub struct Trader<'a, 'c> {
+    entry_policy: crate::config::EntryPolicy,
     fast_cache: fast_entry::Cache,
     human_locks: std::collections::HashSet<i64>,
     pair_occupied_symbols: std::collections::HashSet<i64>,
@@ -1434,6 +1435,23 @@ impl<'a, 'c> Trader<'a, 'c> {
         env: Environment,
         session: &'a AccountSession<'c>,
     ) -> anyhow::Result<Trader<'a, 'c>> {
+        Self::with_entry_policy(
+            pool,
+            allowlist,
+            env,
+            session,
+            crate::config::EntryPolicy::from_env(),
+        )
+        .await
+    }
+
+    pub async fn with_entry_policy(
+        pool: &'a PgPool,
+        allowlist: &'a Allowlist,
+        env: Environment,
+        session: &'a AccountSession<'c>,
+        entry_policy: crate::config::EntryPolicy,
+    ) -> anyhow::Result<Trader<'a, 'c>> {
         let account_id = session.account().id();
         let quotes = jiaoyi_store::latest_assets(pool, account_id)
             .await?
@@ -1516,6 +1534,7 @@ impl<'a, 'c> Trader<'a, 'c> {
             );
         }
         let mut t = Trader {
+            entry_policy,
             fast_cache: Default::default(),
             human_locks: Default::default(),
             pair_occupied_symbols: Default::default(),
@@ -3222,6 +3241,17 @@ impl<'a, 'c> Trader<'a, 'c> {
         };
         let sym = self.syms[&symbol_id].clone();
         let name = sym.name.clone();
+        if let Some(reason) = self.entry_policy.s3_refusal(self.env, &name) {
+            self.d
+                .note(
+                    Some(&name),
+                    "skip",
+                    reason,
+                    json!({"reason_code": reason, "production_policy": mp::POLICY}),
+                )
+                .await;
+            return Ok(());
+        }
         if mp::peer(&name).is_none() {
             self.d.note(Some(&name),"inactive","symbol_retired_from_s3_core",json!({"reason_code":"symbol_retired_from_s3_core","production_policy":mp::POLICY})).await;
             return Ok(());
@@ -3569,7 +3599,10 @@ impl<'a, 'c> Trader<'a, 'c> {
         dispatch_revision: u64,
         outcome: &mut TriggerOutcome,
     ) -> anyhow::Result<()> {
-        if let Some(reason) = self.human_entry_refusal(symbol_id) {
+        if let Some(reason) = self.human_entry_refusal(symbol_id).or_else(|| {
+            self.entry_policy
+                .s3_refusal(self.env, &self.syms[&symbol_id].name)
+        }) {
             outcome.refuse(reason);
             return Ok(());
         }
@@ -4378,6 +4411,33 @@ pub async fn run_session_with_event_offset(
     shutdown: &mut Shutdown,
     offset: chrono::Duration,
 ) -> anyhow::Result<()> {
+    run_session_with_policy(
+        pool,
+        allowlist,
+        env,
+        session,
+        live,
+        ends,
+        shutdown,
+        offset,
+        crate::config::EntryPolicy::from_env(),
+    )
+    .await
+}
+
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub async fn run_session_with_policy(
+    pool: &PgPool,
+    allowlist: &Allowlist,
+    env: Environment,
+    session: &AccountSession<'_>,
+    live: &crate::trading::LivenessMap,
+    ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
+    shutdown: &mut Shutdown,
+    offset: chrono::Duration,
+    entry_policy: crate::config::EntryPolicy,
+) -> anyhow::Result<()> {
     let account_id = session.account().id();
     crate::trading::beat(live, account_id, |l| {
         l.started_at.get_or_insert_with(Utc::now);
@@ -4386,7 +4446,7 @@ pub async fn run_session_with_event_offset(
     let _observer =
         crate::fast_monitor::SessionObserver::start(conn, live, account_id, shutdown.clone());
     let initializing = crate::fast_monitor::WorkGuard::start(live, account_id, "initializing");
-    let mut t = Trader::new(pool, allowlist, env, session).await?;
+    let mut t = Trader::with_entry_policy(pool, allowlist, env, session, entry_policy).await?;
     t.live = live.clone();
     t.protect_during_reads = true;
     t.read_shutdown = Some(shutdown.clone());

@@ -3,13 +3,9 @@
 //! execute trading by 1 PM today"; "Keep the gate; demo trades at 1 PM";
 //! "Allow the minimum volume" for live.
 //!
-//! There is no on/off switch (owner, 24-10-2026: "why do i need
-//! JIAOYI_TRADING_ENABLED, removed it. it should not be doing so"). One loop
-//! per permitted account runs from start-up:
-//! - a **demo** account trades Strategy 1 at once;
-//! - a **live** account runs the same loop armed, and sends nothing until
-//!   the H1 held-out trial under the running pre-registration hash has
-//!   verdict PASS (`trading.live_requires_edge_pass`).
+//! Each permitted account runs its reconciliation and protection loop. New live
+//! entries additionally require `JIAOYI_ENABLE_LIVE_EXECUTION=true` and the
+//! configured admission and edge checks.
 //!
 //! The strategy, as pre-registered (default setting): on the broker's own
 //! completed daily bars, re-read every `LEVELS_REFRESH`, EMA(50) of the
@@ -1771,6 +1767,35 @@ pub async fn run_session_with_levels_refresh(
     shutdown: &mut Shutdown,
     levels_refresh: Duration,
 ) -> anyhow::Result<()> {
+    run_session_with_policy(
+        pool,
+        allowlist,
+        env,
+        session,
+        d,
+        live,
+        ends,
+        shutdown,
+        levels_refresh,
+        crate::config::EntryPolicy::from_env(),
+    )
+    .await
+}
+
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub async fn run_session_with_policy(
+    pool: &PgPool,
+    allowlist: &Allowlist,
+    env: Environment,
+    session: &AccountSession<'_>,
+    d: &mut Decisions<'_>,
+    live: &LivenessMap,
+    ends: &mut tokio::sync::broadcast::Receiver<jiaoyi_ctrader::SessionEnd>,
+    shutdown: &mut Shutdown,
+    levels_refresh: Duration,
+    entry_policy: crate::config::EntryPolicy,
+) -> anyhow::Result<()> {
     let account_id = session.account().id();
     beat(live, account_id, |l| {
         l.started_at.get_or_insert_with(Utc::now);
@@ -1903,6 +1928,7 @@ pub async fn run_session_with_levels_refresh(
     tokio::pin!(refresh_levels);
     let mut tried: HashSet<String> = HashSet::new();
     let ctx = Ctx {
+        entry_policy,
         pool,
         allowlist,
         session,
@@ -2042,6 +2068,7 @@ fn limit_detail() -> Value {
 }
 
 struct Ctx<'a, 'c> {
+    entry_policy: crate::config::EntryPolicy,
     pool: &'a PgPool,
     allowlist: &'a Allowlist,
     session: &'a AccountSession<'c>,
@@ -2289,6 +2316,11 @@ async fn on_quote(
     let Some(side) = triggered(l, sym.bid, sym.ask) else {
         return Ok(());
     };
+    if let Some(reason) = ctx.entry_policy.live_refusal(ctx.env) {
+        d.note(Some(name), "skip", reason, json!({"reason_code":reason}))
+            .await;
+        return Ok(());
+    }
     let entry_guard = jiaoyi_ctrader::entry_guard::EntryGuard {
         connection_generation: session.connection().entry_generation(),
         account_id,

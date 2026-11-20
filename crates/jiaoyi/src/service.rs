@@ -18,6 +18,12 @@ use tokio::task::JoinHandle;
 /// Record every refusal and every permitted account. Run once at start-up,
 /// after migrations.
 pub async fn register_accounts(pool: &PgPool, cfg: &Config) -> store::Result<()> {
+    // Stored research and health readers also select accounts by their enabled flag.
+    // Preserve their ledger and only transition previously enabled retired rows.
+    store::sqlx::query("UPDATE accounts SET enabled = FALSE, updated_at = now() WHERE enabled AND account_id = ANY($1)")
+        .bind(crate::config::RETIRED_ACCOUNTS.as_slice())
+        .execute(pool)
+        .await?;
     for r in &cfg.plan.refused {
         tracing::warn!(account = %r.account_id, reason = %r.reason, "account refused");
         store::record_refusal(pool, &r.account_id, &r.reason, "startup").await?;

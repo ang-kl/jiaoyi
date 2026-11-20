@@ -116,7 +116,7 @@ async fn carried_source_survives_current_peer_rollover_and_both_receipt_formats(
                 sqlx::query("INSERT INTO trading_decisions (account_id,symbol,kind,reason,detail,settings_version) SELECT account_id,symbol,kind,reason,detail-'source_day',settings_version FROM trading_decisions WHERE account_id=$1 AND symbol='BTCUSD' AND kind='s3_pullback_state' ORDER BY id DESC LIMIT 1")
                     .bind(DEMO).execute(&pool).await.unwrap();
             }
-            t.inner = strategy3::Trader::new(&pool, t.allowlist, Environment::Demo, t.session)
+            t.inner = entry_enabled_trader(&pool, t.allowlist, Environment::Demo, t.session)
                 .await
                 .unwrap();
             t.reconcile(at(250)).await.unwrap();
