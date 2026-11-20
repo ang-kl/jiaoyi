@@ -294,27 +294,29 @@ impl Trader<'_, '_> {
             return Ok(());
         }
         let expires = deadline.min(plan.admission.expires());
-        if plan.rules.live {
-            let slots = tokio::time::timeout_at(
+        let held = if plan.rules.live {
+            let exposure = tokio::time::timeout_at(
                 expires,
-                crate::admission::live_s3_concurrency(
-                    self.pool,
-                    self.session,
-                    LIVE_MAX_S3_POSITIONS,
-                ),
+                crate::admission::live_s3_exposure(self.pool, self.session, LIVE_MAX_S3_POSITIONS),
             )
             .await
-            .unwrap_or_else(|_| Err("live: Strategy 3 slot check exceeded dispatch expiry".into()));
-            if let Err(reason) = slots {
-                outcome.refuse(&reason);
-                self.skip(id, &name, &reason, json!({"armed":arm}), now)
-                    .await;
-                return Ok(());
+            .unwrap_or_else(|_| {
+                Err("live: Strategy 3 exposure check exceeded dispatch expiry".into())
+            });
+            match exposure.and_then(|book| self.live_open_risk(&book)) {
+                Ok(held) => held,
+                Err(reason) => {
+                    outcome.refuse(&reason);
+                    self.skip(id, &name, &reason, json!({"armed":arm}), now)
+                        .await;
+                    return Ok(());
+                }
             }
-        }
+        } else {
+            self.open_risk().map_err(anyhow::Error::msg)?
+        };
         // The equity was read for this receipt and has the same five-second
-        // expiry. Recheck the currently held risk under the dispatch lock.
-        let held = self.open_risk().map_err(anyhow::Error::msg)?;
+        // expiry. The Live held risk was re-read under the dispatch lock.
         let budget = within_budget(
             held,
             plan.sized.risk,
@@ -865,7 +867,34 @@ mod tests {
         };
         assert_eq!(request(&trader).s3_positions_open, 0);
 
+        trader.syms.insert(
+            4,
+            Sym {
+                id: 4,
+                name: "XAGUSD".into(),
+                class: AssetClass::Metal,
+                rule: None,
+                day: None,
+                pullback: None,
+                ..trader.syms[&id].clone()
+            },
+        );
         let held = position(4, LABEL, 5_000);
+        let partial = LiveS3Exposure {
+            slots: 1,
+            positions: vec![held.clone()],
+            unresolved: vec![ts::UnresolvedIntent {
+                entry_key: "s3:7:4:1".into(),
+                client_msg_id: "partial".into(),
+                symbol_id: Some(4),
+                volume: Some(10_000),
+                filled: 2_500,
+                position_id: Some(held.position_id),
+                risk: Some(40.0),
+                created_at: now,
+            }],
+        };
+        assert_eq!(trader.live_open_risk(&partial).unwrap(), 37.50 + 20.0);
         positions.lock().unwrap().push(held.clone());
         // Hold the reservation while the cached intent awaits reconciliation
         // with its now-visible broker fill.
@@ -891,8 +920,16 @@ mod tests {
         assert_eq!(plan.sized.mode, "live_broker_minimum");
         assert_eq!(plan.admission.receipt.floor_pct, Some(250.0));
 
-        // A larger reservation added after warming must veto the same plan.
-        trader.pending[0].risk = 55.0;
+        // The broker widens the stop after warming. The cached reservation
+        // stays at $37.50, but the actual stop now risks $55 before this entry.
+        positions
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .find(|p| p.position_id == held.position_id)
+            .unwrap()
+            .stop_loss = Some(98.90);
+        assert_eq!(trader.open_risk().unwrap(), 37.50);
         let mut outcome = TriggerOutcome::pending();
         trader
             .dispatch_prepared(
@@ -909,10 +946,12 @@ mod tests {
             .unwrap();
         let outcome = json!(outcome);
         assert_eq!(outcome["execution_resolution"], "not_sent");
-        assert!(outcome["reason"]
-            .as_str()
-            .unwrap()
-            .contains("would exceed its budget 55.50 (5% of equity)"));
+        let reason = outcome["reason"].as_str().unwrap();
+        assert!(reason.contains("open risk 55.00"), "{reason}");
+        assert!(
+            reason.contains("would exceed its budget 55.50 (5% of equity)"),
+            "{reason}"
+        );
 
         // The slot check must see exposure that appeared since preparation.
         let mut another = held;

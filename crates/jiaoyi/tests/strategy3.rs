@@ -2241,10 +2241,15 @@ async fn insufficient_complete_macro_sessions_refuse_an_entry(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn live_takes_one_minimum_trade_only_with_no_other_program_position(pool: PgPool) {
+async fn live_s3_takes_broker_minimum_with_an_unrelated_s1_position(pool: PgPool) {
     loaded(&pool).await;
-    // A Strategy 1 position open on another symbol: live waits.
-    let f = fake((60_455.0, 60_460.0));
+    let mut f = fake((60_455.0, 60_460.0));
+    f.light_symbols
+        .push(jiaoyi_ctrader::messages::ProtoOaLightSymbol {
+            symbol_id: 5,
+            quote_asset_id: Some(1),
+            ..Default::default()
+        });
     f.positions.lock().unwrap().push(ProtoOaPosition {
         position_id: 77,
         trade_data: ProtoOaTradeData {
@@ -2255,37 +2260,21 @@ async fn live_takes_one_minimum_trade_only_with_no_other_program_position(pool: 
             ..Default::default()
         },
         position_status: 1,
-        swap: 0,
+        price: Some(100.0),
+        stop_loss: Some(99.0),
+        used_margin: Some(100),
+        money_digits: Some(2),
         ..Default::default()
     });
     with_trader!(&pool, f, Environment::Live, |t, log| {
         t.enter_pullback(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
-        assert!(orders(&log).is_empty());
+        let o = orders(&log);
+        assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
+        assert_eq!(o[0].volume, 1);
+        assert_eq!(o[0].relative_take_profit, Some(83_877_000));
     });
-    let d = decisions(&pool).await;
-    assert!(
-        d.iter()
-            .any(|(k, r)| k == "s3_skip" && r.contains("one minimum trade at a time")),
-        "{d:?}"
-    );
-    // With none open: exactly the broker minimum, 1 cent.
-    with_trader!(
-        &pool,
-        fake((60_455.0, 60_460.0)),
-        Environment::Live,
-        |t, log| {
-            t.enter_pullback(BTC, Some(60_455.0), Some(60_460.0), at(60))
-                .await
-                .unwrap();
-            let o = orders(&log);
-            assert_eq!(o.len(), 1, "{:?}", decisions(&pool).await);
-            assert_eq!(o[0].volume, 1);
-            // Every new position uses the full 1.38R broker target.
-            assert_eq!(o[0].relative_take_profit, Some(83_877_000));
-        }
-    );
 }
 
 #[test]
@@ -2601,28 +2590,28 @@ async fn market_closed_session_end_deferral_survives_restart(pool: PgPool) {
     );
 }
 
-/// Codex P1 on #15: the live rule is account-wide. A Strategy 1 position
-/// opened since Strategy 3's last reconcile, or an unresolved Strategy 1
-/// open, stops Strategy 3's live minimum entry (read fresh, not cached).
 #[sqlx::test(migrator = "store::MIGRATOR")]
-async fn a_live_minimum_waits_for_a_strategy_1_trade_opened_since_the_last_reconcile(pool: PgPool) {
+async fn live_s3_checks_fresh_slots_and_preserves_the_unresolved_open_margin_veto(pool: PgPool) {
     loaded(&pool).await;
     let f = fake((60_455.0, 60_460.0));
     with_trader!(&pool, f, Environment::Live, |t, log| {
-        // Strategy 1 opens ETHUSD after this loop's reconcile.
-        f.positions.lock().unwrap().push(ProtoOaPosition {
-            position_id: 77,
-            trade_data: ProtoOaTradeData {
-                symbol_id: 5,
-                volume: 1,
-                trade_side: 1,
-                label: Some("jiaoyi-s1".into()),
+        // Two S3 positions become visible after the actor's reconcile.
+        f.positions
+            .lock()
+            .unwrap()
+            .extend([5, 6].map(|symbol_id| ProtoOaPosition {
+                position_id: 70 + symbol_id,
+                trade_data: ProtoOaTradeData {
+                    symbol_id,
+                    volume: 1,
+                    trade_side: 1,
+                    label: Some(strategy3::LABEL.into()),
+                    ..Default::default()
+                },
+                position_status: 1,
+                swap: 0,
                 ..Default::default()
-            },
-            position_status: 1,
-            swap: 0,
-            ..Default::default()
-        });
+            }));
         t.enter_pullback(BTC, Some(60_455.0), Some(60_460.0), at(30))
             .await
             .unwrap();
@@ -2630,11 +2619,11 @@ async fn a_live_minimum_waits_for_a_strategy_1_trade_opened_since_the_last_recon
     });
     let d = decisions(&pool).await;
     assert!(
-        d.iter()
-            .any(|(k, r)| k == "s3_skip" && r.contains("account-wide")),
+        d.iter().any(|(k, r)| k == "s3_skip"
+            && r.contains("2 Strategy 3 position(s)/unresolved open(s) are active")),
         "{d:?}"
     );
-    // An unresolved Strategy 1 open (no answer yet) counts too.
+    // An unresolved S1 open still prevents a reliable margin reservation.
     f.positions.lock().unwrap().clear();
     store::trading::record_intent(
         &pool,
@@ -2665,8 +2654,10 @@ async fn a_live_minimum_waits_for_a_strategy_1_trade_opened_since_the_last_recon
     });
     let d = decisions(&pool).await;
     assert!(
-        d.iter()
-            .any(|(k, r)| k == "s3_skip" && r.contains("1 unresolved open(s)")),
+        d.iter().any(|(k, r)| k == "s3_refused"
+            && r.contains(
+                "margin buffer: unresolved entry prevents a reliable margin reservation"
+            )),
         "{d:?}"
     );
 }

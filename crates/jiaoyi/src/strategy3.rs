@@ -59,6 +59,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::sync::broadcast::error::RecvError;
 
+use crate::admission::LiveS3Exposure;
 use crate::config::Config;
 use crate::edge::costs;
 use crate::edge::h1job::QuoteAssets;
@@ -2297,13 +2298,33 @@ impl<'a, 'c> Trader<'a, 'c> {
         Ok(())
     }
 
-    pub fn open_risk(&self) -> Result<f64, String> {
+    fn require_open_risk_authority(&self) -> Result<(), String> {
         if self.authority_pending_count > 0 {
             return Err(format!(
                 "{} Strategy 3 position(s) await management authority: open risk is unknown",
                 self.authority_pending_count
             ));
         }
+        Ok(())
+    }
+
+    fn position_risk_rate(&self, position_id: i64, symbol_id: i64) -> Result<f64, String> {
+        // Deposit-currency stop liabilities need no current symbol quote.
+        self.syms
+            .get(&symbol_id)
+            .and_then(|s| match (s.quote.as_deref(), self.deposit.as_deref()) {
+                (Some(q), Some(d)) if q == d && !q.is_empty() => Some(1.0),
+                _ => self.rate(symbol_id),
+            })
+            .ok_or_else(|| {
+                format!(
+                    "position {position_id} has no quote→deposit rate: its open risk is unknown"
+                )
+            })
+    }
+
+    pub fn open_risk(&self) -> Result<f64, String> {
+        self.require_open_risk_authority()?;
         let mut total: f64 = self.pending.iter().map(|p| p.risk).sum();
         for o in self.own.values() {
             let (Some(entry), Some(stop)) = (o.entry, o.stop) else {
@@ -2312,23 +2333,53 @@ impl<'a, 'c> Trader<'a, 'c> {
                     o.position_id
                 ));
             };
-            // Existing USD/USD stop liabilities are price-independent. Missing
-            // gold ticks must not turn a known stop reserve into unknown risk.
-            // Other conversions retain their existing path; account-wide margin
-            // reserves independently use the typed broker-identity FX proof.
-            let rate = self.syms.get(&o.symbol_id).and_then(|s| {
-                match (s.quote.as_deref(), self.deposit.as_deref()) {
-                    (Some(q), Some(d)) if q == d && !q.is_empty() => Some(1.0),
-                    _ => self.rate(o.symbol_id),
-                }
-            });
-            let Some(rate) = rate else {
+            let rate = self.position_risk_rate(o.position_id, o.symbol_id)?;
+            total += risk_at_stop(o.side, entry, stop, o.volume, rate);
+        }
+        Ok(total)
+    }
+
+    /// Value Live S3 exposure from the same fresh book and ledger as the slot
+    /// check. The broker may have changed the stop since the actor last adopted it.
+    fn live_open_risk(&self, exposure: &LiveS3Exposure) -> Result<f64, String> {
+        self.require_open_risk_authority()?;
+        let mut total = 0.0;
+        for position in &exposure.positions {
+            let id = position.position_id;
+            let trade = &position.trade_data;
+            let price = |value: Option<f64>| value.filter(|p| p.is_finite() && *p > 0.0);
+            let (Some(entry), Some(stop), Some(side)) = (
+                price(position.price),
+                price(position.stop_loss),
+                Side::from_proto(trade.trade_side),
+            ) else {
                 return Err(format!(
-                    "position {} has no quote→deposit rate: its open risk is unknown",
-                    o.position_id
+                    "position {id} has no valid broker entry, stop, or side: its open risk is unknown"
                 ));
             };
-            total += risk_at_stop(o.side, entry, stop, o.volume, rate);
+            if position.position_status != 1 || trade.volume <= 0 {
+                return Err(format!(
+                    "position {id} has no valid open broker volume: its open risk is unknown"
+                ));
+            }
+            let rate = self.position_risk_rate(id, trade.symbol_id)?;
+            total += risk_at_stop(side, entry, stop, trade.volume, rate);
+        }
+        for intent in &exposure.unresolved {
+            // A broker position covers the filled portion at its current stop.
+            // Reserve the remaining portion at the intent's recorded risk.
+            let broker_volume = intent
+                .position_id
+                .and_then(|id| exposure.positions.iter().find(|p| p.position_id == id))
+                .map_or(0, |p| p.trade_data.volume);
+            let filled = intent.filled.max(broker_volume);
+            let risk = crate::trading::outstanding_risk(intent.risk, intent.volume, filled)
+                .filter(|risk| risk.is_finite() && *risk >= 0.0)
+                .ok_or_else(|| format!("unresolved open {} has no valid risk", intent.entry_key))?;
+            total += risk;
+        }
+        if !total.is_finite() {
+            return Err("Strategy 3 open risk is not finite".into());
         }
         Ok(total)
     }
@@ -3733,15 +3784,11 @@ impl<'a, 'c> Trader<'a, 'c> {
             self.skip(symbol_id, &name, reason, detail, now).await;
             return Ok(());
         }
-        let live_s3_open = if r.live {
-            match crate::admission::live_s3_concurrency(
-                self.pool,
-                self.session,
-                LIVE_MAX_S3_POSITIONS,
-            )
-            .await
+        let live_exposure = if r.live {
+            match crate::admission::live_s3_exposure(self.pool, self.session, LIVE_MAX_S3_POSITIONS)
+                .await
             {
-                Ok(active) => active,
+                Ok(exposure) => Some(exposure),
                 Err(why) => {
                     outcome.refuse(&why);
                     self.skip(symbol_id, &name, &why, detail, now).await;
@@ -3749,7 +3796,7 @@ impl<'a, 'c> Trader<'a, 'c> {
                 }
             }
         } else {
-            0
+            None
         };
         let equity = match fresh_equity(self.session).await {
             Ok(x) => x,
@@ -3806,7 +3853,8 @@ impl<'a, 'c> Trader<'a, 'c> {
             .await;
             return Ok(());
         }
-        let sized = match size(&r, equity, rel, rate, &limits, live_s3_open) {
+        let slots = live_exposure.as_ref().map_or(0, |exposure| exposure.slots);
+        let sized = match size(&r, equity, rel, rate, &limits, slots) {
             Ok(x) => x,
             Err(why) => {
                 outcome.refuse(&why);
@@ -3824,8 +3872,11 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
         };
         detail["order"] = json!(order);
-        let budget = self
-            .open_risk()
+        let held = match &live_exposure {
+            Some(exposure) => self.live_open_risk(exposure),
+            None => self.open_risk(),
+        };
+        let budget = held
             .and_then(|held| within_budget(held, sized.risk, equity, effective_open_risk_pct(&r)));
         if let Err(why) = budget {
             outcome.refuse(&why);
