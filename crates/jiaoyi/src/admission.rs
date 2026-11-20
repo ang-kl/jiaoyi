@@ -1,17 +1,15 @@
 //! One admission per account, shared by every strategy loop (Codex P1 on
-//! #15). The owner's live rule "one minimum trade at a time" is
-//! account-wide. Strategy 1 and Strategy 3 run separate loops on separate
-//! connections, so neither loop's own book can enforce it.
+//! #15). Strategy 1's live minimum rule is account-wide. Strategy 3 has its
+//! own two-slot limit (No. 18541).
 //!
-//! A live broker-minimum entry takes the account's lock, reads the broker
-//! fresh, and goes only while the account holds no position, pending order or
-//! unresolved open of this program (any `PROGRAM_LABELS` label, any `s1:` or
-//! `s3:` intent). The lock is held through the send, so a second loop sees
-//! the first entry as a position or an unresolved intent.
+//! Live broker-minimum entries read the broker and ledger under the account's
+//! lock. The lock is held through the send so another loop sees the entry as
+//! a position or an unresolved intent.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 
+use jiaoyi_ctrader::messages::ProtoOaReconcileRes;
 use jiaoyi_ctrader::trading::PROGRAM_LABELS;
 use jiaoyi_ctrader::AccountSession;
 use jiaoyi_store::sqlx::PgPool;
@@ -69,4 +67,108 @@ pub async fn live_minimum(pool: &PgPool, session: &AccountSession<'_>) -> Result
         ));
     }
     Ok(())
+}
+
+/// Check the live Strategy 3 slots from fresh broker positions and durable open
+/// intents. Call with the account's lock held through dispatch.
+pub async fn live_s3_concurrency(
+    pool: &PgPool,
+    session: &AccountSession<'_>,
+    max_s3_positions: usize,
+) -> Result<usize, String> {
+    let book = session
+        .reconcile()
+        .await
+        .map_err(|e| format!("the open positions are unreadable ({e}): no entry"))?;
+    let unresolved = ts::open_intents_unresolved(pool, session.account().id())
+        .await
+        .map_err(|e| format!("the unresolved opens are unreadable ({e}): no entry"))?;
+    check_s3_concurrency(&book, &unresolved, max_s3_positions)
+}
+
+fn check_s3_concurrency(
+    book: &ProtoOaReconcileRes,
+    unresolved: &[ts::UnresolvedIntent],
+    max_s3_positions: usize,
+) -> Result<usize, String> {
+    let open_positions: HashSet<_> = book
+        .position
+        .iter()
+        .filter(|p| p.trade_data.label.as_deref() == Some(crate::strategy3::LABEL))
+        .map(|p| p.position_id)
+        .collect();
+    // The query excludes terminal intents. A partial fill and its unresolved
+    // remainder occupy the same slot when the position is already open.
+    let unresolved_opens = unresolved
+        .iter()
+        .filter(|u| {
+            u.entry_key.starts_with("s3:")
+                && u.position_id.is_none_or(|id| !open_positions.contains(&id))
+        })
+        .count();
+    let active_s3 = open_positions.len() + unresolved_opens;
+    if active_s3 >= max_s3_positions {
+        return Err(format!(
+            "live: at most {max_s3_positions} Strategy 3 minimum trades at a time, and {active_s3} Strategy 3 position(s)/unresolved open(s) are active on the account"
+        ));
+    }
+    Ok(active_s3)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jiaoyi_ctrader::messages::{ProtoOaPosition, ProtoOaTradeData};
+
+    #[test]
+    fn live_s3_counts_only_exact_labels_and_unmatched_s3_intents() {
+        let position = |id, label: Option<&str>| ProtoOaPosition {
+            position_id: id,
+            trade_data: ProtoOaTradeData {
+                label: label.map(str::to_owned),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let intent = |key: &str, position_id: Option<i64>| ts::UnresolvedIntent {
+            entry_key: key.into(),
+            client_msg_id: key.into(),
+            symbol_id: None,
+            volume: Some(100),
+            filled: if position_id.is_some() { 50 } else { 0 },
+            position_id,
+            risk: Some(10.0),
+            created_at: chrono::DateTime::UNIX_EPOCH,
+        };
+        let mut book = ProtoOaReconcileRes {
+            position: vec![
+                position(1, Some("jiaoyi-s1")),
+                position(2, Some("")),
+                position(3, None),
+                position(4, Some("jiaoyi-s3-other")),
+            ],
+            ..Default::default()
+        };
+        let mut unresolved = vec![intent("s1:pending", None)];
+        let max = crate::strategy3::LIVE_MAX_S3_POSITIONS;
+        assert_eq!(check_s3_concurrency(&book, &unresolved, max), Ok(0));
+
+        book.position
+            .push(position(5, Some(crate::strategy3::LABEL)));
+        unresolved.push(intent("s3:partial", Some(5)));
+        assert_eq!(check_s3_concurrency(&book, &unresolved, max), Ok(1));
+
+        unresolved.push(intent("s3:pending", None));
+        assert!(check_s3_concurrency(&book, &unresolved, max)
+            .unwrap_err()
+            .contains("2 Strategy 3 position(s)/unresolved open(s) are active"));
+
+        unresolved.pop();
+        book.position
+            .push(position(6, Some(crate::strategy3::LABEL)));
+        assert!(check_s3_concurrency(&book, &unresolved, max).is_err());
+
+        book.position.truncate(4);
+        assert_eq!(check_s3_concurrency(&book, &unresolved, max), Ok(1));
+    }
 }

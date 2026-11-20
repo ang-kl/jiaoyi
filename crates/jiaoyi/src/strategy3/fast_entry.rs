@@ -18,7 +18,7 @@ pub(super) struct Request {
     quote_at: DateTime<Utc>,
     source_at: tokio::time::Instant,
     held_risk: f64,
-    program_positions: usize,
+    s3_positions_open: usize,
 }
 #[derive(Clone)]
 pub(super) struct Prepared {
@@ -153,6 +153,7 @@ impl Trader<'_, '_> {
         let Ok(held_risk) = self.open_risk() else {
             return vec![];
         };
+        let s3_positions_open = self.own.len() + self.pending.len();
         let mut requests = vec![];
         for sym in self.syms.values() {
             if self.entry_policy.s3_refusal(self.env, &sym.name).is_some()
@@ -213,7 +214,7 @@ impl Trader<'_, '_> {
                 quote_at,
                 source_at,
                 held_risk,
-                program_positions: self.program_positions + self.pending.len(),
+                s3_positions_open,
             });
         }
         requests.sort_by_key(|r| r.id);
@@ -292,10 +293,35 @@ impl Trader<'_, '_> {
             outcome.refuse("current_execution_window_unavailable");
             return Ok(());
         }
+        let expires = deadline.min(plan.admission.expires());
+        if plan.rules.live {
+            let slots = tokio::time::timeout_at(
+                expires,
+                crate::admission::live_s3_concurrency(
+                    self.pool,
+                    self.session,
+                    LIVE_MAX_S3_POSITIONS,
+                ),
+            )
+            .await
+            .unwrap_or_else(|_| Err("live: Strategy 3 slot check exceeded dispatch expiry".into()));
+            if let Err(reason) = slots {
+                outcome.refuse(&reason);
+                self.skip(id, &name, &reason, json!({"armed":arm}), now)
+                    .await;
+                return Ok(());
+            }
+        }
+        // The equity was read for this receipt and has the same five-second
+        // expiry. Recheck the currently held risk under the dispatch lock.
         let held = self.open_risk().map_err(anyhow::Error::msg)?;
-        if let Err(reason) =
-            within_budget(held, plan.sized.risk, plan.equity, plan.rules.open_risk_pct)
-        {
+        let budget = within_budget(
+            held,
+            plan.sized.risk,
+            plan.equity,
+            effective_open_risk_pct(&plan.rules),
+        );
+        if let Err(reason) = budget {
             outcome.refuse(&reason);
             self.skip(id, &name, &reason, json!({"armed":arm}), now)
                 .await;
@@ -329,7 +355,7 @@ impl Trader<'_, '_> {
                 slippage_bps_per_side: mp::LIVE_SLIPPAGE_BPS_PER_SIDE,
                 original_r: arm.impulse_range,
             }),
-            expires: deadline.min(plan.admission.expires()),
+            expires,
         };
         let exit_deadline = sym
             .rule
@@ -488,15 +514,8 @@ async fn prepare(
     if jiaoyi_core::strategy3::kelly::skip(&kelly) {
         return Err("Kelly fraction not positive".into());
     }
-    let sized = size(
-        &r,
-        equity,
-        rel,
-        q.rate,
-        &q.limits,
-        if r.live { 0 } else { q.program_positions },
-    )?;
-    within_budget(q.held_risk, sized.risk, equity, r.open_risk_pct)?;
+    let sized = size(&r, equity, rel, q.rate, &q.limits, q.s3_positions_open)?;
+    within_budget(q.held_risk, sized.risk, equity, effective_open_risk_pct(&r))?;
     let entry = Entry {
         side: if q.arm.long { Dir::Buy } else { Dir::Sell },
         band: q.band,
@@ -531,7 +550,9 @@ async fn prepare(
         pool,
         settings_version: Some(r.version),
     };
-    let mut admission = gate::prepare_entry(session, allowlist, &ledger, &policy, &command, r.live)
+    // S3 uses its own slot count here and a fresh check under the send lock.
+    // The last argument selects the legacy account-wide one-trade rule only.
+    let mut admission = gate::prepare_entry(session, allowlist, &ledger, &policy, &command, false)
         .await
         .map_err(|e| e.to_string())?;
     admission.restrict_source_start(q.source_at);
@@ -649,6 +670,13 @@ async fn publish_independently<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jiaoyi_core::secret::Secret;
+    use jiaoyi_ctrader::messages::{
+        ProtoOaInterval, ProtoOaLightSymbol, ProtoOaPosition, ProtoOaSymbol, ProtoOaTradeData,
+        ProtoOaTrader,
+    };
+    use jiaoyi_ctrader::testkit::FakeBroker;
+
     #[tokio::test]
     async fn faster_admission_is_published_before_slow_sibling_finishes() {
         let (release, delayed) = tokio::sync::oneshot::channel();
@@ -671,17 +699,8 @@ mod tests {
         tokio::join!(work, observe);
     }
 
-    #[test]
-    fn restored_source_requires_original_quote_and_causal_matching_macro() {
-        let open = DateTime::parse_from_rfc3339("2026-11-09T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        let session = Session {
-            date: open.date_naive(),
-            open,
-            close: open + chrono::Duration::hours(4),
-            lunch: None,
-        };
+    fn armed_source(session: Session) -> (ArmedPullback, Day) {
+        let open = session.open;
         let context = mp::Context {
             drift_5: 0.0123456789012345,
             drift_20: 0.0234567890123456,
@@ -705,13 +724,234 @@ mod tests {
             open: Ok(100.),
             opening_quote: Some(quote),
             table: SigmaTable {
-                marks: Default::default(),
+                marks: [(30, Ok(0.01))].into_iter().collect(),
                 sessions_used: vec![],
             },
             spread: Ok((0.02, 1)),
             prepared_at: open,
             macro_context: Ok(context),
         };
+        (arm, day)
+    }
+
+    #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
+    async fn live_preparation_uses_s3_slots_and_dispatch_checks_the_fresh_book(pool: PgPool) {
+        let account = 7;
+        let id = 1;
+        let allowlist = Allowlist::parse(Some("7")).unwrap();
+        jiaoyi_store::upsert_account(&pool, account, Environment::Live)
+            .await
+            .unwrap();
+        crate::trading::apply_seed(&pool, crate::trading::SEED_FILE)
+            .await
+            .unwrap();
+        let position = |symbol_id, label: &str, volume| ProtoOaPosition {
+            position_id: symbol_id + 10,
+            position_status: 1,
+            trade_data: ProtoOaTradeData {
+                symbol_id,
+                trade_side: 1,
+                volume,
+                label: Some(label.into()),
+                ..Default::default()
+            },
+            price: Some(100.0),
+            stop_loss: Some(99.25),
+            used_margin: Some(volume as u64),
+            money_digits: Some(2),
+            ..Default::default()
+        };
+        let fake = FakeBroker {
+            account_id: account,
+            trader: Some(ProtoOaTrader {
+                ctid_trader_account_id: account,
+                balance: 111_006,
+                deposit_asset_id: 1,
+                money_digits: Some(2),
+                account_type: Some(0),
+                ..Default::default()
+            }),
+            symbols: vec![ProtoOaSymbol {
+                symbol_id: id,
+                schedule_time_zone: Some("UTC".into()),
+                trading_mode: Some(0),
+                schedule: vec![ProtoOaInterval {
+                    start_second: 0,
+                    end_second: 7 * 86_400,
+                }],
+                ..Default::default()
+            }],
+            light_symbols: (1..=4)
+                .map(|symbol_id| ProtoOaLightSymbol {
+                    symbol_id,
+                    quote_asset_id: Some(1),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let positions = fake.positions.clone();
+        positions
+            .lock()
+            .unwrap()
+            .extend([position(2, "jiaoyi-s1", 100), position(3, "", 100)]);
+        let (conn, log) = fake.spawn();
+        let session = conn
+            .account_auth(&allowlist.permit(account).unwrap(), &Secret::new("token"))
+            .await
+            .unwrap();
+        let mut trader = Trader::with_entry_policy(
+            &pool,
+            &allowlist,
+            Environment::Live,
+            &session,
+            crate::config::EntryPolicy {
+                crypto_4h: false,
+                live_execution: true,
+            },
+        )
+        .await
+        .unwrap();
+        let date = "2026-11-09".parse().unwrap();
+        let (arm, day) = armed_source(prod::windows_on(prod::Market::Index, date)[0]);
+        let now = arm.armed_at;
+        trader.reconcile(now).await.unwrap();
+        assert_eq!(trader.program_positions, 1);
+        trader.deposit = Some("USD".into());
+        trader.commission = Ok(costs::CommissionBook {
+            per_class: Default::default(),
+            overall_median: 0.0,
+            deals: 1,
+        });
+        trader.commission_read = Some(std::time::Instant::now());
+        trader.syms.insert(
+            id,
+            Sym {
+                id,
+                name: "US500".into(),
+                class: AssetClass::EquityIndex,
+                rule: prod::rule_for("US500", AssetClass::EquityIndex),
+                limits: Some(VolumeLimits {
+                    min: 1_000,
+                    step: 1_000,
+                    max: None,
+                    digits: 2,
+                }),
+                quote: Some("USD".into()),
+                bid: Some(100.49),
+                ask: Some(100.51),
+                bid_at: Some(now),
+                ask_at: Some(now),
+                day: Some(Ok(day)),
+                preopen: None,
+                last_try: None,
+                last_decision_mark: None,
+                entered_session: None,
+                cost_skip_session: None,
+                pullback: Some(arm),
+                pullback_source_day: None,
+                pullback_loaded_session: None,
+                last_assessment: None,
+                admission_restored_window: None,
+                last_impulse_check: None,
+            },
+        );
+        let request = |trader: &Trader<'_, '_>| {
+            let mut request = trader.warm_requests(now).pop().expect("armed US500");
+            // The source window uses a fixed event clock. Its broker receipt
+            // uses the real clock, as in a wire replay.
+            request.quote_at = Utc::now();
+            request
+        };
+        assert_eq!(request(&trader).s3_positions_open, 0);
+
+        let held = position(4, LABEL, 5_000);
+        positions.lock().unwrap().push(held.clone());
+        // Hold the reservation while the cached intent awaits reconciliation
+        // with its now-visible broker fill.
+        trader.pending.push(Pending {
+            entry_key: "s3:7:4:1".into(),
+            symbol_id: 4,
+            risk: 37.50,
+            at: now,
+        });
+        let next = request(&trader);
+        assert_eq!(next.s3_positions_open, 1);
+        assert_eq!(next.held_risk, 37.50);
+        let plan = prepare(
+            &pool,
+            &allowlist,
+            Environment::Live,
+            &session,
+            &trader.hash,
+            next,
+        )
+        .await
+        .expect("S1 and an unrelated S3 position permit a prepared plan");
+        assert_eq!(plan.sized.mode, "live_broker_minimum");
+        assert_eq!(plan.admission.receipt.floor_pct, Some(250.0));
+
+        // A larger reservation added after warming must veto the same plan.
+        trader.pending[0].risk = 55.0;
+        let mut outcome = TriggerOutcome::pending();
+        trader
+            .dispatch_prepared(
+                id,
+                arm,
+                100.49,
+                100.51,
+                now,
+                tokio::time::Instant::now() + Duration::from_secs(5),
+                plan.clone(),
+                &mut outcome,
+            )
+            .await
+            .unwrap();
+        let outcome = json!(outcome);
+        assert_eq!(outcome["execution_resolution"], "not_sent");
+        assert!(outcome["reason"]
+            .as_str()
+            .unwrap()
+            .contains("would exceed its budget 55.50 (5% of equity)"));
+
+        // The slot check must see exposure that appeared since preparation.
+        let mut another = held;
+        another.position_id += 1;
+        positions.lock().unwrap().push(another);
+        let mut outcome = TriggerOutcome::pending();
+        trader
+            .dispatch_prepared(
+                id,
+                arm,
+                100.49,
+                100.51,
+                now,
+                tokio::time::Instant::now() + Duration::from_secs(5),
+                plan,
+                &mut outcome,
+            )
+            .await
+            .unwrap();
+        let outcome = json!(outcome);
+        assert_eq!(outcome["execution_resolution"], "not_sent");
+        assert!(outcome["reason"]
+            .as_str()
+            .unwrap()
+            .contains("2 Strategy 3 position(s)/unresolved open(s) are active"));
+        assert!(log.lock().unwrap().orders.is_empty());
+    }
+
+    #[test]
+    fn restored_source_requires_original_quote_and_causal_matching_macro() {
+        let open = DateTime::parse_from_rfc3339("2026-11-09T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let (arm, day) = armed_source(Session {
+            date: open.date_naive(),
+            open,
+            close: open + chrono::Duration::hours(4),
+            lunch: None,
+        });
         let mut restored: ArmedPullback =
             serde_json::from_str(&serde_json::to_string(&arm).unwrap()).unwrap();
         restored.macro_context.drift_5 += 1e-16;
