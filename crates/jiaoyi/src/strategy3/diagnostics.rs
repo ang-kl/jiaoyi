@@ -67,6 +67,14 @@ impl Trader<'_, '_> {
         if let Some(reason) = self.human_entry_refusal(id) {
             gates.push(gate(reason, "blocked", format!("Blocked: {reason}")));
         }
+        if let Some(reason) = self.entry_policy.s3_refusal(self.env, &sym.name) {
+            let message = if reason == crate::config::LIVE_PAUSED {
+                "New live entries are paused pending qualification"
+            } else {
+                "Four-hour crypto entries are disabled for Strategy 3"
+            };
+            gates.push(gate(reason, "blocked", message.into()));
+        }
         if self.pair_entry_refusal(id).is_some() {
             gates.push(gate(
                 "pair_risk_reservation_active",

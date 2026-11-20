@@ -264,7 +264,7 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
     let live = trading::LivenessMap::default();
     let mut ends = conn.session_ends();
     let (stop, mut shutdown) = shutdown::channel();
-    let actor = strategy3::run_session_with_event_offset(
+    let actor = strategy3::run_session_with_policy(
         &pool,
         &list,
         Environment::Demo,
@@ -273,6 +273,10 @@ async fn production_actor_prepares_before_touch_and_writes_one_guarded_order(poo
         &mut ends,
         &mut shutdown,
         Duration::zero(),
+        jiaoyi::config::EntryPolicy {
+            crypto_4h: true,
+            ..Default::default()
+        },
     );
     tokio::pin!(actor);
     let emit = |symbol_id: i64, mid: f64| {

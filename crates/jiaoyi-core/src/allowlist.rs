@@ -207,6 +207,15 @@ impl Allowlist {
         })
     }
 
+    /// Remove inactive broker IDs from both account sources before planning workers.
+    pub fn without_accounts(mut self, excluded: &[i64]) -> Self {
+        for id in excluded {
+            self.ids.remove(id);
+            self.demo.accounts.remove(id);
+        }
+        self
+    }
+
     /// Add the accounts the demo variables name ([`demo_accounts`]). The
     /// list parsed from `JIAOYI_ALLOWED_ACCOUNTS` is unchanged.
     pub fn with_demo_accounts(mut self, demo: DemoAccounts) -> Self {

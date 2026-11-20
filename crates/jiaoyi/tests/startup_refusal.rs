@@ -145,8 +145,8 @@ async fn sigterm_stops_the_service_after_its_tasks_finish(pool: sqlx::PgPool) {
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_jiaoyi"))
         .env_clear()
         .env("RUST_LOG", "info")
-        .env("JIAOYI_ALLOWED_ACCOUNTS", "49236051")
-        .env("JIAOYI_ACCOUNT_ENVIRONMENTS", "49236051:demo")
+        .env("JIAOYI_ALLOWED_ACCOUNTS", "46130058")
+        .env("JIAOYI_ACCOUNT_ENVIRONMENTS", "46130058:demo")
         .env("DATABASE_URL", &url)
         .env("PORT", "0")
         // Nothing listens here: loads fail fast and are recorded.
@@ -197,6 +197,11 @@ async fn sigterm_stops_the_service_after_its_tasks_finish(pool: sqlx::PgPool) {
 // Claude · № 16,973 25-Oct (ordered № 16,972·C; demo accounts by variable)
 #[sqlx::test(migrator = "jiaoyi_store::MIGRATOR")]
 async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
+    for id in [47790949, 49236051] {
+        jiaoyi_store::upsert_account(&pool, id, jiaoyi_core::allowlist::Environment::Demo)
+            .await
+            .unwrap();
+    }
     let db: String = sqlx::query_scalar("SELECT current_database()")
         .fetch_one(&pool)
         .await
@@ -206,8 +211,9 @@ async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_jiaoyi"))
         .env_clear()
         .env("RUST_LOG", "info")
-        .env("JIAOYI_ALLOWED_ACCOUNTS", "49236051")
-        .env("JIAOYI_ACCOUNT_ENVIRONMENTS", "49236051:demo")
+        .env("JIAOYI_ALLOWED_ACCOUNTS", "10001,49236051")
+        .env("JIAOYI_ACCOUNT_ENVIRONMENTS", "10001:demo,49236051:demo")
+        .env("JIAOYI_DEMO_ACCOUNT_ID", "47790949")
         .env("JIAOYI_DEMO_ACCOUNT_ID_2", "46130058")
         .env("JIAOYI_DEMO_ACCOUNT_ID_3", "4779094x")
         .env("UNRELATED_SECRET", "do-not-read-me")
@@ -222,18 +228,22 @@ async fn the_service_reads_the_demo_account_variables(pool: sqlx::PgPool) {
         .unwrap();
     child.wait_until_serving().await;
     // Accounts are registered before the HTTP server starts.
-    let accounts: Vec<(i64, String)> =
-        sqlx::query_as("SELECT account_id, environment FROM accounts ORDER BY account_id")
+    let accounts: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT account_id, environment FROM accounts WHERE enabled ORDER BY account_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        accounts,
+        vec![(10001, "demo".to_string()), (46130058, "demo".to_string())]
+    );
+    let inactive: Vec<i64> =
+        sqlx::query_scalar("SELECT account_id FROM accounts WHERE NOT enabled ORDER BY account_id")
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(
-        accounts,
-        vec![
-            (46130058, "demo".to_string()),
-            (49236051, "demo".to_string())
-        ]
-    );
+    assert_eq!(inactive, vec![47790949, 49236051]);
     let refusals: Vec<(String, String)> =
         sqlx::query_as("SELECT account_ref, reason FROM account_refusals")
             .fetch_all(&pool)

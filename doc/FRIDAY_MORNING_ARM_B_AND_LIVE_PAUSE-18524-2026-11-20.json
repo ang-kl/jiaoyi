@@ -1,0 +1,267 @@
+{
+  "trace": "No.18524",
+  "addendum": "No.18525",
+  "as_of_sgt": "2026-11-20T08:04:11.664729+08:00",
+  "start_inclusive_sgt": "2026-11-20T05:27:14+08:00",
+  "end_exclusive_sgt": "2026-11-20T08:04:11.664729+08:00",
+  "query_capture_sgt": "2026-11-20T08:17:41.025947+08:00",
+  "base_commit": "52ea64ca0850758e13be8fd945b691f023b88049",
+  "production_deployment_at_audit": "10653a82-ac6a-4a4a-809d-258a7c3faf0c",
+  "accounts_active": [
+    "43002148",
+    "46130058"
+  ],
+  "accounts_retired": [
+    "47790949",
+    "49236051"
+  ],
+  "active_accounts_only_for_drain": true,
+  "crypto_4h_entries_enabled_default": false,
+  "live_execution_enabled_default": false,
+  "policy": "s3_macro_pullback_owner_18409_v1",
+  "traditional_symbols": [
+    "XAUUSD",
+    "XAGUSD",
+    "SpotCrude",
+    "SpotBrent",
+    "US500",
+    "NAS100"
+  ],
+  "window_0527_to_cutoff_closes": 3,
+  "window_closed_s3_net_usd": -44.58,
+  "closure_deals": [
+    {
+      "account": "47790949",
+      "position_id": 265223568,
+      "closing_deal_id": 335553390,
+      "symbol": "SpotBrent",
+      "side": "sell",
+      "exit_kind": "session_end",
+      "entry_price": 94.013,
+      "fill_price": 94.228,
+      "executed_sgt": "2026-11-20T05:57:00.911000+08:00",
+      "native_filled_volume": 16300,
+      "net_usd": -35.05
+    },
+    {
+      "account": "46130058",
+      "position_id": 265220046,
+      "closing_deal_id": 335561365,
+      "symbol": "BTCUSD",
+      "side": "sell",
+      "exit_kind": "stop_loss",
+      "entry_price": 61897.33,
+      "fill_price": 61925.61,
+      "executed_sgt": "2026-11-20T06:22:08.440000+08:00",
+      "native_filled_volume": 34,
+      "net_usd": -8.47
+    },
+    {
+      "account": "47790949",
+      "position_id": 265219265,
+      "closing_deal_id": 335561378,
+      "symbol": "BTCUSD",
+      "side": "sell",
+      "exit_kind": "stop_loss",
+      "entry_price": 61932.74,
+      "fill_price": 61939.31,
+      "executed_sgt": "2026-11-20T06:22:10.688000+08:00",
+      "native_filled_volume": 33,
+      "net_usd": -1.06
+    }
+  ],
+  "spotbrent_0557_outcome": {
+    "account": "47790949",
+    "position_id": 265223568,
+    "closing_deal_id": 335553390,
+    "symbol": "SpotBrent",
+    "side": "sell",
+    "exit_kind": "session_end",
+    "entry_price": 94.013,
+    "fill_price": 94.228,
+    "executed_sgt": "2026-11-20T05:57:00.911000+08:00",
+    "native_filled_volume": 16300,
+    "net_usd": -35.05
+  },
+  "btcusd_0800_outcomes": [
+    {
+      "account": "46130058",
+      "position_id": 265220046,
+      "closing_deal_id": 335561365,
+      "symbol": "BTCUSD",
+      "side": "sell",
+      "exit_kind": "stop_loss",
+      "entry_price": 61897.33,
+      "fill_price": 61925.61,
+      "executed_sgt": "2026-11-20T06:22:08.440000+08:00",
+      "native_filled_volume": 34,
+      "net_usd": -8.47
+    },
+    {
+      "account": "47790949",
+      "position_id": 265219265,
+      "closing_deal_id": 335561378,
+      "symbol": "BTCUSD",
+      "side": "sell",
+      "exit_kind": "stop_loss",
+      "entry_price": 61932.74,
+      "fill_price": 61939.31,
+      "executed_sgt": "2026-11-20T06:22:10.688000+08:00",
+      "native_filled_volume": 33,
+      "net_usd": -1.06
+    }
+  ],
+  "rollover_market_closed_rejections": 0,
+  "open_s3_at_cutoff": 1,
+  "open_crypto_s3_positions": 0,
+  "open_s3_all_four_at_audit": 2,
+  "post_pr214_cumulative_s3_net_usd": 1741.89,
+  "consumed_triggers": 2,
+  "missing_trigger_outcomes": 0,
+  "non_unique_trigger_outcomes": 0,
+  "unknown_guard_receipts": 0,
+  "recorded_live_s3_interference": 0,
+  "live_s3_management_intents": 0,
+  "account_refusals_total_at_audit": 0,
+  "account_books": {
+    "43002148": {
+      "book_at_sgt": "2026-11-20T08:03:45.682375+08:00",
+      "positions": [
+        {
+          "position_id": 657180931,
+          "symbol": "NVDA.US",
+          "ownership": "external"
+        },
+        {
+          "position_id": 662143504,
+          "symbol": "NatGas",
+          "ownership": "external"
+        }
+      ]
+    },
+    "46130058": {
+      "book_at_sgt": "2026-11-20T08:03:45.690606+08:00",
+      "positions": [
+        {
+          "position_id": 261231902,
+          "symbol": "AUDUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 261754023,
+          "symbol": "EURUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 262578251,
+          "symbol": "NZDUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 263178401,
+          "symbol": "USDCAD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 264480035,
+          "symbol": "GBPUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 264518049,
+          "symbol": "NatGas",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 265256567,
+          "symbol": "XAGUSD",
+          "ownership": "s3"
+        }
+      ]
+    },
+    "47790949": {
+      "book_at_sgt": "2026-11-20T08:03:45.647319+08:00",
+      "positions": [
+        {
+          "position_id": 261231903,
+          "symbol": "AUDUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 261754015,
+          "symbol": "EURUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 262976216,
+          "symbol": "NZDUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 263178410,
+          "symbol": "USDCAD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 264480037,
+          "symbol": "GBPUSD",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 264906329,
+          "symbol": "NatGas",
+          "ownership": "s1"
+        },
+        {
+          "position_id": 265256568,
+          "symbol": "XAGUSD",
+          "ownership": "s3"
+        }
+      ]
+    },
+    "49236051": {
+      "book_at_sgt": "2026-11-20T08:03:45.662503+08:00",
+      "positions": [
+        {
+          "position_id": 262796763,
+          "symbol": "ETHUSD",
+          "ownership": "s1"
+        }
+      ]
+    }
+  },
+  "retirement_authority": "Owner approved stopping both local workers at rollout despite remaining demo positions. Broker closure requests are pending.",
+  "financial_pass": false,
+  "validation_opened": false,
+  "local_verification": {
+    "cargo_fmt_check": "passed",
+    "cargo_clippy_workspace_all_targets": "passed",
+    "cargo_test_workspace": {
+      "passed": 822,
+      "failed": 0,
+      "ignored": 1
+    },
+    "protected_paths_modified": 0,
+    "guard_receipt_parser_tested_codes": [
+      "CRYPTO_4H_DISABLED_ARM_B",
+      "LIVE_EXECUTION_PAUSED_PRE_QUALIFICATION"
+    ]
+  },
+  "drain_before_pr": {
+    "read_at_sgt": "2026-11-20T08:21:24.241793+08:00",
+    "accounts": {
+      "43002148": {
+        "book_at": "2026-11-20T00:20:45.679403703Z",
+        "s3": 0,
+        "crypto_s3": 0
+      },
+      "46130058": {
+        "book_at": "2026-11-20T00:20:45.683388925Z",
+        "s3": 1,
+        "crypto_s3": 0
+      }
+    },
+    "open_crypto_s3_positions": 0
+  },
+  "report_file": "doc/FRIDAY_MORNING_ARM_B_AND_LIVE_PAUSE-18524-2026-11-20.md"
+}

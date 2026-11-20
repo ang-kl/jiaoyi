@@ -224,6 +224,28 @@ async fn trade_with(
     env: Environment,
     live: &trading::LivenessMap,
 ) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
+    trade_with_policy(
+        pool,
+        f,
+        secs,
+        env,
+        live,
+        jiaoyi::config::EntryPolicy {
+            live_execution: true,
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+async fn trade_with_policy(
+    pool: &PgPool,
+    f: &FakeBroker,
+    secs: u64,
+    env: Environment,
+    live: &trading::LivenessMap,
+    policy: jiaoyi::config::EntryPolicy,
+) -> std::sync::Arc<std::sync::Mutex<jiaoyi_ctrader::testkit::FakeLog>> {
     let (conn, log) = f.clone().spawn();
     let session = loader::authorise(pool, &conn, &broker(), &permitted())
         .await
@@ -233,7 +255,7 @@ async fn trade_with(
     let mut d = trading::decisions(pool, DEMO);
     let list = allowlist();
     tokio::select! {
-        r = trading::run_session(pool, &list, env, &session, &mut d, live, &mut ends, &mut stop) => {
+        r = trading::run_session_with_policy(pool, &list, env, &session, &mut d, live, &mut ends, &mut stop, Duration::from_secs(300), policy) => {
             r.unwrap();
         }
         _ = tokio::time::sleep(Duration::from_secs(secs)) => trigger.fire(),
@@ -247,6 +269,56 @@ async fn decisions(pool: &PgPool) -> Vec<(String, String)> {
         .fetch_all(pool)
         .await
         .unwrap()
+}
+
+#[sqlx::test(migrator = "store::MIGRATOR")]
+async fn live_execution_pause_holds_new_signal_and_trails_owned_position(pool: PgPool) {
+    loaded_with(
+        &pool,
+        &[
+            (ETH, "ETHUSD", AssetClass::Crypto, 1),
+            (BTC, "BTCUSD", AssetClass::Crypto, 1),
+        ],
+    )
+    .await;
+    // Match the normal startup settings, including the registered live edge policy.
+    trading::apply_seed(&pool, trading::SEED_FILE)
+        .await
+        .unwrap();
+    let mut f = fake_on(&[ETH, BTC], 2_000);
+    f.fill_quotes = HashMap::from([(ETH, (3608.0, 3611.0)), (BTC, (3608.0, 3611.0))]);
+    f.quote_sequence = vec![(0, ETH, q(3608.0, 3611.0))];
+    let opened = trade(&pool, &f, 2, Environment::Demo).await;
+    assert_eq!(opened.lock().unwrap().orders.len(), 1);
+    f.quote_sequence = vec![(0, ETH, q(3700.0, 3701.0)), (500, BTC, q(3608.0, 3611.0))];
+    let restarted = trade_with_policy(
+        &pool,
+        &f,
+        3,
+        Environment::Live,
+        &Default::default(),
+        Default::default(),
+    )
+    .await;
+    let observed = restarted.lock().unwrap().clone();
+    assert!(observed.orders.is_empty());
+    assert_eq!(observed.amends.len(), 1);
+    assert_eq!(observed.amends[0].stop_loss, Some(3580.0));
+    let records = decisions(&pool).await;
+    assert!(
+        records
+            .iter()
+            .any(|(k, r)| k == "skip" && r == jiaoyi::config::LIVE_PAUSED),
+        "{records:?}"
+    );
+    let opens: i64 = sqlx::query_scalar("SELECT count(*) FROM trading_intents WHERE kind='open'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        opens, 1,
+        "only the historical position has an opening intent"
+    );
 }
 
 #[sqlx::test(migrator = "store::MIGRATOR")]

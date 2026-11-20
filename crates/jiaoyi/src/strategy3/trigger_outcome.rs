@@ -104,7 +104,12 @@ mod tests {
             .await
             .unwrap();
         let mut decisions = Decisions::new(&pool, 49236051);
-        for _ in 0..3 {
+        for reason in [
+            "pair_risk_reservation_unknown",
+            "pair_risk_reservation_unknown",
+            crate::config::CRYPTO_DISABLED,
+            crate::config::LIVE_PAUSED,
+        ] {
             let consumed = ts::record_decision_returning_id(
                 &pool,
                 49236051,
@@ -117,15 +122,10 @@ mod tests {
             .await
             .unwrap();
             decisions
-                .note(
-                    Some("ETHUSD"),
-                    "refused",
-                    "pair_risk_reservation_unknown",
-                    json!({}),
-                )
+                .note(Some("ETHUSD"), "refused", reason, json!({}))
                 .await;
             let mut outcome = TriggerOutcome::pending();
-            outcome.refuse("pair_risk_reservation_unknown");
+            outcome.refuse(reason);
             outcome.finish(&Ok(()));
             decisions
                 .trigger_outcome("ETHUSD", consumed, &outcome)
@@ -148,14 +148,14 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(counts, (3, 0, 0));
+        assert_eq!(counts, (4, 0, 0));
         let idle_count: i64 =
             sqlx::query_scalar("SELECT count(*) FROM trading_decisions WHERE kind='s3_refused'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
         assert_eq!(
-            idle_count, 1,
+            idle_count, 3,
             "idle diagnostics retain their existing deduplication"
         );
     }
