@@ -263,5 +263,90 @@
     },
     "open_crypto_s3_positions": 0
   },
-  "report_file": "doc/FRIDAY_MORNING_ARM_B_AND_LIVE_PAUSE-18524-2026-11-20.md"
+  "report_file": "doc/FRIDAY_MORNING_ARM_B_AND_LIVE_PAUSE-18524-2026-11-20.md",
+  "status": "merged_and_deployed",
+  "pr": 246,
+  "merge_commit": "3fca1b8497e09e24cd27005c11090a60139e4d5d",
+  "active_production_commit": "3fca1b8497e09e24cd27005c11090a60139e4d5d",
+  "protected_files_touched": 0,
+  "tests_passed": true,
+  "premerge_drain": {
+    "read_at_sgt": "2026-11-20T08:30:17.698057+08:00",
+    "accounts": {
+      "43002148": {
+        "book_at": "2026-11-20T00:29:45.678056552Z",
+        "s3": 0,
+        "crypto_s3": 0
+      },
+      "46130058": {
+        "book_at": "2026-11-20T00:29:45.683674103Z",
+        "s3": 1,
+        "crypto_s3": 0
+      }
+    },
+    "open_crypto_s3_positions": 0
+  },
+  "release_verification": {
+    "commit": "3fca1b8497e09e24cd27005c11090a60139e4d5d",
+    "deployment": "c1712b14-8022-4c04-88e2-6243fe2a7526",
+    "status": "SUCCESS",
+    "verified_sgt": "2026-11-20T08:34:02.901283+08:00",
+    "account_refusals_recorded": 0,
+    "s1_s3_connected_accounts": [
+      43002148,
+      46130058
+    ],
+    "retired_worker_loads_observed": 0,
+    "retired_entry_or_management_intents_observed": 0,
+    "live_core_symbols_showing_pause": 8,
+    "demo_crypto_symbols_showing_disabled": 2,
+    "demo_traditional_symbols_without_release_veto": 6,
+    "observed_book_ids": {
+      "43002148": [
+        657180931,
+        662143504
+      ],
+      "46130058": [
+        261231902,
+        261754023,
+        262578251,
+        263178401,
+        264480035,
+        264518049,
+        265256567
+      ]
+    },
+    "service_id": "0f67b4a0-629d-42f1-97f1-8910887896af",
+    "pr_merged_at": "2026-11-20T00:31:09Z",
+    "ci": {
+      "check": "SUCCESS",
+      "docker": "SUCCESS",
+      "engineering": "SUCCESS"
+    },
+    "sole_active_deployment": true,
+    "active_account_register": [
+      {
+        "account_id": 43002148,
+        "enabled": true,
+        "updated_at": "2026-11-20T00:33:24.20893+00:00"
+      },
+      {
+        "account_id": 46130058,
+        "enabled": true,
+        "updated_at": "2026-11-20T00:33:24.218992+00:00"
+      },
+      {
+        "account_id": 47790949,
+        "enabled": false,
+        "updated_at": "2026-11-20T00:33:24.198937+00:00"
+      },
+      {
+        "account_id": 49236051,
+        "enabled": false,
+        "updated_at": "2026-11-20T00:33:24.198937+00:00"
+      }
+    ],
+    "retired_refusals_since_local_retirement": 0,
+    "registry_observed_at": "2026-11-20T00:33:41.678572+00:00"
+  }
 }
