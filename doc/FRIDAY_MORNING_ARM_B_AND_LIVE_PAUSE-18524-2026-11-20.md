@@ -45,4 +45,19 @@ Both switches were unset or empty on the running service before release. The rea
 
 ## 5. Verification
 
-The release starts from production commit `52ea64ca0850758e13be8fd945b691f023b88049`. The regression suite exercises default and opt-in permissions, prepared dispatch, the session-end close of a carried crypto position, retained live S1 protection, the retired-account startup path and individual outcomes. Local formatting and workspace Clippy passed. The full workspace test run passed 822 tests with 1 already marked ignored. A separate parser check recognized both refusal codes. The 08:21 SGT active-account book recheck again found zero open S3 crypto positions. The release requires the three CI jobs and a fresh active-account drain check before merge. Runtime verification checks the deployed SHA, active actor IDs, entry-gate reasons and the account refusal counter. [Measured audit JSON](FRIDAY_MORNING_ARM_B_AND_LIVE_PAUSE-18524-2026-11-20.json)
+The release starts from production commit `52ea64ca0850758e13be8fd945b691f023b88049`. The regression suite exercises default and opt-in permissions, prepared dispatch, the session-end close of a carried crypto position, retained live S1 protection, the retired-account startup path and individual outcomes. Local formatting and workspace Clippy passed. The full workspace test run passed 822 tests with 1 already marked ignored. A separate parser check recognized both refusal codes. The 08:21 SGT active-account book recheck again found zero open S3 crypto positions. [Measured audit JSON](FRIDAY_MORNING_ARM_B_AND_LIVE_PAUSE-18524-2026-11-20.json)
+
+## 6. Production result
+
+At **08:30:17 SGT** a fresh private book read again showed zero crypto S3 positions on both continuing accounts. Live held no S3 positions. Demo 46130058 held Silver #265256567. The `check`, `docker` and `engineering` jobs all passed on the tested head. PR #246 merged at **08:31:09 SGT** as `3fca1b8497e09e24cd27005c11090a60139e4d5d`. Both report files in that merge matched the locally verified Git blobs. [Implementation PR](https://github.com/ang-kl/jiaoyi/pull/246)
+
+At **08:34:02 SGT**, Railway reported deployment `c1712b14-8022-4c04-88e2-6243fe2a7526` as the sole active deployment on Trading. The running container reported the merge SHA. The private account books had refreshed at 08:33:25 SGT.
+
+| Production check | Observed outcome |
+|---|---|
+| Connected S1 and S3 accounts | Live 43002148 and Demo 46130058 |
+| Live entry pause | All eight core symbols reported `LIVE_EXECUTION_PAUSED_PRE_QUALIFICATION` |
+| Demo entry policy | BTCUSD and ETHUSD reported `CRYPTO_4H_DISABLED_ARM_B`. All six traditional symbols continued to their existing gates. |
+| Retired accounts | Both PostgreSQL account rows were inactive. The startup plan excluded both accounts. |
+| Activity after retirement through verification | Zero retired-account loader runs, zero new intents on those accounts, zero new retirement refusals. The service-wide refusal counter was zero. |
+| Ongoing protection on retained accounts | The refreshed demo book retained Silver #265256567. The live book retained external NVDA.US and NatGas. |
