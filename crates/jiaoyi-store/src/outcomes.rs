@@ -37,7 +37,7 @@ struct Facts {
 }
 
 const FACTS_SQL: &str = r#"
-WITH owned AS (
+WITH owned AS MATERIALIZED (
  SELECT DISTINCT ON (e.position_id) e.position_id, i.entry_key, i.volume AS requested_volume, i.risk, i.side, i.symbol_id
  FROM trading_intents i JOIN trading_events e
    ON e.entry_key = i.entry_key AND e.account_id = i.account_id
@@ -58,7 +58,7 @@ WITH owned AS (
    AND e.kind=ANY($3) AND e.volume>0
  ),0))::bigint AS quantity
  FROM owned o LEFT JOIN opening_deal_events d ON d.position_id=o.position_id
-), owned_orders AS (
+), owned_orders AS MATERIALIZED (
  SELECT DISTINCT o.position_id, COALESCE(e.order_id,d.order_id) AS order_id
  FROM owned o JOIN trading_events e ON e.account_id=$1 AND e.entry_key=o.entry_key
   AND e.position_id=o.position_id AND e.kind=ANY($3) AND e.volume>0
@@ -105,7 +105,7 @@ WITH owned AS (
  WHERE $2='s1' AND f.account_id=$1 AND f.kind='broker_exit'
    AND f.outcome IN ('filled','partly_filled') AND f.volume>0
  ORDER BY f.entry_key,f.id DESC
-), grouped_receipts AS (
+), grouped_receipts AS MATERIALIZED (
  SELECT position_id,entry_key,MAX(quantity) AS quantity, MAX(at) AS at
  FROM (SELECT * FROM local_receipts UNION ALL SELECT * FROM fills UNION ALL SELECT * FROM s1_fills) r
  GROUP BY position_id,entry_key
