@@ -59,6 +59,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::sync::broadcast::error::RecvError;
 
+use crate::admission::LiveS3Exposure;
 use crate::config::Config;
 use crate::edge::costs;
 use crate::edge::h1job::QuoteAssets;
@@ -70,6 +71,9 @@ use crate::trading::{fresh_equity, relative_stop, risk_at_stop, PgLedger};
 pub const STRATEGY: &str = "Strategy 3: macro pullback";
 /// The label on every position Strategy 3 opens.
 pub const LABEL: &str = "jiaoyi-s3";
+/// No. 18541: live broker-minimum slots and minimum aggregate open-risk budget.
+pub const LIVE_MAX_S3_POSITIONS: usize = 2;
+pub const LIVE_MIN_OPEN_RISK_PCT: f64 = 5.0;
 /// №18,403: immutable owner reservations, independent of environment settings.
 pub const HUMAN_RESERVED_SYMBOLS: &[&str] = &["NatGas", "JPN225"];
 pub fn human_reserved(symbol: &str) -> bool {
@@ -522,15 +526,14 @@ pub struct Sized {
 
 /// Size an open: demo `risk_pct` of equity floored to the step, or the broker
 /// minimum within the explicit minimum-risk cap; live exactly the minimum within
-/// `min_volume_max_risk_pct` of equity, and only with no other position of
-/// this program open on the account.
+/// `min_volume_max_risk_pct` of equity, subject to the Strategy 3 slot limit.
 pub fn size(
     r: &Rules,
     equity: f64,
     relative_stop: i64,
     quote_to_deposit: f64,
     limits: &VolumeLimits,
-    program_positions_open: usize,
+    s3_positions_open: usize,
 ) -> Result<Sized, String> {
     if !(equity.is_finite() && equity > 0.0) {
         return Err(format!("equity {equity} is not positive"));
@@ -542,9 +545,9 @@ pub fn size(
         return Err("the symbol's volume rules are unknown".into());
     }
     if r.live {
-        if program_positions_open > 0 {
+        if s3_positions_open >= LIVE_MAX_S3_POSITIONS {
             return Err(format!(
-                "live: one minimum trade at a time, and {program_positions_open} position(s) of this program are open on the account"
+                "live: at most {LIVE_MAX_S3_POSITIONS} Strategy 3 minimum trades at a time, and {s3_positions_open} Strategy 3 position(s) are open on the account"
             ));
         }
         let risk = gate::risk_of(limits.min, relative_stop, quote_to_deposit);
@@ -832,6 +835,15 @@ fn trail_price(side: Side, best: f64, r: f64, current: f64, digits: i32) -> Opti
         Side::Sell => stop < current,
     };
     (stop > 0 && improves).then_some(stop as f64 / factor)
+}
+
+/// The configured budget, with the owner's minimum applied on Live.
+pub fn effective_open_risk_pct(r: &Rules) -> f64 {
+    if r.live {
+        r.open_risk_pct.max(LIVE_MIN_OPEN_RISK_PCT)
+    } else {
+        r.open_risk_pct
+    }
 }
 
 /// The open-risk budget: Strategy 3's open risk at its stops plus a new
@@ -2286,13 +2298,33 @@ impl<'a, 'c> Trader<'a, 'c> {
         Ok(())
     }
 
-    pub fn open_risk(&self) -> Result<f64, String> {
+    fn require_open_risk_authority(&self) -> Result<(), String> {
         if self.authority_pending_count > 0 {
             return Err(format!(
                 "{} Strategy 3 position(s) await management authority: open risk is unknown",
                 self.authority_pending_count
             ));
         }
+        Ok(())
+    }
+
+    fn position_risk_rate(&self, position_id: i64, symbol_id: i64) -> Result<f64, String> {
+        // Deposit-currency stop liabilities need no current symbol quote.
+        self.syms
+            .get(&symbol_id)
+            .and_then(|s| match (s.quote.as_deref(), self.deposit.as_deref()) {
+                (Some(q), Some(d)) if q == d && !q.is_empty() => Some(1.0),
+                _ => self.rate(symbol_id),
+            })
+            .ok_or_else(|| {
+                format!(
+                    "position {position_id} has no quote→deposit rate: its open risk is unknown"
+                )
+            })
+    }
+
+    pub fn open_risk(&self) -> Result<f64, String> {
+        self.require_open_risk_authority()?;
         let mut total: f64 = self.pending.iter().map(|p| p.risk).sum();
         for o in self.own.values() {
             let (Some(entry), Some(stop)) = (o.entry, o.stop) else {
@@ -2301,23 +2333,53 @@ impl<'a, 'c> Trader<'a, 'c> {
                     o.position_id
                 ));
             };
-            // Existing USD/USD stop liabilities are price-independent. Missing
-            // gold ticks must not turn a known stop reserve into unknown risk.
-            // Other conversions retain their existing path; account-wide margin
-            // reserves independently use the typed broker-identity FX proof.
-            let rate = self.syms.get(&o.symbol_id).and_then(|s| {
-                match (s.quote.as_deref(), self.deposit.as_deref()) {
-                    (Some(q), Some(d)) if q == d && !q.is_empty() => Some(1.0),
-                    _ => self.rate(o.symbol_id),
-                }
-            });
-            let Some(rate) = rate else {
+            let rate = self.position_risk_rate(o.position_id, o.symbol_id)?;
+            total += risk_at_stop(o.side, entry, stop, o.volume, rate);
+        }
+        Ok(total)
+    }
+
+    /// Value Live S3 exposure from the same fresh book and ledger as the slot
+    /// check. The broker may have changed the stop since the actor last adopted it.
+    fn live_open_risk(&self, exposure: &LiveS3Exposure) -> Result<f64, String> {
+        self.require_open_risk_authority()?;
+        let mut total = 0.0;
+        for position in &exposure.positions {
+            let id = position.position_id;
+            let trade = &position.trade_data;
+            let price = |value: Option<f64>| value.filter(|p| p.is_finite() && *p > 0.0);
+            let (Some(entry), Some(stop), Some(side)) = (
+                price(position.price),
+                price(position.stop_loss),
+                Side::from_proto(trade.trade_side),
+            ) else {
                 return Err(format!(
-                    "position {} has no quote→deposit rate: its open risk is unknown",
-                    o.position_id
+                    "position {id} has no valid broker entry, stop, or side: its open risk is unknown"
                 ));
             };
-            total += risk_at_stop(o.side, entry, stop, o.volume, rate);
+            if position.position_status != 1 || trade.volume <= 0 {
+                return Err(format!(
+                    "position {id} has no valid open broker volume: its open risk is unknown"
+                ));
+            }
+            let rate = self.position_risk_rate(id, trade.symbol_id)?;
+            total += risk_at_stop(side, entry, stop, trade.volume, rate);
+        }
+        for intent in &exposure.unresolved {
+            // A broker position covers the filled portion at its current stop.
+            // Reserve the remaining portion at the intent's recorded risk.
+            let broker_volume = intent
+                .position_id
+                .and_then(|id| exposure.positions.iter().find(|p| p.position_id == id))
+                .map_or(0, |p| p.trade_data.volume);
+            let filled = intent.filled.max(broker_volume);
+            let risk = crate::trading::outstanding_risk(intent.risk, intent.volume, filled)
+                .filter(|risk| risk.is_finite() && *risk >= 0.0)
+                .ok_or_else(|| format!("unresolved open {} has no valid risk", intent.entry_key))?;
+            total += risk;
+        }
+        if !total.is_finite() {
+            return Err("Strategy 3 open risk is not finite".into());
         }
         Ok(total)
     }
@@ -3714,22 +3776,28 @@ impl<'a, 'c> Trader<'a, 'c> {
                 .await;
             return Ok(());
         }
-        // Claude · № 17,020 25-Oct (Codex P1 on #15): a live entry is one
-        // broker minimum, admitted account-wide (both strategies' loops) from
-        // fresh broker state; the account's lock is held through the send.
+        // Live S3 slots use fresh broker state under the shared account lock,
+        // held through the send.
         let _admission = crate::admission::lock(self.account_id()).await;
         if let Some(reason) = self.pair_entry_refusal(symbol_id) {
             outcome.refuse(reason);
             self.skip(symbol_id, &name, reason, detail, now).await;
             return Ok(());
         }
-        if r.live {
-            if let Err(why) = crate::admission::live_minimum(self.pool, self.session).await {
-                outcome.refuse(&why);
-                self.skip(symbol_id, &name, &why, detail, now).await;
-                return Ok(());
+        let live_exposure = if r.live {
+            match crate::admission::live_s3_exposure(self.pool, self.session, LIVE_MAX_S3_POSITIONS)
+                .await
+            {
+                Ok(exposure) => Some(exposure),
+                Err(why) => {
+                    outcome.refuse(&why);
+                    self.skip(symbol_id, &name, &why, detail, now).await;
+                    return Ok(());
+                }
             }
-        }
+        } else {
+            None
+        };
         let equity = match fresh_equity(self.session).await {
             Ok(x) => x,
             Err(why) => {
@@ -3744,12 +3812,6 @@ impl<'a, 'c> Trader<'a, 'c> {
                 .await;
                 return Ok(());
             }
-        };
-        // Live: the fresh account-wide admission above is the count.
-        let open_programs = if r.live {
-            0
-        } else {
-            self.program_positions + self.pending.len()
         };
         // Kelly (№ 17,588–17,589, 28-10-2026). A ceiling and a skip in front of
         // size(). It does not write risk_pct, the live minimum, or the budget.
@@ -3791,7 +3853,8 @@ impl<'a, 'c> Trader<'a, 'c> {
             .await;
             return Ok(());
         }
-        let sized = match size(&r, equity, rel, rate, &limits, open_programs) {
+        let slots = live_exposure.as_ref().map_or(0, |exposure| exposure.slots);
+        let sized = match size(&r, equity, rel, rate, &limits, slots) {
             Ok(x) => x,
             Err(why) => {
                 outcome.refuse(&why);
@@ -3809,9 +3872,12 @@ impl<'a, 'c> Trader<'a, 'c> {
             }
         };
         detail["order"] = json!(order);
-        let budget = self
-            .open_risk()
-            .and_then(|held| within_budget(held, sized.risk, equity, r.open_risk_pct));
+        let held = match &live_exposure {
+            Some(exposure) => self.live_open_risk(exposure),
+            None => self.open_risk(),
+        };
+        let budget = held
+            .and_then(|held| within_budget(held, sized.risk, equity, effective_open_risk_pct(&r)));
         if let Err(why) = budget {
             outcome.refuse(&why);
             self.skip(symbol_id, &name, &why, detail, now).await;
@@ -4631,7 +4697,7 @@ pub async fn health(
             "strategy": STRATEGY,
             "label": LABEL,
             "trades": if r.as_ref().is_some_and(|r| r.paused) { "paused by the owner: no new entry" } else { "yes" },
-            "sizing": if env == "live" { "one broker-minimum trade at a time" } else { "risk_pct of fresh equity" },
+            "sizing": if env == "live" { "up to 2 concurrent S3 broker-minimum trades within Live open-risk budget" } else { "risk_pct of fresh equity" },
             "prereg_file": PREREG_FILE,
             "active_production_model": mp::MODEL, "production_policy": mp::POLICY,
             "active_symbols": mp::CORE,
@@ -5085,7 +5151,7 @@ mod tests {
     }
 
     #[test]
-    fn demo_sizes_risk_pct_and_live_takes_one_minimum() {
+    fn demo_sizes_risk_pct_and_live_sizes_two_broker_minimum_slots() {
         // $10,000 at 0.6% = $60; a 200.00 stop on 1 cent (0.01 BTC) risks $2.
         let s = size(&rules_demo(), 10_000.0, 20_000_000, 1.0, &BTC, 0).unwrap();
         assert_eq!((s.volume, s.mode), (30, "risk_pct"));
@@ -5102,12 +5168,15 @@ mod tests {
             ..rules_demo()
         };
         // Live: exactly the minimum (2.00 risk = 5.1% of 38.98 ≤ 10%).
-        let s = size(&live, 38.98, 20_000_000, 1.0, &BTC, 0).unwrap();
-        assert_eq!((s.volume, s.mode), (1, "live_broker_minimum"));
-        assert!((s.max_risk - 3.898).abs() < 1e-9);
-        // Only while no other position of this program is open.
-        let e = size(&live, 38.98, 20_000_000, 1.0, &BTC, 1).unwrap_err();
-        assert!(e.contains("one minimum trade at a time"), "{e}");
+        for open in [0, 1] {
+            let s = size(&live, 38.98, 20_000_000, 1.0, &BTC, open).unwrap();
+            assert_eq!((s.volume, s.mode), (1, "live_broker_minimum"));
+            assert!((s.max_risk - 3.898).abs() < 1e-9);
+        }
+        for open in [2, 3] {
+            let e = size(&live, 38.98, 20_000_000, 1.0, &BTC, open).unwrap_err();
+            assert!(e.contains("at most 2 Strategy 3 minimum trades"), "{e}");
+        }
         // Above 10% of equity: skipped.
         let e = size(&live, 15.0, 20_000_000, 1.0, &BTC, 0).unwrap_err();
         assert!(e.contains("above 10% of equity"), "{e}");
@@ -5118,6 +5187,30 @@ mod tests {
         assert!(within_budget(200.0, 100.0, 10_000.0, 3.0).is_ok());
         let e = within_budget(250.0, 100.0, 10_000.0, 3.0).unwrap_err();
         assert!(e.contains("exceed its budget"), "{e}");
+    }
+
+    #[test]
+    fn live_open_risk_floor_admits_the_approved_pair_within_budget() {
+        let demo = rules_demo();
+        let mut live = Rules {
+            live: true,
+            ..demo.clone()
+        };
+        assert_eq!(effective_open_risk_pct(&demo), 3.0);
+        let pct = effective_open_risk_pct(&live);
+        assert_eq!(pct, 5.0);
+
+        let equity = 1_110.06;
+        let xagusd_risk = 37.50; // 0.01 lot
+        let us500_risk = 15.00; // 0.10 lot
+        assert!(within_budget(0.0, xagusd_risk, equity, effective_open_risk_pct(&demo)).is_err());
+        assert!(within_budget(0.0, xagusd_risk, equity, pct).is_ok());
+        assert!(within_budget(xagusd_risk, us500_risk, equity, pct).is_ok());
+        assert!(within_budget(40.0, 25.0, equity, pct).is_err());
+
+        live.open_risk_pct = 6.0;
+        assert_eq!(effective_open_risk_pct(&live), 6.0);
+        assert!(within_budget(40.0, 25.0, equity, effective_open_risk_pct(&live)).is_ok());
     }
 
     #[test]
