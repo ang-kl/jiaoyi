@@ -106,16 +106,17 @@ pub struct TickStats {
 /// Per account: the latest tick and the count in the last hour.
 pub async fn stats(pool: &PgPool) -> Result<Vec<TickStats>, sqlx::Error> {
     let rows = sqlx::query(
-        "WITH recent AS MATERIALIZED (
-            SELECT t.account_id, max(t.received_at) AS last,
-                   count(*) FILTER (WHERE t.received_at > now() - interval '1 hour') AS n
-            FROM ticks t JOIN accounts a ON a.account_id=t.account_id AND a.enabled
-            WHERE t.received_at > now() - interval '2 days'
-            GROUP BY t.account_id
-         )
-         SELECT a.account_id, recent.last, COALESCE(recent.n,0)::BIGINT AS n
-         FROM accounts a LEFT JOIN recent ON recent.account_id=a.account_id
-         WHERE a.enabled ORDER BY a.account_id",
+        "SELECT a.account_id,
+                (SELECT t.received_at FROM ticks t
+                 WHERE t.account_id = a.account_id
+                   AND t.received_at > now() - interval '2 days'
+                 ORDER BY t.received_at DESC LIMIT 1) AS last,
+                (SELECT count(*) FROM ticks t
+                 WHERE t.account_id = a.account_id
+                   AND t.received_at > now() - interval '1 hour') AS n
+         FROM accounts a
+         WHERE a.enabled
+         ORDER BY a.account_id",
     )
     .fetch_all(pool)
     .await?;

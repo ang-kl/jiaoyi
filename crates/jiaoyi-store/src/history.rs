@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
-use sqlx::{PgPool, Postgres, QueryBuilder, Row};
+use sqlx::{PgPool, Row};
 
 use crate::record_reconcile;
 
@@ -94,20 +94,30 @@ pub async fn record_window(
         .await?;
     let mut stored = 0i64;
     for part in ticks.chunks(5000) {
-        let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
-            "INSERT INTO ticks_history (account_id, broker_symbol_id, side, ts, price_e5, dup, fetch_id) ",
-        );
-        qb.push_values(part, |mut b, t| {
-            b.push_bind(f.account_id)
-                .push_bind(f.broker_symbol_id)
-                .push_bind(f.side)
-                .push_bind(t.ts)
-                .push_bind(t.price_e5)
-                .push_bind(t.dup)
-                .push_bind(id);
-        });
-        qb.push(" ON CONFLICT (account_id, broker_symbol_id, side, ts, price_e5, dup) DO NOTHING");
-        stored += qb.build().execute(&mut *tx).await?.rows_affected() as i64;
+        let mut ts = Vec::with_capacity(part.len());
+        let mut price_e5 = Vec::with_capacity(part.len());
+        let mut dup = Vec::with_capacity(part.len());
+        for t in part {
+            ts.push(t.ts);
+            price_e5.push(t.price_e5);
+            dup.push(t.dup);
+        }
+        stored += sqlx::query(
+            "INSERT INTO ticks_history (account_id, broker_symbol_id, side, ts, price_e5, dup, fetch_id)
+             SELECT $1, $2, $3, u.ts, u.price_e5, u.dup, $4
+             FROM UNNEST($5::timestamptz[], $6::bigint[], $7::int4[]) AS u(ts, price_e5, dup)
+             ON CONFLICT (account_id, broker_symbol_id, side, ts, price_e5, dup) DO NOTHING",
+        )
+        .bind(f.account_id)
+        .bind(f.broker_symbol_id)
+        .bind(f.side)
+        .bind(id)
+        .bind(&ts)
+        .bind(&price_e5)
+        .bind(&dup)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected() as i64;
     }
     sqlx::query(
         "INSERT INTO history_fetches (id, account_id, broker_symbol_id, side, kind, window_from, window_to,
